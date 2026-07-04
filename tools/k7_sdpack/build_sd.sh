@@ -12,16 +12,37 @@
 #
 # Usage: ./build_sd.sh <nuttx.bin> <rkbin_dir> <out_dir>
 #   Get <rkbin_dir> with ./fetch_rkbin.sh (or point at a full rkbin checkout).
-set -e
+set -Eeuo pipefail
+# Report the failing line/command instead of exiting silently (set -e used to
+# swallow the reason -- e.g. a merger hitting a read-only rkbin dir).
+trap 'rc=$?; echo "ERROR: build_sd.sh failed at line ${LINENO} (exit ${rc}): ${BASH_COMMAND}" >&2; exit "${rc}"' ERR
+
+die() { echo "ERROR: $*" >&2; exit 1; }
+
 abspath() { (cd "$(dirname "$1")" && printf '%s/%s' "$(pwd)" "$(basename "$1")"); }
-NUTTX=$(abspath "${1:?usage: build_sd.sh <nuttx.bin> <rkbin_dir> <out_dir>}")
-RKBIN=$(cd "${2:?rkbin dir}" && pwd)
-OUT="${3:?out dir}"; mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
+[ $# -eq 3 ] || die "usage: build_sd.sh <nuttx.bin> <rkbin_dir> <out_dir>"
+[ -r "$1" ] || die "nuttx.bin not readable: $1"
+[ -d "$2" ] || die "rkbin dir not found: $2 (run ./fetch_rkbin.sh first)"
+NUTTX=$(abspath "$1")
+RKBIN=$(cd "$2" && pwd)
+mkdir -p "$3" 2>/dev/null || die "cannot create out dir: $3"
+OUT=$(cd "$3" && pwd)
+[ -w "$OUT" ] || die "out dir not writable: $OUT"
 MKIMAGE=$RKBIN/tools/mkimage
 
 # Pinned rkbin versions (match RK3576MINIALL.ini / RK3576TRUST.ini).
 BL31=$RKBIN/bin/rk35/rk3576_bl31_v1.24.elf
 BL32=$RKBIN/bin/rk35/rk3576_bl32_v1.08.bin
+
+# Preflight: host tools + rkbin inputs, with a clear message for each.
+for t in dtc sgdisk dd; do
+  command -v "$t" >/dev/null 2>&1 || die "missing host tool: $t"
+done
+for f in "$MKIMAGE" "$RKBIN/tools/boot_merger" "$RKBIN/tools/trust_merger" \
+         "$BL31" "$BL32" "$RKBIN/RKBOOT/RK3576MINIALL.ini" \
+         "$RKBIN/RKTRUST/RK3576TRUST.ini"; do
+  [ -e "$f" ] || die "missing rkbin file: $f (re-run ./fetch_rkbin.sh)"
+done
 
 cd "$OUT"
 
@@ -76,11 +97,21 @@ ITS
 "$MKIMAGE" -f fit.its uboot_nuttx.img >/dev/null
 echo "FIT: uboot_nuttx.img $(stat -c%s uboot_nuttx.img) bytes"
 
-# --- 4. idbloader + trust from rkbin (mergers read ini paths relative to root) -
-( cd "$RKBIN" && ./tools/boot_merger  RKBOOT/RK3576MINIALL.ini )
-( cd "$RKBIN" && ./tools/trust_merger RKTRUST/RK3576TRUST.ini )
-cp "$RKBIN"/rk3576_idblock_*.img idbloader.img
-cp "$RKBIN"/trust.img trust.img
+# --- 4. idbloader + trust from rkbin -----------------------------------------
+# The mergers read ini paths relative to the rkbin root AND write temp/output
+# files back into it (tools/*.bin, rk3576_idblock_*.img, trust.img). Running
+# them directly in $RKBIN therefore fails when it is read-only or root-owned
+# (the original silent-exit-as-non-root bug). Run them in a writable copy under
+# $OUT instead, so $RKBIN is never written to.
+WORK="$OUT/rkbin_work"
+rm -rf "$WORK"
+cp -r "$RKBIN" "$WORK"
+chmod -R u+w "$WORK"
+( cd "$WORK" && ./tools/boot_merger  RKBOOT/RK3576MINIALL.ini )
+( cd "$WORK" && ./tools/trust_merger RKTRUST/RK3576TRUST.ini )
+cp "$WORK"/rk3576_idblock_*.img idbloader.img
+cp "$WORK"/trust.img trust.img
+rm -rf "$WORK"
 
 # --- 5. assemble SD image (Rockchip standard sector offsets) -------------------
 IMG=sd_nuttx.img
