@@ -43,7 +43,7 @@ boards/rk3576/kickpi-k7/  →  vendor/rockchip/boards/rk3576/kickpi-k7/ (板级)
 openvela 自带完整 rk3399 移植，RK3399 与 RK3576 同族、同 armv8-a、同款 DesignWare UART，故照 rk3399 改地址/GIC 版本/板配置而非从零。
 
 **但 rk3399 移植本身抄自全志 A64，带毒**。M2 卡死的三个根因全部是“照抄 rk3399 的遗留值没改”：中断号、启动时钟、链接地址（详见第三节）。
-> 沉淀教训：**移植参考代码前先审其血统，港版号 ≠ 可信值，逐一对 TRM/DTS 核实。**
+> 沉淀教训：**移植参考代码前先审其血统，从参考代码直接抄来的值 ≠ 可信值，必须逐一对 TRM/DTS 核实。**
 
 ### 2.3 启动链原理：为什么选“NuttX 当 BL33”
 
@@ -120,22 +120,28 @@ export PATH=/root/openvela/src/vela/prebuilts/gcc/linux-x86_64/aarch64-none-elf/
 # 产出 nuttx/nuttx.bin（ARM aarch64，~420KB）
 ```
 
-### 4.2 打包 SD 启动镜像（外科手术法）
+### 4.2 打包 SD 启动镜像（rkbin 官方件 + 自建 FIT）
 
-**不要用 mkimage 整体重打 FIT**——FIT 移除签名节点会使头变小、所有 data-position 整体位移，atf-3 落到与 vendor 不同的绝对偏移被 SPL 活动区覆盖，报 `Bad hash`（血泪坑，见 5.1）。
-
-正确做法 = 对已验证的 vendor `uboot.img` 做**最小字节补丁**：
+启动件全部取自 Rockchip 官方二进制仓 [rkbin](https://github.com/rockchip-linux/rkbin)，
+**仓内不含任何从设备镜像抠出的私有 blob**（license 干净）。脚本在 `tools/k7_sdpack/`：
 
 ```bash
-cd 工具/k7_sdpack        # 自包含 vendor 引导件 + 脚本
-./make_sd.sh <nuttx.bin> # 内部: 把 nuttx padding 到 vendor U-Boot 原大小(1328152B)
-                         #       → 原位替换 uboot 载荷(0x1000 起)
-                         #       → 只改头里那处 uboot 节点 sha256
-                         #       → 组 sd_nuttx.img(64MB GPT)
-# 产出 烧录/sd_nuttx.img
+cd tools/k7_sdpack
+./fetch_rkbin.sh rkbin              # 拉所需 ~10 个 RK3576 官方件(~4MB, 支持 PROXY=host:port)
+./build_sd.sh <nuttx.bin> rkbin out # 组出 out/sd_nuttx.img
+# 烧 out/sd_nuttx.img
 ```
 
-原理：atf-1/2/3/optee/fdt 字节与 vendor 位级一致，彻底消除偏移变量。
+原理（见 `tools/k7_sdpack/README.md`）：拆 rkbin BL31 elf 的 3 个 PT_LOAD 段 → `atf-1/2/3`，
+自写最简 `fit.its`（`uboot` 槽 = nuttx@0x40200000 + atf-1/2/3 + optee@0x48400000 + dummy-fdt），
+`mkimage` **内嵌**打包（不用 `-E`，各段 hash 由 mkimage 重算、布局自洽）；idbloader、trust 用
+rkbin 的 merger 按官方 `.ini` 生成。SD 布局 idbloader@64 / uboot@16384 / trust@24576。
+
+> rkbin BL31 elf 段址 `0x40060000 / 0x400f0000 / 0x3fe70000` 与原厂 vendor FIT 的 atf-1/2/3 逐一
+> 吻合，证同族固件；版本 v1.24/OP-TEE v1.08 较原厂新，2026-07-04 板上实测兼容、一次点亮。
+
+> **弃用的旧法（外科手术）**：早期抠 vendor `uboot.img` 原位换 BL33 载荷 + 改一处 hash。因坑多
+> （见 5.1）已被 rkbin 自建取代；`make_sd.sh`/`patch_fit_uboot.py` 仅作无 rkbin 时的应急回退。
 
 ### 4.3 烧卡 + 抓串口
 
@@ -149,8 +155,8 @@ cd 工具/k7_sdpack        # 自包含 vendor 引导件 + 脚本
 
 ## 五、踩坑记录（最值钱的部分）
 
-### 5.1 FIT `Bad hash` / atf-3 被覆盖
-mkimage `-E` 外部数据布局对总大小敏感；nuttx(420KB) 比 vendor U-Boot(1.3MB) 小 → 段位移 → SPL 加载缓冲落点与 atf-3(0x3fe70000, SRAM 低地址)重叠自覆盖 → 两次坏 hash 值还不同（非确定性=运行时被改写）。→ **弃 mkimage 重打，改最小字节补丁**（4.2）。
+### 5.1 FIT `Bad hash` / atf-3 被覆盖（已定性）
+手术改 vendor FIT 时用 mkimage `-E`（外部数据）+ 载荷改尺寸 → 段 data-position 位移 → SPL 加载缓冲落点与 atf-3(0x3fe70000, SRAM 低地址)重叠自覆盖 → 两次坏 hash 值还不同（非确定性=运行时被改写）。**根因是"改 vendor FIT"本身**，非 mkimage 之过。→ 改用 rkbin 官方件 + 干净内嵌 FIT（4.2），mkimage 重算各段 hash、布局自洽，atf-3 一次通过，坑随之消失。
 
 ### 5.2 隔 SSH 写含 `\x00` 的脚本被截断
 隔多层 SSH 用 `python3 -c` 写含 NUL 的字节串 → shell 截断 → 脚本残且被认成 binary。→ **复杂脚本本地 Write 干净版再 scp；补零用 `truncate` 不用 python 字节串**。
@@ -166,9 +172,10 @@ head.S 依赖，漏了报 `unknown mnemonic`。→ 重写 chip.h 保留 `__ASSEM
 ## 六、当前状态与后续
 
 - **已达成**：M2（NSH 点亮）。三个抄 rk3399 遗留（irq.h / cntfrq / dramboot 链接地址）全清。
+- **启动件官方化（实测）**：整条链改从 rkbin 官方件全量复现，仓内零设备抠出 blob，`tools/k7_sdpack/` 自建 FIT 板上一次点亮 NSH。
 - **两仓一致**：队伍仓（github，PR#6）与 VM vendor 树（gitee）内存图已同步。
 - **后续（M3~M7）**：时钟树/CRU、GIC 中断实触发、MMU 细分、SMP 多核、外设驱动（UART 完整/SPI/I2C/GPIO/双圆屏 QSPI）。
-- **相关 PR**：#4 irq.h、#5 cntfrq、#6 链接地址修复 + 本次内存图回填。
+- **相关 PR**：#4 irq.h、#5 cntfrq、#6 链接地址修复 + 内存图回填 + rkbin 打包套件。
 
 ---
 
