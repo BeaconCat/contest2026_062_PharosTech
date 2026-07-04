@@ -3,7 +3,7 @@
 > 队伍 062 · Pharos Tech · 项目 Nyabula
 > 状态：**M2 达成 — 板上 NSH 命令行点亮（2026-07-04）**
 >
-> 完整 bring-up 实现/原理/复现步骤见 [BRINGUP.md](./BRINGUP.md)。
+> 完整 bring-up 实现/原理/复现步骤见 [docs/BRINGUP.md](./docs/BRINGUP.md)。
 
 ## 一、概述
 
