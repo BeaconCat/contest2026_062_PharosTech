@@ -1,7 +1,9 @@
 # KICKPI-K7 (RK3576) — openvela 板级适配
 
 > 队伍 062 · Pharos Tech · 项目 Nyabula
-> 状态：**编译通过，板上待验证**
+> 状态：**M2 达成 — 板上 NSH 命令行点亮（2026-07-04）**
+>
+> 完整 bring-up 实现/原理/复现步骤见 [BRINGUP.md](./BRINGUP.md)。
 
 ## 一、概述
 
@@ -35,8 +37,8 @@ boards/rk3576/kickpi-k7/    →  vendor/rockchip/boards/rk3576/kickpi-k7/ （板
 # 产出：nuttx/nuttx.bin（ARM aarch64）
 ```
 
-## 五、板上待验证
+## 五、进度
 
-- `LOAD_BASE` / `RAM_START`（MiniLoader→BL33 交接地址）当前为占位值。
-- M2 里程碑：串口打印（"NuttX on K7"）。
-- 之后：时钟、GIC、MMU、SMP、外设驱动。
+- **M2 达成（实测）**：SD 启动，NuttX 作 BL33，一路 SPL→BL31→OP-TEE→nuttx→`nsh>`。加载地址 `0x40200000` 板验。
+- 内存图已按 `/proc/iomem` 板验回填（见 BRINGUP.md 3.4）。
+- 后续 M3~M7：时钟/CRU、GIC 中断触发、MMU、SMP、外设驱动。
