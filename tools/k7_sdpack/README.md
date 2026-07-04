@@ -25,7 +25,13 @@ SD BootROM → idbloader(DDR init + U-Boot SPL) → FIT(atf-1/uboot/atf-2/atf-3/
 引导件（DDR/SPL/BL31/OP-TEE）全部取自 Rockchip 官方二进制仓
 [rockchip-linux/rkbin](https://github.com/rockchip-linux/rkbin)，本目录不提交任何从设备
 镜像抠出的专有 blob（license 干净，可随 Apache 仓分发）。`fetch_rkbin.sh` 只下载所需的
-~10 个文件。固定版本（与 rkbin 的 `.ini` 一致）：
+~10 个文件。
+
+> **rkbin revision 固定**：`fetch_rkbin.sh` 里 `REV` 钉死在一个具体 commit
+> （`ecb4fcbe`，2025-12-30，板上实测所用），**不跟 `master`**——rkbin 无发布 tag 且更新可能
+> 破坏兼容性。需要升级时手动改 `REV` 并**重新上板验证**。
+
+固定版本（与 rkbin 的 `.ini` 一致）：
 
 | 件 | rkbin 文件 | 用途 |
 |---|---|---|

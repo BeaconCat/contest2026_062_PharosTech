@@ -8,7 +8,11 @@
 #   Alternatively, skip this and point build_sd.sh at a full rkbin checkout.
 set -e
 DEST="${1:-rkbin}"
-REV="master"   # rkbin has no release tags; pin a commit here for full reproducibility
+# Pin an exact rkbin commit -- do NOT track 'master'. rkbin has no release tags and
+# its updates can break compatibility, so we fix the revision and bump it manually
+# (re-verify on board) when an update is actually needed.
+# ecb4fcbe = rkbin master HEAD as of 2025-12-30, the revision verified on board.
+REV="ecb4fcbe954edf38b3ae037d5de6d9f5bccf81f4"
 BASE="https://raw.githubusercontent.com/rockchip-linux/rkbin/$REV"
 CURL="curl -sSL -m 180"
 [ -n "$PROXY" ] && CURL="$CURL -x http://$PROXY"
