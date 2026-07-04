@@ -31,17 +31,15 @@ PHDRS
 
 SECTIONS
 {
-  /* Ref to https://github.com/apache/nuttx/pull/10193
-   *
-   * This comes from (https://github.com/u-boot/u-boot/blob/v2022.04/
-   *                  include/configs/rk3576_common.h)
-   * with patch from (https://github.com/armbian/build/tree/main/
-   *                  patch/u-boot/u-boot-rockchip64-v2022.04)
-   *
-   * Using U-Boot(U-Boot 2020.10-armbian (Jan 05 2021 - 01:05:57 +0100))
-   * from Armbian(https://www.armbian.com/), and replace `Image` with nuttx.bin
+  /* NuttX runs as BL33 in the Rockchip vendor boot chain
+   * (idbloader/SPL -> BL31/ATF -> NuttX). It is packed into the "uboot"
+   * slot of the vendor FIT image, whose load address is 0x40200000 (verified
+   * on hardware with dumpimage). BL31 exits to this address at EL2, so the
+   * link address must match CONFIG_RAM_START (0x40200000); the previous
+   * 0x02080000 was inherited from the rk3399 port and left NuttX linked at an
+   * address it was never loaded to, hanging silently right after the BL31 handoff.
    */
-  . = 0x02080000;  /* U-Boot loads NuttX at this address (kernel_addr_r) */
+  . = 0x40200000;  /* = CONFIG_RAM_START; BL31 hands off to NuttX (BL33) here */
   _start = .;
   .text : {
         _stext = .;            /* Text section */
