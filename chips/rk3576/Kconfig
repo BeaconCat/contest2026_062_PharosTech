@@ -57,6 +57,17 @@ config RK3576_UART4
 	---help---
 		Select to enable support for UART4.
 
+
+config RK3576_SDMMC
+	bool "SD/MMC (SDMMC0 - SD card)"
+	default n
+	select ARCH_HAVE_SDIO
+	select MMCSD
+	select MMCSD_SDIO
+	---help---
+		Enable the RK3576 SDMMC (SD card) host controller driver
+		(Synopsys DesignWare MSHC, PIO mode).
+
 endmenu # Rockchip RK3576 Peripheral Selection
 
 endif # ARCH_CHIP_RK3576

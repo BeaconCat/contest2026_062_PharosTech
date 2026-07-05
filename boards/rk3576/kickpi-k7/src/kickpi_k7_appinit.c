@@ -26,8 +26,18 @@
 
 #include <nuttx/config.h>
 #include <sys/types.h>
+#include <syslog.h>
 #include <nuttx/board.h>
 #include "kickpi_k7.h"
+
+#ifdef CONFIG_RK3576_SDMMC
+#  include <nuttx/sdio.h>
+#  include <nuttx/mmcsd.h>
+
+/* 由芯片层 chips/rk3576/rk3576_sdmmc.c 提供 */
+
+FAR struct sdio_dev_s *rk3576_sdmmc_initialize(int slotno);
+#endif
 
 /****************************************************************************
  * Public Functions
@@ -60,7 +70,25 @@
 
 int board_app_initialize(uintptr_t arg)
 {
-  /* Perform board initialization */
+#ifdef CONFIG_RK3576_SDMMC
+  /* 挂载 SD 卡槽 (SDMMC0) -> /dev/mmcsd0。SD 卡为可选外设：初始化失败
+   * 只告警、不阻断系统启动（没插卡时也应正常进 NSH）。
+   */
+
+  FAR struct sdio_dev_s *sdmmc = rk3576_sdmmc_initialize(0);
+  if (sdmmc == NULL)
+    {
+      syslog(LOG_ERR, "ERROR: rk3576_sdmmc_initialize 失败\n");
+    }
+  else
+    {
+      int ret = mmcsd_slotinitialize(0, sdmmc);
+      if (ret < 0)
+        {
+          syslog(LOG_ERR, "ERROR: mmcsd_slotinitialize 失败: %d\n", ret);
+        }
+    }
+#endif
 
   return OK;
 }
