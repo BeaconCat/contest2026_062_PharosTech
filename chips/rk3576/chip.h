@@ -39,4 +39,19 @@
  * Macro Definitions
  ****************************************************************************/
 
+
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
+
+#ifndef __ASSEMBLY__
+
+struct sdio_dev_s;
+
+/* RK3576 SDMMC (SD card) host initialize (see rk3576_sdmmc.c). */
+
+FAR struct sdio_dev_s *rk3576_sdmmc_initialize(int slotno);
+
+#endif /* __ASSEMBLY__ */
+
 #endif /* __ARCH_ARM64_SRC_RK3576_CHIP_H */
