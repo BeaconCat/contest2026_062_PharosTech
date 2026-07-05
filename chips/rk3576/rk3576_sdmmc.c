@@ -690,7 +690,14 @@ static sdio_capset_t rk3576_capabilities(struct sdio_dev_s *dev)
   caps |= SDIO_CAPS_4BIT;
 #endif
 
-  /* 第一版无 DMA，不设 SDIO_CAPS_DMASUPPORTED */
+  /* 第一版无 DMA，不设 SDIO_CAPS_DMASUPPORTED。
+   * 但必须设 DMABEFOREWRITE：它让 mmcsd 把写命令(CMD24/25)延到 SENDSETUP
+   * 之后再发。否则 mmcsd 会先发 CMD24 再 SENDSETUP，控制器进入写数据态时
+   * TX FIFO 还空 → underrun → 数据错误(甚至 SENDSETUP 预填撞上错误中断清空
+   * 的 buffer 而崩)。设它后：SENDSETUP 预填 FIFO → 再发 CMD24 → 不 underrun。
+   */
+
+  caps |= SDIO_CAPS_DMABEFOREWRITE;
 
   return caps;
 }
@@ -938,13 +945,24 @@ static int rk3576_sendsetup(struct sdio_dev_s *dev, const uint8_t *buffer,
                             size_t nbytes)
 {
   struct rk3576_dev_s *priv = (struct rk3576_dev_s *)dev;
+  int i;
 
   DEBUGASSERT(buffer != NULL && nbytes > 0);
   DEBUGASSERT(((uintptr_t)buffer & 3) == 0);
 
+  /* 复位 FIFO 并等待该位自清，否则随后预填的数据会被复位清掉 */
+
   rk3576_putreg(priv, RK3576_SDMMC_CTRL,
                 rk3576_getreg(priv, RK3576_SDMMC_CTRL) |
                 SDMMC_CTRL_FIFO_RESET);
+  for (i = 0; i < RK3576_SDMMC_SPIN; i++)
+    {
+      if ((rk3576_getreg(priv, RK3576_SDMMC_CTRL) &
+           SDMMC_CTRL_FIFO_RESET) == 0)
+        {
+          break;
+        }
+    }
 
   priv->buffer    = (uint32_t *)buffer;
   priv->remaining = nbytes;
@@ -952,7 +970,16 @@ static int rk3576_sendsetup(struct sdio_dev_s *dev, const uint8_t *buffer,
   rk3576_putreg(priv, RK3576_SDMMC_BLKSIZ, nbytes);
   rk3576_putreg(priv, RK3576_SDMMC_BYTCNT, nbytes);
 
-  /* 开数据发送中断：TXDR + DTO + 错误 */
+  /* ★ 预填 TX FIFO：DW-MSHC PIO 写必须在发命令前把数据塞进 FIFO，否则发
+   * CMD24 后 TX FIFO 为空 → 控制器 underrun(FRUN) → 数据错误 → 写失败。
+   * 单块(<=FIFO 容量)一次填完；更大传输靠后续 TXDR 中断续填。
+   * 预填必须在开中断【之前】做：否则开 TXDR 后 FIFO 空会立即触发中断，
+   * 中断里的 sendfifo 会与此处预填并发争用 priv->buffer/remaining。
+   */
+
+  rk3576_sendfifo(priv);
+
+  /* 预填完再开数据发送中断：TXDR(续填) + DTO + 错误 */
 
   rk3576_configxfrints(priv, SDMMC_INT_TXDR | SDMMC_XFRDONE_INTS |
                        SDMMC_DATAERR_INTS);
