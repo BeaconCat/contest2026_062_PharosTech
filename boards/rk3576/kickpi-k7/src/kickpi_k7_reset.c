@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/arm64/rk3576/kickpi_k7/src/kickpi_k7_appinit.c
+ * boards/arm64/rk3576/kickpi-k7/src/kickpi_k7_reset.c
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -25,62 +25,36 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
-#include <sys/types.h>
-#include <syslog.h>
+
+#include <nuttx/arch.h>
 #include <nuttx/board.h>
-#include "kickpi_k7.h"
 
-#ifdef CONFIG_RK3576_SDMMC
-#  include <nuttx/sdio.h>
-#  include <nuttx/mmcsd.h>
-
-/* 由芯片层 chips/rk3576/rk3576_sdmmc.c 提供 */
-
-FAR struct sdio_dev_s *rk3576_sdmmc_initialize(int slotno);
-#endif
-
-#ifdef CONFIG_FS_TMPFS
-#  include <sys/mount.h>
-#endif
+#ifdef CONFIG_BOARDCTL_RESET
 
 /****************************************************************************
- * Public Functions
+ * Public functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: board_app_initialize
+ * Name: board_reset
+ *
+ * Description:
+ *   复位开发板。CONFIG_BOARDCTL_RESET 打开时由板级逻辑提供。
+ *   RK3576 走 PSCI(up_systemreset 在 arch/arm64 的 arm64_cpu_psci.c 实现),
+ *   触发系统热重启,重新从 MiniLoader/BL33 引导,使新固件生效。
+ *
+ * Input Parameters:
+ *   status - 复位事件携带的状态信息,板级自定义,未用时传 0。
+ *
+ * Returned Value:
+ *   若函数返回,说明未能复位;返回值为板级特定的失败原因。
+ *
  ****************************************************************************/
 
-int board_app_initialize(uintptr_t arg)
+int board_reset(int status)
 {
-#ifdef CONFIG_RK3576_SDMMC
-  /* 挂载 SD 卡槽 (SDMMC0) -> /dev/mmcsd0。SD 卡为可选外设:初始化失败只告警、
-   * 不阻断系统启动(没插卡时也应正常进 NSH)。
-   */
-
-  FAR struct sdio_dev_s *sdmmc = rk3576_sdmmc_initialize(0);
-  if (sdmmc == NULL)
-    {
-      syslog(LOG_ERR, "ERROR: rk3576_sdmmc_initialize 失败\n");
-    }
-  else
-    {
-      int ret = mmcsd_slotinitialize(0, sdmmc);
-      if (ret < 0)
-        {
-          syslog(LOG_ERR, "ERROR: mmcsd_slotinitialize 失败: %d\n", ret);
-        }
-    }
-#endif
-
-#ifdef CONFIG_FS_TMPFS
-  /* 挂 tmpfs 到 /tmp,供固件热更新:ymodem(rb)接收固件写到 /tmp,k7flash 从此读取 */
-
-  if (mount(NULL, "/tmp", "tmpfs", 0, NULL) < 0)
-    {
-      syslog(LOG_ERR, "ERROR: mount /tmp (tmpfs) 失败\n");
-    }
-#endif
-
-  return OK;
+  up_systemreset();
+  return 0;
 }
+
+#endif /* CONFIG_BOARDCTL_RESET */
