@@ -129,4 +129,69 @@
 
 #define SDMMC_CDETECT_PRESENT   (1 << 0)
 
+
+/* ===== IDMAC (内部 DMA) 相关定义 —— 参考 Linux drivers/mmc/host/dw_mmc.h =====
+ *
+ * DW-MSHC 内部 DMA 控制器(IDMAC)使用 32 位链式描述符。以下位定义严格照
+ * Linux dw_mmc.h 的 IDMAC_DES0_* / IDMAC_INT_* / BMOD，勿凭记忆改。
+ */
+
+/* BMOD (0x080) 总线模式 */
+
+#define SDMMC_IDMAC_SWRESET     (1 << 0)   /* 软复位 IDMAC */
+#define SDMMC_IDMAC_FB          (1 << 1)   /* 固定突发 */
+#define SDMMC_IDMAC_ENABLE      (1 << 7)   /* DE：使能内部 DMA */
+
+/* IDSTS (0x08c) / IDINTEN (0x090) 位 —— 两者位布局相同 */
+
+#define SDMMC_IDMAC_INT_TI      (1 << 0)   /* 发送完成 */
+#define SDMMC_IDMAC_INT_RI      (1 << 1)   /* 接收完成 */
+#define SDMMC_IDMAC_INT_FBE     (1 << 2)   /* 致命总线错误 */
+#define SDMMC_IDMAC_INT_DU      (1 << 4)   /* 描述符不可用 */
+#define SDMMC_IDMAC_INT_CES     (1 << 5)   /* 卡错误汇总 */
+#define SDMMC_IDMAC_INT_NI      (1 << 8)   /* 正常中断汇总 */
+#define SDMMC_IDMAC_INT_AI      (1 << 9)   /* 异常中断汇总 */
+#define SDMMC_IDMAC_INT_ALL     0x337      /* 全部状态位(写1清) */
+
+#define SDMMC_IDMAC_INT_ERR     (SDMMC_IDMAC_INT_FBE | SDMMC_IDMAC_INT_DU | \
+                                 SDMMC_IDMAC_INT_CES)
+#define SDMMC_IDMAC_INT_DONE    (SDMMC_IDMAC_INT_TI | SDMMC_IDMAC_INT_RI)
+
+/* 使能的 IDMAC 中断：收/发完成 + 各类错误 + 汇总 */
+
+#define SDMMC_IDMAC_INT_ENA     (SDMMC_IDMAC_INT_TI | SDMMC_IDMAC_INT_RI | \
+                                 SDMMC_IDMAC_INT_FBE | SDMMC_IDMAC_INT_DU | \
+                                 SDMMC_IDMAC_INT_CES | SDMMC_IDMAC_INT_NI | \
+                                 SDMMC_IDMAC_INT_AI)
+
+/* 32 位链式描述符 DES0 位 (Linux IDMAC_DES0_*) */
+
+#define IDMAC_DES0_DIC          (1 << 1)   /* 完成不产生中断 */
+#define IDMAC_DES0_LD           (1 << 2)   /* 末描述符 */
+#define IDMAC_DES0_FD           (1 << 3)   /* 首描述符 */
+#define IDMAC_DES0_CH           (1 << 4)   /* 链式(第二地址接下一描述符) */
+#define IDMAC_DES0_ER           (1 << 5)   /* 环末尾 */
+#define IDMAC_DES0_CES          (1 << 30)  /* 卡错误汇总 */
+#define IDMAC_DES0_OWN          (1u << 31) /* 所有权归 DMA */
+
+/* DES1 buffer1 大小域(bits 12:0)，单描述符最大 8191B；本驱动用 4KB/描述符 */
+
+#define IDMAC_DES1_BS_MASK      0x1fff
+#define IDMAC_DES1_BS1(x)       ((x) & IDMAC_DES1_BS_MASK)
+
+/* 每描述符搬运字节数：4KB(页对齐、<8191 安全) */
+
+#define RK3576_IDMAC_BUFSZ      4096
+
+/* 32 位链式描述符结构 */
+
+struct rk3576_idmac_desc_s
+{
+  uint32_t des0;   /* 控制/状态位 */
+  uint32_t des1;   /* buffer1 字节数(BS1) */
+  uint32_t des2;   /* buffer1 物理地址 */
+  uint32_t des3;   /* 链式模式：下一描述符物理地址 */
+};
+
+
 #endif /* __ARCH_ARM64_SRC_RK3576_HARDWARE_RK3576_SDMMC_H */

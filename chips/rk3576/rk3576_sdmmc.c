@@ -53,6 +53,7 @@
 #include <nuttx/sdio.h>
 #include <nuttx/mmcsd.h>
 #include <nuttx/wqueue.h>
+#include <nuttx/cache.h>
 
 #include "arm64_arch.h"
 #include "arm64_internal.h"
@@ -86,6 +87,10 @@
 
 #define RK3576_SDMMC_FIFO_DEPTH 256
 #define RK3576_SDMMC_FIFO_HALF  (RK3576_SDMMC_FIFO_DEPTH / 2)
+
+/* IDMAC 描述符表项数：256 项 x 4KB = 1MB 单次 DMA 传输上限 */
+
+#define RK3576_IDMAC_NDESC      256
 
 /* 轮询超时（忙等循环上限） */
 
@@ -133,6 +138,17 @@ struct rk3576_dev_s
   volatile size_t    remaining;  /* 剩余字节数 */
   volatile uint32_t  xfrints;    /* 数据传输期间使能的中断 */
   bool               widebus;    /* 4-bit 总线 */
+
+#ifdef CONFIG_SDIO_DMA
+  /* IDMAC(内部 DMA)状态 */
+
+  volatile bool      dmamode;    /* 当前传输走 IDMAC */
+  bool               dmaread;    /* DMA 方向：true=读(DMA 写内存) */
+  uintptr_t          dmabuf;     /* DMA 缓冲区起址 */
+  size_t             dmalen;     /* DMA 缓冲区长度 */
+  struct rk3576_idmac_desc_s *descs;  /* 描述符表(指向静态对齐数组) */
+#endif
+  uint32_t           blocksize;  /* 当前块大小(由 blocksetup 记录) */
 };
 
 /***************************************************************************
@@ -162,6 +178,27 @@ static void rk3576_eventtimeout(wdparm_t arg);
 static void rk3576_recvfifo(struct rk3576_dev_s *priv);
 static void rk3576_sendfifo(struct rk3576_dev_s *priv);
 static void rk3576_callback(struct rk3576_dev_s *priv);
+
+#ifdef CONFIG_SDIO_DMA
+static void rk3576_dma_disable(struct rk3576_dev_s *priv);
+static int  rk3576_dma_build(struct rk3576_dev_s *priv,
+                             const uint8_t *buffer, size_t buflen);
+static int  rk3576_dma_common(struct rk3576_dev_s *priv,
+                              const uint8_t *buffer, size_t buflen,
+                              bool write);
+#ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
+static int  rk3576_dmapreflight(struct sdio_dev_s *dev,
+                                const uint8_t *buffer, size_t buflen);
+#endif
+static int  rk3576_dmarecvsetup(struct sdio_dev_s *dev, uint8_t *buffer,
+                                size_t buflen);
+static int  rk3576_dmasendsetup(struct sdio_dev_s *dev,
+                                const uint8_t *buffer, size_t buflen);
+#endif
+#ifdef CONFIG_SDIO_BLOCKSETUP
+static void rk3576_blocksetup(struct sdio_dev_s *dev,
+                              unsigned int blocklen, unsigned int nblocks);
+#endif
 
 /* 中断处理 */
 
@@ -206,6 +243,13 @@ static void rk3576_gotextcsd(struct sdio_dev_s *dev,
  * Private Data
  ***************************************************************************/
 
+#ifdef CONFIG_SDIO_DMA
+/* IDMAC 描述符表：cache line(64B)对齐，CPU 与 DMA 共享 */
+
+static struct rk3576_idmac_desc_s
+  g_idmac_descs[RK3576_IDMAC_NDESC] aligned_data(64);
+#endif
+
 /* 单实例：RK3576 只挂 SD 卡槽（SDMMC0）。 */
 
 static struct rk3576_dev_s g_sdmmcdev =
@@ -237,6 +281,16 @@ static struct rk3576_dev_s g_sdmmcdev =
     .registercallback = rk3576_registercallback,
 #endif
     .gotextcsd       = rk3576_gotextcsd,
+#ifdef CONFIG_SDIO_DMA
+#ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
+    .dmapreflight    = rk3576_dmapreflight,
+#endif
+    .dmarecvsetup    = rk3576_dmarecvsetup,
+    .dmasendsetup    = rk3576_dmasendsetup,
+#endif
+#ifdef CONFIG_SDIO_BLOCKSETUP
+    .blocksetup      = rk3576_blocksetup,
+#endif
   },
   .base = RK3576_SDMMC_ADDR,
   .irq  = RK3576_IRQ_SDMMC,
@@ -518,6 +572,32 @@ static int rk3576_interrupt(int irq, void *context, void *arg)
 
   rk3576_putreg(priv, RK3576_SDMMC_RINTSTS, pending);
 
+#ifdef CONFIG_SDIO_DMA
+  /* --- IDMAC 状态：处理 DMA 错误(收/发完成靠下面 DTO 收口) --- */
+
+  if (priv->dmamode)
+    {
+      uint32_t idsts = rk3576_getreg(priv, RK3576_SDMMC_IDSTS);
+
+      rk3576_putreg(priv, RK3576_SDMMC_IDSTS,
+                    idsts & SDMMC_IDMAC_INT_ALL);
+
+      if ((idsts & SDMMC_IDMAC_INT_ERR) != 0)
+        {
+          rk3576_dma_disable(priv);
+          priv->remaining = 0;
+          priv->buffer    = NULL;
+          rk3576_configxfrints(priv, 0);
+
+          if ((priv->waitevents &
+               (SDIOWAIT_TRANSFERDONE | SDIOWAIT_ERROR)) != 0)
+            {
+              rk3576_endwait(priv, SDIOWAIT_ERROR);
+            }
+        }
+    }
+#endif
+
   /* --- PIO 数据搬运 --- */
 
   if ((pending & SDMMC_INT_RXDR) != 0 && priv->buffer != NULL)
@@ -534,6 +614,12 @@ static int rk3576_interrupt(int irq, void *context, void *arg)
 
   if ((pending & SDMMC_DATAERR_INTS) != 0)
     {
+#ifdef CONFIG_SDIO_DMA
+      if (priv->dmamode)
+        {
+          rk3576_dma_disable(priv);
+        }
+#endif
       priv->remaining = 0;
       priv->buffer    = NULL;
       rk3576_configxfrints(priv, 0);
@@ -548,7 +634,23 @@ static int rk3576_interrupt(int irq, void *context, void *arg)
 
   else if ((pending & SDMMC_INT_DTO) != 0)
     {
-      /* 收尾：把 FIFO 里残留数据读完 */
+#ifdef CONFIG_SDIO_DMA
+      if (priv->dmamode)
+        {
+          /* ★ DMA 读：DTO 后再 invalidate 一次，确保 CPU 读到 DMA 写入内存
+           * 的新数据(而非旧的 cache 行)。
+           */
+
+          if (priv->dmaread)
+            {
+              up_invalidate_dcache(priv->dmabuf,
+                                   priv->dmabuf + priv->dmalen);
+            }
+
+          rk3576_dma_disable(priv);
+        }
+#endif
+      /* 收尾：把 FIFO 里残留数据读完(仅 PIO) */
 
       if (priv->buffer != NULL)
         {
@@ -668,6 +770,27 @@ static void rk3576_reset(struct sdio_dev_s *dev)
   priv->waitevents = 0;
   priv->wkupevent  = 0;
 
+#ifdef CONFIG_SDIO_DMA
+  /* 初始化 IDMAC：软复位并等自清，清状态，使能收/发完成+错误中断。
+   * 复位默认不选 IDMAC(USE_IDMAC=0)，PIO 为缺省路径。
+   */
+
+  rk3576_putreg(priv, RK3576_SDMMC_BMOD, SDMMC_IDMAC_SWRESET);
+  for (i = 0; i < RK3576_SDMMC_SPIN; i++)
+    {
+      if ((rk3576_getreg(priv, RK3576_SDMMC_BMOD) &
+           SDMMC_IDMAC_SWRESET) == 0)
+        {
+          break;
+        }
+    }
+
+  rk3576_putreg(priv, RK3576_SDMMC_IDSTS, SDMMC_IDMAC_INT_ALL);
+  rk3576_putreg(priv, RK3576_SDMMC_IDINTEN, SDMMC_IDMAC_INT_ENA);
+  priv->dmamode = false;
+#endif
+  priv->blocksize = 0;
+
   /* ID 模式初始时钟（<400KHz） */
 
   rk3576_setclock(priv, RK3576_SDMMC_ID_FREQ);
@@ -698,6 +821,14 @@ static sdio_capset_t rk3576_capabilities(struct sdio_dev_s *dev)
    */
 
   caps |= SDIO_CAPS_DMABEFOREWRITE;
+
+#ifdef CONFIG_SDIO_DMA
+  /* IDMAC 硬件搬数据：提速 + 解决多块写 underrun。不对齐/超容量的 buffer 由
+   * dmapreflight 拒绝，mmcsd 自动回退到 PIO 路径。
+   */
+
+  caps |= SDIO_CAPS_DMASUPPORTED;
+#endif
 
   return caps;
 }
@@ -922,9 +1053,10 @@ static int rk3576_recvsetup(struct sdio_dev_s *dev, uint8_t *buffer,
   priv->buffer    = (uint32_t *)buffer;
   priv->remaining = nbytes;
 
-  /* 设块大小与字节数（单块传输时 BLKSIZ=nbytes） */
+  /* 设块大小与字节数：块大小取 blocksetup 记录值(缺省 nbytes) */
 
-  rk3576_putreg(priv, RK3576_SDMMC_BLKSIZ, nbytes);
+  rk3576_putreg(priv, RK3576_SDMMC_BLKSIZ,
+                priv->blocksize ? priv->blocksize : nbytes);
   rk3576_putreg(priv, RK3576_SDMMC_BYTCNT, nbytes);
 
   /* 开数据接收中断：RXDR + DTO + 错误 */
@@ -967,7 +1099,8 @@ static int rk3576_sendsetup(struct sdio_dev_s *dev, const uint8_t *buffer,
   priv->buffer    = (uint32_t *)buffer;
   priv->remaining = nbytes;
 
-  rk3576_putreg(priv, RK3576_SDMMC_BLKSIZ, nbytes);
+  rk3576_putreg(priv, RK3576_SDMMC_BLKSIZ,
+                priv->blocksize ? priv->blocksize : nbytes);
   rk3576_putreg(priv, RK3576_SDMMC_BYTCNT, nbytes);
 
   /* ★ 预填 TX FIFO：DW-MSHC PIO 写必须在发命令前把数据塞进 FIFO，否则发
@@ -1232,6 +1365,281 @@ static void rk3576_gotextcsd(struct sdio_dev_s *dev,
   UNUSED(buffer);
 }
 
+#ifdef CONFIG_SDIO_DMA
+
+/***************************************************************************
+ * Name: rk3576_dma_disable
+ *
+ * Description:
+ *   关闭 IDMAC：清 BMOD 的 DE 位与 CTRL 的 USE_IDMAC，退出 DMA 模式。
+ ***************************************************************************/
+
+static void rk3576_dma_disable(struct rk3576_dev_s *priv)
+{
+  rk3576_putreg(priv, RK3576_SDMMC_CTRL,
+                rk3576_getreg(priv, RK3576_SDMMC_CTRL) &
+                ~SDMMC_CTRL_USE_IDMAC);
+  rk3576_putreg(priv, RK3576_SDMMC_BMOD,
+                rk3576_getreg(priv, RK3576_SDMMC_BMOD) &
+                ~SDMMC_IDMAC_ENABLE);
+  priv->dmamode = false;
+}
+
+/***************************************************************************
+ * Name: rk3576_dma_build
+ *
+ * Description:
+ *   把 [buffer, buffer+buflen) 拆成 <=4KB 的段，填入静态描述符链(32 位链式)。
+ *   首段置 FD、末段置 LD，非末段置 DIC(仅末段产生完成中断)。填完 clean 描述符
+ *   表的 dcache，让 IDMAC 读到 CPU 写入的描述符。
+ ***************************************************************************/
+
+static int rk3576_dma_build(struct rk3576_dev_s *priv,
+                            const uint8_t *buffer, size_t buflen)
+{
+  struct rk3576_idmac_desc_s *desc = priv->descs;
+  uintptr_t addr = (uintptr_t)buffer;
+  size_t remaining = buflen;
+  unsigned int n;
+  unsigned int i;
+
+  n = (buflen + RK3576_IDMAC_BUFSZ - 1) / RK3576_IDMAC_BUFSZ;
+  if (n == 0 || n > RK3576_IDMAC_NDESC)
+    {
+      return -EFAULT;
+    }
+
+  for (i = 0; i < n; i++)
+    {
+      size_t seg = remaining > RK3576_IDMAC_BUFSZ ?
+                   RK3576_IDMAC_BUFSZ : remaining;
+      uint32_t ctrl = IDMAC_DES0_OWN | IDMAC_DES0_CH;
+
+      desc[i].des1 = IDMAC_DES1_BS1(seg);
+      desc[i].des2 = (uint32_t)addr;      /* buffer1 物理地址(低 4G) */
+
+      if (i == 0)
+        {
+          ctrl |= IDMAC_DES0_FD;
+        }
+
+      if (i == n - 1)
+        {
+          ctrl |= IDMAC_DES0_LD;          /* 末段：完成后停止 */
+          desc[i].des3 = 0;
+        }
+      else
+        {
+          ctrl |= IDMAC_DES0_DIC;         /* 非末段不产生完成中断 */
+          desc[i].des3 = (uint32_t)(uintptr_t)&desc[i + 1];
+        }
+
+      desc[i].des0 = ctrl;
+
+      addr      += seg;
+      remaining -= seg;
+    }
+
+  /* ★ 描述符由 CPU 写、由 DMA 读 —— 必须把描述符表刷回内存 */
+
+  up_clean_dcache((uintptr_t)desc,
+                  (uintptr_t)desc + n * sizeof(struct rk3576_idmac_desc_s));
+  return OK;
+}
+
+/***************************************************************************
+ * Name: rk3576_dma_common
+ *
+ * Description:
+ *   dmarecvsetup/dmasendsetup 公共流程：复位 FIFO+DMA、建描述符链、处理 cache、
+ *   使能 IDMAC、设块大小/字节数、切到 DTO+错误中断(关 PIO 的 RXDR/TXDR)。
+ ***************************************************************************/
+
+static int rk3576_dma_common(struct rk3576_dev_s *priv,
+                             const uint8_t *buffer, size_t buflen,
+                             bool write)
+{
+  uint32_t blksz;
+  int ret;
+  int i;
+
+  /* 进入 DMA 模式：清 PIO 用的 buffer 指针，防 ISR 走 recvfifo/sendfifo */
+
+  priv->buffer    = NULL;
+  priv->remaining = 0;
+  priv->dmabuf    = (uintptr_t)buffer;
+  priv->dmalen    = buflen;
+  priv->dmaread   = !write;
+  priv->dmamode   = true;
+
+  /* 复位 FIFO + DMA，并等待自清 */
+
+  rk3576_putreg(priv, RK3576_SDMMC_CTRL,
+                rk3576_getreg(priv, RK3576_SDMMC_CTRL) |
+                SDMMC_CTRL_FIFO_RESET | SDMMC_CTRL_DMA_RESET);
+  for (i = 0; i < RK3576_SDMMC_SPIN; i++)
+    {
+      if ((rk3576_getreg(priv, RK3576_SDMMC_CTRL) &
+           (SDMMC_CTRL_FIFO_RESET | SDMMC_CTRL_DMA_RESET)) == 0)
+        {
+          break;
+        }
+    }
+
+  /* 软复位 IDMAC，等自清 */
+
+  rk3576_putreg(priv, RK3576_SDMMC_BMOD, SDMMC_IDMAC_SWRESET);
+  for (i = 0; i < RK3576_SDMMC_SPIN; i++)
+    {
+      if ((rk3576_getreg(priv, RK3576_SDMMC_BMOD) &
+           SDMMC_IDMAC_SWRESET) == 0)
+        {
+          break;
+        }
+    }
+
+  /* 建描述符链 */
+
+  ret = rk3576_dma_build(priv, buffer, buflen);
+  if (ret < 0)
+    {
+      priv->dmamode = false;
+      return ret;
+    }
+
+  /* ★ cache 一致性：
+   *   发送(DMA 读内存) -> clean，把 CPU 缓存刷到内存；
+   *   接收(DMA 写内存) -> invalidate，避免脏行回写覆盖 DMA 数据，
+   *                        DTO 后 ISR 再 invalidate 一次让 CPU 读到新数据。
+   */
+
+  if (write)
+    {
+      up_clean_dcache((uintptr_t)buffer, (uintptr_t)buffer + buflen);
+    }
+  else
+    {
+      up_invalidate_dcache((uintptr_t)buffer, (uintptr_t)buffer + buflen);
+    }
+
+  /* 使能 IDMAC 中断(收/发完成 + 错误) */
+
+  rk3576_putreg(priv, RK3576_SDMMC_IDSTS, SDMMC_IDMAC_INT_ALL);
+  rk3576_putreg(priv, RK3576_SDMMC_IDINTEN, SDMMC_IDMAC_INT_ENA);
+
+  /* 描述符基址 -> DBADDR */
+
+  rk3576_putreg(priv, RK3576_SDMMC_DBADDR, (uint32_t)(uintptr_t)priv->descs);
+
+  /* CTRL 选内部 DMA；BMOD 使能 DE(+固定突发) */
+
+  rk3576_putreg(priv, RK3576_SDMMC_CTRL,
+                rk3576_getreg(priv, RK3576_SDMMC_CTRL) |
+                SDMMC_CTRL_USE_IDMAC);
+  rk3576_putreg(priv, RK3576_SDMMC_BMOD,
+                SDMMC_IDMAC_FB | SDMMC_IDMAC_ENABLE);
+
+  /* 块大小/字节数：blocksize 由 blocksetup 记录，缺省 512 */
+
+  blksz = priv->blocksize ? priv->blocksize : buflen;
+  rk3576_putreg(priv, RK3576_SDMMC_BLKSIZ, blksz);
+  rk3576_putreg(priv, RK3576_SDMMC_BYTCNT, buflen);
+
+  /* 数据完成用 DTO，错误用 DATAERR；DMA 模式不开 RXDR/TXDR */
+
+  rk3576_configxfrints(priv, SDMMC_XFRDONE_INTS | SDMMC_DATAERR_INTS);
+  return OK;
+}
+
+/***************************************************************************
+ * Name: rk3576_dmapreflight
+ *
+ * Description:
+ *   校验 buffer 是否适合 IDMAC：cache line 对齐、长度对齐、不超描述符容量、
+ *   物理地址落在低 4G(32 位描述符)。不满足返回 -EFAULT，mmcsd 自动回退 PIO。
+ ***************************************************************************/
+
+#ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
+static int rk3576_dmapreflight(struct sdio_dev_s *dev,
+                               const uint8_t *buffer, size_t buflen)
+{
+  uintptr_t addr = (uintptr_t)buffer;
+  size_t line = up_get_dcache_linesize();
+
+  if (line == 0)
+    {
+      line = 64;   /* armv8-a L1 D-cache line */
+    }
+
+  /* 地址与长度需 cache line 对齐(否则 invalidate 会波及相邻数据) */
+
+  if ((addr & (line - 1)) != 0 || (buflen & (line - 1)) != 0)
+    {
+      return -EFAULT;
+    }
+
+  /* 超过描述符链容量 -> 回退 PIO */
+
+  if (buflen > (size_t)RK3576_IDMAC_NDESC * RK3576_IDMAC_BUFSZ)
+    {
+      return -EFAULT;
+    }
+
+  /* 32 位描述符只能寻址低 4G */
+
+  if ((uint64_t)addr + buflen > 0x100000000ull)
+    {
+      return -EFAULT;
+    }
+
+  return OK;
+}
+#endif
+
+/***************************************************************************
+ * Name: rk3576_dmarecvsetup / rk3576_dmasendsetup
+ ***************************************************************************/
+
+static int rk3576_dmarecvsetup(struct sdio_dev_s *dev, uint8_t *buffer,
+                               size_t buflen)
+{
+  struct rk3576_dev_s *priv = (struct rk3576_dev_s *)dev;
+
+  DEBUGASSERT(buffer != NULL && buflen > 0);
+  return rk3576_dma_common(priv, buffer, buflen, false);
+}
+
+static int rk3576_dmasendsetup(struct sdio_dev_s *dev,
+                               const uint8_t *buffer, size_t buflen)
+{
+  struct rk3576_dev_s *priv = (struct rk3576_dev_s *)dev;
+
+  DEBUGASSERT(buffer != NULL && buflen > 0);
+  return rk3576_dma_common(priv, buffer, buflen, true);
+}
+
+#endif /* CONFIG_SDIO_DMA */
+
+#ifdef CONFIG_SDIO_BLOCKSETUP
+/***************************************************************************
+ * Name: rk3576_blocksetup
+ *
+ * Description:
+ *   记录块大小并预置 BLKSIZ/BYTCNT。DMA 与 PIO 路径都据此设块大小。
+ ***************************************************************************/
+
+static void rk3576_blocksetup(struct sdio_dev_s *dev,
+                              unsigned int blocklen, unsigned int nblocks)
+{
+  struct rk3576_dev_s *priv = (struct rk3576_dev_s *)dev;
+
+  priv->blocksize = blocklen;
+  rk3576_putreg(priv, RK3576_SDMMC_BLKSIZ, blocklen);
+  rk3576_putreg(priv, RK3576_SDMMC_BYTCNT, blocklen * nblocks);
+}
+#endif
+
+
 /***************************************************************************
  * Public Functions
  ***************************************************************************/
@@ -1254,6 +1662,10 @@ struct sdio_dev_s *rk3576_sdmmc_initialize(int slotno)
   struct rk3576_dev_s *priv = &g_sdmmcdev;
 
   DEBUGASSERT(slotno == 0);
+
+#ifdef CONFIG_SDIO_DMA
+  priv->descs = g_idmac_descs;
+#endif
 
   nxmutex_init(&priv->dev.mutex);
   nxsem_init(&priv->waitsem, 0, 0);
