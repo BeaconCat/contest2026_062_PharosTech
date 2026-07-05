@@ -1559,9 +1559,9 @@ static int rk3576_dma_common(struct rk3576_dev_s *priv,
  *   物理地址落在低 4G(32 位描述符)。不满足返回 -EFAULT，mmcsd 自动回退 PIO。
  ***************************************************************************/
 
-#ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
-static int rk3576_dmapreflight(struct sdio_dev_s *dev,
-                               const uint8_t *buffer, size_t buflen)
+/* 判断 buffer 能否走 IDMAC:cache line 对齐 + 不超描述符容量 + 落低 4G。 */
+
+static bool rk3576_dma_ok(const uint8_t *buffer, size_t buflen)
 {
   uintptr_t addr = (uintptr_t)buffer;
   size_t line = up_get_dcache_linesize();
@@ -1571,27 +1571,23 @@ static int rk3576_dmapreflight(struct sdio_dev_s *dev,
       line = 64;   /* armv8-a L1 D-cache line */
     }
 
-  /* 地址与长度需 cache line 对齐(否则 invalidate 会波及相邻数据) */
+  return (addr & (line - 1)) == 0 && (buflen & (line - 1)) == 0 &&
+         buflen <= (size_t)RK3576_IDMAC_NDESC * RK3576_IDMAC_BUFSZ &&
+         (uint64_t)addr + buflen <= 0x100000000ull;
+}
 
-  if ((addr & (line - 1)) != 0 || (buflen & (line - 1)) != 0)
-    {
-      return -EFAULT;
-    }
+#ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
+static int rk3576_dmapreflight(struct sdio_dev_s *dev,
+                               const uint8_t *buffer, size_t buflen)
+{
+  /* ★ 总是返回 OK:mmcsd 对 preflight 失败【不回退 PIO】(直接返回 EFAULT),
+   * 所以这里不能拒绝任何 buffer。实际能否走 DMA 在下面的 setup 里判,不满足
+   * (不对齐/超容量/超 4G)时由【驱动自身】回退到 PIO,保证任何 buffer 都能读写。
+   */
 
-  /* 超过描述符链容量 -> 回退 PIO */
-
-  if (buflen > (size_t)RK3576_IDMAC_NDESC * RK3576_IDMAC_BUFSZ)
-    {
-      return -EFAULT;
-    }
-
-  /* 32 位描述符只能寻址低 4G */
-
-  if ((uint64_t)addr + buflen > 0x100000000ull)
-    {
-      return -EFAULT;
-    }
-
+  UNUSED(dev);
+  UNUSED(buffer);
+  UNUSED(buflen);
   return OK;
 }
 #endif
@@ -1606,6 +1602,15 @@ static int rk3576_dmarecvsetup(struct sdio_dev_s *dev, uint8_t *buffer,
   struct rk3576_dev_s *priv = (struct rk3576_dev_s *)dev;
 
   DEBUGASSERT(buffer != NULL && buflen > 0);
+
+  /* buffer 不适合 DMA -> 驱动自行回退 PIO(mmcsd 不会替我们回退) */
+
+  if (!rk3576_dma_ok(buffer, buflen))
+    {
+      priv->dmamode = false;
+      return rk3576_recvsetup(dev, buffer, buflen);
+    }
+
   return rk3576_dma_common(priv, buffer, buflen, false);
 }
 
@@ -1615,6 +1620,13 @@ static int rk3576_dmasendsetup(struct sdio_dev_s *dev,
   struct rk3576_dev_s *priv = (struct rk3576_dev_s *)dev;
 
   DEBUGASSERT(buffer != NULL && buflen > 0);
+
+  if (!rk3576_dma_ok(buffer, buflen))
+    {
+      priv->dmamode = false;
+      return rk3576_sendsetup(dev, buffer, buflen);
+    }
+
   return rk3576_dma_common(priv, buffer, buflen, true);
 }
 
