@@ -61,7 +61,11 @@
 #include "hardware/rk3576_sdmmc.h"
 #include "rk3576_sdmmc.h"
 
-#ifdef CONFIG_RK3576_SDMMC
+#ifdef CONFIG_RK3576_SDIO
+#  include "rk3576_cru.h"
+#endif
+
+#if defined(CONFIG_RK3576_SDMMC) || defined(CONFIG_RK3576_SDIO)
 
 /***************************************************************************
  * Pre-processor Definitions
@@ -73,6 +77,20 @@
  */
 
 #define RK3576_SDMMC_CLKIN      50000000
+
+/* Host instances.  The same DW-MSHC driver drives both the SD-card slot
+ * (SDMMC0) and the SDIO controller (SDIO0, on-board WiFi combo); they differ
+ * only in register base and IRQ.  Slot 0 = SD card, slot 1 = SDIO.
+ */
+
+#define RK3576_SDMMC_SLOT       0
+#define RK3576_SDIO_SLOT        1
+
+#ifdef CONFIG_RK3576_SDIO
+#  define RK3576_SDMMC_NHOSTS   2
+#else
+#  define RK3576_SDMMC_NHOSTS   1
+#endif
 
 /* Target card clock for each stage */
 
@@ -245,18 +263,21 @@ static void rk3576_sdmmc_gotextcsd(struct sdio_dev_s *dev,
  ***************************************************************************/
 
 #ifdef CONFIG_SDIO_DMA
-/* IDMAC descriptor table: cache-line (64B) aligned, shared by CPU and DMA */
+/* IDMAC descriptor table: cache-line (64B) aligned, shared by CPU and DMA.
+ * One table per host so the SD-card and SDIO controllers never share
+ * descriptors.
+ */
 
 static struct rk3576_sdmmc_idmac_desc_s
-  g_idmac_descs[RK3576_IDMAC_NDESC] aligned_data(64);
+  g_idmac_descs[RK3576_SDMMC_NHOSTS][RK3576_IDMAC_NDESC] aligned_data(64);
 #endif
 
-/* Single instance: RK3576 has only one SD card slot (SDMMC0). */
+/* Shared sdio_dev_s operations template.  Both host instances start from a
+ * copy of this; only base/irq (and, for SDIO, the clock bring-up) differ.
+ */
 
-static struct rk3576_sdmmc_dev_s g_sdmmcdev =
+static const struct sdio_dev_s g_rk3576_sdmmc_ops =
 {
-  .dev =
-  {
     .reset           = rk3576_sdmmc_reset,
     .capabilities    = rk3576_sdmmc_capabilities,
     .status          = rk3576_sdmmc_status,
@@ -292,10 +313,29 @@ static struct rk3576_sdmmc_dev_s g_sdmmcdev =
 #ifdef CONFIG_SDIO_BLOCKSETUP
     .blocksetup      = rk3576_sdmmc_blocksetup,
 #endif
-  },
-  .base = RK3576_SDMMC_ADDR,
-  .irq  = RK3576_IRQ_SDMMC,
 };
+
+/* Per-slot register base and IRQ (indexed by slot number). */
+
+static const struct rk3576_sdmmc_cfg_s
+{
+  uintptr_t base;
+  int       irq;
+} g_sdmmc_cfg[RK3576_SDMMC_NHOSTS] =
+{
+  {
+    .base = RK3576_SDMMC_ADDR, .irq = RK3576_IRQ_SDMMC,   /* slot 0: SD card */
+  },
+#ifdef CONFIG_RK3576_SDIO
+  {
+    .base = RK3576_SDIO_ADDR,  .irq = RK3576_IRQ_SDIO,    /* slot 1: SDIO WiFi */
+  },
+#endif
+};
+
+/* Host instances (ops copied from the template at initialize time). */
+
+static struct rk3576_sdmmc_dev_s g_sdmmc_hosts[RK3576_SDMMC_NHOSTS];
 
 /***************************************************************************
  * Private Functions
@@ -1703,7 +1743,7 @@ static void rk3576_sdmmc_blocksetup(struct sdio_dev_s *dev,
  *   mmcsd layer to mount.
  *
  * Input Parameters:
- *   slotno - Slot number (RK3576 has only one SD card slot, use 0).
+ *   slotno - Host slot: 0 = SD card (SDMMC0), 1 = SDIO (on-board WiFi combo).
  *
  * Returned Value:
  *   On success returns an sdio_dev_s pointer, on failure returns NULL.
@@ -1711,12 +1751,30 @@ static void rk3576_sdmmc_blocksetup(struct sdio_dev_s *dev,
 
 struct sdio_dev_s *rk3576_sdmmc_initialize(int slotno)
 {
-  struct rk3576_sdmmc_dev_s *priv = &g_sdmmcdev;
+  struct rk3576_sdmmc_dev_s *priv;
 
-  DEBUGASSERT(slotno == 0);
+  DEBUGASSERT(slotno >= 0 && slotno < RK3576_SDMMC_NHOSTS);
+
+  priv = &g_sdmmc_hosts[slotno];
+  priv->dev  = g_rk3576_sdmmc_ops;          /* copy the shared ops template */
+  priv->base = g_sdmmc_cfg[slotno].base;
+  priv->irq  = g_sdmmc_cfg[slotno].irq;
 
 #ifdef CONFIG_SDIO_DMA
-  priv->descs = g_idmac_descs;
+  priv->descs = g_idmac_descs[slotno];
+#endif
+
+#ifdef CONFIG_RK3576_SDIO
+  if (slotno == RK3576_SDIO_SLOT)
+    {
+      /* SDIO is not the boot device, so the loader leaves its clock domain
+       * off: bring up cclk_src_sdio / hclk_sdio via the CRU before use.
+       * TODO(S2/S3): SDIO pin IOMUX and the AP6256 WL_REG_ON power-up
+       * sequence must still be wired before enumeration will succeed.
+       */
+
+      rk3576_cru_sdio_enable();
+    }
 #endif
 
   nxmutex_init(&priv->dev.mutex);
@@ -1733,4 +1791,4 @@ struct sdio_dev_s *rk3576_sdmmc_initialize(int slotno)
   return &priv->dev;
 }
 
-#endif /* CONFIG_RK3576_SDMMC */
+#endif /* CONFIG_RK3576_SDMMC || CONFIG_RK3576_SDIO */
