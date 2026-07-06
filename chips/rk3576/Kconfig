@@ -68,6 +68,19 @@ config RK3576_SDMMC
 		Enable the RK3576 SDMMC (SD card) host controller driver
 		(Synopsys DesignWare MSHC, PIO mode).
 
+config RK3576_SDIO
+	bool "SDIO (SDIO0 - WiFi AP6256)"
+	default n
+	select ARCH_HAVE_SDIO
+	select MMCSD
+	select MMCSD_SDIO
+	---help---
+		Enable the RK3576 SDIO host controller driver (mmc@2a320000,
+		Synopsys DesignWare MSHC) for the on-board AP6256 (BCM43456)
+		WiFi/BT combo.  Pulls in the CRU clock/reset bring-up
+		(rk3576_cru.c): SDIO is not the boot device so the loader
+		leaves its clock domain off.
+
 endmenu # Rockchip RK3576 Peripheral Selection
 
 endif # ARCH_CHIP_RK3576
