@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/arm64/rk3576/kickpi_k7/src/kickpi_k7_boardinit.c
+ * boards/rk3576/kickpi-k7/src/kickpi_k7_boardinit.c
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -26,9 +26,15 @@
 
 #include <nuttx/config.h>
 #include <stdint.h>
+#include <syslog.h>
 #include <nuttx/board.h>
 #include "rk3576_gpio.h"
 #include "kickpi_k7.h"
+
+#ifdef CONFIG_RK3576_SDMMC
+#  include <nuttx/mmcsd.h>
+#  include "rk3576_sdmmc.h"
+#endif
 
 /****************************************************************************
  * Public Functions
@@ -107,12 +113,28 @@ void board_late_initialize(void)
 #ifdef CONFIG_DEV_GPIO
   /* setup gpio driver */
   rk3576_gpio_init();
-#endif
 
-#ifdef CONFIG_DEV_GPIO
   /* register LED GPIO pin */
   rk3576_gpio_register(GPIO_PORT0 | GPIO_PIN_B4 | GPIO_OUTPUT);
 #endif
 
+#ifdef CONFIG_RK3576_SDMMC
+  /* Initialize the SD card slot (SDMMC0) -> /dev/mmcsd0.  The SD card is an
+   * optional peripheral: on failure only warn, do not block the boot (booting
+   * to NSH must succeed even with no card inserted).
+   */
+
+  {
+    FAR struct sdio_dev_s *sdmmc = rk3576_sdmmc_initialize(0);
+    if (sdmmc == NULL)
+      {
+        syslog(LOG_ERR, "ERROR: rk3576_sdmmc_initialize failed\n");
+      }
+    else if (mmcsd_slotinitialize(0, sdmmc) < 0)
+      {
+        syslog(LOG_ERR, "ERROR: mmcsd_slotinitialize failed\n");
+      }
+  }
+#endif
 }
 #endif /* CONFIG_BOARD_LATE_INITIALIZE */
