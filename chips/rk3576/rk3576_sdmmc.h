@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/rk3576/kickpi-k7/src/kickpi_k7_appinit.c
+ * chips/rk3576/rk3576_sdmmc.h
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -20,45 +20,35 @@
  *
  ****************************************************************************/
 
+#ifndef __ARCH_ARM64_SRC_RK3576_RK3576_SDMMC_H
+#define __ARCH_ARM64_SRC_RK3576_RK3576_SDMMC_H
+
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
 #include <nuttx/config.h>
-#include <sys/types.h>
-#include <nuttx/board.h>
-#include "kickpi_k7.h"
+#include <nuttx/sdio.h>
 
 /****************************************************************************
- * Public Functions
+ * Public Function Prototypes
  ****************************************************************************/
 
 /****************************************************************************
- * Name: board_app_initialize
+ * Name: rk3576_sdmmc_initialize
  *
  * Description:
- *   Perform application specific initialization.  This function is never
- *   called directly from application code, but only indirectly via the
- *   (non-standard) boardctl() interface using the command BOARDIOC_INIT.
+ *   Initialize the RK3576 SDMMC (SD card) host and return an sdio_dev_s for
+ *   the mmcsd layer to mount.
  *
  * Input Parameters:
- *   arg - The boardctl() argument is passed to the board_app_initialize()
- *         implementation without modification.  The argument has no
- *         meaning to NuttX; the meaning of the argument is a contract
- *         between the board-specific initialization logic and the
- *         matching application logic.  The value could be such things as a
- *         mode enumeration value, a set of DIP switch switch settings, a
- *         pointer to configuration data read from a file or serial FLASH,
- *         or whatever you would like to do with it.  Every implementation
- *         should accept zero/NULL as a default configuration.
+ *   slotno - Slot number (RK3576 has only one SD card slot, use 0).
  *
  * Returned Value:
- *   Zero (OK) is returned on success; a negated errno value is returned on
- *   any failure to indicate the nature of the failure.
+ *   On success returns an sdio_dev_s pointer, on failure returns NULL.
  *
  ****************************************************************************/
 
-int board_app_initialize(uintptr_t arg)
-{
-  return OK;
-}
+FAR struct sdio_dev_s *rk3576_sdmmc_initialize(int slotno);
+
+#endif /* __ARCH_ARM64_SRC_RK3576_RK3576_SDMMC_H */
