@@ -38,7 +38,6 @@
 #endif
 
 #if defined(CONFIG_RK3576_SDMMC) && defined(CONFIG_GPT_PARTITION)
-#  include <sys/mount.h>
 #  include <nuttx/fs/partition.h>
 #endif
 
@@ -55,7 +54,7 @@
  *
  * Description:
  *   Called by parse_block_partition() for each valid GPT partition on
- *   the sdmmc device.  The GPT layout (see build_sd.sh) is 
+ *   the sdmmc device.  The GPT layout (see build_sd.sh) is
  *   index 0 = uboot (BL33), index 1 = trust, index 2 = rootfs.
  ****************************************************************************/
 
@@ -184,15 +183,20 @@ void board_late_initialize(void)
   }
 
 #ifdef CONFIG_GPT_PARTITION
-  /* Parse the GPT and mount the rootfs FAT partition on /data (mount only). */
+  /* Parse the GPT and register each partition as /dev/mmcsd0pN.  The rootfs
+   * FAT is mounted explicitly (e.g. on /data) when needed, not here.
+   */
 
-  int ret = parse_block_partition(KICKPI_K7_SDMMC_DEVNAME, kickpi_k7_partition_handler,
-                              NULL);
-  if (ret < 0)
-    {
-      syslog(LOG_WARNING, "WARNING: parse " KICKPI_K7_SDMMC_DEVNAME " GPT failed: %d\n", ret);
-    }
-  
+  {
+    int ret = parse_block_partition(KICKPI_K7_SDMMC_DEVNAME,
+                                    kickpi_k7_partition_handler, NULL);
+    if (ret < 0)
+      {
+        syslog(LOG_WARNING,
+               "WARNING: parse " KICKPI_K7_SDMMC_DEVNAME " GPT failed: %d\n",
+               ret);
+      }
+  }
 #endif
 #endif
 }
