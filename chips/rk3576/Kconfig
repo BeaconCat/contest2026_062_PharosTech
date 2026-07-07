@@ -96,6 +96,31 @@ config RK3576_MAILBOX
 		command/data doorbell used for AMP rptun/rpmsg notification between
 		openvela and a remote OS (e.g. Linux).
 
+config RK3576_RPTUN
+	bool "AMP rptun/rpmsg transport (mailbox)"
+	default n
+	depends on RK3576_MAILBOX
+	select RPTUN
+	---help---
+		Enable the RK3576 AMP rptun back end.  openvela runs as the OpenAMP
+		rpmsg remote and reaches a peer OS (Linux) over shared memory, using
+		the inter-core mailbox (RK3576_MAILBOX) for doorbell notification.
+		Chief use: legal WiFi offload, where Linux owns the GPLv2 RTL8822CS
+		radio and openvela bridges to the network via rpmsg (two independent
+		kernels = mere aggregation, so the licenses do not mix).
+
+if RK3576_RPTUN
+
+config RK3576_RPTUN_SHM_BASE
+	hex "rptun shared-memory base address"
+	default 0x7c000000
+	---help---
+		Physical base of the shared-memory carveout holding the resource
+		table and vrings.  Must match the reserved-memory region the Linux
+		master exposes to its remoteproc node.
+
+endif # RK3576_RPTUN
+
 config RK3576_GPIO
 	bool "GPIO"
 	default n
