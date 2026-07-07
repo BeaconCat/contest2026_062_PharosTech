@@ -80,11 +80,9 @@
 
 /* Host instances.  The same DW-MSHC driver drives both the SD-card slot
  * (SDMMC0) and the SDIO controller (SDIO0, on-board WiFi combo); they differ
- * only in register base and IRQ.  Slot 0 = SD card, slot 1 = SDIO.
+ * only in register base and IRQ.  Slot numbers (RK3576_SDMMC_SLOT /
+ * RK3576_SDIO_SLOT) come from rk3576_sdmmc.h.
  */
-
-#define RK3576_SDMMC_SLOT       0
-#define RK3576_SDIO_SLOT        1
 
 #ifdef CONFIG_RK3576_SDIO
 #  define RK3576_SDMMC_NHOSTS   2

@@ -633,6 +633,19 @@ int rk3576_config_gpio(gpio_pinset_t pinset)
 
           rk3576_drive_set(g_ioc_base, port, pin,
                            RK3576_DRIVE_LEVEL_DEFAULT);
+
+          /* Configure pull-up/pull-down for the alternate function.  Some
+           * peripherals (e.g. SDIO CMD/DATA lines) require internal pulls.
+           */
+
+          if ((pinset & GPIO_PUPD_MASK) == GPIO_PULLUP)
+            {
+              rk3576_pull_set(g_ioc_base, port, pin, RK3576_PULL_UP);
+            }
+          else if ((pinset & GPIO_PUPD_MASK) == GPIO_PULLDOWN)
+            {
+              rk3576_pull_set(g_ioc_base, port, pin, RK3576_PULL_DOWN);
+            }
         }
         break;
 

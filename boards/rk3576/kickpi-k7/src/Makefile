@@ -25,6 +25,10 @@ include $(TOPDIR)/Make.defs
 CSRCS = kickpi_k7_boardinit.c
 CSRCS += kickpi_k7_appinit.c
 
+ifeq ($(CONFIG_IEEE80211_BROADCOM_FULLMAC_SDIO),y)
+CSRCS += kickpi_k7_wlan.c
+endif
+
 ifeq ($(CONFIG_ETC_ROMFS),y)
   RCSRCS = etc/init.d/rc.sysinit etc/init.d/rcS
 endif

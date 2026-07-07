@@ -35,5 +35,18 @@
  * Public Functions Definitions
  ****************************************************************************/
 
+#ifdef CONFIG_IEEE80211_BROADCOM_FULLMAC_SDIO
+/****************************************************************************
+ * Name: kickpi_k7_wlan_initialize
+ *
+ * Description:
+ *   Bring up the SDIO host (slot 1) and register the on-board AP6256 WiFi
+ *   combo with the bcmf stack.
+ *
+ ****************************************************************************/
+
+int kickpi_k7_wlan_initialize(void);
+#endif
+
 #endif /* __ASSEMBLY__ */
 #endif /* __BOARDS_ARM64_RK3576_KICKPI_K7_SRC_KICKPI_K7_H */

@@ -31,6 +31,17 @@
 #include <nuttx/sdio.h>
 
 /****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+/* Host slots for rk3576_sdmmc_initialize(): the same DW-MSHC driver drives
+ * the SD-card slot and the SDIO (WiFi) controller.
+ */
+
+#define RK3576_SDMMC_SLOT  0   /* SD card (SDMMC0, mmc@2a310000) */
+#define RK3576_SDIO_SLOT   1   /* SDIO WiFi/BT (SDIO0, mmc@2a320000) */
+
+/****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
@@ -42,7 +53,7 @@
  *   the mmcsd layer to mount.
  *
  * Input Parameters:
- *   slotno - Slot number (RK3576 has only one SD card slot, use 0).
+ *   slotno - Host slot: RK3576_SDMMC_SLOT (SD card) or RK3576_SDIO_SLOT.
  *
  * Returned Value:
  *   On success returns an sdio_dev_s pointer, on failure returns NULL.

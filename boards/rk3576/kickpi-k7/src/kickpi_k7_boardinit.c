@@ -199,5 +199,11 @@ void board_late_initialize(void)
   }
 #endif
 #endif
+
+#ifdef CONFIG_IEEE80211_BROADCOM_FULLMAC_SDIO
+  /* Bring up the on-board AP6256 WiFi combo on the SDIO controller. */
+
+  kickpi_k7_wlan_initialize();
+#endif
 }
 #endif /* CONFIG_BOARD_LATE_INITIALIZE */
