@@ -6,4 +6,15 @@ config ARCH_BOARD_KICKPI_K7
 	default y
 
 if ARCH_BOARD_KICKPI_K7
+
+config KICKPI_K7_SDIO_PROBE
+	bool "SDIO WiFi controller bring-up probe"
+	default n
+	depends on RK3576_SDIO && RK3576_GPIO
+	---help---
+		Run a bring-up self-test at boot that muxes the SDIO pins, powers
+		the WiFi combo (WL_REG_ON), enumerates the SD-IO card (CMD5) and
+		reads the CIS manufacturer ID.  Validates the SDIO clock/pins/power
+		and the host command path before the WiFi driver exists.
+
 endif # ARCH_BOARD_KICKPI_K7

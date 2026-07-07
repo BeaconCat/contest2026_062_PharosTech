@@ -35,6 +35,18 @@
  * Public Functions Definitions
  ****************************************************************************/
 
+#ifdef CONFIG_KICKPI_K7_SDIO_PROBE
+/****************************************************************************
+ * Name: kickpi_k7_sdio_probe
+ *
+ * Description:
+ *   SDIO WiFi controller bring-up self-test (see kickpi_k7_sdioprobe.c).
+ *
+ ****************************************************************************/
+
+void kickpi_k7_sdio_probe(void);
+#endif
+
 #ifdef CONFIG_IEEE80211_BROADCOM_FULLMAC_SDIO
 /****************************************************************************
  * Name: kickpi_k7_wlan_initialize

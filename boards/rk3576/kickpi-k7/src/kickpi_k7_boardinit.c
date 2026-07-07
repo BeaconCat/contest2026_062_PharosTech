@@ -200,8 +200,14 @@ void board_late_initialize(void)
 #endif
 #endif
 
+#ifdef CONFIG_KICKPI_K7_SDIO_PROBE
+  /* Bring-up self-test for the SDIO WiFi controller. */
+
+  kickpi_k7_sdio_probe();
+#endif
+
 #ifdef CONFIG_IEEE80211_BROADCOM_FULLMAC_SDIO
-  /* Bring up the on-board AP6256 WiFi combo on the SDIO controller. */
+  /* Bring up the on-board WiFi combo on the SDIO controller. */
 
   kickpi_k7_wlan_initialize();
 #endif
