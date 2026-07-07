@@ -61,17 +61,20 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* Physical base/size of the shared-memory region that holds the resource
- * table and the vrings.  This must match the reserved-memory carveout the
- * Linux master exposes to its remoteproc node; the two sides agree on it
- * out of band (device tree on Linux, these macros here).
+/* Physical base of the shared-memory region that holds the resource table
+ * and the vrings.  This must match the reserved-memory carveout the Linux
+ * master exposes; the two sides agree out of band (device tree on Linux,
+ * this macro here).
  *
- * TODO: confirm against the final Linux remoteproc reserved-memory DT before
- * bring-up; the values below are placeholders in high DDR.
+ * The default matches the amp-shmem carveout in Rockchip's official
+ * rk3576-amp.dtsi (vendor kernel develop-6.1): amp-shmem@47c00000, 4 MiB.
+ * That DT also places the AMP firmware (this OS) at mcu@48000000 and the
+ * rpmsg control/DMA pools at 47800000/47a00000, and links the peer on CPU3
+ * (rockchip,link-id = 0x03) over mailbox0(rx)/mailbox3(tx).
  */
 
 #ifndef CONFIG_RK3576_RPTUN_SHM_BASE
-#  define CONFIG_RK3576_RPTUN_SHM_BASE 0x7c000000
+#  define CONFIG_RK3576_RPTUN_SHM_BASE 0x47c00000
 #endif
 
 /****************************************************************************

@@ -113,11 +113,12 @@ if RK3576_RPTUN
 
 config RK3576_RPTUN_SHM_BASE
 	hex "rptun shared-memory base address"
-	default 0x7c000000
+	default 0x47c00000
 	---help---
 		Physical base of the shared-memory carveout holding the resource
 		table and vrings.  Must match the reserved-memory region the Linux
-		master exposes to its remoteproc node.
+		master exposes.  The default matches amp-shmem@47c00000 in Rockchip's
+		official rk3576-amp.dtsi (vendor kernel develop-6.1).
 
 endif # RK3576_RPTUN
 
