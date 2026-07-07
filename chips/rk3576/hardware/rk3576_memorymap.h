@@ -65,4 +65,8 @@
 #define RK3576_CRU_ADDR        0x27200000
 #define RK3576_IOC_ADDR        0x26040000
 
+/* Mailbox 0 (inter-core doorbell, e.g. for AMP rptun). */
+
+#define RK3576_MAILBOX_ADDR    0x2AE50000
+
 #endif /* __ARCH_ARM64_SRC_RK3576_HARDWARE_RK3576_MEMORYMAP_H */

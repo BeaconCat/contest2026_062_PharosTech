@@ -38,3 +38,7 @@ endif
 ifeq ($(CONFIG_RK3576_SDIO),y)
 CHIP_CSRCS += rk3576_cru.c
 endif
+
+ifeq ($(CONFIG_RK3576_MAILBOX),y)
+CHIP_CSRCS += rk3576_mailbox.c
+endif
