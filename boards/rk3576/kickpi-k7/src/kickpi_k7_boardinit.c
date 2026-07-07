@@ -36,6 +36,92 @@
 #  include "rk3576_sdmmc.h"
 #endif
 
+#if defined(CONFIG_RK3576_SDMMC) && defined(CONFIG_GPT_PARTITION)
+#  include <sys/mount.h>
+#  include <nuttx/fs/partition.h>
+#endif
+
+/****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
+#if defined(CONFIG_RK3576_SDMMC) && defined(CONFIG_GPT_PARTITION)
+
+/****************************************************************************
+ * Name: kickpi_k7_partition_handler
+ *
+ * Description:
+ *   Called by parse_block_partition() for each valid GPT partition on
+ *   /dev/mmcsd0.  The GPT layout (see build_sd.sh) is index 0 = uboot (BL33),
+ *   index 1 = trust, index 2 = rootfs.  Register a block-device node
+ *   /dev/mmcsd0p{index+1} for each (mapping only, no writes, so the boot
+ *   images are never touched).
+ ****************************************************************************/
+
+static void kickpi_k7_partition_handler(FAR struct partition_s *part,
+                                        FAR void *arg)
+{
+  char devname[] = "/dev/mmcsd0p0";
+
+  if (part->index < 9)
+    {
+      /* ASCII digit: 0x31 = '1'.  Do not use (char)(1 + index) -- that would
+       * be a control character.
+       */
+
+      devname[sizeof(devname) - 2] = (char)(0x31 + part->index);
+      register_blockpartition(devname, 0660, "/dev/mmcsd0",
+                              part->firstblock, part->nblocks);
+      syslog(LOG_INFO, "INFO: partition %s firstblock=%lu nblocks=%lu\n",
+             devname, (unsigned long)part->firstblock,
+             (unsigned long)part->nblocks);
+    }
+}
+
+/****************************************************************************
+ * Name: kickpi_k7_mount_data
+ *
+ * Description:
+ *   Parse the GPT of /dev/mmcsd0, register each partition as /dev/mmcsd0pN,
+ *   then mount the rootfs partition (p3) as FAT on /data.
+ *   Mount only -- NEVER mkfatfs here: formatting on the boot path would
+ *   corrupt the boot images and brick the card if a partition maps wrong
+ *   (already hit once).  Format once manually with `mkfatfs /dev/mmcsd0p3`
+ *   or pre-format on the PC.  Any failure only warns and never blocks boot.
+ ****************************************************************************/
+
+static void kickpi_k7_mount_data(void)
+{
+  const char *datadev = "/dev/mmcsd0p3";   /* GPT partition 3 rootfs @ sector 32768 */
+  const char *datadir = "/data";
+  int ret;
+
+  ret = parse_block_partition("/dev/mmcsd0", kickpi_k7_partition_handler,
+                              NULL);
+  if (ret < 0)
+    {
+      syslog(LOG_WARNING, "WARNING: parse /dev/mmcsd0 GPT failed: %d\n", ret);
+      return;
+    }
+
+  /* Mount an already-formatted FAT only; if unformatted (mount fails) just
+   * warn -- do not format here.
+   */
+
+  ret = mount(datadev, datadir, "vfat", 0, NULL);
+  if (ret >= 0)
+    {
+      syslog(LOG_INFO, "INFO: mounted %s (vfat) -> %s\n", datadev, datadir);
+    }
+  else
+    {
+      syslog(LOG_WARNING,
+             "WARNING: %s not mounted (maybe unformatted, %d); "
+             "format once with `mkfatfs %s`\n", datadev, ret, datadev);
+    }
+}
+#endif /* CONFIG_RK3576_SDMMC && CONFIG_GPT_PARTITION */
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -135,6 +221,12 @@ void board_late_initialize(void)
         syslog(LOG_ERR, "ERROR: mmcsd_slotinitialize failed\n");
       }
   }
+
+#ifdef CONFIG_GPT_PARTITION
+  /* Parse the GPT and mount the rootfs FAT partition on /data (mount only). */
+
+  kickpi_k7_mount_data();
+#endif
 #endif
 }
 #endif /* CONFIG_BOARD_LATE_INITIALIZE */
