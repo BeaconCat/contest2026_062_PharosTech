@@ -84,4 +84,22 @@
 #define RK3576_CRU_SDIO_DIV_CON    23
 #define RK3576_CRU_SDIO_CCLK_FREQ  (RK3576_CRU_GPLL_FREQ / (RK3576_CRU_SDIO_DIV_CON + 1))
 
+/* I2C2 controller clocks (pclk_i2c2 / clk_i2c2).  The hym8563 RTC sits on
+ * this bus and its 32.768 kHz CLKOUT is the RTL8822CS Wi-Fi sleep clock, so
+ * the bus must be clocked before it can be programmed.  Source: RK3576 TRM
+ * Part1 cross-checked with Linux mainline drivers/clk/rockchip/clk-rk3576.c:
+ *   GATE(PCLK_I2C2,            GATE_CON(12) bit1)
+ *   COMPOSITE_NODIV(CLK_I2C2,  mux[200/100/50/24 MHz] CLKSEL_CON(57) sel[3:2],
+ *                              GATE_CON(12) bit13)
+ */
+
+#define RK3576_CRU_I2C2_GATE       12
+#define RK3576_CRU_I2C2_PCLK_BIT   (1 << 1)    /* pclk_i2c2_en  */
+#define RK3576_CRU_I2C2_CCLK_BIT   (1 << 13)   /* clk_i2c2_en   */
+
+#define RK3576_CRU_I2C2_CLKSEL     57
+#define RK3576_CRU_I2C2_SEL_SHIFT  2           /* clk_i2c2_sel[3:2] */
+#define RK3576_CRU_I2C2_SEL_MASK   (0x3 << RK3576_CRU_I2C2_SEL_SHIFT)
+#define RK3576_CRU_I2C2_SEL_100M   1           /* parent1 = 100 MHz */
+
 #endif /* __ARCH_ARM64_SRC_RK3576_HARDWARE_RK3576_CRU_H */

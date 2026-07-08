@@ -117,3 +117,29 @@ uint32_t rk3576_cru_sdio_enable(void)
 
   return RK3576_CRU_SDIO_CCLK_FREQ;
 }
+
+/****************************************************************************
+ * Name: rk3576_cru_i2c2_enable
+ *
+ * Description:
+ *   Bring up the I2C2 controller clocks (mmc@... hym8563 RTC bus).  The
+ *   loader leaves i2c2 gated, so a raw access to the controller hangs; this
+ *   selects clk_i2c2 = 100 MHz and ungates pclk_i2c2 + clk_i2c2.
+ *
+ ****************************************************************************/
+
+void rk3576_cru_i2c2_enable(void)
+{
+  /* Select clk_i2c2 = 100 MHz (sel=1 in the 200/100/50/24 MHz mux group). */
+
+  cru_write_mask(RK3576_CRU_CLKSEL_CON(RK3576_CRU_I2C2_CLKSEL),
+                 RK3576_CRU_I2C2_SEL_MASK,
+                 RK3576_CRU_I2C2_SEL_100M << RK3576_CRU_I2C2_SEL_SHIFT);
+
+  /* Ungate pclk_i2c2 + clk_i2c2 (a gate bit high = disabled, so write 0). */
+
+  cru_write_mask(RK3576_CRU_GATE_CON(RK3576_CRU_I2C2_GATE),
+                 RK3576_CRU_I2C2_PCLK_BIT | RK3576_CRU_I2C2_CCLK_BIT, 0);
+
+  mcinfo("I2C2 CRU enabled (clk_i2c2 = 100 MHz)\n");
+}

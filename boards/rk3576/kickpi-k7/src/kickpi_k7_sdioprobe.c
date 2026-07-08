@@ -45,6 +45,7 @@
 
 #include "rk3576_gpio.h"
 #include "rk3576_sdmmc.h"
+#include "rk3576_cru.h"
 #include "kickpi_k7.h"
 
 #ifdef CONFIG_KICKPI_K7_SDIO_PROBE
@@ -82,6 +83,95 @@ static const gpio_pinset_t g_sdio_pins[] =
  * Private Functions
  ****************************************************************************/
 
+static inline uint32_t mmio_rd(uintptr_t addr)
+{
+  return *(volatile uint32_t *)addr;
+}
+
+static inline void mmio_wr(uintptr_t addr, uint32_t val)
+{
+  *(volatile uint32_t *)addr = val;
+}
+
+/* Minimal raw RK3576 I2C master-write of one register on i2c@2ac50000 (the
+ * bus the hym8563 RTC sits on).  Sequence per TRM + u-boot rk_i2c.c.
+ * Returns 0 on ACK, -1 on NAK, -2 on timeout.
+ */
+
+#define I2C5_BASE      0x2ac50000
+#define I2C_CON        0x0000
+#define I2C_CLKDIV     0x0004
+#define I2C_MTXCNT     0x0010
+#define I2C_IPD        0x001c
+#define I2C_TXDATA0    0x0100
+
+static int i2c5_write_reg(uint8_t slave, uint8_t reg, uint8_t val)
+{
+  int t;
+
+  mmio_wr(I2C5_BASE + I2C_CLKDIV, 0x003e003d);   /* ~100kHz @ PCLK 100MHz */
+
+  /* START */
+
+  mmio_wr(I2C5_BASE + I2C_IPD, 0x7f);
+  mmio_wr(I2C5_BASE + I2C_CON, 0x9);             /* EN | START */
+  for (t = 0; !(mmio_rd(I2C5_BASE + I2C_IPD) & (1 << 4)); t++)
+    {
+      if (t > 100000)
+        {
+          return -2;
+        }
+    }
+
+  mmio_wr(I2C5_BASE + I2C_IPD, 1 << 4);
+
+  /* Transmit: [slave<<1|W][reg][val] */
+
+  mmio_wr(I2C5_BASE + I2C_TXDATA0,
+          ((uint32_t)slave << 1) | ((uint32_t)reg << 8) |
+          ((uint32_t)val << 16));
+  mmio_wr(I2C5_BASE + I2C_CON, 0x1);             /* EN, TX mode */
+  mmio_wr(I2C5_BASE + I2C_MTXCNT, 3);            /* triggers the transfer */
+
+  for (t = 0; ; t++)
+    {
+      uint32_t ipd = mmio_rd(I2C5_BASE + I2C_IPD);
+      if (ipd & (1 << 6))                        /* NAK */
+        {
+          mmio_wr(I2C5_BASE + I2C_IPD, 0x7f);
+          mmio_wr(I2C5_BASE + I2C_CON, 0);
+          return -1;
+        }
+
+      if (ipd & (1 << 2))                        /* MBTF: tx done */
+        {
+          break;
+        }
+
+      if (t > 100000)
+        {
+          mmio_wr(I2C5_BASE + I2C_CON, 0);
+          return -2;
+        }
+    }
+
+  /* STOP */
+
+  mmio_wr(I2C5_BASE + I2C_IPD, 0x7f);
+  mmio_wr(I2C5_BASE + I2C_CON, 0x11);            /* EN | STOP */
+  for (t = 0; !(mmio_rd(I2C5_BASE + I2C_IPD) & (1 << 5)); t++)
+    {
+      if (t > 100000)
+        {
+          break;
+        }
+    }
+
+  mmio_wr(I2C5_BASE + I2C_IPD, 1 << 5);
+  mmio_wr(I2C5_BASE + I2C_CON, 0);
+  return 0;
+}
+
 static int sdio_rd(FAR struct sdio_dev_s *dev, uint32_t addr, uint8_t *val)
 {
   return sdio_io_rw_direct(dev, false, 0, addr, 0, val);
@@ -103,6 +193,28 @@ void kickpi_k7_sdio_probe(void)
 
   syslog(LOG_ERR, "SDIOPROBE: ===== start =====\n");
 
+  /* The hym8563 RTC 32.768kHz CLKOUT is the RTL8822CS sleep clock (schematic
+   * K7_V2.1: HYM8563 CLKOUT -> 32KOUT_RTC -> WIFIBT_32KIN).  It sits on I2C2,
+   * which the loader leaves gated and un-muxed, so before touching the RTC we
+   * must (1) ungate the I2C2 clocks and (2) mux the I2C2_M0 pins:
+   *   SCL = GPIO0_B7 func 9  (PMU1_IOC + 0x00, sel[15:12])
+   *   SDA = GPIO0_C0 func 9  (PMU1_IOC + 0x04, sel[3:0])
+   */
+
+  rk3576_cru_i2c2_enable();
+  mmio_wr(0x26042000 + 0x00, (0xfu << 28) | (0x9u << 12));  /* GPIO0_B7 = I2C2_SCL_M0 */
+  mmio_wr(0x26042000 + 0x04, (0xfu << 16) | (0x9u << 0));   /* GPIO0_C0 = I2C2_SDA_M0 */
+  up_udelay(10);
+
+  /* Ensure the hym8563 drives its 32.768kHz CLKOUT (reg 0x0D = 0x80, FE=1
+   * freq=32768): the RTL8822CS needs this LPO to come out of reset.
+   */
+
+  ret = i2c5_write_reg(0x51, 0x0d, 0x80);
+  syslog(LOG_ERR, "SDIOPROBE: hym8563 CLKOUT enable i2c ret=%d "
+         "(0=ack -1=nak -2=timeout)\n", ret);
+  up_mdelay(10);
+
   /* Mux the SDIO bus pins (GPIO1, IOMUX func 2, pull-up). */
 
   for (i = 0; i < (int)(sizeof(g_sdio_pins) / sizeof(g_sdio_pins[0])); i++)
@@ -110,11 +222,18 @@ void kickpi_k7_sdio_probe(void)
       rk3576_config_gpio(g_sdio_pins[i]);
     }
 
-  /* Power the combo: WL_REG_ON high, then the pwrseq settle time. */
+  /* Power sequence (mmc-pwrseq-simple): assert WL_REG_ON low (reset), then
+   * deassert high, then the post-power-on settle time.
+   */
 
   rk3576_config_gpio(WL_REG_ON);
+  rk3576_gpio_write(WL_REG_ON, false);
+  up_mdelay(20);
   rk3576_gpio_write(WL_REG_ON, true);
   up_mdelay(200);
+
+  syslog(LOG_ERR, "SDIOPROBE: WL_REG_ON readback=%d\n",
+         rk3576_gpio_read(GPIO_PORT1 | GPIO_PIN_C6 | GPIO_INPUT));
 
   /* Bring up the SDIO host (slot 1) and enumerate the SD-IO card. */
 
@@ -124,6 +243,26 @@ void kickpi_k7_sdio_probe(void)
       syslog(LOG_ERR, "SDIOPROBE: host init failed\n");
       return;
     }
+
+  /* Diagnostics: CRU regs (SDIO clock/reset) and a controller register to
+   * confirm the SDIO0 block is clocked (a dead clock reads back as 0).
+   */
+
+  syslog(LOG_ERR, "SDIOPROBE: CRU CLKSEL104=%08" PRIx32 " GATE42=%08" PRIx32
+         " SOFTRST42=%08" PRIx32 "\n",
+         mmio_rd(0x272004a0), mmio_rd(0x272008a8), mmio_rd(0x27200aa8));
+  syslog(LOG_ERR, "SDIOPROBE: SDIO0 CTRL=%08" PRIx32 " VERID=%08" PRIx32 "\n",
+         mmio_rd(0x2a320000 + 0x00), mmio_rd(0x2a320000 + 0x6c));
+
+  /* Pin mux readback (should be nibble 2 = SDIO func for each pin) and the
+   * controller card-clock registers (CLKDIV/CLKENA/CLKSRC).
+   */
+
+  syslog(LOG_ERR, "SDIOPROBE: IOMUX B4-7=%08" PRIx32 " C0-1=%08" PRIx32 "\n",
+         mmio_rd(0x2604402c), mmio_rd(0x26044030));
+  syslog(LOG_ERR, "SDIOPROBE: CLKDIV=%08" PRIx32 " CLKENA=%08" PRIx32
+         " CLKSRC=%08" PRIx32 "\n",
+         mmio_rd(0x2a320008), mmio_rd(0x2a320010), mmio_rd(0x2a32000c));
 
   ret = sdio_probe(dev);
   if (ret < 0)

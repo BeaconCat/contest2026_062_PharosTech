@@ -45,4 +45,15 @@
 
 uint32_t rk3576_cru_sdio_enable(void);
 
+/****************************************************************************
+ * Name: rk3576_cru_i2c2_enable
+ *
+ * Description:
+ *   Ungate the I2C2 controller clocks (the hym8563 RTC bus) and select a
+ *   100 MHz functional clock.  See rk3576_cru.c for details.
+ *
+ ****************************************************************************/
+
+void rk3576_cru_i2c2_enable(void);
+
 #endif /* __ARCH_ARM64_SRC_RK3576_RK3576_CRU_H */
