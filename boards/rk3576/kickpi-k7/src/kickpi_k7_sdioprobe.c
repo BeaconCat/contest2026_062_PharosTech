@@ -254,7 +254,7 @@ void kickpi_k7_sdio_probe(void)
   rk3576_gpio_write(WL_REG_ON, false);
   up_mdelay(20);
   rk3576_gpio_write(WL_REG_ON, true);
-  up_mdelay(200);
+  up_mdelay(500);
 
   syslog(LOG_ERR, "SDIOPROBE: WL_REG_ON readback=%d\n",
          rk3576_gpio_read(GPIO_PORT1 | GPIO_PIN_C6 | GPIO_INPUT));
@@ -289,6 +289,9 @@ void kickpi_k7_sdio_probe(void)
          mmio_rd(0x2a320008), mmio_rd(0x2a320010), mmio_rd(0x2a32000c));
 
   ret = sdio_probe(dev);
+  syslog(LOG_ERR, "SDIOPROBE: after CMD5 RINTSTS=%08" PRIx32
+         " STATUS=%08" PRIx32 "\n",
+         mmio_rd(0x2a320000 + 0x44), mmio_rd(0x2a320000 + 0x48));
   if (ret < 0)
     {
       syslog(LOG_ERR, "SDIOPROBE: sdio_probe (CMD5) failed: %d "
