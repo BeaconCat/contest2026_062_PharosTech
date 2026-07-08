@@ -517,6 +517,25 @@ void kickpi_k7_sdio_probe(void)
 
   up_mdelay(100);
 
+  /* Program the DW-MSHC clock drive/sample phase, which our host driver never
+   * touched (left at the reset 0 degrees).  Mainline dw_mmc-rockchip.c for
+   * rk3576 (internal_phase) programs DRIVE=90 deg / SAMPLE=0 deg at the init
+   * clock; with drive=0 the CMD line changes on the clock edge and the chip
+   * samples it mid-transition -> it sees garbage and never answers, which
+   * matches "CMD physically transmits but the chip is silent".
+   *   TIMING_CON0 (0x130) = drive/tx phase, TIMING_CON1 (0x134) = sample/rx.
+   *   MISC_CON (0x138) bit5 = MEM_CLK_AUTOGATE, required for internal phase.
+   * Phase word (hiword-masked, degree in bits[2:1]): 90=0x0FFE0002,
+   * 180=0x0FFE0004, 270=0x0FFE0006, 0=0x0FFE0000.
+   */
+
+  mmio_wr(0x2a320138, 0x00000020);                 /* MISC_CON MEM_CLK_AUTOGATE */
+  mmio_wr(0x2a320130, 0x0ffe0002);                 /* drive 90 deg */
+  mmio_wr(0x2a320134, 0x0ffe0000);                 /* sample 0 deg */
+  syslog(LOG_ERR, "SDIOPROBE: PHASE con0=%08" PRIx32 " con1=%08" PRIx32
+         " misc=%08" PRIx32 "\n",
+         mmio_rd(0x2a320130), mmio_rd(0x2a320134), mmio_rd(0x2a320138));
+
   /* Retry CMD5 enumeration: the SV6621 may need time to reach SDIO-ready
    * after power-on.  Log RINTSTS each try (0x100 = RTO, no response).
    */
@@ -544,6 +563,33 @@ void kickpi_k7_sdio_probe(void)
     st = sdio_raw_cmd(5, 0, true, &rsp);
     syslog(LOG_ERR, "SDIOPROBE: raw CMD5 RINTSTS=%08" PRIx32
            " RESP=%08" PRIx32 "\n", st, rsp);
+  }
+
+  /* Drive-phase sweep: cycle the 4 coarse drive phases (sample fixed at 0)
+   * and fire CMD5 at each.  If a wrong drive phase was masking the chip's
+   * response, one of these makes RINTSTS show a command-done without RTO.
+   */
+
+  {
+    static const uint32_t phases[4] =
+    {
+      0x0ffe0000, 0x0ffe0002, 0x0ffe0004, 0x0ffe0006   /* 0/90/180/270 deg */
+    };
+
+    uint32_t rsp;
+    uint32_t st;
+    int p;
+
+    for (p = 0; p < 4; p++)
+      {
+        mmio_wr(0x2a320130, phases[p]);
+        up_mdelay(2);
+        st = sdio_raw_cmd(5, 0, true, &rsp);
+        syslog(LOG_ERR, "SDIOPROBE: PHASE-SWEEP drive=%ddeg CMD5 RINTSTS=%08"
+               PRIx32 " RESP=%08" PRIx32 "\n", p * 90, st, rsp);
+      }
+
+    mmio_wr(0x2a320130, 0x0ffe0002);                 /* restore drive 90 */
   }
 
   for (i = 0; i < 8; i++)
