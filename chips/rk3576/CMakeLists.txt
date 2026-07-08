@@ -25,4 +25,8 @@ if(CONFIG_RK3576_RPTUN)
   list(APPEND SRCS rk3576_rptun.c)
 endif()
 
+if(CONFIG_RK3576_I2C)
+  list(APPEND SRCS rk3576_i2c.c)
+endif()
+
 target_sources(arch PRIVATE ${SRCS})
