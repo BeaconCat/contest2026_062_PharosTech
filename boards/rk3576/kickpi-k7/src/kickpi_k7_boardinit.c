@@ -32,6 +32,10 @@
 #include "rk3576_gpio.h"
 #include "kickpi_k7.h"
 
+#ifdef CONFIG_RK3576_RPTUN
+#  include "rk3576_rptun.h"
+#endif
+
 #ifdef CONFIG_RK3576_SDMMC
 #  include <nuttx/mmcsd.h>
 #  include "rk3576_sdmmc.h"
@@ -210,6 +214,18 @@ void board_late_initialize(void)
   /* Bring up the on-board WiFi combo on the SDIO controller. */
 
   kickpi_k7_wlan_initialize();
+#endif
+
+#ifdef CONFIG_RK3576_RPTUN
+  /* Bring up the AMP rpmsg transport to the Linux master.  Linux owns the
+   * GPLv2 RTL8822CS WiFi radio and bridges the network to openvela over
+   * rpmsg (mailbox doorbell + shared-memory vrings).
+   */
+
+  if (rk3576_rptun_init("linux") < 0)
+    {
+      syslog(LOG_ERR, "ERROR: rk3576_rptun_init failed\n");
+    }
 #endif
 }
 #endif /* CONFIG_BOARD_LATE_INITIALIZE */

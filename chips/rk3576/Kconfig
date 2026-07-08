@@ -107,20 +107,9 @@ config RK3576_RPTUN
 		the inter-core mailbox (RK3576_MAILBOX) for doorbell notification.
 		Chief use: legal WiFi offload, where Linux owns the GPLv2 RTL8822CS
 		radio and openvela bridges to the network via rpmsg (two independent
-		kernels = mere aggregation, so the licenses do not mix).
-
-if RK3576_RPTUN
-
-config RK3576_RPTUN_SHM_BASE
-	hex "rptun shared-memory base address"
-	default 0x47c00000
-	---help---
-		Physical base of the shared-memory carveout holding the resource
-		table and vrings.  Must match the reserved-memory region the Linux
-		master exposes.  The default matches amp-shmem@47c00000 in Rockchip's
-		official rk3576-amp.dtsi (vendor kernel develop-6.1).
-
-endif # RK3576_RPTUN
+		kernels = mere aggregation, so the licenses do not mix).  The vring
+		and buffer addresses are fixed by Rockchip's rk3576-amp.dtsi and are
+		compiled in (see rk3576_rptun.c).
 
 config RK3576_GPIO
 	bool "GPIO"

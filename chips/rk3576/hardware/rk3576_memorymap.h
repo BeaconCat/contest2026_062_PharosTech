@@ -65,8 +65,14 @@
 #define RK3576_CRU_ADDR        0x27200000
 #define RK3576_IOC_ADDR        0x26040000
 
-/* Mailbox 0 (inter-core doorbell, e.g. for AMP rptun). */
+/* Mailboxes (inter-core doorbell for AMP rptun/rpmsg).  Six instances at
+ * 0x2AE5n000.  For the openvela<->Linux rpmsg link (rk3576-amp.dtsi:
+ * mboxes = <&mailbox0 0 &mailbox3 0>), openvela is the "B" endpoint:
+ * it transmits on mailbox0 (Linux receives it as B2A) and receives on
+ * mailbox3 (Linux transmits there as A2B).  See docs AMP互通契约.
+ */
 
-#define RK3576_MAILBOX_ADDR    0x2AE50000
+#define RK3576_MAILBOX_ADDR    0x2AE50000   /* mailbox0: openvela TX (B2A) */
+#define RK3576_MAILBOX3_ADDR   0x2AE53000   /* mailbox3: openvela RX (A2B) */
 
 #endif /* __ARCH_ARM64_SRC_RK3576_HARDWARE_RK3576_MEMORYMAP_H */
