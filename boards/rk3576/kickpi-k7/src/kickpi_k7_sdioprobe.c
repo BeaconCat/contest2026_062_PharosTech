@@ -600,6 +600,60 @@ void kickpi_k7_sdio_probe(void)
 
   if (ret < 0)
     {
+      /* Android-clocking replication: the vendor kernel NEVER uses the
+       * DW-MSHC internal CLKDIV (dmesg shows "div = 0" at both 400kHz and
+       * 198MHz); it re-rates the CRU source instead, and clk_summary
+       * (cclk_src_sdio=396MHz vs bus 198MHz) proves a fixed /2 clkgen sits
+       * between the CRU and the card clock.  If the internal divider is not
+       * effective for the command path on this integration, all previous
+       * tries actually ran CLK at cclk_src speed -- far too fast for
+       * identification.  Replicate Android exactly: CRU source = xin24m/60
+       * = 400kHz, internal CLKDIV = 0 (card clock 400kHz, or 200kHz if the
+       * /2 clkgen applies -- both legal for ID), then raw CMD0/CMD5.
+       */
+
+      uint32_t upd = (1u << 31) | (1u << 21) | (1u << 13);
+      uint32_t st;
+      uint32_t rsp;
+      int t;
+
+      mmio_wr(0x272004a0, (0xffu << 16) | (2u << 6) | 59u); /* CLKSEL104 */
+      syslog(LOG_ERR, "SDIOPROBE: ANDROID-CLK CLKSEL104=%08" PRIx32 "\n",
+             mmio_rd(0x272004a0));
+
+      mmio_wr(0x2a320010, 0);                    /* CLKENA=0 */
+      mmio_wr(0x2a32002c, upd);
+      for (t = 0; (mmio_rd(0x2a32002c) & (1u << 31)) && t < 100000; t++);
+      mmio_wr(0x2a320008, 0);                    /* CLKDIV=0 */
+      mmio_wr(0x2a32002c, upd);
+      for (t = 0; (mmio_rd(0x2a32002c) & (1u << 31)) && t < 100000; t++);
+      mmio_wr(0x2a320010, 1);                    /* CLKENA=1 */
+      mmio_wr(0x2a32002c, upd);
+      for (t = 0; (mmio_rd(0x2a32002c) & (1u << 31)) && t < 100000; t++);
+
+      /* Power-cycle the chip so it identifies on the new clock. */
+
+      rk3576_gpio_write(WL_REG_ON, false);
+      up_mdelay(100);
+      rk3576_gpio_write(WL_REG_ON, true);
+      up_mdelay(300);
+
+      for (i = 0; i < 4; i++)
+        {
+          st = sdio_raw_cmd(0, 0, false, NULL);
+          syslog(LOG_ERR, "SDIOPROBE: ANDROID-CLK CMD0 RINTSTS=%08" PRIx32
+                 "\n", st);
+          st = sdio_raw_cmd(5, 0, true, &rsp);
+          syslog(LOG_ERR, "SDIOPROBE: ANDROID-CLK CMD5 try%d RINTSTS=%08"
+                 PRIx32 " RESP=%08" PRIx32 "\n", i, st, rsp);
+          if ((st & (1u << 8)) == 0 && (st & (1u << 2)) != 0)
+            {
+              break;                             /* no RTO + cmd done */
+            }
+
+          up_mdelay(100);
+        }
+
       syslog(LOG_ERR, "SDIOPROBE: sdio_probe (CMD5) failed: %d "
              "(no SD-IO card responded)\n", ret);
       return;
