@@ -172,6 +172,84 @@ static int i2c5_write_reg(uint8_t slave, uint8_t reg, uint8_t val)
   return 0;
 }
 
+/* Raw register-read on the same RK I2C: hardware TRX mode does the whole
+ * write-reg-then-read transaction (u-boot rk_i2c read path).
+ *   MRXADDR(0x08)  = (slave<<1|1) | addr-valid bit24
+ *   MRXRADDR(0x0c) = reg | reg-valid bit24
+ *   CON mode=TRX(2), MRXCNT(0x14)=count -> wait IPD MBRF (bit3)
+ */
+
+static int i2c5_read_reg(uint8_t slave, uint8_t reg, uint8_t *val)
+{
+  int t;
+
+  /* Phase 1: TX the register pointer [slave|W][reg] (like the write path
+   * but only two bytes and no payload), then a repeated START in RX mode.
+   */
+
+  mmio_wr(I2C5_BASE + I2C_IPD, 0x7f);
+  mmio_wr(I2C5_BASE + I2C_CON, 0x9);             /* EN | START */
+  for (t = 0; !(mmio_rd(I2C5_BASE + I2C_IPD) & (1 << 4)); t++)
+    {
+      if (t > 100000)
+        {
+          return -2;
+        }
+    }
+
+  mmio_wr(I2C5_BASE + I2C_IPD, 1 << 4);
+  mmio_wr(I2C5_BASE + I2C_TXDATA0,
+          ((uint32_t)slave << 1) | ((uint32_t)reg << 8));
+  mmio_wr(I2C5_BASE + I2C_CON, 0x1);             /* EN, TX mode */
+  mmio_wr(I2C5_BASE + I2C_MTXCNT, 2);
+  for (t = 0; !(mmio_rd(I2C5_BASE + I2C_IPD) & (1 << 2)); t++)
+    {
+      if (mmio_rd(I2C5_BASE + I2C_IPD) & (1 << 6))
+        {
+          mmio_wr(I2C5_BASE + I2C_CON, 0);
+          return -1;                             /* NAK on pointer write */
+        }
+
+      if (t > 100000)
+        {
+          mmio_wr(I2C5_BASE + I2C_CON, 0);
+          return -2;
+        }
+    }
+
+  /* Phase 2: repeated START, RX-only mode (mode 1): controller sends
+   * MRXADDR (read address) itself, then clocks in MRXCNT bytes.
+   */
+
+  mmio_wr(I2C5_BASE + 0x08, ((uint32_t)(slave << 1) | 1) | (1u << 24));
+  mmio_wr(I2C5_BASE + I2C_IPD, 0x7f);
+  mmio_wr(I2C5_BASE + I2C_CON, 0x9 | (1 << 1));  /* EN | MOD_RX | START */
+  mmio_wr(I2C5_BASE + 0x14, 1);                  /* MRXCNT = 1 */
+  for (t = 0; !(mmio_rd(I2C5_BASE + I2C_IPD) & (1 << 3)); t++)
+    {
+      if (t > 100000)
+        {
+          mmio_wr(I2C5_BASE + I2C_CON, 0);
+          return -3;                             /* RX timeout */
+        }
+    }
+
+  *val = (uint8_t)(mmio_rd(I2C5_BASE + 0x200) & 0xff);
+
+  mmio_wr(I2C5_BASE + I2C_IPD, 0x7f);
+  mmio_wr(I2C5_BASE + I2C_CON, 0x11);            /* EN | STOP */
+  for (t = 0; !(mmio_rd(I2C5_BASE + I2C_IPD) & (1 << 5)); t++)
+    {
+      if (t > 100000)
+        {
+          break;
+        }
+    }
+
+  mmio_wr(I2C5_BASE + I2C_CON, 0);
+  return 0;
+}
+
 static int sdio_rd(FAR struct sdio_dev_s *dev, uint32_t addr, uint8_t *val)
 {
   return sdio_io_rw_direct(dev, false, 0, addr, 0, val);
@@ -237,6 +315,46 @@ void kickpi_k7_sdio_probe(void)
   ret = i2c5_write_reg(0x51, 0x0d, 0x80);
   syslog(LOG_ERR, "SDIOPROBE: hym8563 CLKOUT enable i2c ret=%d "
          "(0=ack -1=nak -2=timeout)\n", ret);
+
+  /* Read back CLKOUT (expect 0x80) plus control/seconds registers: if every
+   * register reads 0xff the read path is broken (SDA stuck high); if 0x00
+   * and the ticking 0x02 read sane values then 0x0D really is wrong and the
+   * chip is emitting 1Hz (FD=11) instead of 32768Hz -- the LPO root cause.
+   */
+
+  {
+    uint8_t r00 = 0xa5;
+    uint8_t r02 = 0xa5;
+    uint8_t r0d = 0xa5;
+    int r;
+
+    for (r = 0; r < 3 && i2c5_read_reg(0x51, 0x00, &r00) < 0; r++)
+      {
+        up_mdelay(2);
+      }
+
+    up_mdelay(2);
+    for (r = 0; r < 3 && i2c5_read_reg(0x51, 0x02, &r02) < 0; r++)
+      {
+        up_mdelay(2);
+      }
+
+    up_mdelay(2);
+    for (r = 0; r < 3; r++)
+      {
+        ret = i2c5_read_reg(0x51, 0x0d, &r0d);
+        if (ret >= 0)
+          {
+            break;
+          }
+
+        up_mdelay(2);
+      }
+
+    syslog(LOG_ERR, "SDIOPROBE: hym8563 rb ret=%d r00=0x%02x r02=0x%02x "
+           "r0D=0x%02x\n", ret, r00, r02, r0d);
+  }
+
   up_mdelay(10);
 
   /* Mux the SDIO bus pins (GPIO1, IOMUX func 2, pull-up). */
@@ -245,6 +363,19 @@ void kickpi_k7_sdio_probe(void)
     {
       rk3576_config_gpio(g_sdio_pins[i]);
     }
+
+  /* Enable the input schmitt trigger on the six SDIO pins -- Android's
+   * pinctrl does (debugfs pinconf: "input schmitt enabled") and our GPIO
+   * driver does not touch it.  GPIO1 SMT: VCCIO_IOC + 0x6210 + (pin/8)*4,
+   * one bit per pin, Rockchip 16-bit write-mask.
+   *   B4-B7 = pins 12-15 -> 0x26046214 bits 4-7
+   *   C0-C1 = pins 16-17 -> 0x26046218 bits 0-1
+   */
+
+  mmio_wr(0x26046214, (0xf0u << 16) | 0xf0u);
+  mmio_wr(0x26046218, (0x03u << 16) | 0x03u);
+  syslog(LOG_ERR, "SDIOPROBE: SMT 6214=%08" PRIx32 " 6218=%08" PRIx32 "\n",
+         mmio_rd(0x26046214), mmio_rd(0x26046218));
 
   /* Power sequence, mmc-pwrseq-simple semantics (order matters!):
    *   1. assert WL_REG_ON low (chip held in reset)
@@ -310,6 +441,31 @@ void kickpi_k7_sdio_probe(void)
 
   for (i = 0; i < 8; i++)
     {
+      if (i == 4)
+        {
+          /* Second half of the tries at ~97kHz (CLKDIV=0xff): raw slow-clock
+           * sweep in case the chip needs a sub-400kHz identification clock.
+           * Sequence per DW-MSHC: CLKENA=0 -> update -> CLKDIV -> update ->
+           * CLKENA=1 -> update, all via CMD_UPD_CLK|START.
+           */
+
+          uint32_t upd = (1u << 31) | (1u << 21) | (1u << 13);
+          int t;
+
+          mmio_wr(0x2a320010, 0);
+          mmio_wr(0x2a32002c, upd);
+          for (t = 0; (mmio_rd(0x2a32002c) & (1u << 31)) && t < 100000; t++);
+          mmio_wr(0x2a320008, 0xff);
+          mmio_wr(0x2a32002c, upd);
+          for (t = 0; (mmio_rd(0x2a32002c) & (1u << 31)) && t < 100000; t++);
+          mmio_wr(0x2a320010, 1);
+          mmio_wr(0x2a32002c, upd);
+          for (t = 0; (mmio_rd(0x2a32002c) & (1u << 31)) && t < 100000; t++);
+          syslog(LOG_ERR, "SDIOPROBE: slow sweep CLKDIV=%08" PRIx32 "\n",
+                 mmio_rd(0x2a320008));
+          up_mdelay(100);
+        }
+
       ret = sdio_probe(dev);
       syslog(LOG_ERR, "SDIOPROBE: CMD5 try%d ret=%d RINTSTS=%08" PRIx32 "\n",
              i, ret, mmio_rd(0x2a320000 + 0x44));
