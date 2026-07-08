@@ -140,6 +140,20 @@ void rk3576_board_initialize(void)
 
   /* board_autoled_initialize(); */
 #endif
+
+#ifdef CONFIG_KICKPI_K7_SDIO_PROBE
+  /* SeekWave FAQ 5.1 (无法枚举到设备): drive the WiFi chip_en / WL_REG_ON
+   * (GPIO1_C6, matches the Android dmesg "chipen=54") LOW from the earliest
+   * board hook.  If it stays high through boot the SV6621 powers up and
+   * latches its host-interface (SDIO/USB/UART) detection before any SDIO
+   * clock exists and then never answers CMD5.  Holding it low here keeps the
+   * chip powered down until the SDIO probe (board_late_initialize) performs a
+   * clean LOW->HIGH power-on with the card clock already running.
+   */
+
+  rk3576_config_gpio(GPIO_PORT1 | GPIO_PIN_C6 | GPIO_OUTPUT);
+  rk3576_gpio_write(GPIO_PORT1 | GPIO_PIN_C6 | GPIO_OUTPUT, false);
+#endif
 }
 
 /****************************************************************************
@@ -208,6 +222,12 @@ void board_late_initialize(void)
   /* Bring-up self-test for the SDIO WiFi controller. */
 
   kickpi_k7_sdio_probe();
+#endif
+
+#ifdef CONFIG_KICKPI_K7_BT_PROBE
+  /* Bring-up self-test for the UART4 Bluetooth HCI transport. */
+
+  kickpi_k7_bt_probe();
 #endif
 
 #ifdef CONFIG_IEEE80211_BROADCOM_FULLMAC_SDIO

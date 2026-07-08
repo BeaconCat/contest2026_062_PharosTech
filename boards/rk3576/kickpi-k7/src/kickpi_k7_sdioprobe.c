@@ -300,6 +300,21 @@ void kickpi_k7_sdio_probe(void)
 
   syslog(LOG_ERR, "SDIOPROBE: ===== start =====\n");
 
+  /* SeekWave FAQ 5.1 (无法枚举到设备): chip_en / WL_REG_ON defaults HIGH after
+   * CPU reset.  With it high through the whole bootloader + early boot the
+   * SV6621 powers up and latches its host-interface (SDIO/USB/UART) detection
+   * at the wrong time -- before any SDIO clock exists -- and never answers
+   * CMD5.  Vendor fix: drive chip_en LOW early and hold it for a full
+   * power-down, then do a clean LOW->HIGH power-on at scan time so the chip's
+   * detection window aligns with the running SDIO clock.  Our gpio 54 =
+   * GPIO1_C6 matches the Android dmesg "chipen=54".  Pull it low here at the
+   * very start, held ~1 s, well before the host/clock is brought up.
+   */
+
+  rk3576_config_gpio(WL_REG_ON);
+  rk3576_gpio_write(WL_REG_ON, false);
+  up_mdelay(1000);
+
   /* The hym8563 RTC 32.768kHz CLKOUT is the RTL8822CS sleep clock (schematic
    * K7_V2.1: HYM8563 CLKOUT -> 32KOUT_RTC -> WIFIBT_32KIN).  It sits on I2C2,
    * which the loader leaves gated, so ungate the I2C2 clocks before touching
@@ -590,6 +605,31 @@ void kickpi_k7_sdio_probe(void)
       }
 
     mmio_wr(0x2a320130, 0x0ffe0002);                 /* restore drive 90 */
+  }
+
+  /* chip_en polarity test: the SeekWave FAQ diff drives the reg-on gpio LOW
+   * for "wifi reg on", which reads as active-low-enable -- the opposite of the
+   * mmc-pwrseq active-low-reset interpretation we used (HIGH = on).  Drive
+   * WL_REG_ON LOW, settle, and retry CMD5 to see if the chip enables low.
+   */
+
+  {
+    uint32_t rsp;
+    uint32_t st;
+    int q;
+
+    rk3576_gpio_write(WL_REG_ON, false);
+    up_mdelay(200);
+    for (q = 0; q < 3; q++)
+      {
+        st = sdio_raw_cmd(5, 0, true, &rsp);
+        syslog(LOG_ERR, "SDIOPROBE: CHIPEN-LOW CMD5 try%d RINTSTS=%08" PRIx32
+               " RESP=%08" PRIx32 "\n", q, st, rsp);
+        up_mdelay(100);
+      }
+
+    rk3576_gpio_write(WL_REG_ON, true);              /* restore high */
+    up_mdelay(200);
   }
 
   for (i = 0; i < 8; i++)
