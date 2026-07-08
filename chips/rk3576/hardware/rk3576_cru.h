@@ -101,5 +101,6 @@
 #define RK3576_CRU_I2C2_SEL_SHIFT  2           /* clk_i2c2_sel[3:2] */
 #define RK3576_CRU_I2C2_SEL_MASK   (0x3 << RK3576_CRU_I2C2_SEL_SHIFT)
 #define RK3576_CRU_I2C2_SEL_100M   1           /* parent1 = 100 MHz */
+#define RK3576_CRU_I2C2_SEL_24M    3           /* parent3 = xin24m (always on) */
 
 #endif /* __ARCH_ARM64_SRC_RK3576_HARDWARE_RK3576_CRU_H */

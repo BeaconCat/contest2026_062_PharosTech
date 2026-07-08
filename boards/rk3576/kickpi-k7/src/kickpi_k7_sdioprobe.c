@@ -151,7 +151,7 @@ static int i2c5_write_reg(uint8_t slave, uint8_t reg, uint8_t val)
       if (t > 100000)
         {
           mmio_wr(I2C5_BASE + I2C_CON, 0);
-          return -2;
+          return -3;                           /* transfer-phase timeout */
         }
     }
 
@@ -203,6 +203,31 @@ void kickpi_k7_sdio_probe(void)
    */
 
   rk3576_cru_i2c2_enable();
+  up_udelay(10);
+
+  /* Diagnostic: CRU gate for i2c2 (GATE_CON12 bit1=pclk bit13=clk, 0=enabled)
+   * and the i2c2 controller CON/CLKDIV (readable => pclk present).  If the
+   * i2c write below still times out at START with the gate bits clear, the
+   * functional clk_i2c2 mux parent is not running.
+   */
+
+  syslog(LOG_ERR, "SDIOPROBE: GATE12=%08lx i2c2.CON=%08lx i2c2.CLKDIV=%08lx\n",
+         (unsigned long)mmio_rd(0x27200830),
+         (unsigned long)mmio_rd(I2C5_BASE + I2C_CON),
+         (unsigned long)mmio_rd(I2C5_BASE + I2C_CLKDIV));
+
+  /* Mux the I2C2_M0 pins (the loader leaves them un-muxed, so i2c START never
+   * completes): SCL=GPIO0_B7 func9, SDA=GPIO0_C0 func9, via PMU1_IOC.  The
+   * PMU IO-controller pclk (pclk_pmu0) is CLK_IS_CRITICAL, so the domain is
+   * up and this write is safe (an earlier hang here was really the
+   * .note.gnu.build-id entry bug, since fixed in dramboot.ld).
+   */
+
+  mmio_wr(0x26042000 + 0x00, (0xfu << 28) | (0x9u << 12));  /* GPIO0_B7 = I2C2_SCL_M0 */
+  mmio_wr(0x26042000 + 0x04, (0xfu << 16) | (0x9u << 0));   /* GPIO0_C0 = I2C2_SDA_M0 */
+  syslog(LOG_ERR, "SDIOPROBE: PMU1_IOC B_H=%08lx C_L=%08lx\n",
+         (unsigned long)mmio_rd(0x26042000 + 0x00),
+         (unsigned long)mmio_rd(0x26042000 + 0x04));
   up_udelay(10);
 
   /* Ensure the hym8563 drives its 32.768kHz CLKOUT (reg 0x0D = 0x80, FE=1

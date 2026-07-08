@@ -130,11 +130,13 @@ uint32_t rk3576_cru_sdio_enable(void)
 
 void rk3576_cru_i2c2_enable(void)
 {
-  /* Select clk_i2c2 = 100 MHz (sel=1 in the 200/100/50/24 MHz mux group). */
+  /* Select clk_i2c2 = xin24m (sel=3): always-on, unlike the 100/50 MHz PLL
+   * children whose parents may be gated off.
+   */
 
   cru_write_mask(RK3576_CRU_CLKSEL_CON(RK3576_CRU_I2C2_CLKSEL),
                  RK3576_CRU_I2C2_SEL_MASK,
-                 RK3576_CRU_I2C2_SEL_100M << RK3576_CRU_I2C2_SEL_SHIFT);
+                 RK3576_CRU_I2C2_SEL_24M << RK3576_CRU_I2C2_SEL_SHIFT);
 
   /* Ungate pclk_i2c2 + clk_i2c2 (a gate bit high = disabled, so write 0). */
 
