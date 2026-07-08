@@ -126,6 +126,8 @@ SECTIONS
        *(.exitcall.exit)
        *(.eh_frame)
        *(.note.gnu.build-id)
+       *(.note.GNU-stack)
+       *(.gnu.hash)
   }
 
   /* Stabs debugging sections.  */
