@@ -195,15 +195,14 @@ void kickpi_k7_sdio_probe(void)
 
   /* The hym8563 RTC 32.768kHz CLKOUT is the RTL8822CS sleep clock (schematic
    * K7_V2.1: HYM8563 CLKOUT -> 32KOUT_RTC -> WIFIBT_32KIN).  It sits on I2C2,
-   * which the loader leaves gated and un-muxed, so before touching the RTC we
-   * must (1) ungate the I2C2 clocks and (2) mux the I2C2_M0 pins:
-   *   SCL = GPIO0_B7 func 9  (PMU1_IOC + 0x00, sel[15:12])
-   *   SDA = GPIO0_C0 func 9  (PMU1_IOC + 0x04, sel[3:0])
+   * which the loader leaves gated, so ungate the I2C2 clocks before touching
+   * the RTC.  The I2C2_M0 pins (GPIO0_B7/C0) live in the PMU1_IOC domain;
+   * the loader already muxes them to reach the RTC at boot, so we do not
+   * touch PMU1_IOC here (its pclk is not guaranteed on and a blind write
+   * hangs the bus).
    */
 
   rk3576_cru_i2c2_enable();
-  mmio_wr(0x26042000 + 0x00, (0xfu << 28) | (0x9u << 12));  /* GPIO0_B7 = I2C2_SCL_M0 */
-  mmio_wr(0x26042000 + 0x04, (0xfu << 16) | (0x9u << 0));   /* GPIO0_C0 = I2C2_SDA_M0 */
   up_udelay(10);
 
   /* Ensure the hym8563 drives its 32.768kHz CLKOUT (reg 0x0D = 0x80, FE=1
