@@ -430,8 +430,14 @@ static void rk3576_sdmmc_setclock(struct rk3576_sdmmc_dev_s *priv, uint32_t freq
 
   /* 3) Enable card clock (low-power bit: auto-stop clock when idle) */
 
-  rk3576_sdmmc_putreg(priv, RK3576_SDMMC_CLKENA,
-                SDMMC_CLKENA_ENABLE | SDMMC_CLKENA_LOWPWR);
+  /* No LOWPWR: low-power mode gates the card clock when idle, but an SDIO
+   * WiFi SoC needs a free-running clock -- the SV6621 boot ROM detects its
+   * host interface (SDIO/USB/UART tri-mode) from bus activity, and SDIO
+   * interrupts also require a continuous clock (Linux dw_mmc likewise
+   * disables low-power for cap-sdio-irq hosts).
+   */
+
+  rk3576_sdmmc_putreg(priv, RK3576_SDMMC_CLKENA, SDMMC_CLKENA_ENABLE);
   rk3576_sdmmc_ciu_update(priv, 0);
 }
 

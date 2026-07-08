@@ -246,20 +246,21 @@ void kickpi_k7_sdio_probe(void)
       rk3576_config_gpio(g_sdio_pins[i]);
     }
 
-  /* Power sequence (mmc-pwrseq-simple): assert WL_REG_ON low (reset), then
-   * deassert high, then the post-power-on settle time.
+  /* Power sequence, mmc-pwrseq-simple semantics (order matters!):
+   *   1. assert WL_REG_ON low (chip held in reset)
+   *   2. bring up the SDIO host so the 400kHz card clock free-runs
+   *   3. release WL_REG_ON high WHILE the clock is running
+   *   4. post-power-on settle, then CMD5
+   * The SV6621 boot ROM samples its host interface (SDIO/USB/UART tri-mode)
+   * when it comes out of reset -- releasing reset before the clock runs made
+   * it miss SDIO and never answer CMD5.
    */
 
   rk3576_config_gpio(WL_REG_ON);
   rk3576_gpio_write(WL_REG_ON, false);
   up_mdelay(20);
-  rk3576_gpio_write(WL_REG_ON, true);
-  up_mdelay(500);
 
-  syslog(LOG_ERR, "SDIOPROBE: WL_REG_ON readback=%d\n",
-         rk3576_gpio_read(GPIO_PORT1 | GPIO_PIN_C6 | GPIO_INPUT));
-
-  /* Bring up the SDIO host (slot 1) and enumerate the SD-IO card. */
+  /* Bring up the SDIO host (slot 1) with the chip still in reset. */
 
   dev = rk3576_sdmmc_initialize(RK3576_SDIO_SLOT);
   if (dev == NULL)
@@ -267,6 +268,14 @@ void kickpi_k7_sdio_probe(void)
       syslog(LOG_ERR, "SDIOPROBE: host init failed\n");
       return;
     }
+
+  /* Release reset with the card clock running, then settle. */
+
+  rk3576_gpio_write(WL_REG_ON, true);
+  up_mdelay(200);
+
+  syslog(LOG_ERR, "SDIOPROBE: WL_REG_ON readback=%d\n",
+         rk3576_gpio_read(GPIO_PORT1 | GPIO_PIN_C6 | GPIO_INPUT));
 
   /* Diagnostics: CRU regs (SDIO clock/reset) and a controller register to
    * confirm the SDIO0 block is clocked (a dead clock reads back as 0).
@@ -288,10 +297,30 @@ void kickpi_k7_sdio_probe(void)
          " CLKSRC=%08" PRIx32 "\n",
          mmio_rd(0x2a320008), mmio_rd(0x2a320010), mmio_rd(0x2a32000c));
 
-  ret = sdio_probe(dev);
-  syslog(LOG_ERR, "SDIOPROBE: after CMD5 RINTSTS=%08" PRIx32
-         " STATUS=%08" PRIx32 "\n",
-         mmio_rd(0x2a320000 + 0x44), mmio_rd(0x2a320000 + 0x48));
+  /* Let the free-running 400kHz card clock feed the chip before the first
+   * command: the SV6621 boot ROM samples bus activity to detect its host
+   * interface (SDIO/USB/UART tri-mode).
+   */
+
+  up_mdelay(100);
+
+  /* Retry CMD5 enumeration: the SV6621 may need time to reach SDIO-ready
+   * after power-on.  Log RINTSTS each try (0x100 = RTO, no response).
+   */
+
+  for (i = 0; i < 8; i++)
+    {
+      ret = sdio_probe(dev);
+      syslog(LOG_ERR, "SDIOPROBE: CMD5 try%d ret=%d RINTSTS=%08" PRIx32 "\n",
+             i, ret, mmio_rd(0x2a320000 + 0x44));
+      if (ret >= 0)
+        {
+          break;
+        }
+
+      up_mdelay(200);
+    }
+
   if (ret < 0)
     {
       syslog(LOG_ERR, "SDIOPROBE: sdio_probe (CMD5) failed: %d "
