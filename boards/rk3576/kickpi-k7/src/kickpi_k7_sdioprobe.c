@@ -42,10 +42,12 @@
 
 #include <nuttx/arch.h>
 #include <nuttx/sdio.h>
+#include <nuttx/i2c/i2c_master.h>
 
 #include "rk3576_gpio.h"
 #include "rk3576_sdmmc.h"
 #include "rk3576_cru.h"
+#include "rk3576_i2c.h"
 #include "kickpi_k7.h"
 
 #ifdef CONFIG_KICKPI_K7_SDIO_PROBE
@@ -381,6 +383,42 @@ void kickpi_k7_sdio_probe(void)
     syslog(LOG_ERR, "SDIOPROBE: hym8563 rb ret=%d r00=0x%02x r02=0x%02x "
            "r0D=0x%02x\n", ret, r00, r02, r0d);
   }
+
+#ifdef CONFIG_RK3576_I2C
+  /* Cross-check the bare i2c5_read_reg() readback against the real
+   * rk3576_i2c driver: bring up I2C2 and read hym8563 reg 0x0D through the
+   * standard i2c_master transfer path.  The driver value must match r0D
+   * above (0xc4 observed) -- this validates the driver before we push it.
+   */
+
+  {
+    struct i2c_master_s *i2c = rk3576_i2c_initialize(2);
+    uint8_t regaddr = 0x0d;
+    uint8_t drvval = 0xa5;
+    struct i2c_msg_s msgs[2];
+    int dret = -ENODEV;
+
+    if (i2c != NULL)
+      {
+        msgs[0].frequency = 100000;
+        msgs[0].addr      = 0x51;
+        msgs[0].flags     = 0;
+        msgs[0].buffer    = &regaddr;
+        msgs[0].length    = 1;
+
+        msgs[1].frequency = 100000;
+        msgs[1].addr      = 0x51;
+        msgs[1].flags     = I2C_M_READ;
+        msgs[1].buffer    = &drvval;
+        msgs[1].length    = 1;
+
+        dret = I2C_TRANSFER(i2c, msgs, 2);
+      }
+
+    syslog(LOG_ERR, "SDIOPROBE: hym8563 DRIVER rb ret=%d r0D=0x%02x\n",
+           dret, drvval);
+  }
+#endif
 
   up_mdelay(10);
 
