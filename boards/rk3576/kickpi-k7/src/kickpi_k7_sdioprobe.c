@@ -393,30 +393,47 @@ void kickpi_k7_sdio_probe(void)
 
   {
     struct i2c_master_s *i2c = rk3576_i2c_initialize(2);
-    uint8_t regaddr = 0x0d;
+    uint8_t wbuf3[2] = { 0x0d, 0x80 };            /* CLKOUT enable (3B write) */
+    uint8_t regptr = 0x02;                        /* seconds register */
     uint8_t drvval = 0xa5;
     struct i2c_msg_s msgs[2];
     int dret = -ENODEV;
 
     if (i2c != NULL)
       {
+        int w3;
+        int w2;
+
+        /* (1) 3-byte write [addr|W][0x0D][0x80] -- mirrors the bare CLKOUT
+         * enable exactly.  (2) 2-byte pointer write [addr|W][0x02].  (3)
+         * combined pointer-write + repeated-START read of reg 0x02.
+         */
+
         msgs[0].frequency = 100000;
         msgs[0].addr      = 0x51;
         msgs[0].flags     = 0;
-        msgs[0].buffer    = &regaddr;
-        msgs[0].length    = 1;
+        msgs[0].buffer    = wbuf3;
+        msgs[0].length    = 2;
+        w3 = I2C_TRANSFER(i2c, msgs, 1);
 
+        msgs[0].buffer    = &regptr;
+        msgs[0].length    = 1;
+        w2 = I2C_TRANSFER(i2c, msgs, 1);
+
+        msgs[0].buffer    = &regptr;
+        msgs[0].length    = 1;
         msgs[1].frequency = 100000;
         msgs[1].addr      = 0x51;
         msgs[1].flags     = I2C_M_READ;
         msgs[1].buffer    = &drvval;
         msgs[1].length    = 1;
-
         dret = I2C_TRANSFER(i2c, msgs, 2);
+
+        syslog(LOG_ERR, "SDIOPROBE: hym8563 DRIVER w3=%d w2=%d\n", w3, w2);
       }
 
-    syslog(LOG_ERR, "SDIOPROBE: hym8563 DRIVER rb ret=%d r0D=0x%02x\n",
-           dret, drvval);
+    syslog(LOG_ERR, "SDIOPROBE: hym8563 DRIVER reg02 ret=%d val=0x%02x "
+           "(bare r02 above)\n", dret, drvval);
   }
 #endif
 

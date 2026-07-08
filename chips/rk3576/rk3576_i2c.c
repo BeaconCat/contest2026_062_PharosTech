@@ -61,19 +61,17 @@
 #define RK3576_I2C_FIFO_BYTES   32
 #define RK3576_I2C_POLL_LIMIT   1000000       /* busy-wait iterations */
 
-/* I2C2 functional/bus clock: CLK_I2C2 mux CLKSEL_CON(57) sel[3:2] (select
- * xin24m = always-on parent 3), gate CLKGATE_CON(12) bit13; PCLK_I2C2 gate
- * CLKGATE_CON(12) bit1.  clk_i2c2 = 24 MHz.
+/* I2C2 bus/functional clock gates: PCLK_I2C2 = CLKGATE_CON(12) bit1,
+ * CLK_I2C2 = CLKGATE_CON(12) bit13.  The functional-clock mux is left at its
+ * reset default (clk_i2c2 = 100 MHz); re-muxing it here is unnecessary and
+ * risks selecting a stopped parent.  This 100 MHz input matches the CLKDIV
+ * the bare-metal bring-up code used successfully on hardware.
  */
 
-#define RK3576_I2C2_CLKIN       24000000
+#define RK3576_I2C2_CLKIN       100000000
 #define RK3576_I2C2_GATE_CON    12
 #define RK3576_I2C2_PCLK_BIT    (1 << 1)
 #define RK3576_I2C2_CCLK_BIT    (1 << 13)
-#define RK3576_I2C2_CLKSEL_CON  57
-#define RK3576_I2C2_SEL_SHIFT   2
-#define RK3576_I2C2_SEL_MASK    (0x3 << 2)
-#define RK3576_I2C2_SEL_24M     3
 
 /****************************************************************************
  * Private Types
@@ -142,13 +140,9 @@ static void rk3576_i2c_clk_enable(struct rk3576_i2c_priv_s *priv)
 #ifdef CONFIG_RK3576_I2C2
   if (priv->base == RK3576_I2C2_ADDR)
     {
-      /* Select clk_i2c2 = xin24m (always-on). */
-
-      putreg32((RK3576_I2C2_SEL_MASK << 16) |
-               (RK3576_I2C2_SEL_24M << RK3576_I2C2_SEL_SHIFT),
-               RK3576_CRU_CLKSEL(RK3576_I2C2_CLKSEL_CON));
-
-      /* Ungate pclk_i2c2 + clk_i2c2 (gate bit high = disabled). */
+      /* Ungate pclk_i2c2 + clk_i2c2 (gate bit high = disabled).  The clock
+       * mux is left at its reset default; see the clock note above.
+       */
 
       putreg32(((RK3576_I2C2_PCLK_BIT | RK3576_I2C2_CCLK_BIT) << 16),
                RK3576_CRU_GATE(RK3576_I2C2_GATE_CON));
@@ -222,21 +216,6 @@ static int rk3576_i2c_poll(struct rk3576_i2c_priv_s *priv, uint32_t mask)
 }
 
 /****************************************************************************
- * Name: rk3576_i2c_start
- ****************************************************************************/
-
-static int rk3576_i2c_start(struct rk3576_i2c_priv_s *priv)
-{
-  int ret;
-
-  i2c_putreg(priv, RK3576_I2C_IPD, RK3576_I2C_INT_ALL);
-  i2c_putreg(priv, RK3576_I2C_CON, RK3576_I2C_CON_EN | RK3576_I2C_CON_START);
-  ret = rk3576_i2c_poll(priv, RK3576_I2C_INT_START);
-  i2c_putreg(priv, RK3576_I2C_IPD, RK3576_I2C_INT_START);
-  return ret < 0 ? ret : OK;
-}
-
-/****************************************************************************
  * Name: rk3576_i2c_write_msg
  *
  * Description:
@@ -256,6 +235,21 @@ static int rk3576_i2c_write_msg(struct rk3576_i2c_priv_s *priv,
       return -EINVAL;
     }
 
+  /* Issue a (repeated) START and wait for it, then clear the START pending
+   * bit -- matches the register order proven on hardware by the bare-metal
+   * bring-up code.
+   */
+
+  i2c_putreg(priv, RK3576_I2C_IPD, RK3576_I2C_INT_ALL);
+  i2c_putreg(priv, RK3576_I2C_CON, RK3576_I2C_CON_EN | RK3576_I2C_CON_START);
+  ret = rk3576_i2c_poll(priv, RK3576_I2C_INT_START);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  i2c_putreg(priv, RK3576_I2C_IPD, RK3576_I2C_INT_START);
+
   fifo[0] = (uint32_t)(msg->addr << 1);          /* addr | W in byte 0 */
   for (i = 0; i < (uint32_t)msg->length; i++)
     {
@@ -267,10 +261,11 @@ static int rk3576_i2c_write_msg(struct rk3576_i2c_priv_s *priv,
       i2c_putreg(priv, RK3576_I2C_TXDATA0 + i * 4, fifo[i]);
     }
 
-  i2c_putreg(priv, RK3576_I2C_IPD, RK3576_I2C_INT_ALL);
-  i2c_putreg(priv, RK3576_I2C_CON,
-             RK3576_I2C_CON_EN | RK3576_I2C_CON_MODE_TX |
-             RK3576_I2C_CON_ACT2NAK);
+  /* TX mode (no START bit here -- START was issued above), then trigger the
+   * transfer by loading MTXCNT.
+   */
+
+  i2c_putreg(priv, RK3576_I2C_CON, RK3576_I2C_CON_EN | RK3576_I2C_CON_MODE_TX);
   i2c_putreg(priv, RK3576_I2C_MTXCNT, total);
 
   ret = rk3576_i2c_poll(priv, RK3576_I2C_INT_MBTF);
@@ -301,10 +296,18 @@ static int rk3576_i2c_read_msg(struct rk3576_i2c_priv_s *priv,
              (uint32_t)((msg->addr << 1) | 1) | RK3576_I2C_ADDR_LOW_VLD);
   i2c_putreg(priv, RK3576_I2C_MRXRADDR, 0);
 
+  /* Issue the (repeated) START together with the receive mode.  This block
+   * uses TRX mode with one valid MRXADDR byte and zero MRXRADDR bytes: the
+   * controller sends [addr|R] from MRXADDR and then clocks in the data --
+   * verified on hardware (pure RX mode 2 was NAKed on this IP).  START must
+   * be in the same CON write, else the repeated START is consumed and the
+   * read address is never sent.
+   */
+
   i2c_putreg(priv, RK3576_I2C_IPD, RK3576_I2C_INT_ALL);
   i2c_putreg(priv, RK3576_I2C_CON,
-             RK3576_I2C_CON_EN | RK3576_I2C_CON_MODE_RX |
-             RK3576_I2C_CON_ACT2NAK | RK3576_I2C_CON_LASTACK);
+             RK3576_I2C_CON_EN | RK3576_I2C_CON_START |
+             RK3576_I2C_CON_MODE_TRX);
   i2c_putreg(priv, RK3576_I2C_MRXCNT, (uint32_t)msg->length);
 
   ret = rk3576_i2c_poll(priv, RK3576_I2C_INT_MBRF);
@@ -345,36 +348,44 @@ static int rk3576_i2c_transfer(struct i2c_master_s *dev,
 {
   struct rk3576_i2c_priv_s *priv = (struct rk3576_i2c_priv_s *)dev;
   int ret = OK;
+  int attempt;
   int i;
 
   nxmutex_lock(&priv->lock);
 
-  for (i = 0; i < count; i++)
+  /* The controller drops the very first START it is asked to generate after
+   * power-up; a single retry (with a STOP + disable to reset the bus in
+   * between) makes that first transfer reliable and is harmless afterwards.
+   */
+
+  for (attempt = 0; attempt < 2; attempt++)
     {
-      rk3576_i2c_setclk(priv, msgs[i].frequency);
-
-      ret = rk3576_i2c_start(priv);
-      if (ret < 0)
+      for (i = 0; i < count; i++)
         {
-          break;
+          rk3576_i2c_setclk(priv, msgs[i].frequency);
+
+          if ((msgs[i].flags & I2C_M_READ) != 0)
+            {
+              ret = rk3576_i2c_read_msg(priv, &msgs[i]);
+            }
+          else
+            {
+              ret = rk3576_i2c_write_msg(priv, &msgs[i]);
+            }
+
+          if (ret < 0)
+            {
+              break;
+            }
         }
 
-      if ((msgs[i].flags & I2C_M_READ) != 0)
-        {
-          ret = rk3576_i2c_read_msg(priv, &msgs[i]);
-        }
-      else
-        {
-          ret = rk3576_i2c_write_msg(priv, &msgs[i]);
-        }
-
-      if (ret < 0)
+      rk3576_i2c_stop(priv);
+      if (ret >= 0)
         {
           break;
         }
     }
 
-  rk3576_i2c_stop(priv);
   nxmutex_unlock(&priv->lock);
   return ret;
 }
