@@ -634,6 +634,18 @@ void kickpi_k7_sdio_probe(void)
 
   for (i = 0; i < 8; i++)
     {
+      /* Neardi/SeekWave guide: regenerate a clean chip_en LOW->HIGH reset
+       * edge + the documented 200 ms post-power-on settle before EVERY CMD5
+       * try.  A stale-high chip_en never re-arms the SV6621 SDIO ROM, so each
+       * retry must re-assert LOW first (this is the one guide step we had not
+       * been doing per-attempt).
+       */
+
+      rk3576_gpio_write(WL_REG_ON, false);
+      up_mdelay(50);
+      rk3576_gpio_write(WL_REG_ON, true);
+      up_mdelay(200);
+
       if (i == 2)
         {
           /* Long power-down variant: hold WL_REG_ON low 500ms in case the
