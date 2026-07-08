@@ -250,6 +250,33 @@ static int i2c5_read_reg(uint8_t slave, uint8_t reg, uint8_t *val)
   return 0;
 }
 
+/* Raw DW-MSHC command (bypasses the mmcsd layer) to replicate Linux's exact
+ * pre-enumeration sequence: CMD52 I/O-reset -> CMD0 -> CMD8 -> CMD5.
+ * Returns RINTSTS; *resp gets RESP0 when a response was expected.
+ */
+
+static uint32_t sdio_raw_cmd(uint8_t idx, uint32_t arg, bool resp,
+                             uint32_t *rsp)
+{
+  uint32_t rint;
+  int t;
+
+  mmio_wr(0x2a320044, 0xffffffff);               /* clear RINTSTS */
+  mmio_wr(0x2a320028, arg);                      /* CMDARG */
+  mmio_wr(0x2a32002c, (1u << 31) | (1u << 29) | (1u << 13) |
+          (resp ? (1u << 6) : 0) | idx);         /* START|HOLD|WAITPRV */
+  for (t = 0; (mmio_rd(0x2a32002c) & (1u << 31)) && t < 100000; t++);
+  for (t = 0; !(mmio_rd(0x2a320044) & (1u << 2)) && t < 100000; t++);
+
+  rint = mmio_rd(0x2a320044);
+  if (rsp != NULL)
+    {
+      *rsp = mmio_rd(0x2a320030);                /* RESP0 */
+    }
+
+  return rint;
+}
+
 static int sdio_rd(FAR struct sdio_dev_s *dev, uint32_t addr, uint8_t *val)
 {
   return sdio_io_rw_direct(dev, false, 0, addr, 0, val);
@@ -439,8 +466,47 @@ void kickpi_k7_sdio_probe(void)
    * after power-on.  Log RINTSTS each try (0x100 = RTO, no response).
    */
 
+  /* Linux mmc_rescan pre-enumeration sequence, verbatim: CMD52 write 0x08 to
+   * CCCR reg 6 (I/O abort / RES, the SDIO-specific reset -- works before
+   * enumeration and unsticks a wedged I/O state machine), CMD0, CMD8, then
+   * CMD5.  Log the raw RINTSTS/response of each step: ANY response at all
+   * proves the chip is alive on the bus.
+   */
+
+  {
+    uint32_t rsp = 0;
+    uint32_t st;
+
+    st = sdio_raw_cmd(52, 0x80000c08, true, &rsp);
+    syslog(LOG_ERR, "SDIOPROBE: raw CMD52(reset) RINTSTS=%08" PRIx32
+           " RESP=%08" PRIx32 "\n", st, rsp);
+    st = sdio_raw_cmd(0, 0, false, NULL);
+    syslog(LOG_ERR, "SDIOPROBE: raw CMD0 RINTSTS=%08" PRIx32 "\n", st);
+    up_mdelay(2);
+    st = sdio_raw_cmd(8, 0x1aa, true, &rsp);
+    syslog(LOG_ERR, "SDIOPROBE: raw CMD8 RINTSTS=%08" PRIx32
+           " RESP=%08" PRIx32 "\n", st, rsp);
+    st = sdio_raw_cmd(5, 0, true, &rsp);
+    syslog(LOG_ERR, "SDIOPROBE: raw CMD5 RINTSTS=%08" PRIx32
+           " RESP=%08" PRIx32 "\n", st, rsp);
+  }
+
   for (i = 0; i < 8; i++)
     {
+      if (i == 2)
+        {
+          /* Long power-down variant: hold WL_REG_ON low 500ms in case the
+           * short 20ms pulse does not fully reset the interface-detect
+           * logic, then release and settle.
+           */
+
+          rk3576_gpio_write(WL_REG_ON, false);
+          up_mdelay(500);
+          rk3576_gpio_write(WL_REG_ON, true);
+          up_mdelay(300);
+          syslog(LOG_ERR, "SDIOPROBE: long-PDN retry\n");
+        }
+
       if (i == 4)
         {
           /* Second half of the tries at ~97kHz (CLKDIV=0xff): raw slow-clock
