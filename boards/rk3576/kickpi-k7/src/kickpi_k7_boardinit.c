@@ -151,8 +151,7 @@ void rk3576_board_initialize(void)
    * clean LOW->HIGH power-on with the card clock already running.
    */
 
-  rk3576_config_gpio(GPIO_PORT1 | GPIO_PIN_C6 | GPIO_OUTPUT);
-  rk3576_gpio_write(GPIO_PORT1 | GPIO_PIN_C6 | GPIO_OUTPUT, false);
+  /* NO-TOUCH experiment: do not drive chip_en here. */
 #endif
 }
 

@@ -95,33 +95,6 @@ static inline void mmio_wr(uintptr_t addr, uint32_t val)
   *(volatile uint32_t *)addr = val;
 }
 
-/* Raw DW-MSHC command (bypasses the mmcsd layer) to replicate Linux's exact
- * pre-enumeration sequence: CMD52 I/O-reset -> CMD0 -> CMD8 -> CMD5.
- * Returns RINTSTS; *resp gets RESP0 when a response was expected.
- */
-
-static uint32_t sdio_raw_cmd(uint8_t idx, uint32_t arg, bool resp,
-                             uint32_t *rsp)
-{
-  uint32_t rint;
-  int t;
-
-  mmio_wr(0x2a320044, 0xffffffff);               /* clear RINTSTS */
-  mmio_wr(0x2a320028, arg);                      /* CMDARG */
-  mmio_wr(0x2a32002c, (1u << 31) | (1u << 29) | (1u << 13) |
-          (resp ? (1u << 6) : 0) | idx);         /* START|HOLD|WAITPRV */
-  for (t = 0; (mmio_rd(0x2a32002c) & (1u << 31)) && t < 100000; t++);
-  for (t = 0; !(mmio_rd(0x2a320044) & (1u << 2)) && t < 100000; t++);
-
-  rint = mmio_rd(0x2a320044);
-  if (rsp != NULL)
-    {
-      *rsp = mmio_rd(0x2a320030);                /* RESP0 */
-    }
-
-  return rint;
-}
-
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -129,13 +102,9 @@ static uint32_t sdio_raw_cmd(uint8_t idx, uint32_t arg, bool resp,
 void kickpi_k7_sdio_probe(void)
 {
   FAR struct sdio_dev_s *dev;
-  uint32_t upd = (1u << 31) | (1u << 21) | (1u << 13);
-  uint32_t rsp;
-  uint32_t st;
   int i;
-  int t;
 
-  syslog(LOG_ERR, "SDIOPROBE: ===== start (clean, correct-phase-first) =====\n");
+  syslog(LOG_ERR, "SDIOPROBE: ===== start (driver-path SDIO enum) =====\n");
 
   /* Mux the SDIO bus pins (GPIO1, func 2, pull-up) + input schmitt. */
 
@@ -151,9 +120,23 @@ void kickpi_k7_sdio_probe(void)
    * 200 ms quiet settle (no clock).
    */
 
-  rk3576_config_gpio(WL_REG_ON);
-  rk3576_gpio_write(WL_REG_ON, false);
-  up_mdelay(50);
+  /* NO-TOUCH experiment: leave chip_en exactly as the previous OS (Android)
+   * left it.  Dump GPIO1 first: warm-reboot registers survive, showing what
+   * Android left -- especially whether its shutdown already drove chip_en
+   * (C6, bit22) low, which would void the preserved-state assumption.
+   */
+
+  syslog(LOG_ERR, "SDIOPROBE: GPIO1 DR=%08" PRIx32 " DDR=%08" PRIx32
+         " EXT=%08" PRIx32 " (C6=%u C7=%u)\n",
+         mmio_rd(0x2ae10000 + 0x00), mmio_rd(0x2ae10000 + 0x08),
+         mmio_rd(0x2ae10000 + 0x70),
+         (unsigned)((mmio_rd(0x2ae10000 + 0x70) >> 22) & 1),
+         (unsigned)((mmio_rd(0x2ae10000 + 0x70) >> 23) & 1));
+
+  /* Bring up the host controller.  This also starts the ID-mode clock, so we
+   * gate it again immediately -- the vendor pwrseq requires NO card clock
+   * until 200 ms after chip_en is released.
+   */
 
   dev = rk3576_sdmmc_initialize(RK3576_SDIO_SLOT);
   if (dev == NULL)
@@ -162,111 +145,69 @@ void kickpi_k7_sdio_probe(void)
       return;
     }
 
-  mmio_wr(0x2a320010, 0);                          /* CLKENA = 0 */
-  mmio_wr(0x2a32002c, upd);
-  for (t = 0; (mmio_rd(0x2a32002c) & (1u << 31)) && t < 100000; t++);
-
-  rk3576_gpio_write(WL_REG_ON, true);
-  up_mdelay(200);
-
-  /* CORRECT PHASE FIRST -- before any bus command.  Android clock path
-   * (CLKDIV=0 so the internal phase is effective; CRU cclk_src = xin24m/30 =
-   * 800 kHz, fixed /2 clkgen -> 400 kHz card clock).  MISC_CON MEM_CLK_
-   * AUTOGATE and the phase regs are HIWORD-MASK (upper 16 = write-enable).
-   * drive=180 deg puts CMD on the CLK-low/falling edge so the SV6621 samples
-   * stable CMD at the rising edge (verified: CLK rises while CMD is steady).
-   */
-
-  mmio_wr(0x272004a0, (0xffu << 16) | (2u << 6) | 29u);  /* CLKSEL104 */
-  mmio_wr(0x2a320010, 0);
-  mmio_wr(0x2a32002c, upd);
-  for (t = 0; (mmio_rd(0x2a32002c) & (1u << 31)) && t < 100000; t++);
-  mmio_wr(0x2a320008, 0);                          /* CLKDIV = 0 */
-  mmio_wr(0x2a32002c, upd);
-  for (t = 0; (mmio_rd(0x2a32002c) & (1u << 31)) && t < 100000; t++);
-
-  mmio_wr(0x2a320138, 0x00200020);                /* MISC_CON MEM_CLK_AUTOGATE */
-  mmio_wr(0x2a320130, 0x0ffe0004);                /* drive 180 deg */
-  mmio_wr(0x2a320134, 0x0ffe0000);                /* sample 0 deg */
-
-  mmio_wr(0x2a320010, 1);                          /* CLKENA = 1 */
-  mmio_wr(0x2a32002c, upd);
-  for (t = 0; (mmio_rd(0x2a32002c) & (1u << 31)) && t < 100000; t++);
-  up_mdelay(10);
-
-  syslog(LOG_ERR, "SDIOPROBE: 400kHz drive=180 CLKDIV=%08" PRIx32 " misc=%08"
-         PRIx32 " con0=%08" PRIx32 " -- CMD5 is the FIRST command\n",
-         mmio_rd(0x2a320008), mmio_rd(0x2a320138), mmio_rd(0x2a320130));
-
-  /* Response-window pad sampling: fire CMD5 then immediately watch the CMD
-   * pad (GPIO1 EXT_PORT bit16) for the chip pulling it LOW (its response start
-   * bit + bits).  The teammate's analyzer saw 1-sample glitches after some
-   * CMD5s -- if the chip really drives a response but our host keeps driving
-   * CMD (bus contention), we should see CMD-low samples here even though the
-   * controller reports RTO.  cmd_low > 0 = chip drove a response the host
-   * failed to capture; 0 = chip truly silent.
-   */
-
   {
-    uint32_t e;
-    int c5 = 0;
-    int c0 = 0;
+    const uint32_t cmd5 = (5u | MMCSD_R4_RESPONSE);
+    uint32_t r4 = 0;
+    uint32_t ocr = 0;
+    int wret;
     int k;
 
-    /* Control: CMD0 expects NO response -- CMD stays high afterwards. */
+    /* Strict mmc-pwrseq-simple + mmc-core power-up order (from the Rockchip
+     * vendor kernel behavior spec), which we had never reproduced cleanly:
+     *   1. chip_en (GPIO1_C6, ACTIVE_LOW) driven LOW  = assert reset
+     *   2. host up, card clock GATED (no CLK yet)
+     *   3. chip_en HIGH = release, then wait 200 ms WITH NO CLOCK
+     *   4. only THEN start the ID-mode clock (driver's CLKDIV, no phase hack)
+     *   5. 10 ms, then CMD0 (80-clock init) + CMD5
+     */
 
-    mmio_wr(0x2a320044, 0xffffffff);
-    mmio_wr(0x2a320028, 0);
-    mmio_wr(0x2a32002c, (1u << 31) | (1u << 29) | (1u << 13) | 0);
-    for (k = 0; (mmio_rd(0x2a32002c) & (1u << 31)) && k < 100000; k++);
-    for (k = 0; k < 80000; k++)
+    rk3576_config_gpio(WL_REG_ON);
+    rk3576_gpio_write(WL_REG_ON, false);          /* assert reset (low) */
+    SDIO_CLOCK(dev, CLOCK_SDIO_DISABLED);         /* gate the card clock */
+    up_mdelay(10);
+
+    rk3576_gpio_write(WL_REG_ON, true);           /* release (high) */
+    up_mdelay(200);                               /* settle, NO clock */
+
+    SDIO_CLOCK(dev, CLOCK_IDMODE);                /* now start ~393 kHz */
+    syslog(LOG_ERR, "SDIOPROBE: pwrseq-order CLKDIV=%08" PRIx32 " CLKENA=%08"
+           PRIx32 " CLKSEL104=%08" PRIx32 "\n",
+           mmio_rd(0x2a320008), mmio_rd(0x2a320010), mmio_rd(0x272004a0));
+
+    up_mdelay(10);
+
+    SDIO_SENDCMD(dev, MMCSD_CMD0, 0);             /* 80-clock init + reset */
+    up_mdelay(2);
+
+    /* SDIO enumeration: CMD5 arg=0 to read OCR, then CMD5 with the OCR set
+     * until the card reports ready (R4 bit31 C=1).
+     */
+
+    for (k = 0; k < 20; k++)
       {
-        e = mmio_rd(0x2ae10000 + 0x70);
-        if ((e & (1u << 16)) == 0)
+        SDIO_SENDCMD(dev, cmd5, ocr);
+        wret = SDIO_WAITRESPONSE(dev, cmd5);
+        r4 = 0;
+        SDIO_RECVR4(dev, cmd5, &r4);
+
+        syslog(LOG_ERR, "SDIOPROBE: DRVPATH CMD5 #%d arg=%08" PRIx32 " wait=%d "
+               "R4=%08" PRIx32 "\n", k, ocr, wret, r4);
+
+        if (wret == OK && r4 != 0)
           {
-            c0++;
+            ocr = r4 & 0x00ffffff;                /* card's OCR voltage window */
+            if ((r4 & 0x80000000) != 0)
+              {
+                syslog(LOG_ERR, "SDIOPROBE: *** SDIO CARD READY R4=%08" PRIx32
+                       " numfn=%u mempresent=%u ***\n", r4,
+                       (unsigned)((r4 >> 28) & 7), (unsigned)((r4 >> 27) & 1));
+                break;
+              }
           }
+
+        up_mdelay(10);
       }
-
-    /* CMD5 expects R4 -- if the chip responds, CMD is pulled low here. */
-
-    mmio_wr(0x2a320044, 0xffffffff);
-    mmio_wr(0x2a320028, 0);
-    mmio_wr(0x2a32002c, (1u << 31) | (1u << 29) | (1u << 13) | (1u << 6) | 5);
-    for (k = 0; (mmio_rd(0x2a32002c) & (1u << 31)) && k < 100000; k++);
-    for (k = 0; k < 80000; k++)
-      {
-        e = mmio_rd(0x2ae10000 + 0x70);
-        if ((e & (1u << 16)) == 0)
-          {
-            c5++;
-          }
-      }
-
-    syslog(LOG_ERR, "SDIOPROBE: RESPWIN CMD-low CMD0(noresp)=%d CMD5=%d "
-           "/ 80000 (CMD5>>CMD0 => real chip response)\n", c0, c5);
   }
-
-  /* CMD5 as the very first command on the bus, correct phase, repeated. */
-
-  for (i = 0; i < 200; i++)
-    {
-      st = sdio_raw_cmd(5, 0, true, &rsp);
-      if ((i % 20) == 0)
-        {
-          syslog(LOG_ERR, "SDIOPROBE: CMD5 #%d RINTSTS=%08" PRIx32
-                 " RESP=%08" PRIx32 "\n", i, st, rsp);
-        }
-
-      if ((st & (1u << 8)) == 0 && (st & (1u << 2)) != 0)
-        {
-          syslog(LOG_ERR, "SDIOPROBE: *** CMD5 RESPONDED #%d RINTSTS=%08"
-                 PRIx32 " RESP=%08" PRIx32 " ***\n", i, st, rsp);
-          break;
-        }
-
-      up_mdelay(20);
-    }
 
   syslog(LOG_ERR, "SDIOPROBE: ===== done =====\n");
 }
