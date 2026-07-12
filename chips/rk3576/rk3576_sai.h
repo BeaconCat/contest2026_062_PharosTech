@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/arm64/rk3576/kickpi_k7/src/kickpi_k7.h
+ * chips/rk3576/rk3576_sai.h
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -20,46 +20,42 @@
  *
  ****************************************************************************/
 
-#ifndef __BOARDS_ARM64_RK3576_KICKPI_K7_SRC_KICKPI_K7_H
-#define __BOARDS_ARM64_RK3576_KICKPI_K7_SRC_KICKPI_K7_H
+#ifndef __VENDOR_ROCKCHIP_RK3576_RK3576_SAI_H
+#define __VENDOR_ROCKCHIP_RK3576_RK3576_SAI_H
 
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
 #include <nuttx/config.h>
-#include <stdint.h>
-#ifndef __ASSEMBLY__
+
+#include <nuttx/audio/i2s.h>
+
+#ifdef CONFIG_RK3576_SAI
 
 /****************************************************************************
- * Public Functions Definitions
+ * Public Function Prototypes
  ****************************************************************************/
 
-#ifdef CONFIG_KICKPI_K7_DMA_PROBE
 /****************************************************************************
- * Name: kickpi_k7_dma_probe
+ * Name: rk3576_sai_initialize
  *
  * Description:
- *   ARM PL330 memory-to-memory bring-up self-test (see
- *   kickpi_k7_dmaprobe.c).
+ *   Initialize a SAI controller and return its lower-half I2S interface for
+ *   the board to bind to a codec (ES8388) via audio_i2s_initialize().  The
+ *   board is responsible for muxing the SAI's MCLK/SCLK/LRCK/SDO/SDI pins
+ *   before the returned device is used.
+ *
+ * Input Parameters:
+ *   busno - SAI controller index (1 selects SAI1 @ 0x2a610000; the only
+ *           instance currently supported on the KICKPI-K7).
+ *
+ * Returned Value:
+ *   A non-NULL i2s_dev_s on success; NULL on failure.
  *
  ****************************************************************************/
 
-void kickpi_k7_dma_probe(void);
-#endif
+struct i2s_dev_s *rk3576_sai_initialize(int busno);
 
-#ifdef CONFIG_KICKPI_K7_AUDIO
-/****************************************************************************
- * Name: kickpi_k7_audio_initialize
- *
- * Description:
- *   Bring up the on-board ES8388 codec on SAI1/I2C3 and register
- *   /dev/audio/pcm0 (see kickpi_k7_audio.c).
- *
- ****************************************************************************/
-
-int kickpi_k7_audio_initialize(void);
-#endif
-
-#endif /* __ASSEMBLY__ */
-#endif /* __BOARDS_ARM64_RK3576_KICKPI_K7_SRC_KICKPI_K7_H */
+#endif /* CONFIG_RK3576_SAI */
+#endif /* __VENDOR_ROCKCHIP_RK3576_RK3576_SAI_H */

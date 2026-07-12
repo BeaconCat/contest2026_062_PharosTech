@@ -199,5 +199,18 @@ void board_late_initialize(void)
   }
 #endif
 #endif
+
+#ifdef CONFIG_KICKPI_K7_DMA_PROBE
+  /* Bring-up self-test for the ARM PL330 DMA controller. */
+
+  kickpi_k7_dma_probe();
+#endif
+
+  /* NOTE: audio (ES8388 on SAI1/I2C3) is brought up on demand from the
+   * "audioinit" NSH command (see kickpi_k7_audio.c), not here.  Codec/SAI
+   * bring-up polls hardware clocks that may not be running on a cold boot;
+   * keeping it off the boot path guarantees the board always reaches NSH
+   * (and stays hot-flashable) even if audio bring-up stalls.
+   */
 }
 #endif /* CONFIG_BOARD_LATE_INITIALIZE */

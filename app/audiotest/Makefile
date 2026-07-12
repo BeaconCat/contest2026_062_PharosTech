@@ -1,5 +1,7 @@
 ############################################################################
-# arch/arm64/src/rk3576/Make.defs
+# apps/examples/audiotest/Makefile
+#
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -18,31 +20,13 @@
 #
 ############################################################################
 
-include common/Make.defs
+include $(APPDIR)/Make.defs
 
-# Rockchip RK3576 specific C source files
-CHIP_CSRCS  = rk3576_boot.c rk3576_serial.c
+PROGNAME  = $(CONFIG_EXAMPLES_AUDIOTEST_PROGNAME)
+PRIORITY  = $(CONFIG_EXAMPLES_AUDIOTEST_PRIORITY)
+STACKSIZE = $(CONFIG_EXAMPLES_AUDIOTEST_STACKSIZE)
+MODULE    = $(CONFIG_EXAMPLES_AUDIOTEST)
 
-ifeq ($(CONFIG_RK3576_GPIO),y)
-CHIP_CSRCS += rk3576_gpio.c
-endif
+MAINSRC = audiotest_main.c
 
-ifeq ($(CONFIG_ARCH_EARLY_PRINT),y)
-CHIP_ASRCS  = rk3576_lowputc.S
-endif
-
-ifeq ($(CONFIG_RK3576_SDMMC),y)
-CHIP_CSRCS += rk3576_sdmmc.c
-endif
-
-ifeq ($(CONFIG_RK3576_I2C),y)
-CHIP_CSRCS += rk3576_i2c.c
-endif
-
-ifeq ($(CONFIG_RK3576_DMA),y)
-CHIP_CSRCS += rk3576_dma.c
-endif
-
-ifeq ($(CONFIG_RK3576_SAI),y)
-CHIP_CSRCS += rk3576_sai.c
-endif
+include $(APPDIR)/Application.mk
