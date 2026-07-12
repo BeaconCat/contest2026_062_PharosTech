@@ -37,6 +37,11 @@
 #  include "rk3576_sdmmc.h"
 #endif
 
+#ifdef CONFIG_RK3576_PWM
+#  include <nuttx/timers/pwm.h>
+#  include "rk3576_pwm.h"
+#endif
+
 #if defined(CONFIG_RK3576_SDMMC) && defined(CONFIG_GPT_PARTITION)
 #  include <nuttx/fs/partition.h>
 #endif
@@ -198,6 +203,24 @@ void board_late_initialize(void)
       }
   }
 #endif
+#endif
+
+#ifdef CONFIG_RK3576_PWM
+  /* Mux PWM1 channel 0 onto GPIO0_B4 (func 12) and register it as
+   * /dev/pwm0 for servo / fan / LED control.
+   */
+
+  {
+    FAR struct pwm_lowerhalf_s *pwm;
+
+    rk3576_config_gpio(GPIO_PORT0 | GPIO_PIN_B4 | GPIO_ALT | GPIO_AF12);
+
+    pwm = rk3576_pwm_initialize(0);
+    if (pwm == NULL || pwm_register("/dev/pwm0", pwm) < 0)
+      {
+        syslog(LOG_ERR, "ERROR: PWM1 ch0 register failed\n");
+      }
+  }
 #endif
 }
 #endif /* CONFIG_BOARD_LATE_INITIALIZE */
