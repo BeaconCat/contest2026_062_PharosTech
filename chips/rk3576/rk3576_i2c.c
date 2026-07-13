@@ -354,7 +354,7 @@ static int rk3576_i2c_write_msg(struct rk3576_i2c_priv_s *priv,
  ****************************************************************************/
 
 static int rk3576_i2c_read_chunk(struct rk3576_i2c_priv_s *priv,
-                                 uint16_t addr,
+                                 uint16_t addr, uint32_t mrxraddr,
                                  FAR uint8_t *buf, uint32_t len,
                                  bool first)
 {
@@ -369,11 +369,19 @@ static int rk3576_i2c_read_chunk(struct rk3576_i2c_priv_s *priv,
     {
       /* TRX mode: START + send MRXADDR[M] + MRXRADDR + restart +
        * send MRXADDR[R] + receive len bytes.
+       *
+       * mrxraddr carries the slave register address bytes (with their
+       * valid bits) for the common write-register-then-read transfer, so
+       * the pointer write and the read happen in ONE bus transaction with
+       * a repeated START.  Devices such as the ES8388 reset their register
+       * pointer on STOP, so splitting the pair into two transactions makes
+       * every read return bus-idle 0xff.  mrxraddr == 0 sends no register
+       * byte (a plain addressed read).
        */
 
       i2c_putreg(priv, RK3576_I2C_MRXADDR,
                  (uint32_t)((addr << 1) | 1) | RK3576_I2C_ADDR_LOW_VLD);
-      i2c_putreg(priv, RK3576_I2C_MRXRADDR, 0);
+      i2c_putreg(priv, RK3576_I2C_MRXRADDR, mrxraddr);
 
       i2c_putreg(priv, RK3576_I2C_CON,
                  RK3576_I2C_CON_EN | RK3576_I2C_CON_START |
@@ -418,7 +426,7 @@ static int rk3576_i2c_read_chunk(struct rk3576_i2c_priv_s *priv,
  ****************************************************************************/
 
 static int rk3576_i2c_read_msg(struct rk3576_i2c_priv_s *priv,
-                               struct i2c_msg_s *msg)
+                               struct i2c_msg_s *msg, uint32_t mrxraddr)
 {
   uint32_t remaining = (uint32_t)msg->length;
   uint32_t offset = 0;
@@ -442,7 +450,7 @@ static int rk3576_i2c_read_msg(struct rk3576_i2c_priv_s *priv,
        * continuing the same transaction per TRM §32.6 Fig.32-8.
        */
 
-      ret = rk3576_i2c_read_chunk(priv, msg->addr,
+      ret = rk3576_i2c_read_chunk(priv, msg->addr, mrxraddr,
                                   msg->buffer + offset, chunk, first);
       if (ret < 0)
         {
@@ -497,9 +505,34 @@ static int rk3576_i2c_transfer(struct i2c_master_s *dev,
         {
           rk3576_i2c_setclk(priv, msgs[i].frequency);
 
-          if ((msgs[i].flags & I2C_M_READ) != 0)
+          if ((msgs[i].flags & I2C_M_READ) == 0 &&
+              msgs[i].length >= 1 && msgs[i].length <= 3 &&
+              i + 1 < count &&
+              (msgs[i + 1].flags & I2C_M_READ) != 0 &&
+              msgs[i + 1].addr == msgs[i].addr)
             {
-              ret = rk3576_i2c_read_msg(priv, &msgs[i]);
+              /* Register-pointer write followed by a read from the same
+               * device: merge into a single TRX transaction (register bytes
+               * via MRXRADDR + repeated START).  Splitting them puts a STOP
+               * between, which resets the register pointer on devices like
+               * the ES8388 and every read returns 0xff.
+               */
+
+              uint32_t raddr = 0;
+              int b;
+
+              for (b = 0; b < msgs[i].length; b++)
+                {
+                  raddr |= (uint32_t)msgs[i].buffer[b] << (8 * b);
+                  raddr |= RK3576_I2C_ADDR_LOW_VLD << b;
+                }
+
+              i++;
+              ret = rk3576_i2c_read_msg(priv, &msgs[i], raddr);
+            }
+          else if ((msgs[i].flags & I2C_M_READ) != 0)
+            {
+              ret = rk3576_i2c_read_msg(priv, &msgs[i], 0);
             }
           else
             {
