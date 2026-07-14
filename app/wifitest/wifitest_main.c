@@ -38,6 +38,7 @@ int kickpi_k7_wifi_initialize(void);
 uint32_t rk3576_skw_state(void);
 int rk3576_skw_scan(struct rk3576_skw_bss_s *list, int max);
 int rk3576_skw_connect(const char *ssid);
+int rk3576_skw_wpa_connect(const char *ssid, const char *psk);
 
 int main(int argc, FAR char *argv[])
 {
@@ -53,7 +54,17 @@ int main(int argc, FAR char *argv[])
       return 1;
     }
 
-  /* "wifitest <ssid>" connects; no arg just scans. */
+  /* "wifitest <ssid> <psk>" runs the full WPA2-PSK 4-way handshake;
+   * "wifitest <ssid>" does open/L2 association only; no arg just scans.
+   */
+
+  if (argc >= 3)
+    {
+      ret = rk3576_skw_wpa_connect(argv[1], argv[2]);
+      printf("wifitest: wpa2 connect \"%s\" -> %d %s\n", argv[1], ret,
+             ret == 0 ? "CONNECTED (keys installed)" : "failed");
+      return ret == 0 ? 0 : 1;
+    }
 
   if (argc >= 2)
     {
