@@ -56,6 +56,7 @@
 
 #include "rk3576_sdmmc.h"
 #include "rk3576_skw.h"
+#include "rk3576_skw_wpa.h"
 
 #ifdef CONFIG_RK3576_SKW
 
@@ -178,6 +179,7 @@
 #define SKW_CMD_ASSOC       11
 #define SKW_CMD_DISCONNECT  17
 #define SKW_CMD_SET_MIB     40
+#define SKW_CMD_ADD_KEY     12
 
 /* WiFi events (skw_msg type=EVENT). */
 
@@ -221,6 +223,10 @@ static const struct rk3576_skw_board_s *g_skw_board;
 static uint32_t g_skw_service;
 static bool g_skw_run;
 static uint8_t g_skw_mac[6];
+static uint8_t g_skw_bssid[6];
+static uint8_t g_skw_peer_idx;
+
+static void skw_data_rx(const uint8_t *pl, int len);
 
 /* Scan result cache (SSID/BSSID/channel/rssi), filled from SCAN_REPORT
  * events, drained by rk3576_skw_scan().
@@ -993,7 +999,7 @@ static int skw_rx_burst(int buf_num)
             break;
 
           case SKW_CH_WIFI_DATA:
-            /* TODO(P4): strip the RX descriptor and inject to netdev. */
+            skw_data_rx(p + 4, plen);
             break;
 
           default:
@@ -1617,6 +1623,9 @@ static int skw_connect(const struct skw_bss_s *bss)
 
     syslog(LOG_INFO, "SKW: JOIN ok status=%d peer_idx=%d\n", ret,
            jrlen > 0 ? jresp[0] : -1);
+
+    g_skw_peer_idx = (jrlen > 0) ? jresp[0] : 0;
+    memcpy(g_skw_bssid, bss->bssid, 6);
   }
 
   up_mdelay(50);
@@ -1841,6 +1850,191 @@ int rk3576_skw_connect(const char *ssid)
     }
 
   return -ENOENT;
+}
+
+
+/****************************************************************************
+ * Name: skw_data_rx
+ *
+ * Description:
+ *   Handle a channel-7 (data) receive packet.  The CP has already
+ *   converted 802.11 to 802.3, so after the RX descriptor the payload is
+ *   an Ethernet frame.  EAPOL frames (EtherType 0x888e) are routed to the
+ *   host WPA supplicant; other frames are dropped until the netdev data
+ *   plane (P4) is wired up.
+ *
+ *   RX descriptor stripping (skw_rx.c): the Ethernet header sits at
+ *   msdu_offset - RX_DESC_MSDU_OFFSET(52) past the descriptor; frame
+ *   length = msdu_len + SKW_MSDU_HDR_LEN(6).
+ *
+ ****************************************************************************/
+
+static void skw_data_rx(const uint8_t *pl, int len)
+{
+  int i;
+
+  /* The exact rx_desc layout offset of msdu_offset is a binary blind spot
+   * (undefined in the reference sources), so rather than trust a fixed
+   * descriptor size we locate the Ethernet payload by scanning for the
+   * EAPOL EtherType (0x888e).  This is sufficient for the 4-way handshake;
+   * the full descriptor map is confirmed during netdev (P4) bring-up.
+   */
+
+  for (i = 12; i + 2 <= len; i++)
+    {
+      if (pl[i] == 0x88 && pl[i + 1] == 0x8e)
+        {
+          int ethlen = len - (i - 12);
+
+          if (ethlen > 14)
+            {
+              rk3576_skw_wpa_eapol_input(pl + (i - 12) + 14, ethlen - 14);
+            }
+
+          return;
+        }
+    }
+}
+
+/****************************************************************************
+ * Name: rk3576_skw_get_mac / rk3576_skw_get_bssid
+ ****************************************************************************/
+
+void rk3576_skw_get_mac(uint8_t mac[6])
+{
+  memcpy(mac, g_skw_mac, 6);
+}
+
+void rk3576_skw_get_bssid(uint8_t bssid[6])
+{
+  memcpy(bssid, g_skw_bssid, 6);
+}
+
+/****************************************************************************
+ * Name: rk3576_skw_data_tx
+ *
+ * Description:
+ *   Transmit a bare Ethernet frame on the data channel (7).  Builds the
+ *   channel-7 packet: outer header + skw_tx_desc_hdr(6) + skw_tx_desc_conf
+ *   (2) + Ethernet frame + trailing eof terminator.  Best-effort TX credit
+ *   handling (read 0x184, write consumed to 0x168); the CP ignores credit
+ *   when SKW_FLAG_FW_IGNORE_CRED is set.
+ *
+ ****************************************************************************/
+
+int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
+{
+  int inner = 6 + 2 + ethlen;                  /* desc_hdr + conf + frame */
+  int pkt_len = 4 + inner + 4;                 /* outer hdr + inner + eof */
+  int padded = (pkt_len + 511) & ~511;
+  uint16_t ethertype = (eth[12] << 8) | eth[13];
+  uint32_t hdr;
+  uint32_t eof;
+  uint16_t w0;
+  uint16_t w1;
+  uint8_t credit = 0;
+
+  if (ethlen < 14 || padded > (int)sizeof(g_skw_txbuf))
+    {
+      return -E2BIG;
+    }
+
+  /* Best-effort credit check (func0 SIG registers). */
+
+  skw_cmd52(false, 0, 0x184, 0, &credit);
+
+  memset(g_skw_txbuf, 0, padded);
+
+  hdr = SKW_HDR(SKW_CH_WIFI_DATA, inner);
+  g_skw_txbuf[0] = hdr & 0xff;
+  g_skw_txbuf[1] = (hdr >> 8) & 0xff;
+  g_skw_txbuf[2] = (hdr >> 16) & 0xff;
+  g_skw_txbuf[3] = (hdr >> 24) & 0xff;
+
+  /* skw_tx_desc_hdr word0: padding_gap:2 inst:2 tid:4 peer_lut:5
+   * frame_type:1 encry_dis:1 rate:1.  STA data: peer_lut = peer_idx,
+   * everything else 0 (frame_type SKW_ETHER_FRAME, encry enabled).
+   */
+
+  w0 = ((uint16_t)(g_skw_peer_idx & 0x1f)) << 8;
+  g_skw_txbuf[4] = w0 & 0xff;
+  g_skw_txbuf[5] = (w0 >> 8) & 0xff;
+
+  /* word1: msdu_len:12 lmac_id:2 rsv:2 */
+
+  w1 = ethlen & 0x0fff;
+  g_skw_txbuf[6] = w1 & 0xff;
+  g_skw_txbuf[7] = (w1 >> 8) & 0xff;
+
+  /* word2: eth_type */
+
+  g_skw_txbuf[8] = ethertype & 0xff;
+  g_skw_txbuf[9] = (ethertype >> 8) & 0xff;
+
+  /* skw_tx_desc_conf (2B): checksum offload off. */
+
+  g_skw_txbuf[10] = 0;
+  g_skw_txbuf[11] = 0;
+
+  memcpy(g_skw_txbuf + 12, eth, ethlen);
+
+  eof = SKW_HDR_EOF_TERM;
+  g_skw_txbuf[4 + inner + 0] = eof & 0xff;
+  g_skw_txbuf[4 + inner + 1] = (eof >> 8) & 0xff;
+  g_skw_txbuf[4 + inner + 2] = (eof >> 16) & 0xff;
+  g_skw_txbuf[4 + inner + 3] = (eof >> 24) & 0xff;
+
+  /* Return one consumed credit to the CP (best-effort). */
+
+  if (credit > 0)
+    {
+      skw_cmd52(true, 0, 0x168, 1, NULL);
+    }
+
+  return skw_cmd53_write(1, SKW_PK_WINDOW, false, g_skw_txbuf, padded);
+}
+
+/****************************************************************************
+ * Name: rk3576_skw_add_key
+ *
+ * Description:
+ *   Install a key into the CP via ADD_KEY(12).  Builds skw_key_params:
+ *   mac_addr[6], key_type, cipher_type, pn[6], key_id, key_len, key[].
+ *
+ ****************************************************************************/
+
+int rk3576_skw_add_key(uint8_t key_type, uint8_t cipher,
+                       const uint8_t *mac, uint8_t key_id,
+                       const uint8_t *key, int key_len, const uint8_t *pn)
+{
+  uint8_t buf[64];
+  int n = 0;
+
+  if (key_len < 0 || 16 + key_len > (int)sizeof(buf))
+    {
+      return -E2BIG;
+    }
+
+  memcpy(buf + n, mac, 6);
+  n += 6;
+  buf[n++] = key_type;
+  buf[n++] = cipher;
+  if (pn != NULL)
+    {
+      memcpy(buf + n, pn, 6);
+    }
+  else
+    {
+      memset(buf + n, 0, 6);
+    }
+
+  n += 6;
+  buf[n++] = key_id;
+  buf[n++] = (uint8_t)key_len;
+  memcpy(buf + n, key, key_len);
+  n += key_len;
+
+  return skw_send_cmd(SKW_CMD_ADD_KEY, buf, n, NULL, NULL);
 }
 
 #endif /* CONFIG_RK3576_SKW */

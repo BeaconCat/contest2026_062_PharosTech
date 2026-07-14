@@ -144,6 +144,14 @@ int rk3576_skw_scan(FAR struct rk3576_skw_bss_s *list, int max);
 
 int rk3576_skw_connect(FAR const char *ssid);
 
+
+void rk3576_skw_get_mac(uint8_t mac[6]);
+void rk3576_skw_get_bssid(uint8_t bssid[6]);
+int rk3576_skw_data_tx(const uint8_t *eth, int ethlen);
+int rk3576_skw_add_key(uint8_t key_type, uint8_t cipher,
+                       const uint8_t *mac, uint8_t key_id,
+                       const uint8_t *key, int key_len, const uint8_t *pn);
+
 #undef EXTERN
 #ifdef __cplusplus
 }
