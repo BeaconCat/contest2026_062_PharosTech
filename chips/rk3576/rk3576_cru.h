@@ -171,4 +171,19 @@ int rk3576_cru_get_i2c_clock_gate(uint16_t i2c_bus_id, bool *p_pclk_en, bool *p_
 }
 #endif
 
+
+/****************************************************************************
+ * Name: rk3576_cru_sdio_enable
+ *
+ * Description:
+ *   Bring up the SDIO controller clock domain (49.5 MHz card clock source,
+ *   bus clock gate, soft-reset pulse).
+ *
+ * Returned Value:
+ *   The cclk_src_sdio frequency in Hz.
+ *
+ ****************************************************************************/
+
+uint32_t rk3576_cru_sdio_enable(void);
+
 #endif /* __ARCH_ARM64_SRC_RK3576_RK3576_CRU_H */

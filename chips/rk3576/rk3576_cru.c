@@ -525,4 +525,51 @@ int rk3576_cru_get_i2c_clock_gate(uint16_t i2c_bus_id, bool *p_pclk_en, bool *p_
   return OK;
 }
 
+/****************************************************************************
+ * Name: rk3576_cru_sdio_enable
+ *
+ * Description:
+ *   Enable the clock and reset of the SDIO controller (mmc@2a320000, the
+ *   on-board SeekWave SV6621 WiFi/BT combo).  SDIO is not the boot device,
+ *   so the boot loader leaves its clock domain uninitialized; this routine:
+ *     1. Sets cclk_src_sdio source=gpll and divider=/24 -> 49.5 MHz (the
+ *        reset default gpll/3 = 396 MHz exceeds the DW-MSHC 8-bit CLKDIV
+ *        limit and cannot be divided down to the 400 kHz card-id clock).
+ *     2. Enables the hclk_sdio (bus clock) and cclk_src_sdio (card clock
+ *        source) gates.
+ *     3. Pulses the hresetn_sdio soft reset to bring the controller to a
+ *        known initial state.
+ *
+ * Returned Value:
+ *   The actual cclk_src_sdio frequency (Hz) for the host driver.
+ *
+ ****************************************************************************/
 
+uint32_t rk3576_cru_sdio_enable(void)
+{
+  /* cclk_src_sdio: sel=gpll(0), div_con=23 -> gpll(1188MHz)/24 = 49.5MHz */
+
+  putreg32(((RK3576_CRU_SDIO_SEL_MASK | RK3576_CRU_SDIO_DIV_MASK) << 16) |
+           (RK3576_CRU_SDIO_SEL_GPLL << RK3576_CRU_SDIO_SEL_SHIFT) |
+           (RK3576_CRU_SDIO_DIV_CON << RK3576_CRU_SDIO_DIV_SHIFT),
+           RK3576_CRU_ADDR + RK3576_CRU_CLKSEL_CON(RK3576_CRU_SDIO_CLKSEL));
+
+  /* Enable gates: a gate bit high = disabled, so writing 0 = enabled */
+
+  putreg32(((RK3576_CRU_SDIO_HCLK_BIT | RK3576_CRU_SDIO_CCLK_BIT) << 16),
+           RK3576_CRU_ADDR + RK3576_CRU_GATE_CON(RK3576_CRU_SDIO_GATE));
+
+  /* Soft-reset pulse: assert -> short delay -> deassert */
+
+  putreg32((RK3576_CRU_SDIO_RST_BIT << 16) | RK3576_CRU_SDIO_RST_BIT,
+           RK3576_CRU_ADDR +
+           RK3576_CRU_SOFTRST_CON(RK3576_CRU_SDIO_SOFTRST));
+  up_udelay(20);
+
+  putreg32((RK3576_CRU_SDIO_RST_BIT << 16),
+           RK3576_CRU_ADDR +
+           RK3576_CRU_SOFTRST_CON(RK3576_CRU_SDIO_SOFTRST));
+  up_udelay(20);
+
+  return RK3576_CRU_SDIO_CCLK_FREQ;
+}

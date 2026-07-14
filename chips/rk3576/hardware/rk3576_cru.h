@@ -187,4 +187,39 @@
 #define RK3576_PMU1CRU_DEEPSLOW_DETECT_CON (0x0B40)
 #define RK3576_PMU1CRU_DEEPSLOW_DETECT_ST  (0x0B44)
 
+
+/* SDIO controller (mmc@2a320000) clock/reset controls.  Values
+ * cross-verified between TRM Part1 and the Linux clk-rk3576.c driver,
+ * board-verified on KICKPI-K7.
+ */
+
+
+#define RK3576_CRU_SDIO_CLKSEL     104
+#define RK3576_CRU_SDIO_SEL_SHIFT  6      /* cclk_src_sdio_sel[7:6] */
+#define RK3576_CRU_SDIO_SEL_MASK   (0x3 << RK3576_CRU_SDIO_SEL_SHIFT)
+#define RK3576_CRU_SDIO_SEL_GPLL   0      /* parent0 = gpll */
+#define RK3576_CRU_SDIO_SEL_CPLL   1      /* parent1 = cpll */
+#define RK3576_CRU_SDIO_SEL_24M    2      /* parent2 = xin24m */
+#define RK3576_CRU_SDIO_DIV_SHIFT  0      /* cclk_src_sdio_div[5:0] */
+#define RK3576_CRU_SDIO_DIV_MASK   (0x3f << RK3576_CRU_SDIO_DIV_SHIFT)
+
+#define RK3576_CRU_SDIO_GATE       42
+#define RK3576_CRU_SDIO_HCLK_BIT   (1 << 12)   /* hclk_sdio_en */
+#define RK3576_CRU_SDIO_CCLK_BIT   (1 << 11)   /* cclk_src_sdio_en */
+
+#define RK3576_CRU_SDIO_SOFTRST    42
+#define RK3576_CRU_SDIO_RST_BIT    (1 << 12)   /* hresetn_sdio */
+
+/* gpll frequency (verified from the DTS assigned-clock-rates value
+ * 0x46CF7100 = 1188 MHz).  cclk_src_sdio = gpll / (div_con + 1).  We pick
+ * div_con=23 -> 1188/24 = 49.5 MHz, close to the CLKIN=50 MHz constant reused
+ * from rk3576_sdmmc.c, and low enough for the DW-MSHC 8-bit CLKDIV to reach
+ * the 400 kHz card-identification clock (the reset default gpll/3 = 396 MHz is
+ * above that limit, so the divider must be reprogrammed).
+ */
+
+#define RK3576_CRU_GPLL_FREQ       1188000000u
+#define RK3576_CRU_SDIO_DIV_CON    23
+#define RK3576_CRU_SDIO_CCLK_FREQ  (RK3576_CRU_GPLL_FREQ / (RK3576_CRU_SDIO_DIV_CON + 1))
+
 #endif /* __ARCH_ARM64_SRC_RK3576_HARDWARE_RK3576_CRU_H */
