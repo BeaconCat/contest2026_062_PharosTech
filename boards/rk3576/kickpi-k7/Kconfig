@@ -6,4 +6,23 @@ config ARCH_BOARD_KICKPI_K7
 	default y
 
 if ARCH_BOARD_KICKPI_K7
+
+config KICKPI_K7_WIFI
+	bool "On-board SeekWave SV6621 WiFi/BT combo"
+	default n
+	depends on RK3576_SKW && RK3576_I2C
+	---help---
+		Bring up the on-board SeekWave SV6621 (SWT6621-S) WiFi/BT combo
+		via the SeekWave SDIO core driver (RK3576_SKW).
+
+config KICKPI_K7_WIFI_IRAM
+	string "SV6621 IRAM firmware path"
+	default "SWT6621S_IRAM_SDIO.bin"
+	depends on KICKPI_K7_WIFI
+
+config KICKPI_K7_WIFI_DRAM
+	string "SV6621 DRAM firmware path"
+	default "SWT6621S_DRAM_SDIO.bin"
+	depends on KICKPI_K7_WIFI
+
 endif # ARCH_BOARD_KICKPI_K7

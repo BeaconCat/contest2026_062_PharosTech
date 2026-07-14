@@ -1,5 +1,5 @@
 ############################################################################
-# boards/arm64/rk3576/kickpi_k7/src/Makefile
+# apps/examples/wifitest/Makefile
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -20,24 +20,13 @@
 #
 ############################################################################
 
-include $(TOPDIR)/Make.defs
+include $(APPDIR)/Make.defs
 
-CSRCS = kickpi_k7_boardinit.c
-CSRCS += kickpi_k7_appinit.c
-CSRCS += kickpi_k7_reset.c
+PROGNAME  = $(CONFIG_EXAMPLES_WIFITEST_PROGNAME)
+PRIORITY  = $(CONFIG_EXAMPLES_WIFITEST_PRIORITY)
+STACKSIZE = $(CONFIG_EXAMPLES_WIFITEST_STACKSIZE)
+MODULE    = $(CONFIG_EXAMPLES_WIFITEST)
 
-ifeq ($(CONFIG_KICKPI_K7_WIFI),y)
-CSRCS += kickpi_k7_wifi.c
-endif
+MAINSRC = wifitest_main.c
 
-ifeq ($(CONFIG_ETC_ROMFS),y)
-  RCSRCS = etc/init.d/rc.sysinit etc/init.d/rcS
-endif
-
-
-ifeq ($(CONFIG_KICKPI_K7_WIFI),y)
-# incbin search path for the SV6621 CP firmware images
-CFLAGS += -Wa,-I$(abspath $(BOARD_DIR)/firmware)
-endif
-
-include $(TOPDIR)/boards/Board.mk
+include $(APPDIR)/Application.mk

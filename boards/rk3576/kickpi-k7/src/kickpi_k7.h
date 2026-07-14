@@ -36,4 +36,18 @@
  ****************************************************************************/
 
 #endif /* __ASSEMBLY__ */
+
+#ifdef CONFIG_KICKPI_K7_WIFI
+/****************************************************************************
+ * Name: kickpi_k7_wifi_initialize
+ *
+ * Description:
+ *   Bring up the on-board SeekWave SV6621 WiFi/BT combo (pin environment,
+ *   32 kHz clock, firmware download) via the SeekWave SDIO core driver.
+ *
+ ****************************************************************************/
+
+int kickpi_k7_wifi_initialize(void);
+#endif
+
 #endif /* __BOARDS_ARM64_RK3576_KICKPI_K7_SRC_KICKPI_K7_H */
