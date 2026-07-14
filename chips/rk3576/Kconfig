@@ -66,3 +66,39 @@ config RK3576_I2C
 endmenu # Rockchip RK3576 Peripheral Selection
 
 endif # ARCH_CHIP_RK3576
+
+config RK3576_SDIO
+	bool "SDIO (SDIO0 - WiFi/BT combo)"
+	default n
+	depends on RK3576_GPIO
+	select ARCH_HAVE_SDIO
+	select MMCSD
+	select MMCSD_SDIO
+	select SDIO_DMA
+	select ARCH_HAVE_SDIO_PREFLIGHT
+	select SDIO_BLOCKSETUP
+	---help---
+		Enable the RK3576 SDIO host controller driver (mmc@2a320000) for
+		the on-board SeekWave SV6621 WiFi/BT combo.  Reuses the SDMMC host
+		driver as a second instance and brings up the SDIO clock domain via
+		the CRU (rk3576_cru.c).
+
+config RK3576_SKW
+	bool "SeekWave SV6621 WiFi/BT combo"
+	default n
+	depends on RK3576_SDIO && RK3576_I2C
+	select SCHED_HPWORK
+	---help---
+		Native SDIO driver for the on-board SeekWave SV6621 (SWT6621-S)
+		WiFi/BT combo: CP firmware download + boot over the DT protocol,
+		loopcheck service handshake, and the packet receive thread.
+
+config RK3576_SKW_RXPRIO
+	int "SKW rx thread priority"
+	default 100
+	depends on RK3576_SKW
+
+config RK3576_SKW_RXSTACK
+	int "SKW rx thread stack size"
+	default 4096
+	depends on RK3576_SKW
