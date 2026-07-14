@@ -21,4 +21,8 @@ if(CONFIG_RK3576_SKW)
   list(APPEND SRCS rk3576_skw.c rk3576_skw_wpa.c rk3576_skw_netdev.c rk3576_usbdev.c)
 endif()
 
+if(CONFIG_RK3576_USBDEV)
+  list(APPEND SRCS rk3576_usbdev.c)
+endif()
+
 target_sources(arch PRIVATE ${SRCS})
