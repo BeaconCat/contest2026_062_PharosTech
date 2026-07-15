@@ -227,6 +227,7 @@ static uint8_t g_skw_bssid[6];
 static uint8_t g_skw_peer_idx;
 
 static void skw_data_rx(const uint8_t *pl, int len);
+static void skw_data_recover(void);
 
 /* Scan result cache (SSID/BSSID/channel/rssi), filled from SCAN_REPORT
  * events, drained by rk3576_skw_scan().
@@ -389,8 +390,11 @@ static int skw_cmd52(bool write, uint32_t func, uint32_t reg,
   uint32_t rint;
 
   arg = (write ? (1u << 31) : 0) | ((func & 7) << 28) |
-        (write ? (1u << 27) : 0) | ((reg & 0x1ffff) << 9) |
-        (write ? in : 0);
+        ((reg & 0x1ffff) << 9) | (write ? in : 0);
+  if (write && out != NULL)
+    {
+      arg |= (1u << 27);                        /* RAW: read-after-write */
+    }
 
   rint = skw_cmd(SKW_CMDW_CMD52, arg, &resp);
   if (rint & SKW_INT_RTO)
@@ -482,7 +486,30 @@ static int skw_cmd53_read(uint32_t func, uint32_t reg, bool incr,
     }
 
   rint = skw_rd(SKW_RINTSTS);
-  return (rint & SKW_INT_DATAERR) ? -EIO : (got == words ? 0 : -EIO);
+
+  /* Idle polls of the PK window return filler data that always carries a
+   * DCRC: deliver anything fully received and let the caller reject bogus
+   * packet headers.  Only a short transfer is a hard error.
+   */
+
+  if (got != words)
+    {
+      /* A packet burst shorter than the request ends in DRTO with the
+       * received bytes valid: deliver them and let the packet walk use
+       * the framing headers.  Nothing received is a hard error.
+       */
+
+      if (got > 0 && (rint & (1u << 9)) != 0)
+        {
+          return 0;
+        }
+
+      syslog(LOG_ERR, "BR: cmd53rd rint=%08x got=%d/%d\n",
+             (unsigned)rint, got, words);
+      return -EIO;
+    }
+
+  return 0;
 }
 
 static int skw_cmd53_write(uint32_t func, uint32_t reg, bool incr,
@@ -493,7 +520,13 @@ static int skw_cmd53_write(uint32_t func, uint32_t reg, bool incr,
   int words = (len + 3) / 4;
   int fed = 0;
   int k;
-  bool blk = (len >= 512 && (len % 512) == 0);
+
+  /* Byte mode up to 512 (count field 0 encodes 512): the golden trace
+   * downloads with byte-INCR transfers; block-mode writes are rejected
+   * by the card with an end-bit error.
+   */
+
+  bool blk = (len > 512 && (len % 512) == 0);
 
   skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 1));
   for (k = 0; (skw_rd(SKW_CTRL) & (1u << 1)) && k < 100000; k++);
@@ -547,10 +580,18 @@ static int skw_cmd53_write(uint32_t func, uint32_t reg, bool incr,
   rint = skw_rd(SKW_RINTSTS);
   if ((rint & SKW_INT_RTO) || fed < words)
     {
+      syslog(LOG_ERR, "BR: c53wr TO rint=%08x fed=%d/%d\n",
+             (unsigned)rint, fed, words);
       return -ETIMEDOUT;
     }
 
-  return (rint & SKW_INT_DATAERR) ? -EIO : 0;
+  if (rint & SKW_INT_DATAERR)
+    {
+      syslog(LOG_ERR, "BR: c53wr derr rint=%08x\n", (unsigned)rint);
+      return -EIO;
+    }
+
+  return 0;
 }
 
 /****************************************************************************
@@ -578,8 +619,7 @@ static int skw_dt_stream(uint32_t cpaddr, const uint8_t *buf, int len)
       ret = skw_cmd53_write(1, SKW_DT_WINDOW, true, buf + off, chunk);
       for (try = 0; ret < 0 && try < 4; try++)
         {
-          skw_cmd52(true, 0, 0x06, 0x01, NULL);   /* I/O abort */
-          up_mdelay(2);
+          skw_data_recover();
           skw_dt_latch(cpaddr + off);
           ret = skw_cmd53_write(1, SKW_DT_WINDOW, true, buf + off, chunk);
         }
@@ -591,6 +631,10 @@ static int skw_dt_stream(uint32_t cpaddr, const uint8_t *buf, int len)
         }
 
       off += chunk;
+      if ((off & 0xffff) == 0)
+        {
+          syslog(LOG_ERR, "BR: dl +%d/%d\n", off, len);
+        }
     }
 
   return 0;
@@ -660,10 +704,40 @@ static void skw_voltage_switch(void)
 
 static void skw_tune_sdr104(void)
 {
+  static const uint16_t survey1[] =
+    { 0x00, 0x08, 0x12, 0x13, 0x14, 0x15, 0x16 };
+  static const uint16_t survey2[] = { 0x09, 0x0a, 0x0b };
   uint32_t resp;
+  uint32_t rint;
   uint8_t v;
   int got = 0;
+  unsigned int i;
   int k;
+
+  /* CCCR survey + async-int enable, exactly as the golden trace does.
+   * Some of these status registers are read-to-clear; skipping them left
+   * a latched card state that turned the 198 MHz chip-id CMD53 into an
+   * unrecoverable HLE instead of a retryable data error.
+   */
+
+  for (i = 0; i < sizeof(survey1) / sizeof(survey1[0]); i++)
+    {
+      skw_cmd52(false, 0, survey1[i], 0, &v);
+    }
+
+  skw_cmd52(true, 0, 0x16, 0x03, NULL);
+
+  for (i = 0; i < sizeof(survey2) / sizeof(survey2[0]); i++)
+    {
+      skw_cmd52(false, 0, survey2[i], 0, &v);
+    }
+
+  for (i = 0x1000; i <= 0x1010; i++)            /* FBR1 info region */
+    {
+      skw_cmd52(false, 0, (uint32_t)i, 0, &v);
+    }
+
+  /* 4-bit + SDR104 select (card + host), then 198 MHz and frozen phase. */
 
   skw_cmd52(false, 0, 0x07, 0, &v);
   skw_cmd52(true, 0, 0x07, 0x02, NULL);         /* card 4-bit */
@@ -675,14 +749,19 @@ static void skw_tune_sdr104(void)
   skw_wr(SKW_TIMING0, SKW_TCON_180);
   skw_wr(SKW_TIMING1, SKW_TCON_180);
 
-  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 1));
+  /* One CMD19 tuning block read (64 bytes), drained and discarded.  The
+   * card requires this exchange before it will service func1 data reads.
+   */
+
+  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 1));   /* FIFO reset */
   for (k = 0; (skw_rd(SKW_CTRL) & (1u << 1)) && k < 100000; k++);
   skw_wr(SKW_BLKSIZ, 64);
   skw_wr(SKW_BYTCNT, 64);
-  skw_cmd(SKW_CMDW_CMD19, 0, &resp);
+  rint = skw_cmd(SKW_CMDW_CMD19, 0, &resp);
   for (k = 0; k < 200000 && got < 16; k++)
     {
-      uint32_t fc = (skw_rd(SKW_STATUS) >> 17) & 0x1fff;
+      uint32_t st = skw_rd(SKW_STATUS);
+      uint32_t fc = (st >> 17) & 0x1fff;
 
       while (fc-- > 0 && got < 16)
         {
@@ -692,6 +771,8 @@ static void skw_tune_sdr104(void)
 
       up_udelay(2);
     }
+
+  syslog(LOG_ERR, "BR: CMD19 rint=%08x words=%d\n", (unsigned)rint, got);
 }
 
 /****************************************************************************
@@ -949,12 +1030,36 @@ static int skw_rx_burst(int buf_num)
       buf_num = 8;
     }
 
-  readlen = SKW_PAC_SIZE * buf_num + 512;
+  /* The CP delivers packets through the PK window in 512-byte reads
+   * (larger requests overrun the available payload and end in DRTO).
+   * The first read after idle tends to DCRC once: recover and retry.
+   */
+
+  UNUSED(buf_num);
+  readlen = 2560;                    /* golden RX shape: 5 x 512 blocks */
 
   ret = skw_cmd53_read(1, SKW_PK_WINDOW, false, g_skw_rxbuf, readlen);
   if (ret < 0)
     {
-      return ret;
+      skw_data_recover();
+      ret = skw_cmd53_read(1, SKW_PK_WINDOW, false, g_skw_rxbuf, readlen);
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+
+  /* RX debug: dump the first 8 bytes of every non-idle read (idle filler
+   * starts fc 05 3f ff or all-zero) so the real loopcheck traffic shows.
+   */
+
+  if (!(g_skw_rxbuf[0] == 0xfc && g_skw_rxbuf[1] == 0x05) &&
+      !(g_skw_rxbuf[0] == 0 && g_skw_rxbuf[1] == 0 &&
+        g_skw_rxbuf[2] == 0 && g_skw_rxbuf[3] == 0))
+    {
+      syslog(LOG_ERR, "SKW: raw %02x %02x %02x %02x %02x %02x %02x %02x\n",
+             g_skw_rxbuf[0], g_skw_rxbuf[1], g_skw_rxbuf[2], g_skw_rxbuf[3],
+             g_skw_rxbuf[4], g_skw_rxbuf[5], g_skw_rxbuf[6], g_skw_rxbuf[7]);
     }
 
   /* Walk packets on the 0x600 stride. */
@@ -971,6 +1076,8 @@ static int skw_rx_burst(int buf_num)
         {
           break;
         }
+
+      syslog(LOG_ERR, "SKW: rx ch=%u len=%d\n", (unsigned)ch, plen);
 
 #ifdef CONFIG_RK3576_SKW_DEBUG
       if (ch == SKW_CH_WIFI_CMD || ch == SKW_CH_WIFI_DATA)
@@ -1041,6 +1148,18 @@ static int skw_rx_thread(int argc, char **argv)
       int drained;
 
       skw_cmd52(false, 0, SKW_REG_INTX, 0, &intx);
+
+      /* The golden trace never touches the PK window until the CP raises
+       * an interrupt (CCCR 0x05 INT1): polling it early reads filler and
+       * can disturb the CP boot.  Gate all PK reads on INTx.
+       */
+
+      if ((intx & 0x02) == 0)
+        {
+          up_mdelay(g_skw_scanning ? 5 : 20);
+          continue;
+        }
+
 
       /* Drain queued packets in a bounded burst, then always yield.  The
        * hard cap + mandatory sleep prevent a runaway spin (a stuck FIFO
@@ -1316,6 +1435,134 @@ static int skw_scan(void)
 }
 
 /****************************************************************************
+ * Name: skw_data_recover
+ *
+ * Description:
+ *   Unwedge host and card after a failed data transfer.  A short read that
+ *   ends in SBE/DCRC leaves the DW-MSHC data FSM waiting for the rest of
+ *   BYTCNT and every following data command load then fails with HLE.
+ *   Issue a stop/abort-flagged CMD52 I/O-abort (clears the CIU data FSM),
+ *   reset the FIFO and clear stale status.
+ *
+ ****************************************************************************/
+
+static void skw_data_recover(void)
+{
+  uint32_t arg;
+  int k;
+
+  /* CMD52 write CCCR 0x06 = 0x01 (I/O abort) with stop_abort_cmd. */
+
+  arg = (1u << 31) | (1u << 27) | (0x06 << 9) | 0x01;
+  skw_wr(SKW_RINTSTS, 0xffffffff);
+  skw_wr(SKW_CMDARG, arg);
+  skw_wr(SKW_CMD, SKW_CMDW_CMD52 | (1u << 14));   /* stop/abort */
+  for (k = 0; (skw_rd(SKW_CMD) & SKW_CMD_START) && k < SKW_POLL_LIMIT; k++);
+  for (k = 0; k < SKW_POLL_LIMIT; k++)
+    {
+      if (skw_rd(SKW_RINTSTS) & (SKW_INT_CMDDONE | SKW_INT_RTO))
+        {
+          break;
+        }
+
+      up_udelay(5);
+    }
+
+  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 1));  /* FIFO reset */
+  for (k = 0; (skw_rd(SKW_CTRL) & (1u << 1)) && k < 100000; k++);
+  skw_wr(SKW_RINTSTS, 0xffffffff);
+  up_mdelay(2);
+}
+
+/****************************************************************************
+ * Name: skw_phase_sweep
+ *
+ * Description:
+ *   On-line 198 MHz sample-phase tuning: for each of 8 phase taps write a
+ *   512-byte firmware slice into CP DRAM scratch space and read part of it
+ *   back; a tap passes when the readback matches.  Freeze TIMING1 at the
+ *   middle of the longest circular pass run.  The region is overwritten by
+ *   the real download immediately afterwards.
+ *
+ ****************************************************************************/
+
+static int skw_phase_sweep(void)
+{
+  static const uint16_t praw[8] =
+  {
+    0x0,                       /*   0 deg */
+    (1u << 10) | (10u << 2),   /*  45 deg */
+    0x1,                       /*  90 deg */
+    (1u << 10) | (10u << 2) | 1,
+    0x2,                       /* 180 deg */
+    (1u << 10) | (10u << 2) | 2,
+    0x3,                       /* 270 deg */
+    (1u << 10) | (10u << 2) | 3,
+  };
+
+  const uint8_t *src = g_skw_board->dram + 0x2800;
+  uint8_t rb[16];
+  char passmask[9];
+  int pass[8];
+  int best_start = -1;
+  int best_len = 0;
+  int t;
+
+  for (t = 0; t < 8; t++)
+    {
+      int ok;
+
+      skw_wr(SKW_TIMING1, SKW_TCON(praw[t]));
+
+      skw_dt_latch(SKW_CP_DRAM + 0x2800);
+      skw_cmd53_write(1, SKW_DT_WINDOW, true, src, 512);
+      memset(rb, 0, sizeof(rb));
+      skw_dt_latch(SKW_CP_DRAM + 0x2910);
+      skw_cmd53_read(1, SKW_DT_WINDOW, true, rb, 16);
+      ok = (memcmp(rb, src + 0x110, 16) == 0);
+      pass[t] = ok;
+      passmask[t] = ok ? 35 : 46;
+
+      if (!ok)
+        {
+          skw_data_recover();
+        }
+    }
+
+  passmask[8] = 0;
+  syslog(LOG_ERR, "BR: phase sweep 45deg-steps [%s]\n", passmask);
+
+  for (t = 0; t < 8; t++)
+    {
+      if (pass[t])
+        {
+          int len = 0;
+
+          while (len < 8 && pass[(t + len) % 8])
+            {
+              len++;
+            }
+
+          if (len > best_len)
+            {
+              best_len = len;
+              best_start = t;
+            }
+        }
+    }
+
+  if (best_len < 1)
+    {
+      return -EIO;
+    }
+
+  t = (best_start + best_len / 2) % 8;
+  skw_wr(SKW_TIMING1, SKW_TCON(praw[t]));
+  syslog(LOG_ERR, "BR: tuned phase=%d deg (len=%d)\n", t * 45, best_len);
+  return OK;
+}
+
+/****************************************************************************
  * Name: skw_download_and_boot
  *
  * Description:
@@ -1359,22 +1606,53 @@ static int skw_download_and_boot(void)
       return -EINVAL;
     }
 
+  /* FBR1 block size back to 512 before boot (golden trace order). */
+
+  skw_cmd52(true, 0, 0x110, 0x00, NULL);
+  skw_cmd52(true, 0, 0x111, 0x02, NULL);
+
   skw_cmd52(true, 0, SKW_REG_DMA_TYPE, 0x01, NULL);   /* ADMA */
   skw_cmd52(true, 0, SKW_REG_SLP, 0x01, NULL);        /* sleep disabled */
 
   ret = skw_dt_stream(dram_addr, g_skw_board->dram, g_skw_board->dram_len);
   if (ret < 0)
     {
+      syslog(LOG_ERR, "BR: dram stream fail %d\n", ret);
       return ret;
     }
 
   ret = skw_dt_stream(iram_addr, iram, iram_len);
   if (ret < 0)
     {
+      syslog(LOG_ERR, "BR: iram stream fail %d\n", ret);
       return ret;
     }
 
-  skw_cmd52(true, 0, SKW_REG_DL_DONE, 0x01, NULL);    /* boot the CP */
+  /* Verify the download before booting: read back the first 16 bytes of
+   * both images through the DT window and compare.
+   */
+
+  {
+    uint8_t vb[16];
+    uint8_t r160 = 0xff;
+
+    memset(vb, 0, sizeof(vb));
+    skw_dt_latch(dram_addr);
+    skw_cmd53_read(1, SKW_DT_WINDOW, true, vb, 16);
+    syslog(LOG_ERR, "BR: dram vfy %s\n",
+           memcmp(vb, g_skw_board->dram, 16) == 0 ? "OK" : "MISMATCH");
+
+    memset(vb, 0, sizeof(vb));
+    skw_dt_latch(iram_addr);
+    skw_cmd53_read(1, SKW_DT_WINDOW, true, vb, 16);
+    syslog(LOG_ERR, "BR: iram vfy %s\n",
+           memcmp(vb, iram, 16) == 0 ? "OK" : "MISMATCH");
+
+    skw_cmd52(true, 0, SKW_REG_DL_DONE, 0x01, NULL);   /* boot the CP */
+    skw_cmd52(false, 0, SKW_REG_DL_DONE, 0, &r160);
+    syslog(LOG_ERR, "BR: dl_done rb=%02x\n", r160);
+  }
+
   return OK;
 }
 
@@ -1392,6 +1670,7 @@ static int skw_download_and_boot(void)
 static int skw_bringup(void)
 {
   uint32_t resp = 0;
+  int ret;
   uint32_t rint;
   uint32_t rca;
   uint8_t id[16];
@@ -1406,6 +1685,9 @@ static int skw_bringup(void)
   g_skw_board->power(false);
   SDIO_CLOCK(g_skw_dev, CLOCK_SDIO_DISABLED);
   up_mdelay(1000);
+
+  skw_wr(SKW_CTRL, 0x00000007);
+  for (k = 0; (skw_rd(SKW_CTRL) & 0x7) && k < SKW_POLL_LIMIT; k++);
 
   skw_wr(SKW_CLKENA, 0x00000000);
   skw_ciu_update(SKW_CLK_UPDATE);
@@ -1425,11 +1707,13 @@ static int skw_bringup(void)
    */
 
   skw_wr(SKW_INTMASK, 0x00000000);
-  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) & ~(1u << 4));
+  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) & ~((1u << 4) | (1u << 25)));  /* PIO, no IDMAC */
 
   /* CMD5 with S18R (request 1.8 V), then the voltage switch if granted. */
 
+  syslog(LOG_ERR, "BR:CMD5start\n");
   rint = skw_cmd(SKW_CMDW_CMD5, 0x01300000, &resp);
+  syslog(LOG_ERR, "BR:CMD5 %08x\n", (unsigned)rint);
   if (rint & SKW_INT_RTO)
     {
       wlerr("ERROR: CMD5 no response\n");
@@ -1461,35 +1745,49 @@ static int skw_bringup(void)
   skw_cmd52(true, 0, 0x16, 0x03, NULL);
   skw_cmd52(true, 0, 0x04, 0x03, NULL);
   skw_tune_sdr104();
+  syslog(LOG_ERR, "BR:tune done\n");
 
   /* FBR1 block size = 512, enable function 1, wait ready. */
 
+  /* func1 bring-up exactly as the golden trace: enable IOE1 and read IOR
+   * once, WITHOUT waiting for a ready bit that this combo never sets, then
+   * the traced blocksize/IEN/0x16 dance.
+   */
+
   skw_cmd52(true, 0, 0x110, 0x00, NULL);
-  skw_cmd52(true, 0, 0x111, 0x02, NULL);
-  skw_cmd52(true, 0, 0x02, 0x02, NULL);
-  for (k = 0; k < 100; k++)
-    {
-      v = 0;
-      skw_cmd52(false, 0, 0x03, 0, &v);
-      if (v & 0x02)
-        {
-          break;
-        }
-
-      up_mdelay(10);
-    }
-
-  if (!(v & 0x02))
-    {
-      wlerr("ERROR: func1 not ready\n");
-      return -EIO;
-    }
+  skw_cmd52(true, 0, 0x111, 0x02, NULL);         /* FBR1 blocksize 512 */
+  skw_cmd52(false, 0, 0x02, 0, &v);
+  skw_cmd52(true, 0, 0x02, 0x02, NULL);          /* IOE func1 */
+  skw_cmd52(false, 0, 0x03, 0, &v);              /* IOR: one read, no wait */
+  skw_cmd52(true, 0, 0x110, 0x00, NULL);
+  skw_cmd52(true, 0, 0x111, 0x01, NULL);         /* 256 */
+  skw_cmd52(false, 0, 0x04, 0, &v);
+  skw_cmd52(true, 0, 0x04, 0x03, NULL);          /* IENM | IEN1 */
+  skw_cmd52(false, 0, 0x16, 0, &v);
+  skw_cmd52(true, 0, 0x16, 0x03, NULL);
+  skw_cmd52(false, 0, 0x16, 0, &v);
+  syslog(LOG_ERR, "BR: func1 enabled (golden)\n");
 
   /* DT chip-id sanity: "SV6160LITE". */
 
-  skw_dt_latch(SKW_CP_CHIPID);
-  memset(id, 0, sizeof(id));
-  skw_cmd53_read(1, SKW_DT_WINDOW, true, id, 16);
+  up_mdelay(100);
+  syslog(LOG_ERR, "BR: pre-chipid STATUS=%08x\n", (unsigned)skw_rd(SKW_STATUS));
+  {
+    int tries;
+    for (tries = 0; tries < 3; tries++)
+      {
+        memset(id, 0, sizeof(id));
+        skw_dt_latch(SKW_CP_CHIPID);
+        if (skw_cmd53_read(1, SKW_DT_WINDOW, true, id, 16) == 0)
+          {
+            break;
+          }
+
+        skw_cmd52(true, 0, 0x06, 0x01, NULL);   /* I/O abort */
+        up_mdelay(2);
+      }
+  }
+  syslog(LOG_ERR, "BR: chipid %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n", id[0], id[1], id[2], id[3], id[4], id[5], id[6], id[7], id[8], id[9]);
   if (memcmp(id, "SV6160LITE", 10) != 0)
     {
       wlerr("ERROR: chip-id mismatch\n");
@@ -1497,6 +1795,14 @@ static int skw_bringup(void)
     }
 
   wlinfo("SV6160LITE detected, downloading firmware\n");
+
+  ret = skw_phase_sweep();
+  if (ret < 0)
+    {
+      wlerr("ERROR: no passing sample phase at 198 MHz\n");
+      return ret;
+    }
+
   return skw_download_and_boot();
 }
 
@@ -1740,6 +2046,7 @@ int rk3576_skw_initialize(const struct rk3576_skw_board_s *board)
     }
 
   ret = skw_bringup();
+  syslog(LOG_ERR, "SKW: bringup ret %d\n", ret);
   if (ret < 0)
     {
       return ret;
