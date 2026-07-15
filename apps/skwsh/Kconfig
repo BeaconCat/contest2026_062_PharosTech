@@ -1,0 +1,29 @@
+#
+# For a description of the syntax of this configuration file,
+# see the file kconfig-language.txt in the NuttX tools repository.
+#
+
+config EXAMPLES_SKWSH
+	tristate "KICKPI-K7 SeekWave WiFi bring-up command"
+	default n
+	depends on KICKPI_K7_WIFI
+	---help---
+		On-demand trigger for the on-board SeekWave SV6621 WiFi
+		bring-up.  Kept off the boot path so a stall in SAI/codec clock
+		bring-up only blocks this command, never the boot to NSH.
+
+if EXAMPLES_SKWSH
+
+config EXAMPLES_SKWSH_PROGNAME
+	string "Program name"
+	default "skwsh"
+
+config EXAMPLES_SKWSH_PRIORITY
+	int "skwsh task priority"
+	default 100
+
+config EXAMPLES_SKWSH_STACKSIZE
+	int "skwsh stack size"
+	default 4096
+
+endif

@@ -272,6 +272,16 @@ static int wpa_pbkdf2_sha1(const char *pass, const uint8_t *salt,
             {
               t[j] ^= u[j];
             }
+
+          /* Yield every 64 rounds: on a UP core this loop otherwise
+           * starves the SDIO rx thread and the CP declares the host
+           * dead (loopcheck pings go unserviced).
+           */
+
+          if ((i & 63) == 0)
+            {
+              usleep(1000);
+            }
         }
 
       memcpy(pmk + (blk - 1) * 20, t, blk == 1 ? 20 : 12);

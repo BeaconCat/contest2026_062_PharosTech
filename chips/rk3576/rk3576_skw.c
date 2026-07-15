@@ -50,6 +50,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/mutex.h>
 #include <nuttx/kthread.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/sdio.h>
@@ -229,6 +230,12 @@ static uint8_t g_skw_peer_idx;
 static void skw_data_rx(const uint8_t *pl, int len);
 static void skw_data_recover(void);
 
+/* Serializes SDIO bus transactions between the rx thread and command
+ * callers (single DW-MSHC command path).
+ */
+
+static mutex_t g_skw_buslock = NXMUTEX_INITIALIZER;
+
 /* Scan result cache (SSID/BSSID/channel/rssi), filled from SCAN_REPORT
  * events, drained by rk3576_skw_scan().
  */
@@ -396,7 +403,9 @@ static int skw_cmd52(bool write, uint32_t func, uint32_t reg,
       arg |= (1u << 27);                        /* RAW: read-after-write */
     }
 
+  nxmutex_lock(&g_skw_buslock);
   rint = skw_cmd(SKW_CMDW_CMD52, arg, &resp);
+  nxmutex_unlock(&g_skw_buslock);
   if (rint & SKW_INT_RTO)
     {
       return -ETIMEDOUT;
@@ -438,7 +447,7 @@ static void skw_dt_latch(uint32_t cpaddr)
  ****************************************************************************/
 
 static int skw_cmd53_read(uint32_t func, uint32_t reg, bool incr,
-                          uint8_t *buf, int len)
+                          uint8_t *buf, int len, int *actual)
 {
   uint32_t arg;
   uint32_t rint;
@@ -447,6 +456,7 @@ static int skw_cmd53_read(uint32_t func, uint32_t reg, bool incr,
   int k;
   bool blk = (len >= 512 && (len % 512) == 0);
 
+  nxmutex_lock(&g_skw_buslock);
   skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 1));   /* FIFO reset */
   for (k = 0; (skw_rd(SKW_CTRL) & (1u << 1)) && k < 100000; k++);
 
@@ -486,6 +496,7 @@ static int skw_cmd53_read(uint32_t func, uint32_t reg, bool incr,
     }
 
   rint = skw_rd(SKW_RINTSTS);
+  nxmutex_unlock(&g_skw_buslock);
 
   /* Idle polls of the PK window return filler data that always carries a
    * DCRC: deliver anything fully received and let the caller reject bogus
@@ -501,12 +512,22 @@ static int skw_cmd53_read(uint32_t func, uint32_t reg, bool incr,
 
       if (got > 0 && (rint & (1u << 9)) != 0)
         {
+          if (actual != NULL)
+            {
+              *actual = got * 4;
+            }
+
           return 0;
         }
 
       syslog(LOG_ERR, "BR: cmd53rd rint=%08x got=%d/%d\n",
              (unsigned)rint, got, words);
       return -EIO;
+    }
+
+  if (actual != NULL)
+    {
+      *actual = got * 4;
     }
 
   return 0;
@@ -528,6 +549,7 @@ static int skw_cmd53_write(uint32_t func, uint32_t reg, bool incr,
 
   bool blk = (len > 512 && (len % 512) == 0);
 
+  nxmutex_lock(&g_skw_buslock);
   skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 1));
   for (k = 0; (skw_rd(SKW_CTRL) & (1u << 1)) && k < 100000; k++);
 
@@ -578,6 +600,7 @@ static int skw_cmd53_write(uint32_t func, uint32_t reg, bool incr,
     }
 
   rint = skw_rd(SKW_RINTSTS);
+  nxmutex_unlock(&g_skw_buslock);
   if ((rint & SKW_INT_RTO) || fed < words)
     {
       syslog(LOG_ERR, "BR: c53wr TO rint=%08x fed=%d/%d\n",
@@ -1017,6 +1040,7 @@ static void skw_handle_wifi_cmd(const uint8_t *pl, int len)
 static int skw_rx_burst(int buf_num)
 {
   int readlen;
+  uint32_t valid_len;
   uint32_t rx_nsize;
   int off;
   int ret;
@@ -1030,41 +1054,64 @@ static int skw_rx_burst(int buf_num)
       buf_num = 8;
     }
 
-  /* The CP delivers packets through the PK window in 512-byte reads
-   * (larger requests overrun the available payload and end in DRTO).
-   * The first read after idle tends to DCRC once: recover and retry.
+  /* V20 read shape: 0x600 * buf_num + 512.  The CP appends valid_len
+   * (end - 8, u32 LE) and rx_nsize = size of the next chunk (end - 4).
+   * Both must be honoured or the CP-side FIFO accounting desynchronizes
+   * and every later command times out.
    */
 
-  UNUSED(buf_num);
-  readlen = 2560;                    /* golden RX shape: 5 x 512 blocks */
+  readlen = SKW_PAC_SIZE * buf_num + 512;
 
-  ret = skw_cmd53_read(1, SKW_PK_WINDOW, false, g_skw_rxbuf, readlen);
+  int actual = 0;
+
+  ret = skw_cmd53_read(1, SKW_PK_WINDOW, false, g_skw_rxbuf, readlen,
+                       &actual);
   if (ret < 0)
     {
-      skw_data_recover();
-      ret = skw_cmd53_read(1, SKW_PK_WINDOW, false, g_skw_rxbuf, readlen);
-      if (ret < 0)
-        {
-          return ret;
-        }
+      return ret;
     }
 
-  /* RX debug: dump the first 8 bytes of every non-idle read (idle filler
-   * starts fc 05 3f ff or all-zero) so the real loopcheck traffic shows.
+  if (actual < 8)
+    {
+      return 0;
+    }
+
+  readlen = actual;                   /* continuation sits at the real end */
+
+  valid_len = g_skw_rxbuf[readlen - 8] |
+              ((uint32_t)g_skw_rxbuf[readlen - 7] << 8) |
+              ((uint32_t)g_skw_rxbuf[readlen - 6] << 16) |
+              ((uint32_t)g_skw_rxbuf[readlen - 5] << 24);
+  rx_nsize  = g_skw_rxbuf[readlen - 4] |
+              ((uint32_t)g_skw_rxbuf[readlen - 3] << 8) |
+              ((uint32_t)g_skw_rxbuf[readlen - 2] << 16) |
+              ((uint32_t)g_skw_rxbuf[readlen - 1] << 24);
+
+  if (g_skw_rxbuf[0] != 0xfc || g_skw_rxbuf[1] != 0x05)
+    {
+      syslog(LOG_ERR, "SKW: rxdbg act=%d vl=%u nn=%u h=%02x%02x%02x%02x t=%02x%02x%02x%02x %02x%02x%02x%02x\n",
+             readlen, (unsigned)valid_len, (unsigned)rx_nsize,
+             g_skw_rxbuf[0], g_skw_rxbuf[1], g_skw_rxbuf[2], g_skw_rxbuf[3],
+             g_skw_rxbuf[readlen - 8], g_skw_rxbuf[readlen - 7],
+             g_skw_rxbuf[readlen - 6], g_skw_rxbuf[readlen - 5],
+             g_skw_rxbuf[readlen - 4], g_skw_rxbuf[readlen - 3],
+             g_skw_rxbuf[readlen - 2], g_skw_rxbuf[readlen - 1]);
+    }
+
+  /* The trailer semantics differ from the reference notes on this
+   * firmware build: walk the whole received buffer (packet headers
+   * self-terminate) and use the trailer only as the next-read hint.
    */
 
-  if (!(g_skw_rxbuf[0] == 0xfc && g_skw_rxbuf[1] == 0x05) &&
-      !(g_skw_rxbuf[0] == 0 && g_skw_rxbuf[1] == 0 &&
-        g_skw_rxbuf[2] == 0 && g_skw_rxbuf[3] == 0))
+  valid_len = readlen;
+  if (rx_nsize > (uint32_t)(SKW_PAC_SIZE * 8))
     {
-      syslog(LOG_ERR, "SKW: raw %02x %02x %02x %02x %02x %02x %02x %02x\n",
-             g_skw_rxbuf[0], g_skw_rxbuf[1], g_skw_rxbuf[2], g_skw_rxbuf[3],
-             g_skw_rxbuf[4], g_skw_rxbuf[5], g_skw_rxbuf[6], g_skw_rxbuf[7]);
+      rx_nsize = 0;
     }
 
-  /* Walk packets on the 0x600 stride. */
+  /* Walk packets on the 0x600 stride within valid_len. */
 
-  for (off = 0; off + 4 <= readlen; off += SKW_PAC_SIZE)
+  for (off = 0; off + 4 <= (int)valid_len; off += SKW_PAC_SIZE)
     {
       const uint8_t *p = g_skw_rxbuf + off;
       uint32_t hdr = p[0] | (p[1] << 8) | (p[2] << 16) |
@@ -1072,28 +1119,12 @@ static int skw_rx_burst(int buf_num)
       uint32_t ch = SKW_HDR_CH(hdr);
       int plen = SKW_HDR_LEN(hdr);
 
-      if (plen == 0 || ch >= 12 || off + 4 + plen > readlen)
+      if (plen == 0 || ch >= 12 || off + 4 + plen > (int)valid_len)
         {
           break;
         }
 
       syslog(LOG_ERR, "SKW: rx ch=%u len=%d\n", (unsigned)ch, plen);
-
-#ifdef CONFIG_RK3576_SKW_DEBUG
-      if (ch == SKW_CH_WIFI_CMD || ch == SKW_CH_WIFI_DATA)
-        {
-          syslog(LOG_ERR, "SKW: rx ch=%" PRIu32 " len=%d off=%d hdr=%08"
-                 PRIx32 "\n", ch, plen, off, hdr);
-          syslog(LOG_ERR, "SKW:   %02x %02x %02x %02x %02x %02x %02x %02x "
-                 "%02x %02x %02x %02x %02x %02x %02x %02x\n",
-                 p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11],
-                 p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19]);
-          syslog(LOG_ERR, "SKW:   %02x %02x %02x %02x %02x %02x %02x %02x "
-                 "%02x %02x %02x %02x %02x %02x %02x %02x\n",
-                 p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27],
-                 p[28], p[29], p[30], p[31], p[32], p[33], p[34], p[35]);
-        }
-#endif
 
       switch (ch)
         {
@@ -1112,17 +1143,9 @@ static int skw_rx_burst(int buf_num)
           default:
             break;
         }
-
-      if (SKW_HDR_EOF(hdr))
-        {
-          break;
-        }
     }
 
-  rx_nsize = g_skw_rxbuf[readlen - 4] |
-             (g_skw_rxbuf[readlen - 3] << 8) |
-             (g_skw_rxbuf[readlen - 2] << 16) |
-             ((uint32_t)g_skw_rxbuf[readlen - 1] << 24);
+  /* Tell the caller how many bytes the CP wants read next. */
 
   return (int)rx_nsize;
 }
@@ -1178,6 +1201,10 @@ static int skw_rx_thread(int argc, char **argv)
 
           buf_num = (nsize >= SKW_PAC_SIZE * 8) ? 8 :
                     ((nsize + SKW_PAC_SIZE - 1) / SKW_PAC_SIZE);
+          if (buf_num < 1)
+            {
+              buf_num = 1;
+            }
         }
 
       /* Poll cadence: brisk while a scan/command is active, relaxed idle. */
@@ -1401,7 +1428,7 @@ static int skw_scan(void)
   int ch;
 
   memset(sp, 0, sizeof(sp));
-  sp[8]  = 13;                      /* nr_chan (u32 LE) */
+  sp[8]  = 13;                      /* nr_chan (u32 LE), 2.4 GHz only */
   sp[12] = 32;                      /* chan_offset = end of fixed head */
 
   for (ch = 0; ch < 13; ch++)
@@ -1453,6 +1480,7 @@ static void skw_data_recover(void)
 
   /* CMD52 write CCCR 0x06 = 0x01 (I/O abort) with stop_abort_cmd. */
 
+  nxmutex_lock(&g_skw_buslock);
   arg = (1u << 31) | (1u << 27) | (0x06 << 9) | 0x01;
   skw_wr(SKW_RINTSTS, 0xffffffff);
   skw_wr(SKW_CMDARG, arg);
@@ -1471,6 +1499,7 @@ static void skw_data_recover(void)
   skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 1));  /* FIFO reset */
   for (k = 0; (skw_rd(SKW_CTRL) & (1u << 1)) && k < 100000; k++);
   skw_wr(SKW_RINTSTS, 0xffffffff);
+  nxmutex_unlock(&g_skw_buslock);
   up_mdelay(2);
 }
 
@@ -1518,7 +1547,7 @@ static int skw_phase_sweep(void)
       skw_cmd53_write(1, SKW_DT_WINDOW, true, src, 512);
       memset(rb, 0, sizeof(rb));
       skw_dt_latch(SKW_CP_DRAM + 0x2910);
-      skw_cmd53_read(1, SKW_DT_WINDOW, true, rb, 16);
+      skw_cmd53_read(1, SKW_DT_WINDOW, true, rb, 16, NULL);
       ok = (memcmp(rb, src + 0x110, 16) == 0);
       pass[t] = ok;
       passmask[t] = ok ? 35 : 46;
@@ -1638,13 +1667,13 @@ static int skw_download_and_boot(void)
 
     memset(vb, 0, sizeof(vb));
     skw_dt_latch(dram_addr);
-    skw_cmd53_read(1, SKW_DT_WINDOW, true, vb, 16);
+    skw_cmd53_read(1, SKW_DT_WINDOW, true, vb, 16, NULL);
     syslog(LOG_ERR, "BR: dram vfy %s\n",
            memcmp(vb, g_skw_board->dram, 16) == 0 ? "OK" : "MISMATCH");
 
     memset(vb, 0, sizeof(vb));
     skw_dt_latch(iram_addr);
-    skw_cmd53_read(1, SKW_DT_WINDOW, true, vb, 16);
+    skw_cmd53_read(1, SKW_DT_WINDOW, true, vb, 16, NULL);
     syslog(LOG_ERR, "BR: iram vfy %s\n",
            memcmp(vb, iram, 16) == 0 ? "OK" : "MISMATCH");
 
@@ -1778,7 +1807,7 @@ static int skw_bringup(void)
       {
         memset(id, 0, sizeof(id));
         skw_dt_latch(SKW_CP_CHIPID);
-        if (skw_cmd53_read(1, SKW_DT_WINDOW, true, id, 16) == 0)
+        if (skw_cmd53_read(1, SKW_DT_WINDOW, true, id, 16, NULL) == 0)
           {
             break;
           }
@@ -2345,3 +2374,56 @@ int rk3576_skw_add_key(uint8_t key_type, uint8_t cipher,
 }
 
 #endif /* CONFIG_RK3576_SKW */
+
+/****************************************************************************
+ * Name: rk3576_skw_dbg_*
+ *
+ * Description:
+ *   Raw bus primitives for the skwsh interactive debug shell: thin
+ *   wrappers over the static driver internals so protocol experiments can
+ *   run from the console without rebuilding the firmware.
+ *
+ ****************************************************************************/
+
+int rk3576_skw_dbg_cmd52(int write, unsigned reg, unsigned val,
+                         unsigned *out)
+{
+  uint8_t v = 0;
+  int ret = skw_cmd52(write != 0, 0, reg, (uint8_t)val,
+                      write ? NULL : &v);
+
+  if (out != NULL)
+    {
+      *out = v;
+    }
+
+  return ret;
+}
+
+int rk3576_skw_dbg_cmd53_read(unsigned char *buf, int len, int *actual)
+{
+  return skw_cmd53_read(1, SKW_PK_WINDOW, false, buf, len, actual);
+}
+
+int rk3576_skw_dbg_cmd53_write(const unsigned char *buf, int len)
+{
+  return skw_cmd53_write(1, SKW_PK_WINDOW, false, buf, len);
+}
+
+int rk3576_skw_dbg_latch(unsigned cpaddr)
+{
+  skw_dt_latch(cpaddr);
+  return 0;
+}
+
+int rk3576_skw_dbg_bringup(void)
+{
+  return rk3576_skw_initialize(g_skw_board);
+}
+
+int rk3576_skw_dbg_sendcmd(unsigned id, const unsigned char *payload,
+                           int plen)
+{
+  return skw_send_cmd((uint8_t)id, payload, plen, NULL, NULL);
+}
+
