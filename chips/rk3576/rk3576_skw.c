@@ -983,11 +983,16 @@ static void skw_data_rx(const uint8_t *pl, int len)
     {
       if (pl[i] == 0x88 && pl[i + 1] == 0x8e)
         {
+          const uint8_t *eth = pl + (i - 12);
           int ethlen = len - (i - 12);
+
+          syslog(LOG_ERR, "SKW: eapol eth dst %02x:%02x:%02x:%02x:%02x:%02x src %02x:%02x:%02x:%02x:%02x:%02x\n",
+                 eth[0], eth[1], eth[2], eth[3], eth[4], eth[5],
+                 eth[6], eth[7], eth[8], eth[9], eth[10], eth[11]);
 
           if (ethlen > 14)
             {
-              rk3576_skw_wpa_eapol_input(pl + (i - 12) + 14, ethlen - 14);
+              rk3576_skw_wpa_eapol_input(eth + 14, ethlen - 14);
             }
 
           return;
@@ -2163,6 +2168,17 @@ int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
    */
 
   w0 = ((uint16_t)(g_skw_peer_idx & 0x1f)) << 8;
+
+  /* EAPOL frames (EtherType 0x888e) must go out unencrypted: during the
+   * 4-way handshake the pairwise key is not installed yet, so encrypting
+   * them produces garbage the AP silently drops.  encry_dis = word0 bit14.
+   */
+
+  if (ethertype == 0x888e)
+    {
+      w0 |= (1u << 14);
+    }
+
   g_skw_txbuf[4] = w0 & 0xff;
   g_skw_txbuf[5] = (w0 >> 8) & 0xff;
 
