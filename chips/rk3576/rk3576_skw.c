@@ -51,13 +51,13 @@
 
 #include <nuttx/arch.h>
 #include <nuttx/mutex.h>
+#include <nuttx/kmalloc.h>
 #include <nuttx/kthread.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/sdio.h>
 
 #include "rk3576_sdmmc.h"
 #include "rk3576_skw.h"
-#include "rk3576_skw_wpa.h"
 
 #ifdef CONFIG_RK3576_SKW
 
@@ -174,13 +174,14 @@
 #define SKW_CMD_GET_INFO    1
 #define SKW_CMD_SYN_VERSION 2
 #define SKW_CMD_OPEN_DEV    3
+#define SKW_CMD_PHY_BB_CFG  50
+#define SKW_CMD_ADD_KEY     12
 #define SKW_CMD_START_SCAN  5
 #define SKW_CMD_JOIN        9
 #define SKW_CMD_AUTH        10
 #define SKW_CMD_ASSOC       11
 #define SKW_CMD_DISCONNECT  17
 #define SKW_CMD_SET_MIB     40
-#define SKW_CMD_ADD_KEY     12
 
 /* WiFi events (skw_msg type=EVENT). */
 
@@ -227,15 +228,6 @@ static uint8_t g_skw_mac[6];
 static uint8_t g_skw_bssid[6];
 static uint8_t g_skw_peer_idx;
 
-static void skw_data_rx(const uint8_t *pl, int len);
-static void skw_data_recover(void);
-
-/* Serializes SDIO bus transactions between the rx thread and command
- * callers (single DW-MSHC command path).
- */
-
-static mutex_t g_skw_buslock = NXMUTEX_INITIALIZER;
-
 /* Scan result cache (SSID/BSSID/channel/rssi), filled from SCAN_REPORT
  * events, drained by rk3576_skw_scan().
  */
@@ -264,6 +256,12 @@ static volatile int g_skw_conn_evt;   /* last connect event id, -1 idle */
 /* RX burst scratch (0x600*n + 512, one 100-packet burst worst case). */
 
 static uint8_t g_skw_rxbuf[SKW_PAC_SIZE * 8 + 512] aligned_data(64);
+
+/* Serializes SDIO bus transactions between the rx thread and command
+ * callers (single DW-MSHC command path).
+ */
+
+static mutex_t g_skw_buslock = NXMUTEX_INITIALIZER;
 
 /* TX packet scratch (header + msg + payload, block-padded). */
 
@@ -397,11 +395,8 @@ static int skw_cmd52(bool write, uint32_t func, uint32_t reg,
   uint32_t rint;
 
   arg = (write ? (1u << 31) : 0) | ((func & 7) << 28) |
-        ((reg & 0x1ffff) << 9) | (write ? in : 0);
-  if (write && out != NULL)
-    {
-      arg |= (1u << 27);                        /* RAW: read-after-write */
-    }
+        (write ? (1u << 27) : 0) | ((reg & 0x1ffff) << 9) |
+        (write ? in : 0);
 
   nxmutex_lock(&g_skw_buslock);
   rint = skw_cmd(SKW_CMDW_CMD52, arg, &resp);
@@ -447,7 +442,7 @@ static void skw_dt_latch(uint32_t cpaddr)
  ****************************************************************************/
 
 static int skw_cmd53_read(uint32_t func, uint32_t reg, bool incr,
-                          uint8_t *buf, int len, int *actual)
+                          uint8_t *buf, int len)
 {
   uint32_t arg;
   uint32_t rint;
@@ -498,39 +493,16 @@ static int skw_cmd53_read(uint32_t func, uint32_t reg, bool incr,
   rint = skw_rd(SKW_RINTSTS);
   nxmutex_unlock(&g_skw_buslock);
 
-  /* Idle polls of the PK window return filler data that always carries a
-   * DCRC: deliver anything fully received and let the caller reject bogus
-   * packet headers.  Only a short transfer is a hard error.
+  /* A burst shorter than the request ends in DRTO with the received
+   * bytes valid: deliver them (packet headers self-terminate).
    */
 
-  if (got != words)
+  if (got != words && got > 0 && (rint & (1u << 9)) != 0)
     {
-      /* A packet burst shorter than the request ends in DRTO with the
-       * received bytes valid: deliver them and let the packet walk use
-       * the framing headers.  Nothing received is a hard error.
-       */
-
-      if (got > 0 && (rint & (1u << 9)) != 0)
-        {
-          if (actual != NULL)
-            {
-              *actual = got * 4;
-            }
-
-          return 0;
-        }
-
-      syslog(LOG_ERR, "BR: cmd53rd rint=%08x got=%d/%d\n",
-             (unsigned)rint, got, words);
-      return -EIO;
+      return 0;
     }
 
-  if (actual != NULL)
-    {
-      *actual = got * 4;
-    }
-
-  return 0;
+  return (rint & SKW_INT_DATAERR) ? -EIO : (got == words ? 0 : -EIO);
 }
 
 static int skw_cmd53_write(uint32_t func, uint32_t reg, bool incr,
@@ -541,12 +513,6 @@ static int skw_cmd53_write(uint32_t func, uint32_t reg, bool incr,
   int words = (len + 3) / 4;
   int fed = 0;
   int k;
-
-  /* Byte mode up to 512 (count field 0 encodes 512): the golden trace
-   * downloads with byte-INCR transfers; block-mode writes are rejected
-   * by the card with an end-bit error.
-   */
-
   bool blk = (len > 512 && (len % 512) == 0);
 
   nxmutex_lock(&g_skw_buslock);
@@ -603,18 +569,10 @@ static int skw_cmd53_write(uint32_t func, uint32_t reg, bool incr,
   nxmutex_unlock(&g_skw_buslock);
   if ((rint & SKW_INT_RTO) || fed < words)
     {
-      syslog(LOG_ERR, "BR: c53wr TO rint=%08x fed=%d/%d\n",
-             (unsigned)rint, fed, words);
       return -ETIMEDOUT;
     }
 
-  if (rint & SKW_INT_DATAERR)
-    {
-      syslog(LOG_ERR, "BR: c53wr derr rint=%08x\n", (unsigned)rint);
-      return -EIO;
-    }
-
-  return 0;
+  return (rint & SKW_INT_DATAERR) ? -EIO : 0;
 }
 
 /****************************************************************************
@@ -642,7 +600,8 @@ static int skw_dt_stream(uint32_t cpaddr, const uint8_t *buf, int len)
       ret = skw_cmd53_write(1, SKW_DT_WINDOW, true, buf + off, chunk);
       for (try = 0; ret < 0 && try < 4; try++)
         {
-          skw_data_recover();
+          skw_cmd52(true, 0, 0x06, 0x01, NULL);   /* I/O abort */
+          up_mdelay(2);
           skw_dt_latch(cpaddr + off);
           ret = skw_cmd53_write(1, SKW_DT_WINDOW, true, buf + off, chunk);
         }
@@ -654,10 +613,6 @@ static int skw_dt_stream(uint32_t cpaddr, const uint8_t *buf, int len)
         }
 
       off += chunk;
-      if ((off & 0xffff) == 0)
-        {
-          syslog(LOG_ERR, "BR: dl +%d/%d\n", off, len);
-        }
     }
 
   return 0;
@@ -727,40 +682,10 @@ static void skw_voltage_switch(void)
 
 static void skw_tune_sdr104(void)
 {
-  static const uint16_t survey1[] =
-    { 0x00, 0x08, 0x12, 0x13, 0x14, 0x15, 0x16 };
-  static const uint16_t survey2[] = { 0x09, 0x0a, 0x0b };
   uint32_t resp;
-  uint32_t rint;
   uint8_t v;
   int got = 0;
-  unsigned int i;
   int k;
-
-  /* CCCR survey + async-int enable, exactly as the golden trace does.
-   * Some of these status registers are read-to-clear; skipping them left
-   * a latched card state that turned the 198 MHz chip-id CMD53 into an
-   * unrecoverable HLE instead of a retryable data error.
-   */
-
-  for (i = 0; i < sizeof(survey1) / sizeof(survey1[0]); i++)
-    {
-      skw_cmd52(false, 0, survey1[i], 0, &v);
-    }
-
-  skw_cmd52(true, 0, 0x16, 0x03, NULL);
-
-  for (i = 0; i < sizeof(survey2) / sizeof(survey2[0]); i++)
-    {
-      skw_cmd52(false, 0, survey2[i], 0, &v);
-    }
-
-  for (i = 0x1000; i <= 0x1010; i++)            /* FBR1 info region */
-    {
-      skw_cmd52(false, 0, (uint32_t)i, 0, &v);
-    }
-
-  /* 4-bit + SDR104 select (card + host), then 198 MHz and frozen phase. */
 
   skw_cmd52(false, 0, 0x07, 0, &v);
   skw_cmd52(true, 0, 0x07, 0x02, NULL);         /* card 4-bit */
@@ -772,19 +697,14 @@ static void skw_tune_sdr104(void)
   skw_wr(SKW_TIMING0, SKW_TCON_180);
   skw_wr(SKW_TIMING1, SKW_TCON_180);
 
-  /* One CMD19 tuning block read (64 bytes), drained and discarded.  The
-   * card requires this exchange before it will service func1 data reads.
-   */
-
-  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 1));   /* FIFO reset */
+  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 1));
   for (k = 0; (skw_rd(SKW_CTRL) & (1u << 1)) && k < 100000; k++);
   skw_wr(SKW_BLKSIZ, 64);
   skw_wr(SKW_BYTCNT, 64);
-  rint = skw_cmd(SKW_CMDW_CMD19, 0, &resp);
+  skw_cmd(SKW_CMDW_CMD19, 0, &resp);
   for (k = 0; k < 200000 && got < 16; k++)
     {
-      uint32_t st = skw_rd(SKW_STATUS);
-      uint32_t fc = (st >> 17) & 0x1fff;
+      uint32_t fc = (skw_rd(SKW_STATUS) >> 17) & 0x1fff;
 
       while (fc-- > 0 && got < 16)
         {
@@ -794,8 +714,6 @@ static void skw_tune_sdr104(void)
 
       up_udelay(2);
     }
-
-  syslog(LOG_ERR, "BR: CMD19 rint=%08x words=%d\n", (unsigned)rint, got);
 }
 
 /****************************************************************************
@@ -809,6 +727,25 @@ static void skw_tune_sdr104(void)
 
 static void skw_handle_loopcheck(const uint8_t *pl, int len)
 {
+  /* Print every loopcheck message: the CP announces firmware asserts
+   * here ("BSPASSERT ...file-line") and losing them hides the crash
+   * cause.
+   */
+
+  {
+    char txt[120];
+    int n = (len < (int)sizeof(txt) - 1) ? len : (int)sizeof(txt) - 1;
+    int i;
+
+    for (i = 0; i < n; i++)
+      {
+        txt[i] = (pl[i] >= 0x20 && pl[i] < 0x7f) ? pl[i] : 46;
+      }
+
+    txt[n] = 0;
+    syslog(LOG_ERR, "SKW: cp> %s\n", txt);
+  }
+
   if (memmem(pl, len, "trunk_W", 7) != NULL &&
       !(g_skw_service & RK3576_SKW_STATE_BSP))
     {
@@ -1026,6 +963,39 @@ static void skw_handle_wifi_cmd(const uint8_t *pl, int len)
 }
 
 /****************************************************************************
+ * Name: skw_data_rx
+ *
+ * Description:
+ *   Handle a channel-7 (data) receive packet.  The CP delivers 802.3
+ *   frames behind an RX descriptor; EAPOL frames (EtherType 0x888e) are
+ *   routed to the host WPA supplicant, other frames are dropped until the
+ *   netdev data plane is wired up.  The descriptor length is located by
+ *   scanning for the EAPOL EtherType.
+ *
+ ****************************************************************************/
+
+static void skw_data_rx(const uint8_t *pl, int len)
+{
+  extern void rk3576_skw_wpa_eapol_input(const uint8_t *data, int dlen);
+  int i;
+
+  for (i = 12; i + 2 <= len; i++)
+    {
+      if (pl[i] == 0x88 && pl[i + 1] == 0x8e)
+        {
+          int ethlen = len - (i - 12);
+
+          if (ethlen > 14)
+            {
+              rk3576_skw_wpa_eapol_input(pl + (i - 12) + 14, ethlen - 14);
+            }
+
+          return;
+        }
+    }
+}
+
+/****************************************************************************
  * Name: skw_rx_burst
  *
  * Description:
@@ -1040,7 +1010,6 @@ static void skw_handle_wifi_cmd(const uint8_t *pl, int len)
 static int skw_rx_burst(int buf_num)
 {
   int readlen;
-  uint32_t valid_len;
   uint32_t rx_nsize;
   int off;
   int ret;
@@ -1054,64 +1023,17 @@ static int skw_rx_burst(int buf_num)
       buf_num = 8;
     }
 
-  /* V20 read shape: 0x600 * buf_num + 512.  The CP appends valid_len
-   * (end - 8, u32 LE) and rx_nsize = size of the next chunk (end - 4).
-   * Both must be honoured or the CP-side FIFO accounting desynchronizes
-   * and every later command times out.
-   */
-
   readlen = SKW_PAC_SIZE * buf_num + 512;
 
-  int actual = 0;
-
-  ret = skw_cmd53_read(1, SKW_PK_WINDOW, false, g_skw_rxbuf, readlen,
-                       &actual);
+  ret = skw_cmd53_read(1, SKW_PK_WINDOW, false, g_skw_rxbuf, readlen);
   if (ret < 0)
     {
       return ret;
     }
 
-  if (actual < 8)
-    {
-      return 0;
-    }
+  /* Walk packets on the 0x600 stride. */
 
-  readlen = actual;                   /* continuation sits at the real end */
-
-  valid_len = g_skw_rxbuf[readlen - 8] |
-              ((uint32_t)g_skw_rxbuf[readlen - 7] << 8) |
-              ((uint32_t)g_skw_rxbuf[readlen - 6] << 16) |
-              ((uint32_t)g_skw_rxbuf[readlen - 5] << 24);
-  rx_nsize  = g_skw_rxbuf[readlen - 4] |
-              ((uint32_t)g_skw_rxbuf[readlen - 3] << 8) |
-              ((uint32_t)g_skw_rxbuf[readlen - 2] << 16) |
-              ((uint32_t)g_skw_rxbuf[readlen - 1] << 24);
-
-  if (g_skw_rxbuf[0] != 0xfc || g_skw_rxbuf[1] != 0x05)
-    {
-      syslog(LOG_ERR, "SKW: rxdbg act=%d vl=%u nn=%u h=%02x%02x%02x%02x t=%02x%02x%02x%02x %02x%02x%02x%02x\n",
-             readlen, (unsigned)valid_len, (unsigned)rx_nsize,
-             g_skw_rxbuf[0], g_skw_rxbuf[1], g_skw_rxbuf[2], g_skw_rxbuf[3],
-             g_skw_rxbuf[readlen - 8], g_skw_rxbuf[readlen - 7],
-             g_skw_rxbuf[readlen - 6], g_skw_rxbuf[readlen - 5],
-             g_skw_rxbuf[readlen - 4], g_skw_rxbuf[readlen - 3],
-             g_skw_rxbuf[readlen - 2], g_skw_rxbuf[readlen - 1]);
-    }
-
-  /* The trailer semantics differ from the reference notes on this
-   * firmware build: walk the whole received buffer (packet headers
-   * self-terminate) and use the trailer only as the next-read hint.
-   */
-
-  valid_len = readlen;
-  if (rx_nsize > (uint32_t)(SKW_PAC_SIZE * 8))
-    {
-      rx_nsize = 0;
-    }
-
-  /* Walk packets on the 0x600 stride within valid_len. */
-
-  for (off = 0; off + 4 <= (int)valid_len; off += SKW_PAC_SIZE)
+  for (off = 0; off + 4 <= readlen; off += SKW_PAC_SIZE)
     {
       const uint8_t *p = g_skw_rxbuf + off;
       uint32_t hdr = p[0] | (p[1] << 8) | (p[2] << 16) |
@@ -1119,12 +1041,26 @@ static int skw_rx_burst(int buf_num)
       uint32_t ch = SKW_HDR_CH(hdr);
       int plen = SKW_HDR_LEN(hdr);
 
-      if (plen == 0 || ch >= 12 || off + 4 + plen > (int)valid_len)
+      if (plen == 0 || ch >= 12 || off + 4 + plen > readlen)
         {
           break;
         }
 
-      syslog(LOG_ERR, "SKW: rx ch=%u len=%d\n", (unsigned)ch, plen);
+#ifdef CONFIG_RK3576_SKW_DEBUG
+      if (ch == SKW_CH_WIFI_CMD || ch == SKW_CH_WIFI_DATA)
+        {
+          syslog(LOG_ERR, "SKW: rx ch=%" PRIu32 " len=%d off=%d hdr=%08"
+                 PRIx32 "\n", ch, plen, off, hdr);
+          syslog(LOG_ERR, "SKW:   %02x %02x %02x %02x %02x %02x %02x %02x "
+                 "%02x %02x %02x %02x %02x %02x %02x %02x\n",
+                 p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11],
+                 p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19]);
+          syslog(LOG_ERR, "SKW:   %02x %02x %02x %02x %02x %02x %02x %02x "
+                 "%02x %02x %02x %02x %02x %02x %02x %02x\n",
+                 p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27],
+                 p[28], p[29], p[30], p[31], p[32], p[33], p[34], p[35]);
+        }
+#endif
 
       switch (ch)
         {
@@ -1143,9 +1079,17 @@ static int skw_rx_burst(int buf_num)
           default:
             break;
         }
+
+      if (SKW_HDR_EOF(hdr))
+        {
+          break;
+        }
     }
 
-  /* Tell the caller how many bytes the CP wants read next. */
+  rx_nsize = g_skw_rxbuf[readlen - 4] |
+             (g_skw_rxbuf[readlen - 3] << 8) |
+             (g_skw_rxbuf[readlen - 2] << 16) |
+             ((uint32_t)g_skw_rxbuf[readlen - 1] << 24);
 
   return (int)rx_nsize;
 }
@@ -1172,18 +1116,6 @@ static int skw_rx_thread(int argc, char **argv)
 
       skw_cmd52(false, 0, SKW_REG_INTX, 0, &intx);
 
-      /* The golden trace never touches the PK window until the CP raises
-       * an interrupt (CCCR 0x05 INT1): polling it early reads filler and
-       * can disturb the CP boot.  Gate all PK reads on INTx.
-       */
-
-      if ((intx & 0x02) == 0)
-        {
-          up_mdelay(g_skw_scanning ? 5 : 20);
-          continue;
-        }
-
-
       /* Drain queued packets in a bounded burst, then always yield.  The
        * hard cap + mandatory sleep prevent a runaway spin (a stuck FIFO
        * indication or a persistent read error otherwise pins the CPU and
@@ -1201,10 +1133,6 @@ static int skw_rx_thread(int argc, char **argv)
 
           buf_num = (nsize >= SKW_PAC_SIZE * 8) ? 8 :
                     ((nsize + SKW_PAC_SIZE - 1) / SKW_PAC_SIZE);
-          if (buf_num < 1)
-            {
-              buf_num = 1;
-            }
         }
 
       /* Poll cadence: brisk while a scan/command is active, relaxed idle. */
@@ -1382,6 +1310,45 @@ static int skw_wifi_bringup_cmds(void)
          resp_len, g_skw_mac[0], g_skw_mac[1], g_skw_mac[2],
          g_skw_mac[3], g_skw_mac[4], g_skw_mac[5]);
 
+  /* RF calibration download (PHY_BB_CFG): 512-byte chunks with a
+   * seq/end/len header.  Without it the CP runs default RF parameters:
+   * weak or empty scans and firmware asserts on RF-heavy operations.
+   */
+
+  if (g_skw_board->calib != NULL && g_skw_board->calib_len > 0)
+    {
+      const uint8_t *cd = g_skw_board->calib;
+      int remain = g_skw_board->calib_len;
+      uint8_t chunk[4 + 512];
+      int seq = 0;
+
+      while (remain > 0)
+        {
+          int len = (remain < 512) ? remain : 512;
+
+          chunk[0] = (uint8_t)seq;
+          chunk[1] = (remain == len) ? 1 : 0;
+          chunk[2] = len & 0xff;
+          chunk[3] = (len >> 8) & 0xff;
+          memcpy(chunk + 4, cd, len);
+
+          ret = skw_send_cmd(SKW_CMD_PHY_BB_CFG, chunk, 4 + len,
+                             NULL, NULL);
+          if (ret < 0)
+            {
+              wlerr("ERROR: PHY_BB_CFG seq %d failed: %d\n", seq, ret);
+              break;
+            }
+
+          cd += len;
+          remain -= len;
+          seq++;
+        }
+
+      syslog(LOG_ERR, "SKW: calib download %s (%d bytes)\n",
+             ret == 0 ? "ok" : "FAILED", g_skw_board->calib_len);
+    }
+
   /* OPEN_DEV: bring up the station interface (mode + flags + MAC). */
 
   {
@@ -1428,7 +1395,7 @@ static int skw_scan(void)
   int ch;
 
   memset(sp, 0, sizeof(sp));
-  sp[8]  = 13;                      /* nr_chan (u32 LE), 2.4 GHz only */
+  sp[8]  = 13;                      /* nr_chan (u32 LE) */
   sp[12] = 32;                      /* chan_offset = end of fixed head */
 
   for (ch = 0; ch < 13; ch++)
@@ -1462,133 +1429,59 @@ static int skw_scan(void)
 }
 
 /****************************************************************************
- * Name: skw_data_recover
+ * Name: skw_nv_patch
  *
  * Description:
- *   Unwedge host and card after a failed data transfer.  A short read that
- *   ends in SBE/DCRC leaves the DW-MSHC data FSM waiting for the rest of
- *   BYTCNT and every following data command load then fails with HLE.
- *   Issue a stop/abort-flagged CMD52 I/O-abort (clears the CIU data FSM),
- *   reset the FIFO and clear stale status.
+ *   Copy the IRAM image and splice the NV common-config blob into its NV
+ *   slot ("TSVN" marker + 4).  Booting with default NV content leaves the
+ *   CP on wrong RF/common parameters.
  *
  ****************************************************************************/
 
-static void skw_data_recover(void)
+static uint8_t *skw_nv_patch(const uint8_t *iram, int iram_len)
 {
-  uint32_t arg;
-  int k;
+  const uint8_t *nv = g_skw_board->nv;
+  uint32_t off;
+  uint32_t size;
+  uint8_t *copy;
+  int i;
 
-  /* CMD52 write CCCR 0x06 = 0x01 (I/O abort) with stop_abort_cmd. */
-
-  nxmutex_lock(&g_skw_buslock);
-  arg = (1u << 31) | (1u << 27) | (0x06 << 9) | 0x01;
-  skw_wr(SKW_RINTSTS, 0xffffffff);
-  skw_wr(SKW_CMDARG, arg);
-  skw_wr(SKW_CMD, SKW_CMDW_CMD52 | (1u << 14));   /* stop/abort */
-  for (k = 0; (skw_rd(SKW_CMD) & SKW_CMD_START) && k < SKW_POLL_LIMIT; k++);
-  for (k = 0; k < SKW_POLL_LIMIT; k++)
+  if (nv == NULL || g_skw_board->nv_len < 36)
     {
-      if (skw_rd(SKW_RINTSTS) & (SKW_INT_CMDDONE | SKW_INT_RTO))
-        {
-          break;
-        }
-
-      up_udelay(5);
+      return NULL;
     }
 
-  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 1));  /* FIFO reset */
-  for (k = 0; (skw_rd(SKW_CTRL) & (1u << 1)) && k < 100000; k++);
-  skw_wr(SKW_RINTSTS, 0xffffffff);
-  nxmutex_unlock(&g_skw_buslock);
-  up_mdelay(2);
-}
+  off  = nv[8] | (nv[9] << 8) | ((uint32_t)nv[10] << 16) |
+         ((uint32_t)nv[11] << 24);
+  size = nv[12] | (nv[13] << 8) | ((uint32_t)nv[14] << 16) |
+         ((uint32_t)nv[15] << 24);
 
-/****************************************************************************
- * Name: skw_phase_sweep
- *
- * Description:
- *   On-line 198 MHz sample-phase tuning: for each of 8 phase taps write a
- *   512-byte firmware slice into CP DRAM scratch space and read part of it
- *   back; a tap passes when the readback matches.  Freeze TIMING1 at the
- *   middle of the longest circular pass run.  The region is overwritten by
- *   the real download immediately afterwards.
- *
- ****************************************************************************/
-
-static int skw_phase_sweep(void)
-{
-  static const uint16_t praw[8] =
-  {
-    0x0,                       /*   0 deg */
-    (1u << 10) | (10u << 2),   /*  45 deg */
-    0x1,                       /*  90 deg */
-    (1u << 10) | (10u << 2) | 1,
-    0x2,                       /* 180 deg */
-    (1u << 10) | (10u << 2) | 2,
-    0x3,                       /* 270 deg */
-    (1u << 10) | (10u << 2) | 3,
-  };
-
-  const uint8_t *src = g_skw_board->dram + 0x2800;
-  uint8_t rb[16];
-  char passmask[9];
-  int pass[8];
-  int best_start = -1;
-  int best_len = 0;
-  int t;
-
-  for (t = 0; t < 8; t++)
+  if (off == 0 || size == 0 || (int)(off + size) > g_skw_board->nv_len)
     {
-      int ok;
+      return NULL;
+    }
 
-      skw_wr(SKW_TIMING1, SKW_TCON(praw[t]));
+  copy = kmm_malloc(iram_len);
+  if (copy == NULL)
+    {
+      return NULL;
+    }
 
-      skw_dt_latch(SKW_CP_DRAM + 0x2800);
-      skw_cmd53_write(1, SKW_DT_WINDOW, true, src, 512);
-      memset(rb, 0, sizeof(rb));
-      skw_dt_latch(SKW_CP_DRAM + 0x2910);
-      skw_cmd53_read(1, SKW_DT_WINDOW, true, rb, 16, NULL);
-      ok = (memcmp(rb, src + 0x110, 16) == 0);
-      pass[t] = ok;
-      passmask[t] = ok ? 35 : 46;
+  memcpy(copy, iram, iram_len);
 
-      if (!ok)
+  for (i = 0; i + 4 <= iram_len && i < 0x200; i += 4)
+    {
+      if (memcmp(copy + i, "TSVN", 4) == 0)
         {
-          skw_data_recover();
+          syslog(LOG_ERR, "BR: NV patch @0x%x size %u\n",
+                 (unsigned)(i + 4), (unsigned)size);
+          memcpy(copy + i + 4, nv + off, size);
+          return copy;
         }
     }
 
-  passmask[8] = 0;
-  syslog(LOG_ERR, "BR: phase sweep 45deg-steps [%s]\n", passmask);
-
-  for (t = 0; t < 8; t++)
-    {
-      if (pass[t])
-        {
-          int len = 0;
-
-          while (len < 8 && pass[(t + len) % 8])
-            {
-              len++;
-            }
-
-          if (len > best_len)
-            {
-              best_len = len;
-              best_start = t;
-            }
-        }
-    }
-
-  if (best_len < 1)
-    {
-      return -EIO;
-    }
-
-  t = (best_start + best_len / 2) % 8;
-  skw_wr(SKW_TIMING1, SKW_TCON(praw[t]));
-  syslog(LOG_ERR, "BR: tuned phase=%d deg (len=%d)\n", t * 45, best_len);
-  return OK;
+  kmm_free(copy);
+  return NULL;
 }
 
 /****************************************************************************
@@ -1635,53 +1528,32 @@ static int skw_download_and_boot(void)
       return -EINVAL;
     }
 
-  /* FBR1 block size back to 512 before boot (golden trace order). */
-
-  skw_cmd52(true, 0, 0x110, 0x00, NULL);
-  skw_cmd52(true, 0, 0x111, 0x02, NULL);
-
   skw_cmd52(true, 0, SKW_REG_DMA_TYPE, 0x01, NULL);   /* ADMA */
   skw_cmd52(true, 0, SKW_REG_SLP, 0x01, NULL);        /* sleep disabled */
 
   ret = skw_dt_stream(dram_addr, g_skw_board->dram, g_skw_board->dram_len);
   if (ret < 0)
     {
-      syslog(LOG_ERR, "BR: dram stream fail %d\n", ret);
       return ret;
     }
-
-  ret = skw_dt_stream(iram_addr, iram, iram_len);
-  if (ret < 0)
-    {
-      syslog(LOG_ERR, "BR: iram stream fail %d\n", ret);
-      return ret;
-    }
-
-  /* Verify the download before booting: read back the first 16 bytes of
-   * both images through the DT window and compare.
-   */
 
   {
-    uint8_t vb[16];
-    uint8_t r160 = 0xff;
+    uint8_t *patched = skw_nv_patch(iram, iram_len);
 
-    memset(vb, 0, sizeof(vb));
-    skw_dt_latch(dram_addr);
-    skw_cmd53_read(1, SKW_DT_WINDOW, true, vb, 16, NULL);
-    syslog(LOG_ERR, "BR: dram vfy %s\n",
-           memcmp(vb, g_skw_board->dram, 16) == 0 ? "OK" : "MISMATCH");
-
-    memset(vb, 0, sizeof(vb));
-    skw_dt_latch(iram_addr);
-    skw_cmd53_read(1, SKW_DT_WINDOW, true, vb, 16, NULL);
-    syslog(LOG_ERR, "BR: iram vfy %s\n",
-           memcmp(vb, iram, 16) == 0 ? "OK" : "MISMATCH");
-
-    skw_cmd52(true, 0, SKW_REG_DL_DONE, 0x01, NULL);   /* boot the CP */
-    skw_cmd52(false, 0, SKW_REG_DL_DONE, 0, &r160);
-    syslog(LOG_ERR, "BR: dl_done rb=%02x\n", r160);
+    ret = skw_dt_stream(iram_addr, patched != NULL ? patched : iram,
+                        iram_len);
+    if (patched != NULL)
+      {
+        kmm_free(patched);
+      }
   }
 
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  skw_cmd52(true, 0, SKW_REG_DL_DONE, 0x01, NULL);    /* boot the CP */
   return OK;
 }
 
@@ -1699,7 +1571,6 @@ static int skw_download_and_boot(void)
 static int skw_bringup(void)
 {
   uint32_t resp = 0;
-  int ret;
   uint32_t rint;
   uint32_t rca;
   uint8_t id[16];
@@ -1714,9 +1585,6 @@ static int skw_bringup(void)
   g_skw_board->power(false);
   SDIO_CLOCK(g_skw_dev, CLOCK_SDIO_DISABLED);
   up_mdelay(1000);
-
-  skw_wr(SKW_CTRL, 0x00000007);
-  for (k = 0; (skw_rd(SKW_CTRL) & 0x7) && k < SKW_POLL_LIMIT; k++);
 
   skw_wr(SKW_CLKENA, 0x00000000);
   skw_ciu_update(SKW_CLK_UPDATE);
@@ -1736,13 +1604,11 @@ static int skw_bringup(void)
    */
 
   skw_wr(SKW_INTMASK, 0x00000000);
-  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) & ~((1u << 4) | (1u << 25)));  /* PIO, no IDMAC */
+  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) & ~(1u << 4));
 
   /* CMD5 with S18R (request 1.8 V), then the voltage switch if granted. */
 
-  syslog(LOG_ERR, "BR:CMD5start\n");
   rint = skw_cmd(SKW_CMDW_CMD5, 0x01300000, &resp);
-  syslog(LOG_ERR, "BR:CMD5 %08x\n", (unsigned)rint);
   if (rint & SKW_INT_RTO)
     {
       wlerr("ERROR: CMD5 no response\n");
@@ -1774,49 +1640,35 @@ static int skw_bringup(void)
   skw_cmd52(true, 0, 0x16, 0x03, NULL);
   skw_cmd52(true, 0, 0x04, 0x03, NULL);
   skw_tune_sdr104();
-  syslog(LOG_ERR, "BR:tune done\n");
 
   /* FBR1 block size = 512, enable function 1, wait ready. */
 
-  /* func1 bring-up exactly as the golden trace: enable IOE1 and read IOR
-   * once, WITHOUT waiting for a ready bit that this combo never sets, then
-   * the traced blocksize/IEN/0x16 dance.
-   */
+  skw_cmd52(true, 0, 0x110, 0x00, NULL);
+  skw_cmd52(true, 0, 0x111, 0x02, NULL);
+  skw_cmd52(true, 0, 0x02, 0x02, NULL);
+  for (k = 0; k < 100; k++)
+    {
+      v = 0;
+      skw_cmd52(false, 0, 0x03, 0, &v);
+      if (v & 0x02)
+        {
+          break;
+        }
 
-  skw_cmd52(true, 0, 0x110, 0x00, NULL);
-  skw_cmd52(true, 0, 0x111, 0x02, NULL);         /* FBR1 blocksize 512 */
-  skw_cmd52(false, 0, 0x02, 0, &v);
-  skw_cmd52(true, 0, 0x02, 0x02, NULL);          /* IOE func1 */
-  skw_cmd52(false, 0, 0x03, 0, &v);              /* IOR: one read, no wait */
-  skw_cmd52(true, 0, 0x110, 0x00, NULL);
-  skw_cmd52(true, 0, 0x111, 0x01, NULL);         /* 256 */
-  skw_cmd52(false, 0, 0x04, 0, &v);
-  skw_cmd52(true, 0, 0x04, 0x03, NULL);          /* IENM | IEN1 */
-  skw_cmd52(false, 0, 0x16, 0, &v);
-  skw_cmd52(true, 0, 0x16, 0x03, NULL);
-  skw_cmd52(false, 0, 0x16, 0, &v);
-  syslog(LOG_ERR, "BR: func1 enabled (golden)\n");
+      up_mdelay(10);
+    }
+
+  if (!(v & 0x02))
+    {
+      wlerr("ERROR: func1 not ready\n");
+      return -EIO;
+    }
 
   /* DT chip-id sanity: "SV6160LITE". */
 
-  up_mdelay(100);
-  syslog(LOG_ERR, "BR: pre-chipid STATUS=%08x\n", (unsigned)skw_rd(SKW_STATUS));
-  {
-    int tries;
-    for (tries = 0; tries < 3; tries++)
-      {
-        memset(id, 0, sizeof(id));
-        skw_dt_latch(SKW_CP_CHIPID);
-        if (skw_cmd53_read(1, SKW_DT_WINDOW, true, id, 16, NULL) == 0)
-          {
-            break;
-          }
-
-        skw_cmd52(true, 0, 0x06, 0x01, NULL);   /* I/O abort */
-        up_mdelay(2);
-      }
-  }
-  syslog(LOG_ERR, "BR: chipid %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n", id[0], id[1], id[2], id[3], id[4], id[5], id[6], id[7], id[8], id[9]);
+  skw_dt_latch(SKW_CP_CHIPID);
+  memset(id, 0, sizeof(id));
+  skw_cmd53_read(1, SKW_DT_WINDOW, true, id, 16);
   if (memcmp(id, "SV6160LITE", 10) != 0)
     {
       wlerr("ERROR: chip-id mismatch\n");
@@ -1824,14 +1676,6 @@ static int skw_bringup(void)
     }
 
   wlinfo("SV6160LITE detected, downloading firmware\n");
-
-  ret = skw_phase_sweep();
-  if (ret < 0)
-    {
-      wlerr("ERROR: no passing sample phase at 198 MHz\n");
-      return ret;
-    }
-
   return skw_download_and_boot();
 }
 
@@ -1925,6 +1769,7 @@ static int skw_connect(const struct skw_bss_s *bss)
   buf[7] = bss->capability & 0xff;              /* capability u16 */
   buf[8] = (bss->capability >> 8) & 0xff;
   memcpy(buf + 11, bss->bssid, 6);              /* bssid */
+  memcpy(g_skw_bssid, bss->bssid, 6);
 
   {
     int fixed = 25;                             /* struct head length */
@@ -1956,11 +1801,9 @@ static int skw_connect(const struct skw_bss_s *bss)
 
     /* JOIN ACK returns skw_join_resp {peer_idx,lmac_id,inst,mcast_idx}. */
 
+    g_skw_peer_idx = (jrlen > 0) ? jresp[0] : 0;
     syslog(LOG_INFO, "SKW: JOIN ok status=%d peer_idx=%d\n", ret,
            jrlen > 0 ? jresp[0] : -1);
-
-    g_skw_peer_idx = (jrlen > 0) ? jresp[0] : 0;
-    memcpy(g_skw_bssid, bss->bssid, 6);
   }
 
   up_mdelay(50);
@@ -2075,7 +1918,6 @@ int rk3576_skw_initialize(const struct rk3576_skw_board_s *board)
     }
 
   ret = skw_bringup();
-  syslog(LOG_ERR, "SKW: bringup ret %d\n", ret);
   if (ret < 0)
     {
       return ret;
@@ -2188,48 +2030,76 @@ int rk3576_skw_connect(const char *ssid)
   return -ENOENT;
 }
 
+#endif /* CONFIG_RK3576_SKW */
 
 /****************************************************************************
- * Name: skw_data_rx
+ * Name: rk3576_skw_dbg_*
  *
  * Description:
- *   Handle a channel-7 (data) receive packet.  The CP has already
- *   converted 802.11 to 802.3, so after the RX descriptor the payload is
- *   an Ethernet frame.  EAPOL frames (EtherType 0x888e) are routed to the
- *   host WPA supplicant; other frames are dropped until the netdev data
- *   plane (P4) is wired up.
- *
- *   RX descriptor stripping (skw_rx.c): the Ethernet header sits at
- *   msdu_offset - RX_DESC_MSDU_OFFSET(52) past the descriptor; frame
- *   length = msdu_len + SKW_MSDU_HDR_LEN(6).
+ *   Raw bus primitives for the skwsh interactive debug shell.
  *
  ****************************************************************************/
 
-static void skw_data_rx(const uint8_t *pl, int len)
+int rk3576_skw_dbg_cmd52(int write, unsigned reg, unsigned val,
+                         unsigned *out)
 {
-  int i;
+  uint8_t v = 0;
+  int ret = skw_cmd52(write != 0, 0, reg, (uint8_t)val,
+                      write ? NULL : &v);
 
-  /* The exact rx_desc layout offset of msdu_offset is a binary blind spot
-   * (undefined in the reference sources), so rather than trust a fixed
-   * descriptor size we locate the Ethernet payload by scanning for the
-   * EAPOL EtherType (0x888e).  This is sufficient for the 4-way handshake;
-   * the full descriptor map is confirmed during netdev (P4) bring-up.
-   */
-
-  for (i = 12; i + 2 <= len; i++)
+  if (out != NULL)
     {
-      if (pl[i] == 0x88 && pl[i + 1] == 0x8e)
-        {
-          int ethlen = len - (i - 12);
-
-          if (ethlen > 14)
-            {
-              rk3576_skw_wpa_eapol_input(pl + (i - 12) + 14, ethlen - 14);
-            }
-
-          return;
-        }
+      *out = v;
     }
+
+  return ret;
+}
+
+int rk3576_skw_dbg_cmd53_read(unsigned char *buf, int len, int *actual)
+{
+  int ret = skw_cmd53_read(1, SKW_PK_WINDOW, false, buf, len);
+
+  if (actual != NULL)
+    {
+      *actual = (ret == 0) ? len : 0;
+    }
+
+  return ret;
+}
+
+int rk3576_skw_dbg_dt_read(unsigned char *buf, int len, int *actual)
+{
+  int ret = skw_cmd53_read(1, SKW_DT_WINDOW, true, buf, len);
+
+  if (actual != NULL)
+    {
+      *actual = (ret == 0) ? len : 0;
+    }
+
+  return ret;
+}
+
+int rk3576_skw_dbg_cmd53_write(const unsigned char *buf, int len)
+{
+  return skw_cmd53_write(1, SKW_PK_WINDOW, false, buf, len);
+}
+
+int rk3576_skw_dbg_latch(unsigned cpaddr)
+{
+  skw_dt_latch(cpaddr);
+  return 0;
+}
+
+int rk3576_skw_dbg_bringup(void)
+{
+  extern int kickpi_k7_wifi_initialize(void);
+  return kickpi_k7_wifi_initialize();
+}
+
+int rk3576_skw_dbg_sendcmd(unsigned id, const unsigned char *payload,
+                           int plen)
+{
+  return skw_send_cmd((uint8_t)id, payload, plen, NULL, NULL);
 }
 
 /****************************************************************************
@@ -2246,7 +2116,7 @@ void rk3576_skw_get_bssid(uint8_t bssid[6])
   memcpy(bssid, g_skw_bssid, 6);
 }
 
-/****************************************************************************
+/***************************************************************************
  * Name: rk3576_skw_data_tx
  *
  * Description:
@@ -2330,7 +2200,7 @@ int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
   return skw_cmd53_write(1, SKW_PK_WINDOW, false, g_skw_txbuf, padded);
 }
 
-/****************************************************************************
+/***************************************************************************
  * Name: rk3576_skw_add_key
  *
  * Description:
@@ -2371,59 +2241,5 @@ int rk3576_skw_add_key(uint8_t key_type, uint8_t cipher,
   n += key_len;
 
   return skw_send_cmd(SKW_CMD_ADD_KEY, buf, n, NULL, NULL);
-}
-
-#endif /* CONFIG_RK3576_SKW */
-
-/****************************************************************************
- * Name: rk3576_skw_dbg_*
- *
- * Description:
- *   Raw bus primitives for the skwsh interactive debug shell: thin
- *   wrappers over the static driver internals so protocol experiments can
- *   run from the console without rebuilding the firmware.
- *
- ****************************************************************************/
-
-int rk3576_skw_dbg_cmd52(int write, unsigned reg, unsigned val,
-                         unsigned *out)
-{
-  uint8_t v = 0;
-  int ret = skw_cmd52(write != 0, 0, reg, (uint8_t)val,
-                      write ? NULL : &v);
-
-  if (out != NULL)
-    {
-      *out = v;
-    }
-
-  return ret;
-}
-
-int rk3576_skw_dbg_cmd53_read(unsigned char *buf, int len, int *actual)
-{
-  return skw_cmd53_read(1, SKW_PK_WINDOW, false, buf, len, actual);
-}
-
-int rk3576_skw_dbg_cmd53_write(const unsigned char *buf, int len)
-{
-  return skw_cmd53_write(1, SKW_PK_WINDOW, false, buf, len);
-}
-
-int rk3576_skw_dbg_latch(unsigned cpaddr)
-{
-  skw_dt_latch(cpaddr);
-  return 0;
-}
-
-int rk3576_skw_dbg_bringup(void)
-{
-  return rk3576_skw_initialize(g_skw_board);
-}
-
-int rk3576_skw_dbg_sendcmd(unsigned id, const unsigned char *payload,
-                           int plen)
-{
-  return skw_send_cmd((uint8_t)id, payload, plen, NULL, NULL);
 }
 

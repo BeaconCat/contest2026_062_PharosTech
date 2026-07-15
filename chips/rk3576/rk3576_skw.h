@@ -64,6 +64,11 @@ struct rk3576_skw_board_s
   int            iram_len;
   const uint8_t *dram;
   int            dram_len;
+  const uint8_t *nv;       /* NV common config, patched into the IRAM
+                            * image NV slot before download */
+  int            nv_len;
+  const uint8_t *calib;    /* RF calibration blob (PHY_BB_CFG payload) */
+  int            calib_len;
 };
 
 /* One scan result. */

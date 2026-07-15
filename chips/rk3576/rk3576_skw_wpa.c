@@ -502,7 +502,9 @@ static int wpa_tx_eapol(struct rk3576_wpa_s *w, uint8_t *kd, int kdlen,
       memcpy(frame + 14 + KD_OFF_MIC, mic, WPA_MIC_LEN);
     }
 
-  return rk3576_skw_data_tx(frame, flen);
+  int txr = rk3576_skw_data_tx(frame, flen);
+
+  return txr;
 }
 
 /****************************************************************************
@@ -662,6 +664,8 @@ static int wpa_extract_gtk(struct rk3576_wpa_s *w, const uint8_t *enc,
 static void wpa_handle_msg1(struct rk3576_wpa_s *w, const uint8_t *kd,
                             int kdlen)
 {
+  rk3576_skw_get_bssid(w->aa);
+
   if (kdlen < KD_FIXED_LEN)
     {
       return;
@@ -775,9 +779,15 @@ void rk3576_skw_wpa_eapol_input(const uint8_t *data, int len)
 
   /* msg1: pairwise + ack, no MIC.  msg3: pairwise + ack + mic + install. */
 
-  if (w->state == WPA_STATE_WAIT_MSG1 &&
+  if ((w->state == WPA_STATE_WAIT_MSG1 ||
+       w->state == WPA_STATE_WAIT_MSG3) &&
       (ki & KI_MIC) == 0 && (ki & KI_ACK) != 0)
     {
+      /* Fresh message 1 or a retransmit (the AP did not accept our
+       * message 2): restart the handshake state.
+       */
+
+      w->state = WPA_STATE_WAIT_MSG1;
       wpa_handle_msg1(w, data, len);
     }
   else if (w->state == WPA_STATE_WAIT_MSG3 &&
@@ -816,16 +826,23 @@ int rk3576_skw_wpa_connect(const char *ssid, const char *passphrase)
 
   rk3576_skw_get_mac(w->spa);
 
+  /* Arm the EAPOL RX path before association: the AP sends message 1
+   * right after assoc-resp, racing the connect return.  The authenticator
+   * address is captured lazily on message 1 (the JOIN recorded it).
+   */
+
+  w->state = WPA_STATE_WAIT_MSG1;
+
   /* L2 association (JOIN/AUTH/ASSOC) advertising the RSN IE. */
 
   ret = rk3576_skw_connect(ssid);
   if (ret < 0)
     {
+      w->state = WPA_STATE_IDLE;
       return ret;
     }
 
   rk3576_skw_get_bssid(w->aa);
-  w->state = WPA_STATE_WAIT_MSG1;              /* arm the EAPOL RX path */
 
   /* Wait for the 4-way handshake to complete (driven by EAPOL RX). */
 
