@@ -2201,15 +2201,9 @@ int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
 
   w0 = ((uint16_t)(g_skw_peer_idx & 0x1f)) << 8;
 
-  /* EAPOL frames (EtherType 0x888e) must go out unencrypted: during the
-   * 4-way handshake the pairwise key is not installed yet, so encrypting
-   * them produces garbage the AP silently drops.  encry_dis = word0 bit14.
+  /* encry_dis stays 0 (matches the reference driver): the CP sends the
+   * frame in the clear until the pairwise key is installed.
    */
-
-  if (ethertype == 0x888e)
-    {
-      w0 |= (1u << 14);
-    }
 
   g_skw_txbuf[4] = w0 & 0xff;
   g_skw_txbuf[5] = (w0 >> 8) & 0xff;
