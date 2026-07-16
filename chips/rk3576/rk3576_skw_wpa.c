@@ -683,7 +683,11 @@ static void wpa_handle_msg1(struct rk3576_wpa_s *w, const uint8_t *kd,
       return;
     }
 
-  if (wpa_send_msg2(w) < 0)
+  {
+    int r2 = wpa_send_msg2(w);
+
+    syslog(LOG_ERR, "WPA: msg2 ret=%d\n", r2);
+    if (r2 < 0)
     {
       w->state = WPA_STATE_FAILED;
       w->result = -EIO;
@@ -691,8 +695,9 @@ static void wpa_handle_msg1(struct rk3576_wpa_s *w, const uint8_t *kd,
       return;
     }
 
-  w->state = WPA_STATE_WAIT_MSG3;
-  wlinfo("WPA: msg1 rx, msg2 sent (PTK derived)\n");
+    w->state = WPA_STATE_WAIT_MSG3;
+    wlinfo("WPA: msg1 rx, msg2 sent (PTK derived)\n");
+  }
 }
 
 /****************************************************************************
@@ -831,18 +836,21 @@ int rk3576_skw_wpa_connect(const char *ssid, const char *passphrase)
    * address is captured lazily on message 1 (the JOIN recorded it).
    */
 
-  w->state = WPA_STATE_WAIT_MSG1;
-
-  /* L2 association (JOIN/AUTH/ASSOC) advertising the RSN IE. */
+  /* L2 association (JOIN/AUTH/ASSOC) advertising the RSN IE.  Arm the
+   * EAPOL path only AFTER association completes: processing message 1 on
+   * the rx thread during association corrupts the shared command slot the
+   * main thread uses for the ASSOC ACK.  The AP retransmits message 1, so
+   * a dropped first copy is harmless.
+   */
 
   ret = rk3576_skw_connect(ssid);
   if (ret < 0)
     {
-      w->state = WPA_STATE_IDLE;
       return ret;
     }
 
   rk3576_skw_get_bssid(w->aa);
+  w->state = WPA_STATE_WAIT_MSG1;
 
   /* Wait for the 4-way handshake to complete (driven by EAPOL RX). */
 

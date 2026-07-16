@@ -44,6 +44,8 @@ int rk3576_skw_dbg_dt_read(unsigned char *buf, int len, int *actual);
 int rk3576_skw_dbg_rx_eapol(unsigned char *buf, int max);
 int rk3576_skw_dbg_data_tx(const unsigned char *eth, int len);
 int rk3576_skw_dbg_connect(const char *ssid);
+int rk3576_skw_dbg_get_bssid(unsigned char *b);
+int rk3576_skw_dbg_get_mac(unsigned char *m);
 int rk3576_skw_dbg_cmd53_write(const unsigned char *buf, int len);
 int rk3576_skw_dbg_latch(unsigned cpaddr);
 int rk3576_skw_dbg_bringup(void);
@@ -206,6 +208,15 @@ int main(int argc, FAR char *argv[])
 
           printf("\n");
         }
+    }
+  else if (strcmp(argv[1], "wbssid") == 0)
+    {
+      unsigned char bm[6], mm[6];
+      rk3576_skw_dbg_get_bssid(bm);
+      rk3576_skw_dbg_get_mac(mm);
+      printf("wbssid %02x%02x%02x%02x%02x%02x mac %02x%02x%02x%02x%02x%02x\n",
+             bm[0], bm[1], bm[2], bm[3], bm[4], bm[5],
+             mm[0], mm[1], mm[2], mm[3], mm[4], mm[5]);
     }
   else if (strcmp(argv[1], "wtx") == 0 && argc >= 3)
     {

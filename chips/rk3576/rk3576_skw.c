@@ -1246,18 +1246,20 @@ static int skw_send_cmd(uint8_t id, const uint8_t *payload, int plen,
 
   skw_cmd52(true, 0, SKW_REG_AP2CP_IRQ, 0x01, NULL);
 
-  /* Called from the rx thread (4-way handshake msg4 / ADD_KEY): the ACK is
-   * delivered by this very thread, so waiting for it would deadlock.  Fire
-   * and forget -- the CP applies the command; a lost ACK is harmless here.
+  /* From the rx thread (4-way msg2/msg4/ADD_KEY) the ACK is delivered by
+   * this same thread; a full wait would deadlock but the CP still needs
+   * time to transmit the frame after the doorbell.  Give it a bounded
+   * window (frame already queued by skw_cmd53_write) then continue.
    */
 
-  if (g_skw_in_rx)
+  ret = nxsem_tickwait(&g_skw_cmd.done,
+                       MSEC2TICK(SKW_CMD_TIMEOUT_MS));
+  if (g_skw_in_rx && ret < 0)
     {
       g_skw_cmd.waiting = false;
       return OK;
     }
 
-  ret = nxsem_tickwait(&g_skw_cmd.done, MSEC2TICK(SKW_CMD_TIMEOUT_MS));
   if (ret < 0)
     {
       g_skw_cmd.waiting = false;
@@ -2343,5 +2345,17 @@ int rk3576_skw_dbg_data_tx(const uint8_t *eapol, int len)
 int rk3576_skw_dbg_connect(const char *ssid)
 {
   return rk3576_skw_connect(ssid);
+}
+
+int rk3576_skw_dbg_get_bssid(uint8_t *bssid)
+{
+  memcpy(bssid, g_skw_bssid, 6);
+  return 6;
+}
+
+int rk3576_skw_dbg_get_mac(uint8_t *mac)
+{
+  memcpy(mac, g_skw_mac, 6);
+  return 6;
 }
 
