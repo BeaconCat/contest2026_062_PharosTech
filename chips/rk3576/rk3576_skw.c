@@ -178,6 +178,7 @@
 #define SKW_CMD_ADD_KEY     12
 #define SKW_CMD_START_SCAN  5
 #define SKW_CMD_JOIN        9
+#define SKW_CMD_TX_DATA_FRAME 15
 #define SKW_CMD_AUTH        10
 #define SKW_CMD_ASSOC       11
 #define SKW_CMD_DISCONNECT  17
@@ -224,6 +225,14 @@ static FAR struct sdio_dev_s *g_skw_dev;
 static const struct rk3576_skw_board_s *g_skw_board;
 static uint32_t g_skw_service;
 static bool g_skw_run;
+static volatile bool g_skw_in_rx;  /* rx thread is inside packet handling */
+
+/* EAPOL capture ring for the skwsh/skwlab host-side 4-way debugger. */
+
+static uint8_t g_skw_dbg_eapol[8][256];
+static volatile int g_skw_dbg_elen[8];
+static volatile unsigned g_skw_dbg_ehead;
+static volatile unsigned g_skw_dbg_etail;
 static uint8_t g_skw_mac[6];
 static uint8_t g_skw_bssid[6];
 static uint8_t g_skw_peer_idx;
@@ -986,12 +995,20 @@ static void skw_data_rx(const uint8_t *pl, int len)
           const uint8_t *eth = pl + (i - 12);
           int ethlen = len - (i - 12);
 
-          syslog(LOG_ERR, "SKW: eapol eth dst %02x:%02x:%02x:%02x:%02x:%02x src %02x:%02x:%02x:%02x:%02x:%02x\n",
-                 eth[0], eth[1], eth[2], eth[3], eth[4], eth[5],
-                 eth[6], eth[7], eth[8], eth[9], eth[10], eth[11]);
-
           if (ethlen > 14)
             {
+              int elen = ethlen - 14;
+              int slot = g_skw_dbg_ehead & 7;
+
+              if (elen > (int)sizeof(g_skw_dbg_eapol[0]))
+                {
+                  elen = sizeof(g_skw_dbg_eapol[0]);
+                }
+
+              memcpy(g_skw_dbg_eapol[slot], eth + 14, elen);
+              g_skw_dbg_elen[slot] = elen;
+              g_skw_dbg_ehead++;
+
               rk3576_skw_wpa_eapol_input(eth + 14, ethlen - 14);
             }
 
@@ -1129,7 +1146,9 @@ static int skw_rx_thread(int argc, char **argv)
 
       for (drained = 0; drained < 16 && g_skw_run; drained++)
         {
+          g_skw_in_rx = true;
           nsize = skw_rx_burst(buf_num);
+          g_skw_in_rx = false;
           if (nsize <= 0)
             {
               buf_num = 1;
@@ -1226,6 +1245,17 @@ static int skw_send_cmd(uint8_t id, const uint8_t *payload, int plen,
   /* Ring the AP->CP doorbell so the CP services the command. */
 
   skw_cmd52(true, 0, SKW_REG_AP2CP_IRQ, 0x01, NULL);
+
+  /* Called from the rx thread (4-way handshake msg4 / ADD_KEY): the ACK is
+   * delivered by this very thread, so waiting for it would deadlock.  Fire
+   * and forget -- the CP applies the command; a lost ACK is harmless here.
+   */
+
+  if (g_skw_in_rx)
+    {
+      g_skw_cmd.waiting = false;
+      return OK;
+    }
 
   ret = nxsem_tickwait(&g_skw_cmd.done, MSEC2TICK(SKW_CMD_TIMEOUT_MS));
   if (ret < 0)
@@ -2200,6 +2230,17 @@ int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
 
   memcpy(g_skw_txbuf + 12, eth, ethlen);
 
+  if (ethertype == 0x888e)
+    {
+      /* Pre-auth EAPOL: send the descriptor+frame as a TX_DATA_FRAME
+       * command (channel 6) so the CP forwards it on the unauthorized
+       * port instead of dropping it on the raw data channel.
+       */
+
+      return skw_send_cmd(SKW_CMD_TX_DATA_FRAME, g_skw_txbuf + 4, inner,
+                          NULL, NULL);
+    }
+
   eof = SKW_HDR_EOF_TERM;
   g_skw_txbuf[4 + inner + 0] = eof & 0xff;
   g_skw_txbuf[4 + inner + 1] = (eof >> 8) & 0xff;
@@ -2257,5 +2298,50 @@ int rk3576_skw_add_key(uint8_t key_type, uint8_t cipher,
   n += key_len;
 
   return skw_send_cmd(SKW_CMD_ADD_KEY, buf, n, NULL, NULL);
+}
+
+int rk3576_skw_dbg_rx_eapol(uint8_t *buf, int max)
+{
+  int slot;
+  int n;
+
+  if (g_skw_dbg_etail == g_skw_dbg_ehead)
+    {
+      return -1;
+    }
+
+  slot = g_skw_dbg_etail & 7;
+  n = g_skw_dbg_elen[slot];
+  if (n > max)
+    {
+      n = max;
+    }
+
+  memcpy(buf, g_skw_dbg_eapol[slot], n);
+  g_skw_dbg_etail++;
+  return n;
+}
+
+int rk3576_skw_dbg_data_tx(const uint8_t *eapol, int len)
+{
+  extern int rk3576_skw_data_tx(const uint8_t *eth, int ethlen);
+  static uint8_t frame[14 + 256];
+
+  if (len < 0 || len > (int)sizeof(frame) - 14)
+    {
+      return -E2BIG;
+    }
+
+  memcpy(frame, g_skw_bssid, 6);          /* dst = AP */
+  memcpy(frame + 6, g_skw_mac, 6);        /* src = STA */
+  frame[12] = 0x88;
+  frame[13] = 0x8e;                       /* EtherType EAPOL */
+  memcpy(frame + 14, eapol, len);
+  return rk3576_skw_data_tx(frame, 14 + len);
+}
+
+int rk3576_skw_dbg_connect(const char *ssid)
+{
+  return rk3576_skw_connect(ssid);
 }
 

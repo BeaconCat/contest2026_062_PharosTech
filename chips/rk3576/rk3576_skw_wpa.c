@@ -117,7 +117,7 @@
 
 /* skw_key_params.cipher_type: CCMP. */
 
-#define SKW_CIPHER_CCMP      4
+#define SKW_CIPHER_CCMP      8            /* CP internal enum, not IEEE suite */
 
 /* RSN information element the supplicant advertises in msg2 (WPA2-PSK,
  * CCMP pairwise + group, PSK AKM) -- matches the association request.
@@ -519,7 +519,7 @@ static int wpa_send_msg2(struct rk3576_wpa_s *w)
   uint16_t ki = KI_VERSION_SHA1 | KI_PAIRWISE | KI_MIC;
 
   memset(kd, 0, sizeof(kd));
-  kd[0] = 2;                                 /* 802.1X version */
+  kd[0] = 1;                                 /* 802.1X version (msg2=1) */
   kd[1] = EAPOL_TYPE_KEY;
   kd[2] = ((kdlen - EAPOL_HDR_LEN) >> 8) & 0xff;
   kd[3] = (kdlen - EAPOL_HDR_LEN) & 0xff;
@@ -527,7 +527,7 @@ static int wpa_send_msg2(struct rk3576_wpa_s *w)
   kd[KD_OFF_KEYINFO] = (ki >> 8) & 0xff;
   kd[KD_OFF_KEYINFO + 1] = ki & 0xff;
   kd[KD_OFF_KEYLEN] = 0;
-  kd[KD_OFF_KEYLEN + 1] = WPA_TK_LEN;        /* 16 for CCMP */
+  kd[KD_OFF_KEYLEN + 1] = 0;                  /* msg2 key length must be 0 */
   memcpy(kd + KD_OFF_REPLAY, w->replay, 8);
   memcpy(kd + KD_OFF_NONCE, w->snonce, WPA_NONCE_LEN);
   kd[KD_OFF_DATALEN] = (datalen >> 8) & 0xff;

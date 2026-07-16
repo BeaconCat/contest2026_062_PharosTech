@@ -40,6 +40,10 @@
 int rk3576_skw_dbg_cmd52(int write, unsigned reg, unsigned val,
                          unsigned *out);
 int rk3576_skw_dbg_cmd53_read(unsigned char *buf, int len, int *actual);
+int rk3576_skw_dbg_dt_read(unsigned char *buf, int len, int *actual);
+int rk3576_skw_dbg_rx_eapol(unsigned char *buf, int max);
+int rk3576_skw_dbg_data_tx(const unsigned char *eth, int len);
+int rk3576_skw_dbg_connect(const char *ssid);
 int rk3576_skw_dbg_cmd53_write(const unsigned char *buf, int len);
 int rk3576_skw_dbg_latch(unsigned cpaddr);
 int rk3576_skw_dbg_bringup(void);
@@ -95,6 +99,27 @@ int main(int argc, FAR char *argv[])
       int ret = rk3576_skw_dbg_cmd52(1, reg, val, NULL);
 
       printf("w52 %03x <= %02x (%d)\n", reg, val, ret);
+    }
+  else if (strcmp(argv[1], "r53d") == 0 && argc >= 3)
+    {
+      int len = strtoul(argv[2], NULL, 0);
+      int actual = 0;
+      int ret;
+
+      if (len > (int)sizeof(buf))
+        {
+          len = sizeof(buf);
+        }
+
+      memset(buf, 0, sizeof(buf));
+      ret = rk3576_skw_dbg_dt_read(buf, len, &actual);
+      printf("r53d ret=%d actual=%d\n", ret, actual);
+      for (i = 0; i < len && i < 64; i++)
+        {
+          printf("%02x%s", buf[i], ((i + 1) % 16) ? " " : "\n");
+        }
+
+      printf("\n");
     }
   else if (strcmp(argv[1], "r53") == 0 && argc >= 3)
     {
@@ -159,6 +184,33 @@ int main(int argc, FAR char *argv[])
 
       printf("cmd %u ret=%d\n", id,
              rk3576_skw_dbg_sendcmd(id, buf, n));
+    }
+  else if (strcmp(argv[1], "wconn") == 0 && argc >= 3)
+    {
+      printf("wconn %s = %d\n", argv[2], rk3576_skw_dbg_connect(argv[2]));
+    }
+  else if (strcmp(argv[1], "wrx") == 0)
+    {
+      int n = rk3576_skw_dbg_rx_eapol(buf, sizeof(buf));
+      if (n < 0)
+        {
+          printf("wrx empty\n");
+        }
+      else
+        {
+          printf("wrx %d\n", n);
+          for (i = 0; i < n; i++)
+            {
+              printf("%02x%s", buf[i], ((i + 1) % 16) ? " " : "\n");
+            }
+
+          printf("\n");
+        }
+    }
+  else if (strcmp(argv[1], "wtx") == 0 && argc >= 3)
+    {
+      int n = hex2buf(argv[2], buf, sizeof(buf));
+      printf("wtx %d = %d\n", n, rk3576_skw_dbg_data_tx(buf, n));
     }
   else
     {
