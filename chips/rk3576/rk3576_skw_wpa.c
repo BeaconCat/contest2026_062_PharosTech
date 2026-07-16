@@ -673,7 +673,29 @@ static void wpa_handle_msg1(struct rk3576_wpa_s *w, const uint8_t *kd,
 
   memcpy(w->replay, kd + KD_OFF_REPLAY, 8);
   memcpy(w->anonce, kd + KD_OFF_NONCE, WPA_NONCE_LEN);
-  getrandom(w->snonce, WPA_NONCE_LEN, 0);
+
+  /* SNonce is fixed for the whole handshake: a message 1 retransmit must
+   * reuse it (regenerating produces a fresh PTK the AP has not seen).
+   */
+
+  {
+    int zi;
+    int allzero = 1;
+
+    for (zi = 0; zi < WPA_NONCE_LEN; zi++)
+      {
+        if (w->snonce[zi] != 0)
+          {
+            allzero = 0;
+            break;
+          }
+      }
+
+    if (allzero)
+      {
+        getrandom(w->snonce, WPA_NONCE_LEN, 0);
+      }
+  }
 
   if (wpa_derive_ptk(w) < 0)
     {
@@ -686,7 +708,6 @@ static void wpa_handle_msg1(struct rk3576_wpa_s *w, const uint8_t *kd,
   {
     int r2 = wpa_send_msg2(w);
 
-    syslog(LOG_ERR, "WPA: msg2 ret=%d\n", r2);
     if (r2 < 0)
     {
       w->state = WPA_STATE_FAILED;
@@ -770,7 +791,7 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
  * Name: rk3576_skw_wpa_eapol_input
  ****************************************************************************/
 
-void rk3576_skw_wpa_eapol_input(const uint8_t *data, int len)
+static void wpa_process(const uint8_t *data, int len)
 {
   struct rk3576_wpa_s *w = &g_wpa;
   uint16_t ki;
@@ -800,6 +821,28 @@ void rk3576_skw_wpa_eapol_input(const uint8_t *data, int len)
     {
       wpa_handle_msg3(w, data, len);
     }
+}
+
+/* EAPOL arrives on the rx thread; process on the connect() thread so
+ * msg2/msg4/ADD_KEY use the main-thread command path (waits for ACK,
+ * no deadlock, frame actually transmitted).
+ */
+
+static uint8_t g_wpa_rx[256];
+static volatile int g_wpa_rxlen;
+static volatile bool g_wpa_rxpending;
+
+void rk3576_skw_wpa_eapol_input(const uint8_t *data, int len)
+{
+  if (g_wpa.state == WPA_STATE_IDLE || len <= 0 ||
+      len > (int)sizeof(g_wpa_rx))
+    {
+      return;
+    }
+
+  memcpy(g_wpa_rx, data, len);
+  g_wpa_rxlen = len;
+  g_wpa_rxpending = true;
 }
 
 /****************************************************************************
@@ -854,12 +897,39 @@ int rk3576_skw_wpa_connect(const char *ssid, const char *passphrase)
 
   /* Wait for the 4-way handshake to complete (driven by EAPOL RX). */
 
-  ret = nxsem_tickwait(&w->done, MSEC2TICK(5000));
-  if (ret < 0)
+  {
+    int waited;
+
+    for (waited = 0; waited < 8000; waited += 10)
+      {
+        if (g_wpa_rxpending)
+          {
+            uint8_t local[256];
+            int llen = g_wpa_rxlen;
+
+            g_wpa_rxpending = false;
+            if (llen > (int)sizeof(local))
+              {
+                llen = sizeof(local);
+              }
+
+            memcpy(local, g_wpa_rx, llen);
+            wpa_process(local, llen);
+          }
+
+        if (w->state == WPA_STATE_DONE || w->state == WPA_STATE_FAILED)
+          {
+            break;
+          }
+
+        up_mdelay(10);
+      }
+  }
+
+  if (w->state != WPA_STATE_DONE)
     {
-      wlerr("WPA: 4-way handshake timeout\n");
       w->state = WPA_STATE_FAILED;
-      return -ETIMEDOUT;
+      return w->result < 0 ? w->result : -ETIMEDOUT;
     }
 
   return w->result;
