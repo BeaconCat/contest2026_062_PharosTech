@@ -40,9 +40,9 @@
  * Included Files
  ****************************************************************************/
 
+#include <inttypes.h>
 #include <nuttx/config.h>
 #include <stdint.h>
-#include <inttypes.h>
 #include <syslog.h>
 
 #include <nuttx/arch.h>
@@ -53,96 +53,114 @@
 
 /* On-board eMMC host base (mmc@2a330000, Synopsys dwcmshc / SDHCI 3.0). */
 
-#define EMMC_BASE   0x2a330000ul
+#define EMMC_BASE 0x2a330000ul
 
 /* SDHCI 3.0 register offsets (from EMMC_BASE).  Only the subset the probe
  * needs is inlined here; the full map lives in the board-private header
  * chips/rk3576/hardware/rk3576_emmc.h.
  */
 
-#define RK3576_EMMC_BLOCKSIZE      0x004  /* Block size (16)              */
-#define RK3576_EMMC_BLOCKCOUNT     0x006  /* Block count (16)             */
-#define RK3576_EMMC_ARG1           0x008  /* Argument 1 (32)              */
-#define RK3576_EMMC_XFERMODE       0x00c  /* Transfer mode (16)           */
-#define RK3576_EMMC_CMD            0x00e  /* Command (16)                 */
-#define RK3576_EMMC_RESP0          0x010  /* Response 0 (32)              */
-#define RK3576_EMMC_RESP1          0x014  /* Response 1 (32)              */
-#define RK3576_EMMC_RESP2          0x018  /* Response 2 (32)              */
-#define RK3576_EMMC_RESP3          0x01c  /* Response 3 (32)              */
-#define RK3576_EMMC_BUFFER         0x020  /* Buffer data port (32)        */
-#define RK3576_EMMC_PRESENT        0x024  /* Present state (32)           */
-#define RK3576_EMMC_HOSTCTRL1      0x028  /* Host control 1 (8)           */
-#define RK3576_EMMC_PWRCTRL        0x029  /* Power control (8)            */
-#define RK3576_EMMC_CLKCTRL        0x02c  /* Clock control (16)           */
-#define RK3576_EMMC_TOUTCTRL       0x02e  /* Timeout control (8)          */
-#define RK3576_EMMC_SWRESET        0x02f  /* Software reset (8)           */
-#define RK3576_EMMC_NINTSTS        0x030  /* Normal interrupt status (16) */
-#define RK3576_EMMC_EINTSTS        0x032  /* Error interrupt status (16)  */
-#define RK3576_EMMC_NINTEN         0x034  /* Normal int status en (16)    */
-#define RK3576_EMMC_EINTEN         0x036  /* Error int status en (16)     */
-#define RK3576_EMMC_HOSTCTRL2      0x03e  /* Host control 2 (16)          */
-#define RK3576_EMMC_CAP0           0x040  /* Capabilities lower (32)      */
-#define RK3576_EMMC_HOSTVER        0x0fe  /* Host controller version (16) */
+#define RK3576_EMMC_BLOCKSIZE  0x004 /* Block size (16)              */
+#define RK3576_EMMC_BLOCKCOUNT 0x006 /* Block count (16)             */
+#define RK3576_EMMC_ARG1       0x008 /* Argument 1 (32)              */
+#define RK3576_EMMC_XFERMODE   0x00c /* Transfer mode (16)           */
+#define RK3576_EMMC_CMD        0x00e /* Command (16)                 */
+#define RK3576_EMMC_RESP0      0x010 /* Response 0 (32)              */
+#define RK3576_EMMC_RESP1      0x014 /* Response 1 (32)              */
+#define RK3576_EMMC_RESP2      0x018 /* Response 2 (32)              */
+#define RK3576_EMMC_RESP3      0x01c /* Response 3 (32)              */
+#define RK3576_EMMC_BUFFER     0x020 /* Buffer data port (32)        */
+#define RK3576_EMMC_PRESENT    0x024 /* Present state (32)           */
+#define RK3576_EMMC_HOSTCTRL1  0x028 /* Host control 1 (8)           */
+#define RK3576_EMMC_PWRCTRL    0x029 /* Power control (8)            */
+#define RK3576_EMMC_CLKCTRL    0x02c /* Clock control (16)           */
+#define RK3576_EMMC_TOUTCTRL   0x02e /* Timeout control (8)          */
+#define RK3576_EMMC_SWRESET    0x02f /* Software reset (8)           */
+#define RK3576_EMMC_NINTSTS    0x030 /* Normal interrupt status (16) */
+#define RK3576_EMMC_EINTSTS    0x032 /* Error interrupt status (16)  */
+#define RK3576_EMMC_NINTEN     0x034 /* Normal int status en (16)    */
+#define RK3576_EMMC_EINTEN     0x036 /* Error int status en (16)     */
+#define RK3576_EMMC_HOSTCTRL2  0x03e /* Host control 2 (16)          */
+#define RK3576_EMMC_CAP0       0x040 /* Capabilities lower (32)      */
+#define RK3576_EMMC_HOSTVER    0x0fe /* Host controller version (16) */
 
 /* SWRESET (0x2f) -- software reset bits. */
 
-#define EMMC_SWRESET_ALL           (1 << 0)  /* Reset the whole host      */
+#define EMMC_SWRESET_ALL (1 << 0) /* Reset the whole host      */
 
 /* PWRCTRL (0x29) -- power control. */
 
-#define EMMC_PWRCTRL_ON            (1 << 0)  /* SD bus power on           */
-#define EMMC_PWRCTRL_1V8           (0x5 << 1) /* Bus voltage 1.8 V        */
+#define EMMC_PWRCTRL_ON  (1 << 0)   /* SD bus power on           */
+#define EMMC_PWRCTRL_1V8 (0x5 << 1) /* Bus voltage 1.8 V        */
 
 /* CLKCTRL (0x2c) -- internal clock + SD clock. */
 
-#define EMMC_CLKCTRL_INTLEN        (1 << 0)  /* Internal clock enable     */
-#define EMMC_CLKCTRL_INTSTABLE     (1 << 1)  /* Internal clock stable     */
-#define EMMC_CLKCTRL_SDCLKEN       (1 << 2)  /* SD clock enable           */
-#define EMMC_CLKCTRL_SDCLKFREQ_SHIFT   8     /* SDCLK freq select [15:8]  */
+#define EMMC_CLKCTRL_INTLEN          (1 << 0) /* Internal clock enable     */
+#define EMMC_CLKCTRL_INTSTABLE       (1 << 1) /* Internal clock stable     */
+#define EMMC_CLKCTRL_SDCLKEN         (1 << 2) /* SD clock enable           */
+#define EMMC_CLKCTRL_SDCLKFREQ_SHIFT 8        /* SDCLK freq select [15:8]  */
 
 /* PRESENT (0x24) -- present state. */
 
-#define EMMC_PRESENT_CMDINHIBIT    (1 << 0)  /* Command inhibit (CMD)     */
-#define EMMC_PRESENT_DATINHIBIT    (1 << 1)  /* Command inhibit (DAT)     */
+#define EMMC_PRESENT_CMDINHIBIT (1 << 0) /* Command inhibit (CMD)     */
+#define EMMC_PRESENT_DATINHIBIT (1 << 1) /* Command inhibit (DAT)     */
 
 /* XFERMODE (0x0c) -- transfer mode. */
 
-#define EMMC_XFERMODE_DTDSEL       (1 << 4)  /* 1 = read (card to host)   */
+#define EMMC_XFERMODE_DTDSEL (1 << 4) /* 1 = read (card to host)   */
 
 /* CMD (0x0e) -- command register. */
 
-#define EMMC_CMD_RESP_NONE         (0 << 0)  /* No response               */
-#define EMMC_CMD_RESP_LONG         (1 << 0)  /* 136-bit response          */
-#define EMMC_CMD_RESP_SHORT        (2 << 0)  /* 48-bit response           */
-#define EMMC_CMD_RESP_SHORT_BUSY   (3 << 0)  /* 48-bit response with busy */
-#define EMMC_CMD_CRCEN             (1 << 3)  /* Command CRC check enable   */
-#define EMMC_CMD_IDXEN             (1 << 4)  /* Command index check enable */
-#define EMMC_CMD_DATA              (1 << 5)  /* Data present               */
-#define EMMC_CMD_INDEX_SHIFT       8         /* Command index [13:8]       */
+#define EMMC_CMD_RESP_NONE       (0 << 0) /* No response               */
+#define EMMC_CMD_RESP_LONG       (1 << 0) /* 136-bit response          */
+#define EMMC_CMD_RESP_SHORT      (2 << 0) /* 48-bit response           */
+#define EMMC_CMD_RESP_SHORT_BUSY (3 << 0) /* 48-bit response with busy */
+#define EMMC_CMD_CRCEN           (1 << 3) /* Command CRC check enable   */
+#define EMMC_CMD_IDXEN           (1 << 4) /* Command index check enable */
+#define EMMC_CMD_DATA            (1 << 5) /* Data present               */
+#define EMMC_CMD_INDEX_SHIFT     8        /* Command index [13:8]       */
 
 /* NINTSTS (0x30) -- normal interrupt bits. */
 
-#define EMMC_NINT_CMDDONE          (1 << 0)  /* Command complete          */
-#define EMMC_NINT_XFERDONE         (1 << 1)  /* Transfer complete         */
-#define EMMC_NINT_BUFRDRDY         (1 << 5)  /* Buffer read ready         */
-#define EMMC_NINT_ERR              (1 << 15) /* Error interrupt           */
+#define EMMC_NINT_CMDDONE  (1 << 0)  /* Command complete          */
+#define EMMC_NINT_XFERDONE (1 << 1)  /* Transfer complete         */
+#define EMMC_NINT_BUFRDRDY (1 << 5)  /* Buffer read ready         */
+#define EMMC_NINT_ERR      (1 << 15) /* Error interrupt           */
 
 /* eMMC CMD1 argument: sector addressing + all voltage window (0x40FF8000).
  * Bit30 = sector mode (>2 GB), bits[23:8] = 2.7-3.6 V window.
  */
 
-#define EMMC_OCR_ARG  0x40ff8000
+#define EMMC_OCR_ARG 0x40ff8000
 
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
 
-static inline uint8_t  rd8(uintptr_t o)  { return *(volatile uint8_t  *)(EMMC_BASE + o); }
-static inline uint16_t rd16(uintptr_t o) { return *(volatile uint16_t *)(EMMC_BASE + o); }
-static inline uint32_t rd32(uintptr_t o) { return *(volatile uint32_t *)(EMMC_BASE + o); }
-static inline void wr8(uintptr_t o, uint8_t v)   { *(volatile uint8_t  *)(EMMC_BASE + o) = v; }
-static inline void wr16(uintptr_t o, uint16_t v) { *(volatile uint16_t *)(EMMC_BASE + o) = v; }
-static inline void wr32(uintptr_t o, uint32_t v) { *(volatile uint32_t *)(EMMC_BASE + o) = v; }
+static inline uint8_t rd8(uintptr_t o)
+{
+  return *(volatile uint8_t *)(EMMC_BASE + o);
+}
+static inline uint16_t rd16(uintptr_t o)
+{
+  return *(volatile uint16_t *)(EMMC_BASE + o);
+}
+static inline uint32_t rd32(uintptr_t o)
+{
+  return *(volatile uint32_t *)(EMMC_BASE + o);
+}
+static inline void wr8(uintptr_t o, uint8_t v)
+{
+  *(volatile uint8_t *)(EMMC_BASE + o) = v;
+}
+static inline void wr16(uintptr_t o, uint16_t v)
+{
+  *(volatile uint16_t *)(EMMC_BASE + o) = v;
+}
+static inline void wr32(uintptr_t o, uint32_t v)
+{
+  *(volatile uint32_t *)(EMMC_BASE + o) = v;
+}
 
 /****************************************************************************
  * Name: emmc_send_cmd
@@ -233,10 +251,9 @@ static int emmc_read_block(uint32_t blkaddr, uint32_t *buf)
   wr16(RK3576_EMMC_EINTSTS, 0xffff);
 
   wr32(RK3576_EMMC_ARG1, blkaddr);
-  wr16(RK3576_EMMC_XFERMODE, EMMC_XFERMODE_DTDSEL);   /* single-block read */
-  wr16(RK3576_EMMC_CMD,
-       (17 << EMMC_CMD_INDEX_SHIFT) | EMMC_CMD_RESP_SHORT | EMMC_CMD_CRCEN |
-       EMMC_CMD_IDXEN | EMMC_CMD_DATA);
+  wr16(RK3576_EMMC_XFERMODE, EMMC_XFERMODE_DTDSEL); /* single-block read */
+  wr16(RK3576_EMMC_CMD, (17 << EMMC_CMD_INDEX_SHIFT) | EMMC_CMD_RESP_SHORT |
+                            EMMC_CMD_CRCEN | EMMC_CMD_IDXEN | EMMC_CMD_DATA);
 
   /* Wait for command complete. */
 
@@ -322,9 +339,9 @@ int main(int argc, char *argv[])
    * still needs a driver.
    */
 
-  ver  = rd16(RK3576_EMMC_HOSTVER);
+  ver = rd16(RK3576_EMMC_HOSTVER);
   cap0 = rd32(RK3576_EMMC_CAP0);
-  basemhz = (cap0 >> 8) & 0xff;   /* CAP0[15:8] = base clock in MHz */
+  basemhz = (cap0 >> 8) & 0xff; /* CAP0[15:8] = base clock in MHz */
 
   syslog(LOG_ERR, "EMMCPROBE: HOSTVER=%04x CAP0=%08" PRIx32 " baseclk=%uMHz\n",
          ver, cap0, (unsigned)basemhz);
@@ -332,7 +349,7 @@ int main(int argc, char *argv[])
   if (ver == 0 || ver == 0xffff)
     {
       syslog(LOG_ERR, "EMMCPROBE: controller not responding -- CRU eMMC clock"
-             " likely gated (needs rk3576_cru_emmc_enable)\n");
+                      " likely gated (needs rk3576_cru_emmc_enable)\n");
       return 1;
     }
 
@@ -372,9 +389,9 @@ int main(int argc, char *argv[])
         }
     }
 
-  wr16(RK3576_EMMC_CLKCTRL,
-       EMMC_CLKCTRL_INTLEN | (0xff << EMMC_CLKCTRL_SDCLKFREQ_SHIFT) |
-       EMMC_CLKCTRL_SDCLKEN);
+  wr16(RK3576_EMMC_CLKCTRL, EMMC_CLKCTRL_INTLEN |
+                                (0xff << EMMC_CLKCTRL_SDCLKFREQ_SHIFT) |
+                                EMMC_CLKCTRL_SDCLKEN);
 
   /* Bus power on at 1.8 V (eMMC is a 1.8 V VCCQ part per the DTS
    * mmc-hs400-1_8v; the identification voltage window is still queried).
@@ -401,18 +418,21 @@ int main(int argc, char *argv[])
    * command line is free before issuing commands.
    */
 
-  syslog(LOG_ERR, "EMMCPROBE: CLKCTRL=%04x PWRCTRL=%02x PRESENT=%08" PRIx32
-         " HOSTCTRL2=%04x\n", rd16(RK3576_EMMC_CLKCTRL),
-         rd8(RK3576_EMMC_PWRCTRL), rd32(RK3576_EMMC_PRESENT),
-         rd16(RK3576_EMMC_HOSTCTRL2));
+  syslog(LOG_ERR,
+         "EMMCPROBE: CLKCTRL=%04x PWRCTRL=%02x PRESENT=%08" PRIx32
+         " HOSTCTRL2=%04x\n",
+         rd16(RK3576_EMMC_CLKCTRL), rd8(RK3576_EMMC_PWRCTRL),
+         rd32(RK3576_EMMC_PRESENT), rd16(RK3576_EMMC_HOSTCTRL2));
 
   /* CMD0 GO_IDLE_STATE (no response). */
 
   if (emmc_send_cmd(0, 0, EMMC_CMD_RESP_NONE) < 0)
     {
-      syslog(LOG_ERR, "EMMCPROBE: CMD0 failed NINT=%04x EINT=%04x PRESENT=%08"
-             PRIx32 "\n", rd16(RK3576_EMMC_NINTSTS),
-             rd16(RK3576_EMMC_EINTSTS), rd32(RK3576_EMMC_PRESENT));
+      syslog(LOG_ERR,
+             "EMMCPROBE: CMD0 failed NINT=%04x EINT=%04x PRESENT=%08" PRIx32
+             "\n",
+             rd16(RK3576_EMMC_NINTSTS), rd16(RK3576_EMMC_EINTSTS),
+             rd32(RK3576_EMMC_PRESENT));
     }
   else
     {
@@ -425,8 +445,7 @@ int main(int argc, char *argv[])
 
   for (i = 0; i < 10; i++)
     {
-      if (emmc_send_cmd(1, EMMC_OCR_ARG,
-                        EMMC_CMD_RESP_SHORT) < 0)
+      if (emmc_send_cmd(1, EMMC_OCR_ARG, EMMC_CMD_RESP_SHORT) < 0)
         {
           syslog(LOG_ERR, "EMMCPROBE: CMD1 no response (try %d) EINT=%04x\n",
                  i, rd16(RK3576_EMMC_EINTSTS));
@@ -439,9 +458,10 @@ int main(int argc, char *argv[])
 
         if (ocr & (1u << 31))
           {
-            syslog(LOG_ERR, "EMMCPROBE: CMD1 OCR=%08" PRIx32
-                   " (ready, %s addressing)  <<< eMMC ALIVE\n", ocr,
-                   (ocr & (1u << 30)) ? "sector" : "byte");
+            syslog(LOG_ERR,
+                   "EMMCPROBE: CMD1 OCR=%08" PRIx32
+                   " (ready, %s addressing)  <<< eMMC ALIVE\n",
+                   ocr, (ocr & (1u << 30)) ? "sector" : "byte");
             ready = 1;
             break;
           }
@@ -473,10 +493,11 @@ int main(int argc, char *argv[])
     }
   else
     {
-      syslog(LOG_ERR, "EMMCPROBE: CID=%08" PRIx32 " %08" PRIx32 " %08" PRIx32
-             " %08" PRIx32 "\n", rd32(RK3576_EMMC_RESP3),
-             rd32(RK3576_EMMC_RESP2), rd32(RK3576_EMMC_RESP1),
-             rd32(RK3576_EMMC_RESP0));
+      syslog(LOG_ERR,
+             "EMMCPROBE: CID=%08" PRIx32 " %08" PRIx32 " %08" PRIx32
+             " %08" PRIx32 "\n",
+             rd32(RK3576_EMMC_RESP3), rd32(RK3576_EMMC_RESP2),
+             rd32(RK3576_EMMC_RESP1), rd32(RK3576_EMMC_RESP0));
     }
 
   /* CMD3 SET_RELATIVE_ADDR: for eMMC the host assigns the RCA (use 1). */
@@ -497,17 +518,18 @@ int main(int argc, char *argv[])
     }
   else
     {
-      syslog(LOG_ERR, "EMMCPROBE: CSD=%08" PRIx32 " %08" PRIx32 " %08" PRIx32
-             " %08" PRIx32 "\n", rd32(RK3576_EMMC_RESP3),
-             rd32(RK3576_EMMC_RESP2), rd32(RK3576_EMMC_RESP1),
-             rd32(RK3576_EMMC_RESP0));
+      syslog(LOG_ERR,
+             "EMMCPROBE: CSD=%08" PRIx32 " %08" PRIx32 " %08" PRIx32
+             " %08" PRIx32 "\n",
+             rd32(RK3576_EMMC_RESP3), rd32(RK3576_EMMC_RESP2),
+             rd32(RK3576_EMMC_RESP1), rd32(RK3576_EMMC_RESP0));
     }
 
   /* CMD7 SELECT_CARD (R1b, arg = RCA << 16) -> transfer state. */
 
   if (emmc_send_cmd(7, 1u << 16,
                     EMMC_CMD_RESP_SHORT_BUSY | EMMC_CMD_CRCEN |
-                    EMMC_CMD_IDXEN) < 0)
+                        EMMC_CMD_IDXEN) < 0)
     {
       syslog(LOG_ERR, "EMMCPROBE: CMD7 (select) failed EINT=%04x\n",
              rd16(RK3576_EMMC_EINTSTS));
@@ -522,16 +544,18 @@ int main(int argc, char *argv[])
 
     if (ret < 0)
       {
-        syslog(LOG_ERR, "EMMCPROBE: read block 0 failed ret=%d NINT=%04x "
-               "EINT=%04x\n", ret, rd16(RK3576_EMMC_NINTSTS),
-               rd16(RK3576_EMMC_EINTSTS));
+        syslog(LOG_ERR,
+               "EMMCPROBE: read block 0 failed ret=%d NINT=%04x "
+               "EINT=%04x\n",
+               ret, rd16(RK3576_EMMC_NINTSTS), rd16(RK3576_EMMC_EINTSTS));
       }
     else
       {
-        syslog(LOG_ERR, "EMMCPROBE: block0 [0..3]=%08" PRIx32 " %08" PRIx32
+        syslog(LOG_ERR,
+               "EMMCPROBE: block0 [0..3]=%08" PRIx32 " %08" PRIx32
                " %08" PRIx32 " %08" PRIx32 " ... [127]=%08" PRIx32
-               "  <<< DATA PATH OK\n", blk[0], blk[1], blk[2], blk[3],
-               blk[127]);
+               "  <<< DATA PATH OK\n",
+               blk[0], blk[1], blk[2], blk[3], blk[127]);
       }
   }
 
