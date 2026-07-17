@@ -746,6 +746,7 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
     }
 
   memcpy(w->replay, kd + KD_OFF_REPLAY, 8);
+  syslog(LOG_ERR, "M3: mic ok\n");
 
   datalen = (kd[KD_OFF_DATALEN] << 8) | kd[KD_OFF_DATALEN + 1];
   if (datalen > 0 && KD_OFF_DATA + datalen <= kdlen)
@@ -757,6 +758,8 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
         }
     }
 
+  syslog(LOG_ERR, "M3: gtk done, send msg4\n");
+
   /* Send msg4 first (acknowledge), then install the keys. */
 
   if (wpa_send_msg4(w) < 0)
@@ -767,9 +770,11 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
       return;
     }
 
+  syslog(LOG_ERR, "M3: msg4 sent, add PTK\n");
   ret = rk3576_skw_add_key(SKW_KEY_PTK, SKW_CIPHER_CCMP, w->aa, 0,
                            w->ptk + WPA_KCK_LEN + WPA_KEK_LEN, WPA_TK_LEN,
                            kd + KD_OFF_RSC);
+  syslog(LOG_ERR, "M3: PTK key done r=%d\n", ret);
   if (ret >= 0 && w->gtk_len > 0)
     {
       ret = rk3576_skw_add_key(SKW_KEY_GTK, SKW_CIPHER_CCMP, w->aa,
@@ -793,6 +798,19 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
 
 static void wpa_process(const uint8_t *data, int len)
 {
+  {
+    int _i;
+    int _n = len < 160 ? len : 160;
+    char _b[3 * 160 + 1];
+
+    for (_i = 0; _i < _n; _i++)
+      {
+        snprintf(_b + _i * 3, 4, "%02x ", data[_i]);
+      }
+
+    syslog(LOG_ERR, "RXEAP len=%d: %s\n", len, _b);
+  }
+
   struct rk3576_wpa_s *w = &g_wpa;
   uint16_t ki;
 

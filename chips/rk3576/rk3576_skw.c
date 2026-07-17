@@ -236,6 +236,7 @@ static volatile unsigned g_skw_dbg_etail;
 static uint8_t g_skw_mac[6];
 static uint8_t g_skw_bssid[6];
 static uint8_t g_skw_peer_idx;
+static uint8_t g_skw_lmac;
 
 /* Scan result cache (SSID/BSSID/channel/rssi), filled from SCAN_REPORT
  * events, drained by rk3576_skw_scan().
@@ -249,6 +250,7 @@ struct skw_bss_s
   uint8_t  channel;
   int16_t  rssi;
   uint16_t capability;             /* beacon capability field */
+  uint16_t beacon_int;             /* beacon interval (TU) */
   uint16_t ie_len;                 /* beacon IE blob length */
   uint8_t  ie[256];                /* beacon IEs (from offset 36) */
 };
@@ -801,6 +803,10 @@ static void skw_handle_loopcheck(const uint8_t *pl, int len)
 
 static void skw_handle_event(uint8_t id, const uint8_t *ev, int len)
 {
+  syslog(LOG_ERR, "EVT id=%d len=%d %02x %02x %02x %02x\n", id, len,
+         len > 0 ? ev[0] : 0, len > 1 ? ev[1] : 0,
+         len > 2 ? ev[2] : 0, len > 3 ? ev[3] : 0);
+
   if (id == SKW_EVENT_SCAN_CMPL)
     {
       g_skw_scan_done = true;
@@ -882,6 +888,7 @@ static void skw_handle_event(uint8_t id, const uint8_t *ev, int len)
        * at offset 34, IEs from offset 36.
        */
 
+      bss->beacon_int = mgmt[32] | (mgmt[33] << 8);
       bss->capability = mgmt[34] | (mgmt[35] << 8);
       bss->ie_len = (mlen - 36 > (int)sizeof(bss->ie)) ?
                     sizeof(bss->ie) : (mlen - 36);
@@ -1231,6 +1238,12 @@ static int skw_send_cmd(uint8_t id, const uint8_t *payload, int plen,
   g_skw_txbuf[4 + msg_pad + 2] = (eof >> 16) & 0xff;
   g_skw_txbuf[4 + msg_pad + 3] = (eof >> 24) & 0xff;
 
+ if (id == SKW_CMD_TX_DATA_FRAME)
+    {
+      int _i; int _n = msg_len < 60 ? msg_len : 60; char _b[3*60+1];
+      for (_i = 0; _i < _n; _i++) snprintf(_b+_i*3, 4, "%02x ", g_skw_txbuf[4+_i]);
+      syslog(LOG_ERR, "C15PKT msglen=%d: %s\n", msg_len, _b);
+    }
   ret = skw_cmd53_write(1, SKW_PK_WINDOW, false, g_skw_txbuf, padded);
 #ifdef CONFIG_RK3576_SKW_DEBUG
   syslog(LOG_ERR, "SKW: tx cmd id=%u seq=%u msglen=%d padded=%d wr=%d\n",
@@ -1803,6 +1816,8 @@ static int skw_connect(const struct skw_bss_s *bss)
   buf[1] = bss->channel;                        /* center_chn1 (20 MHz) */
   buf[3] = 0;                                   /* bandwidth 20 MHz */
   buf[4] = 0;                                   /* band 2.4 GHz */
+  buf[5] = bss->beacon_int & 0xff;              /* beacon_interval u16 */
+  buf[6] = (bss->beacon_int >> 8) & 0xff;
   buf[7] = bss->capability & 0xff;              /* capability u16 */
   buf[8] = (bss->capability >> 8) & 0xff;
   memcpy(buf + 11, bss->bssid, 6);              /* bssid */
@@ -1839,8 +1854,12 @@ static int skw_connect(const struct skw_bss_s *bss)
     /* JOIN ACK returns skw_join_resp {peer_idx,lmac_id,inst,mcast_idx}. */
 
     g_skw_peer_idx = (jrlen > 0) ? jresp[0] : 0;
-    syslog(LOG_INFO, "SKW: JOIN ok status=%d peer_idx=%d\n", ret,
-           jrlen > 0 ? jresp[0] : -1);
+    g_skw_lmac = (jrlen > 1) ? (jresp[1] & 0x3) : 0;
+    syslog(LOG_ERR, "SKW: JOIN resp len=%d %02x %02x %02x %02x "
+           "peer_idx=%d lmac=%d\n", jrlen,
+           jrlen > 0 ? jresp[0] : 0, jrlen > 1 ? jresp[1] : 0,
+           jrlen > 2 ? jresp[2] : 0, jrlen > 3 ? jresp[3] : 0,
+           g_skw_peer_idx, g_skw_lmac);
   }
 
   up_mdelay(50);
@@ -2210,7 +2229,7 @@ int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
 
   /* word1: msdu_len:12 lmac_id:2 rsv:2 */
 
-  w1 = ethlen & 0x0fff;
+  w1 = (ethlen & 0x0fff) | ((uint16_t)(g_skw_lmac & 0x3) << 12);
   g_skw_txbuf[6] = w1 & 0xff;
   g_skw_txbuf[7] = (w1 >> 8) & 0xff;
 
@@ -2228,13 +2247,32 @@ int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
 
   if (ethertype == 0x888e)
     {
-      /* Pre-auth EAPOL: send the descriptor+frame as a TX_DATA_FRAME
-       * command (channel 6) so the CP forwards it on the unauthorized
-       * port instead of dropping it on the raw data channel.
+      int di;
+      static char db[3 * 160 + 1];
+      int dn = inner < 160 ? inner : 160;
+
+      for (di = 0; di < dn; di++)
+        {
+          snprintf(db + di * 3, 4, "%02x ", g_skw_txbuf[4 + di]);
+        }
+
+      syslog(LOG_ERR, "TXD15 len=%d: %s\n", inner, db);
+
+      /* Pre-auth EAPOL goes on the command engine (cmd15): the CP uses the
+       * eth_type=0x888e in the desc header to egress it unencrypted.
+       *
+       * skw_send_cmd() reuses g_skw_txbuf as its own scratch and memsets it
+       * before copying the payload; passing g_skw_txbuf+4 as the payload
+       * would alias that scratch and get wiped.  Copy the frame out first.
        */
 
-      return skw_send_cmd(SKW_CMD_TX_DATA_FRAME, g_skw_txbuf + 4, inner,
-                          NULL, NULL);
+      {
+        static uint8_t eapbuf[256];
+        int cp = inner < (int)sizeof(eapbuf) ? inner : (int)sizeof(eapbuf);
+
+        memcpy(eapbuf, g_skw_txbuf + 4, cp);
+        return skw_send_cmd(SKW_CMD_TX_DATA_FRAME, eapbuf, cp, NULL, NULL);
+      }
     }
 
   eof = SKW_HDR_EOF_TERM;
