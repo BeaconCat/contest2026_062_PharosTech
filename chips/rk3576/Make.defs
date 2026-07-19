@@ -42,4 +42,9 @@ endif
 ifeq ($(CONFIG_RK3576_SKW),y)
 CHIP_CSRCS += rk3576_skw.c
 CHIP_CSRCS += rk3576_skw_wpa.c
+CHIP_CSRCS += rk3576_skw_netdev.c
+endif
+
+ifeq ($(CONFIG_RK3576_USBDEV),y)
+CHIP_CSRCS += rk3576_usbdev.c
 endif

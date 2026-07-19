@@ -107,6 +107,7 @@
 #define SKW_INT_DTO         (1u << 3)
 #define SKW_INT_RTO         (1u << 8)
 #define SKW_INT_VOLTSW      (1u << 12)
+#define SKW_INT_SDIO        (1u << 16)    /* SDIO card interrupt (DAT1) */
 #define SKW_INT_DATAERR     0x0000ae80    /* DCRC/DRTO/SBE/EBE/FRUN/HTO */
 
 #define SKW_CLK_UPDATE      0x80202000    /* start | update-clk-only | wait */
@@ -118,8 +119,12 @@
 #define SKW_DT_WINDOW       0x0f          /* func1 DT data window */
 #define SKW_PK_WINDOW       0x20          /* func1 packet window */
 #define SKW_REG_INTX        0x05          /* CCCR INTx pending */
+#define SKW_REG_INT_EXT     0x16          /* SDIO extended interrupt status */
+#define SKW_REG_CP2AP_FIFO  0x181         /* CP RX FIFO non-empty indication (poll data-ready) */
 #define SKW_REG_DMA_TYPE    0x165         /* 1 = ADMA */
 #define SKW_REG_SLP         0x167         /* 1 = sleep disabled */
+#define SKW_REG_RX_FTL0     0x16c         /* RX channel flow control (ports 0-7) */
+#define SKW_REG_RX_FTL1     0x16d         /* RX channel flow control (ports 8+) */
 #define SKW_REG_DL_DONE     0x160         /* download-done / boot signal */
 #define SKW_REG_CPLOG_SW    0x166         /* CP-log-to-AP switch */
 #define SKW_REG_AP2CP_IRQ   0x1b0         /* AP->CP doorbell */
@@ -149,7 +154,8 @@
  * eof:1 | channel:8.  Max packet 0x600; RX read granularity 512.
  */
 
-#define SKW_PAC_SIZE        0x600
+#define SKW_PAC_SIZE        0x600          /* v2 MAX2_PAC_SIZE = 1536 */
+#define SKW_NSIZE_OFF       1024          /* v2 ADMA next_size region */
 #define SKW_HDR(ch, len)    (((uint32_t)(ch) << 24) | \
                              ((uint32_t)(len) & 0xffff))
 #define SKW_HDR_EOF_TERM    (1u << 23)         /* trailing eof-only header */
@@ -162,6 +168,7 @@
 #define SKW_CH_LOOPCHECK    1
 #define SKW_CH_WIFI_CMD     6
 #define SKW_CH_WIFI_DATA    7
+#define SKW_CH_WIFI_DATA1   8
 
 /* skw_msg (8-byte command header). */
 
@@ -233,10 +240,16 @@ static uint8_t g_skw_dbg_eapol[8][256];
 static volatile int g_skw_dbg_elen[8];
 static volatile unsigned g_skw_dbg_ehead;
 static volatile unsigned g_skw_dbg_etail;
+
+/* Last CP2AP FIFO level snapshot, read by the rx thread to gate work. */
+
+volatile uint8_t g_skw_fifo_last;
+
 static uint8_t g_skw_mac[6];
 static uint8_t g_skw_bssid[6];
 static uint8_t g_skw_peer_idx;
 static uint8_t g_skw_lmac;
+static uint8_t g_skw_mcast;
 
 /* Scan result cache (SSID/BSSID/channel/rssi), filled from SCAN_REPORT
  * events, drained by rk3576_skw_scan().
@@ -803,10 +816,6 @@ static void skw_handle_loopcheck(const uint8_t *pl, int len)
 
 static void skw_handle_event(uint8_t id, const uint8_t *ev, int len)
 {
-  syslog(LOG_ERR, "EVT id=%d len=%d %02x %02x %02x %02x\n", id, len,
-         len > 0 ? ev[0] : 0, len > 1 ? ev[1] : 0,
-         len > 2 ? ev[2] : 0, len > 3 ? ev[3] : 0);
-
   if (id == SKW_EVENT_SCAN_CMPL)
     {
       g_skw_scan_done = true;
@@ -993,7 +1002,16 @@ static void skw_handle_wifi_cmd(const uint8_t *pl, int len)
 static void skw_data_rx(const uint8_t *pl, int len)
 {
   extern void rk3576_skw_wpa_eapol_input(const uint8_t *data, int dlen);
+#ifdef CONFIG_NET
+  extern void rk3576_skw_net_input(const uint8_t *frame, int flen);
+#endif
   int i;
+
+  /* The CP prepends an RX descriptor of variable length, so locate the
+   * 802.3 frame by its EtherType.  EAPOL (0x888e) is matched first in its
+   * own pass so a MAC byte that happens to equal an IP/ARP EtherType can
+   * never mis-route a 4-way handshake frame away from the supplicant.
+   */
 
   for (i = 12; i + 2 <= len; i++)
     {
@@ -1022,6 +1040,28 @@ static void skw_data_rx(const uint8_t *pl, int len)
           return;
         }
     }
+
+#ifdef CONFIG_NET
+  /* Not EAPOL: dispatch IPv4/ARP/IPv6 data frames to the netdev. */
+
+  for (i = 12; i + 2 <= len; i++)
+    {
+      uint16_t et = (pl[i] << 8) | pl[i + 1];
+
+      if (et == 0x0800 || et == 0x0806 || et == 0x86dd)
+        {
+          const uint8_t *eth = pl + (i - 12);
+          int ethlen = len - (i - 12);
+
+          if (ethlen > 14)
+            {
+              rk3576_skw_net_input(eth, ethlen);
+            }
+
+          return;
+        }
+    }
+#endif
 }
 
 /****************************************************************************
@@ -1052,7 +1092,7 @@ static int skw_rx_burst(int buf_num)
       buf_num = 8;
     }
 
-  readlen = SKW_PAC_SIZE * buf_num + 512;
+  readlen = SKW_PAC_SIZE * buf_num + SKW_NSIZE_OFF;
 
   ret = skw_cmd53_read(1, SKW_PK_WINDOW, false, g_skw_rxbuf, readlen);
   if (ret < 0)
@@ -1062,7 +1102,7 @@ static int skw_rx_burst(int buf_num)
 
   /* Walk packets on the 0x600 stride. */
 
-  for (off = 0; off + 4 <= readlen; off += SKW_PAC_SIZE)
+  for (off = 0; off + 4 <= SKW_PAC_SIZE * buf_num; off += SKW_PAC_SIZE)
     {
       const uint8_t *p = g_skw_rxbuf + off;
       uint32_t hdr = p[0] | (p[1] << 8) | (p[2] << 16) |
@@ -1102,6 +1142,10 @@ static int skw_rx_burst(int buf_num)
             break;
 
           case SKW_CH_WIFI_DATA:
+            skw_data_rx(p + 4, plen);
+            break;
+
+          case SKW_CH_WIFI_DATA1:
             skw_data_rx(p + 4, plen);
             break;
 
@@ -1145,6 +1189,51 @@ static int skw_rx_thread(int argc, char **argv)
 
       skw_cmd52(false, 0, SKW_REG_INTX, 0, &intx);
 
+      /* Service the DW-MSHC SDIO card interrupt (DAT1): the CP latches it
+       * when it has queued data; clearing it acks the controller so the CP
+       * re-presents the packet window.  Leaving it latched makes the CP
+       * treat its interrupt as unserviced and withhold data frames.
+       */
+
+      {
+        uint32_t _ri = skw_rd(SKW_RINTSTS);
+        if (_ri & SKW_INT_SDIO)
+          {
+            skw_wr(SKW_RINTSTS, SKW_INT_SDIO);
+          }
+      }
+
+      int _fi_changed = 0;
+      {
+        uint8_t _fi = 0;
+        skw_cmd52(false, 0, SKW_REG_CP2AP_FIFO, 0, &_fi);
+        if (_fi != g_skw_fifo_last)
+          {
+            g_skw_fifo_last = _fi;
+            _fi_changed = 1;
+          }
+      }
+
+      /* Only touch the packet window when the CP signals new RX data via
+       * CP2AP_FIFO_IND (0x181), or while a command ACK is outstanding.
+       * Blindly polling an empty window otherwise desyncs the CP's
+       * presentation so it withholds data frames.
+       */
+
+      {
+        static uint32_t idle_cnt;
+
+        if (!_fi_changed && !g_skw_cmd.waiting)
+          {
+            idle_cnt++;
+            if ((idle_cnt & 7) != 0)          /* ~1 in 8 idle polls reads */
+              {
+                up_mdelay(g_skw_scanning ? 2 : 5);
+                continue;
+              }
+          }
+      }
+
       /* Drain queued packets in a bounded burst, then always yield.  The
        * hard cap + mandatory sleep prevent a runaway spin (a stuck FIFO
        * indication or a persistent read error otherwise pins the CPU and
@@ -1158,12 +1247,23 @@ static int skw_rx_thread(int argc, char **argv)
           g_skw_in_rx = false;
           if (nsize <= 0)
             {
+              uint8_t ext = 0;
+
+              /* Empty window: read the extended interrupt status to
+               * re-arm the CP so it re-presents any queued data frames
+               * (the reference driver does this on every zero-size read).
+               */
+
+              skw_cmd52(false, 0, SKW_REG_INT_EXT, 0, &ext);
               buf_num = 1;
               break;
             }
 
-          buf_num = (nsize >= SKW_PAC_SIZE * 8) ? 8 :
-                    ((nsize + SKW_PAC_SIZE - 1) / SKW_PAC_SIZE);
+          /* rx_nsize is the packet COUNT still queued in the CP (v2
+           * set_packet_num semantics), not a byte count.
+           */
+
+          buf_num = (nsize >= 8) ? 8 : nsize;
         }
 
       /* Poll cadence: brisk while a scan/command is active, relaxed idle. */
@@ -1238,12 +1338,6 @@ static int skw_send_cmd(uint8_t id, const uint8_t *payload, int plen,
   g_skw_txbuf[4 + msg_pad + 2] = (eof >> 16) & 0xff;
   g_skw_txbuf[4 + msg_pad + 3] = (eof >> 24) & 0xff;
 
- if (id == SKW_CMD_TX_DATA_FRAME)
-    {
-      int _i; int _n = msg_len < 60 ? msg_len : 60; char _b[3*60+1];
-      for (_i = 0; _i < _n; _i++) snprintf(_b+_i*3, 4, "%02x ", g_skw_txbuf[4+_i]);
-      syslog(LOG_ERR, "C15PKT msglen=%d: %s\n", msg_len, _b);
-    }
   ret = skw_cmd53_write(1, SKW_PK_WINDOW, false, g_skw_txbuf, padded);
 #ifdef CONFIG_RK3576_SKW_DEBUG
   syslog(LOG_ERR, "SKW: tx cmd id=%u seq=%u msglen=%d padded=%d wr=%d\n",
@@ -1581,6 +1675,13 @@ static int skw_download_and_boot(void)
   skw_cmd52(true, 0, SKW_REG_DMA_TYPE, 0x01, NULL);   /* ADMA */
   skw_cmd52(true, 0, SKW_REG_SLP, 0x01, NULL);        /* sleep disabled */
 
+  /* Un-throttle every RX channel: the CP holds data for a port until its
+   * flow-control bit is clear.
+   */
+
+  skw_cmd52(true, 0, SKW_REG_RX_FTL0, 0x00, NULL);
+  skw_cmd52(true, 0, SKW_REG_RX_FTL1, 0x00, NULL);
+
   ret = skw_dt_stream(dram_addr, g_skw_board->dram, g_skw_board->dram_len);
   if (ret < 0)
     {
@@ -1653,8 +1754,13 @@ static int skw_bringup(void)
    * RINTSTS handling).
    */
 
-  skw_wr(SKW_INTMASK, 0x00000000);
-  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) & ~(1u << 4));
+  /* Enable SDIO card-interrupt detection (INTMASK bit16) so the DW-MSHC
+   * latches RINTSTS[16] when the CP asserts DAT1 to signal queued data.
+   * CTRL.INT_ENABLE stays off: we poll RINTSTS rather than take a GIC IRQ.
+   */
+
+  skw_wr(SKW_INTMASK, 0x00000000);   /* all masked: no GIC IRQ line, RINTSTS still latches for polling */
+  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 4));   /* INT_ENABLE on (golden CTRL=0x10): detect CP DAT1 SDIO interrupt */
 
   /* CMD5 with S18R (request 1.8 V), then the voltage switch if granted. */
 
@@ -1804,6 +1910,24 @@ static int skw_connect(const struct skw_bss_s *bss)
 
   g_skw_conn_evt = -1;
 
+  /* The reference driver sends SET_MIB(DOT11_MODE_HE = false) before JOIN
+   * when the AP is not HE-capable, configuring the CP's PHY mode so it
+   * forwards the AP's (non-HE) data frames to the host.  TLV payload:
+   * plen(u16) + {type(u16), len(u16)} + value(u8).
+   */
+
+  {
+    uint8_t mib[7] =
+    {
+      0x07, 0x00,   /* plen = 7 */
+      0x10, 0x00,   /* type = 16 (SKW_MIB_DOT11_MODE_HE) */
+      0x01, 0x00,   /* len  = 1 */
+      0x00          /* value = false */
+    };
+
+    skw_send_cmd(SKW_CMD_SET_MIB, mib, sizeof(mib), NULL, NULL);
+  }
+
   /* JOIN: skw_join_param + the beacon IEs in the tail.  Field offsets:
    *   0 chan_num, 1 center_chn1, 2 center_chn2, 3 bandwidth, 4 band,
    *   5 beacon_interval(u16), 7 capability(u16), 9 bssid_index,
@@ -1855,6 +1979,7 @@ static int skw_connect(const struct skw_bss_s *bss)
 
     g_skw_peer_idx = (jrlen > 0) ? jresp[0] : 0;
     g_skw_lmac = (jrlen > 1) ? (jresp[1] & 0x3) : 0;
+    g_skw_mcast = (jrlen > 3) ? jresp[3] : 0;
     syslog(LOG_ERR, "SKW: JOIN resp len=%d %02x %02x %02x %02x "
            "peer_idx=%d lmac=%d\n", jrlen,
            jrlen > 0 ? jresp[0] : 0, jrlen > 1 ? jresp[1] : 0,
@@ -1889,6 +2014,24 @@ static int skw_connect(const struct skw_bss_s *bss)
     /* struct: ieee80211_ht_cap(26) + ieee80211_vht_cap(12) + bssid(6) +
      * pre_bssid(6) + req_ie_offset(2) + req_ie_len(2) + req_ie[].
      */
+
+    /* ieee80211_ht_cap: cap_info(2) + ampdu(1) + mcs(16) + ext(2) +
+     * txbf(4) + asel(1).  2.4 GHz 20/40, SGI, SM-PS disabled, 1 stream
+     * (MCS0-7).  Advertising HT enables the AP's QoS data path.
+     */
+
+    static const uint8_t htcap[26] =
+    {
+      0x6e, 0x00,             /* cap_info: 40MHz, SM-PS off, SGI20/40 */
+      0x17,                   /* A-MPDU: 64k, 4us density */
+      0xff, 0x00, 0x00, 0x00, /* MCS rx_mask MCS0-7 */
+      0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00,       /* rx_highest + tx_params */
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00  /* ext + txbf + asel */
+    };
+
+    memcpy(buf, htcap, sizeof(htcap));
 
     int off_bssid = 26 + 12;
     int off_ieoff = off_bssid + 12;
@@ -2152,6 +2295,15 @@ int rk3576_skw_dbg_bringup(void)
   return kickpi_k7_wifi_initialize();
 }
 
+int rk3576_skw_dbg_cplog(int enable)
+{
+  int ret;
+
+  ret = skw_cmd52(true, 0, SKW_REG_CPLOG_SW, enable ? 0x00 : 0x01, NULL);
+  skw_cmd52(true, 0, SKW_REG_AP2CP_IRQ, 1u << 5, NULL);
+  return ret;
+}
+
 int rk3576_skw_dbg_sendcmd(unsigned id, const unsigned char *payload,
                            int plen)
 {
@@ -2189,7 +2341,7 @@ int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
   int inner = 6 + 2 + ethlen;                  /* desc_hdr + conf + frame */
   int pkt_len = 4 + inner + 4;                 /* outer hdr + inner + eof */
   int padded = (pkt_len + 511) & ~511;
-  uint16_t ethertype = (eth[12] << 8) | eth[13];
+
   uint32_t hdr;
   uint32_t eof;
   uint16_t w0;
@@ -2218,7 +2370,10 @@ int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
    * everything else 0 (frame_type SKW_ETHER_FRAME, encry enabled).
    */
 
-  w0 = ((uint16_t)(g_skw_peer_idx & 0x1f)) << 8;
+  {
+    uint8_t lut = (eth[0] & 0x01) ? g_skw_mcast : g_skw_peer_idx;
+    w0 = ((uint16_t)(lut & 0x1f)) << 8;
+  }
 
   /* encry_dis stays 0 (matches the reference driver): the CP sends the
    * frame in the clear until the pairwise key is installed.
@@ -2233,10 +2388,12 @@ int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
   g_skw_txbuf[6] = w1 & 0xff;
   g_skw_txbuf[7] = (w1 >> 8) & 0xff;
 
-  /* word2: eth_type */
+  /* word2: eth_type.  The reference driver stores eth->h_proto verbatim
+   * (network byte order), so copy the frame's EtherType bytes as-is.
+   */
 
-  g_skw_txbuf[8] = ethertype & 0xff;
-  g_skw_txbuf[9] = (ethertype >> 8) & 0xff;
+  g_skw_txbuf[8] = eth[12];
+  g_skw_txbuf[9] = eth[13];
 
   /* skw_tx_desc_conf (2B): checksum offload off. */
 
@@ -2245,19 +2402,17 @@ int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
 
   memcpy(g_skw_txbuf + 12, eth, ethlen);
 
-  if (ethertype == 0x888e)
+  /* Match the reference driver TX filter: only EAPOL and DHCP (UDP ports
+   * 67/68) use the command engine (cmd15); all other data frames use the
+   * ch7 credit-gated data path.
+   */
+
+  {
+  uint16_t et = ((uint16_t)eth[12] << 8) | eth[13];
+  bool filter = (et == 0x888e);
+
+  if (filter)
     {
-      int di;
-      static char db[3 * 160 + 1];
-      int dn = inner < 160 ? inner : 160;
-
-      for (di = 0; di < dn; di++)
-        {
-          snprintf(db + di * 3, 4, "%02x ", g_skw_txbuf[4 + di]);
-        }
-
-      syslog(LOG_ERR, "TXD15 len=%d: %s\n", inner, db);
-
       /* Pre-auth EAPOL goes on the command engine (cmd15): the CP uses the
        * eth_type=0x888e in the desc header to egress it unencrypted.
        *
@@ -2274,6 +2429,7 @@ int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
         return skw_send_cmd(SKW_CMD_TX_DATA_FRAME, eapbuf, cp, NULL, NULL);
       }
     }
+  }
 
   eof = SKW_HDR_EOF_TERM;
   g_skw_txbuf[4 + inner + 0] = eof & 0xff;
@@ -2288,7 +2444,17 @@ int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
       skw_cmd52(true, 0, 0x168, 1, NULL);
     }
 
-  return skw_cmd53_write(1, SKW_PK_WINDOW, false, g_skw_txbuf, padded);
+  {
+    int wret = skw_cmd53_write(1, SKW_PK_WINDOW, false,
+                               g_skw_txbuf, padded);
+
+    /* Ring the AP->CP doorbell so the CP services the queued data
+     * frame (same mechanism the command path uses).
+     */
+
+    skw_cmd52(true, 0, SKW_REG_AP2CP_IRQ, 0x01, NULL);
+    return wret;
+  }
 }
 
 /***************************************************************************

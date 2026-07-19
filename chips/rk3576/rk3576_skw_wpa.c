@@ -628,13 +628,20 @@ static int wpa_extract_gtk(struct rk3576_wpa_s *w, const uint8_t *enc,
     {
       int elen = plain[p + 1];
 
-      if (plain[p] != 0xdd || p + 2 + elen > plainlen)
+      /* AES key-unwrap zero-pads the tail with 0xdd 0x00...; a zero-length
+       * element (or one that overruns) marks the end.  The key data leads
+       * with the RSN IE (0x30) and other KDEs before the GTK KDE, so skip
+       * non-matching elements rather than stopping at the first one.
+       */
+
+      if (elen == 0 || p + 2 + elen > plainlen)
         {
           break;
         }
 
-      if (elen >= 6 && plain[p + 2] == 0x00 && plain[p + 3] == 0x0f &&
-          plain[p + 4] == 0xac && plain[p + 5] == 0x01)
+      if (plain[p] == 0xdd && elen >= 6 && plain[p + 2] == 0x00 &&
+          plain[p + 3] == 0x0f && plain[p + 4] == 0xac &&
+          plain[p + 5] == 0x01)
         {
           /* GTK KDE: keyid(1, low 2 bits) + reserved(1) + GTK[] */
 
@@ -746,7 +753,6 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
     }
 
   memcpy(w->replay, kd + KD_OFF_REPLAY, 8);
-  syslog(LOG_ERR, "M3: mic ok\n");
 
   datalen = (kd[KD_OFF_DATALEN] << 8) | kd[KD_OFF_DATALEN + 1];
   if (datalen > 0 && KD_OFF_DATA + datalen <= kdlen)
@@ -758,8 +764,6 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
         }
     }
 
-  syslog(LOG_ERR, "M3: gtk done, send msg4\n");
-
   /* Send msg4 first (acknowledge), then install the keys. */
 
   if (wpa_send_msg4(w) < 0)
@@ -770,17 +774,77 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
       return;
     }
 
-  syslog(LOG_ERR, "M3: msg4 sent, add PTK\n");
-  ret = rk3576_skw_add_key(SKW_KEY_PTK, SKW_CIPHER_CCMP, w->aa, 0,
-                           w->ptk + WPA_KCK_LEN + WPA_KEK_LEN, WPA_TK_LEN,
-                           kd + KD_OFF_RSC);
-  syslog(LOG_ERR, "M3: PTK key done r=%d\n", ret);
+  /* The pairwise key's TX PN starts fresh at 1 (independent of the AP's
+   * RSC in msg3, which is the group key's receive counter).  The reference
+   * driver seeds pn[0] = 1 for CCMP.
+   */
+
+  {
+    uint8_t ptk_pn[6] =
+    {
+      1, 0, 0, 0, 0, 0
+    };
+
+    ret = rk3576_skw_add_key(SKW_KEY_PTK, SKW_CIPHER_CCMP, w->aa, 0,
+                             w->ptk + WPA_KCK_LEN + WPA_KEK_LEN, WPA_TK_LEN,
+                             ptk_pn);
+  }
   if (ret >= 0 && w->gtk_len > 0)
     {
-      ret = rk3576_skw_add_key(SKW_KEY_GTK, SKW_CIPHER_CCMP, w->aa,
+      /* The GTK is a receive key: its replay baseline is the AP's current
+       * group packet number, carried as the RSC in msg3.  Installing pn = 1
+       * would make the CP reject the AP's next broadcast (PN 1 <= 1) as a
+       * replay, so seed the CCMP replay counter from the RSC instead.
+       */
+
+      /* Group keys install against the broadcast address, matching the
+       * reference driver's addr == NULL branch (mac_addr = ff:..:ff).
+       */
+
+      uint8_t bcast[6] =
+      {
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+      };
+
+      ret = rk3576_skw_add_key(SKW_KEY_GTK, SKW_CIPHER_CCMP, bcast,
                                w->gtk_id, w->gtk, w->gtk_len,
                                kd + KD_OFF_RSC);
     }
+
+  /* Golden post-key sequence (matches the reference driver's authorized
+   * transition): GET_STA + SET_MC_ADDR gate the CP into forwarding data
+   * frames to the host.  Without them the CP queues only the EAPOL frames.
+   */
+
+  {
+    extern int rk3576_skw_dbg_sendcmd(unsigned id,
+                                      const unsigned char *payload, int plen);
+    uint8_t bssid[6];
+    uint8_t mc[15] =
+    {
+      0x02, 0x00,                          /* count = 2 */
+      0x01, 0x00, 0x5e, 0x00, 0x00, 0x01,  /* 224.0.0.1 */
+      0x01, 0x00, 0x5e, 0x00, 0x00, 0xfb   /* 224.0.0.251 (mDNS) */
+    };
+
+    /* skw_setip_param: ip_type(1) + addr; IPv6 = 16 bytes.  The reference
+     * driver sends SET_IP with the interface's IPv6 link-local address at
+     * the COMPLETED transition (before DHCP), which appears to arm the CP
+     * to forward data frames to the host.
+     */
+
+    uint8_t setip[17] =
+    {
+      0x01,                                /* SKW_IP_IPV6 */
+      0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x14, 0x23, 0xd7, 0x19, 0x11, 0x0c, 0x23, 0xbe
+    };
+
+    rk3576_skw_get_bssid(bssid);
+    rk3576_skw_dbg_sendcmd(23, bssid, 6);
+    rk3576_skw_dbg_sendcmd(26, mc, sizeof(mc));
+    rk3576_skw_dbg_sendcmd(16, setip, sizeof(setip));
+  }
 
   w->state = WPA_STATE_DONE;
   w->result = ret >= 0 ? OK : ret;
@@ -798,19 +862,6 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
 
 static void wpa_process(const uint8_t *data, int len)
 {
-  {
-    int _i;
-    int _n = len < 160 ? len : 160;
-    char _b[3 * 160 + 1];
-
-    for (_i = 0; _i < _n; _i++)
-      {
-        snprintf(_b + _i * 3, 4, "%02x ", data[_i]);
-      }
-
-    syslog(LOG_ERR, "RXEAP len=%d: %s\n", len, _b);
-  }
-
   struct rk3576_wpa_s *w = &g_wpa;
   uint16_t ki;
 

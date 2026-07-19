@@ -152,6 +152,11 @@ int rk3576_skw_connect(FAR const char *ssid);
 
 void rk3576_skw_get_mac(uint8_t mac[6]);
 void rk3576_skw_get_bssid(uint8_t bssid[6]);
+void rk3576_skw_get_mac(uint8_t mac[6]);
+#ifdef CONFIG_NET
+int  rk3576_skw_netdev_register(void);
+void rk3576_skw_net_input(const uint8_t *frame, int flen);
+#endif
 int rk3576_skw_data_tx(const uint8_t *eth, int ethlen);
 int rk3576_skw_add_key(uint8_t key_type, uint8_t cipher,
                        const uint8_t *mac, uint8_t key_id,

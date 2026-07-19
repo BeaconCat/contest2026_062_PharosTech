@@ -90,12 +90,28 @@ __asm__(
   "  .incbin \"" CONFIG_KICKPI_K7_WIFI_DRAM "\"\n"
   "  .global g_skw_dram_end\n"
   "g_skw_dram_end:\n"
+  "  .align 4\n"
+  "  .global g_skw_nv_start\n"
+  "g_skw_nv_start:\n"
+  "  .incbin \"SWT6621S_NV_SDIO_ALONE.bin\"\n"
+  "  .global g_skw_nv_end\n"
+  "g_skw_nv_end:\n"
+  "  .align 4\n"
+  "  .global g_skw_calib_start\n"
+  "g_skw_calib_start:\n"
+  "  .incbin \"SWT6621S_SEEKWAVE_R00001.bin\"\n"
+  "  .global g_skw_calib_end\n"
+  "g_skw_calib_end:\n"
   "  .previous\n");
 
 extern const uint8_t g_skw_iram_start[];
 extern const uint8_t g_skw_iram_end[];
 extern const uint8_t g_skw_dram_start[];
 extern const uint8_t g_skw_dram_end[];
+extern const uint8_t g_skw_nv_start[];
+extern const uint8_t g_skw_nv_end[];
+extern const uint8_t g_skw_calib_start[];
+extern const uint8_t g_skw_calib_end[];
 
 static const gpio_pinset_t g_wifi_sdio_pins[] =
 {
@@ -218,6 +234,21 @@ static const struct rk3576_skw_board_s g_kickpi_k7_wifi_board =
 
 int kickpi_k7_wifi_initialize(void)
 {
+  static bool initialized;
+
+  /* The pinmux / 32 kHz / I2C bring-up must run once: re-running it on a
+   * live system races the running driver and hangs the I2C poll.
+   */
+
+  if (initialized)
+    {
+      return (rk3576_skw_state() & 0x2) ? 0 : -EBUSY;
+    }
+
+  initialized = true;
+
+  int ret;
+
   struct rk3576_skw_board_s board = g_kickpi_k7_wifi_board;
   int i;
 
@@ -257,10 +288,22 @@ int kickpi_k7_wifi_initialize(void)
 
   board.iram     = g_skw_iram_start;
   board.iram_len = (int)(g_skw_iram_end - g_skw_iram_start);
+  board.nv       = g_skw_nv_start;
+  board.nv_len   = (int)(g_skw_nv_end - g_skw_nv_start);
+  board.calib    = g_skw_calib_start;
+  board.calib_len = (int)(g_skw_calib_end - g_skw_calib_start);
   board.dram     = g_skw_dram_start;
   board.dram_len = (int)(g_skw_dram_end - g_skw_dram_start);
 
-  return rk3576_skw_initialize(&board);
+  ret = rk3576_skw_initialize(&board);
+#ifdef CONFIG_NET
+  if (ret >= 0)
+    {
+      rk3576_skw_netdev_register();
+    }
+#endif
+
+  return ret;
 }
 
 #endif /* CONFIG_KICKPI_K7_WIFI */

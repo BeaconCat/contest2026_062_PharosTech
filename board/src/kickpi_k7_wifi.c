@@ -247,6 +247,8 @@ int kickpi_k7_wifi_initialize(void)
 
   initialized = true;
 
+  int ret;
+
   struct rk3576_skw_board_s board = g_kickpi_k7_wifi_board;
   int i;
 
@@ -293,7 +295,15 @@ int kickpi_k7_wifi_initialize(void)
   board.dram     = g_skw_dram_start;
   board.dram_len = (int)(g_skw_dram_end - g_skw_dram_start);
 
-  return rk3576_skw_initialize(&board);
+  ret = rk3576_skw_initialize(&board);
+#ifdef CONFIG_NET
+  if (ret >= 0)
+    {
+      rk3576_skw_netdev_register();
+    }
+#endif
+
+  return ret;
 }
 
 #endif /* CONFIG_KICKPI_K7_WIFI */

@@ -49,6 +49,7 @@ int rk3576_skw_dbg_get_mac(unsigned char *m);
 int rk3576_skw_dbg_cmd53_write(const unsigned char *buf, int len);
 int rk3576_skw_dbg_latch(unsigned cpaddr);
 int rk3576_skw_dbg_bringup(void);
+int rk3576_skw_dbg_cplog(int enable);
 int rk3576_skw_dbg_sendcmd(unsigned id, const unsigned char *payload,
                            int plen);
 
@@ -169,6 +170,11 @@ int main(int argc, FAR char *argv[])
         }
 
       printf("mem %p = %08x\n", p, *p);
+    }
+  else if (strcmp(argv[1], "cplog") == 0 && argc >= 3)
+    {
+      printf("cplog=%d ret=%d\n", atoi(argv[2]),
+             rk3576_skw_dbg_cplog(atoi(argv[2])));
     }
   else if (strcmp(argv[1], "br") == 0)
     {
