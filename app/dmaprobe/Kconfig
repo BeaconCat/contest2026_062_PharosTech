@@ -1,0 +1,33 @@
+#
+# For a description of the syntax of this configuration file,
+# see the file kconfig-language.txt in the NuttX tools repository.
+#
+
+config EXAMPLES_DMAPROBE
+	tristate "KICKPI-K7 ARM PL330 DMA controller bring-up probe"
+	default n
+	depends on RK3576_DMA
+	---help---
+		Bring-up self-test for the ARM PL330 (DMA-330) controller on the
+		KICKPI-K7 board (dma-controller@2ab90000).  Acquires a
+		memory-to-memory channel through the generic NuttX DMA framework
+		(DMA_GET_CHAN / DMA_CONFIG / DMA_START), copies a seeded 512-byte
+		source buffer to a cleared destination, waits for the completion
+		interrupt and verifies the copy byte-for-byte.  Run as "dmaprobe"
+		from NSH and observe the result on the console / syslog.
+
+if EXAMPLES_DMAPROBE
+
+config EXAMPLES_DMAPROBE_PROGNAME
+	string "Program name"
+	default "dmaprobe"
+
+config EXAMPLES_DMAPROBE_PRIORITY
+	int "dmaprobe task priority"
+	default 100
+
+config EXAMPLES_DMAPROBE_STACKSIZE
+	int "dmaprobe stack size"
+	default 4096
+
+endif
