@@ -29,4 +29,9 @@ if(CONFIG_RK3576_EMMC)
   list(APPEND SRCS rk3576_emmc.c)
 endif()
 
+if(CONFIG_RK3576_DMA)
+  list(APPEND SRCS rk3576_dma.c)
+endif()
+endif()
+
 target_sources(arch PRIVATE ${SRCS})
