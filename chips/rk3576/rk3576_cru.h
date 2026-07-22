@@ -31,6 +31,9 @@
  * Included Files
  ****************************************************************************/
 
+#pragma message \
+    "WARNING: rk3576_cru.h is DEPRECATED and will be removed soon. Use rk3576_clk_tree.h instead."
+
 #include <nuttx/config.h>
 #include <stdbool.h>
 #include <stdint.h>
