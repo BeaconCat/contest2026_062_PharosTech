@@ -25,6 +25,7 @@
  ****************************************************************************/
 
 #include "kickpi_k7.h"
+#include "rk3576_clk_tree.h"
 #include "rk3576_gpio.h"
 #include <nuttx/board.h>
 #include <nuttx/config.h>
@@ -159,6 +160,15 @@ void rk3576_board_initialize(void)
 #ifdef CONFIG_BOARD_LATE_INITIALIZE
 void board_late_initialize(void)
 {
+  /* Register the RK3576 clock tree with the NuttX CLK framework.
+   * Must be done before any peripheral driver calls clk_get().
+   * This cannot run in arm64_chip_boot() because clk_register()
+   * depends on kmm_zalloc(), which requires the kernel heap to
+   * be initialized (done in nx_start() -> memory_initialize()).
+   */
+
+  rk3576_clk_tree_initialize();
+
   /* Perform board initialization */
 
 #ifdef CONFIG_DEV_GPIO
