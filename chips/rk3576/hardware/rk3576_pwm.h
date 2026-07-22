@@ -62,10 +62,6 @@
 #define RK3576_PWM2      2
 #define RK3576_PWM_NCTRL 3 /* Total number of controllers         */
 
-/* clk_osc_pwm1 root frequency (crystal, fixed). */
-
-#define RK3576_PWM_OSC_HZ 24000000
-
 /* Register offsets (per channel window) ********************************/
 
 #define RK3576_PWM_VERSION  0x0000 /* Version ID (RO)               */
