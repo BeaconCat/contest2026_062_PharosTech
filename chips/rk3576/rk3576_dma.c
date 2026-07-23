@@ -60,6 +60,8 @@
 
 #include "arm64_internal.h"
 #include "hardware/rk3576_dma.h"
+#include "hardware/rk3576_memorymap.h"
+#include "rk3576_addrenv.h"
 #include "rk3576_dma.h"
 
 #ifdef CONFIG_RK3576_DMA
@@ -73,19 +75,12 @@
  * instance of struct rk3576_dma_ctrl_s.
  */
 
-#ifndef CONFIG_RK3576_DMAC0_BASE
-#define CONFIG_RK3576_DMAC0_BASE 0x2ab90000
-#endif
-
 /* GIC INTIDs for dmac0 (from arch/arm64/include/rk3576/irq.h).  The "event"
  * line signals DMASEV completion and normal channel interrupts; the "abort"
  * line signals a manager/channel fault.  NOTE: the TRM numbers the SPIs as
  * event=SPI0 (INTID 64) and abort=SPI1 (INTID 65); verify against the TRM
  * DMA request table if a controller other than dmac0 is added.
  */
-
-#define RK3576_DMA_IRQ_EVENT RK3576_IRQ_DMAC0       /* INTID 64      */
-#define RK3576_DMA_IRQ_ABORT RK3576_IRQ_DMAC0_ABORT /* INTID 65      */
 
 /* DMAGO launch state.  openvela runs non-secure at EL1, so the DMA manager
  * is expected to have booted non-secure and DMAGO must carry the NS bit.
@@ -272,9 +267,9 @@ static struct rk3576_dma_ctrl_s g_rk3576_dmac0 = {
       .get_chan = rk3576_dma_get_chan,
       .put_chan = rk3576_dma_put_chan,
     },
-  .base = CONFIG_RK3576_DMAC0_BASE,
-  .irq_event = RK3576_DMA_IRQ_EVENT,
-  .irq_abort = RK3576_DMA_IRQ_ABORT,
+  .base = RK3576_DMAC0_ADDR,
+  .irq_event = RK3576_IRQ_DMAC0,
+  .irq_abort = RK3576_IRQ_DMAC0_ABORT,
   .lock = SP_UNLOCKED,
 };
 
@@ -866,12 +861,18 @@ static int rk3576_dma_setup(struct rk3576_dmach_s *ch,
       return -EINVAL;
     }
 
-  /* PL330 SAR/DAR are 32-bit: addresses must be in the low 4GB. */
+  /* PL330 SAR/DAR are 32-bit: physical addresses must be in the low 4 GB.
+   * Translate VA to PA first, then range-check and embed the PAs directly
+   * in the micro-code so the conversion is done exactly once per address.
+   */
 
-  if ((uint64_t)xfer->src + xfer->nbytes > 0x100000000ull ||
-      (uint64_t)xfer->dst + xfer->nbytes > 0x100000000ull)
+  uintptr_t src_pa = up_addrenv_va_to_pa((void *)xfer->src);
+  uintptr_t dst_pa = up_addrenv_va_to_pa((void *)xfer->dst);
+
+  if ((uint64_t)src_pa + xfer->nbytes > 0x100000000ull ||
+      (uint64_t)dst_pa + xfer->nbytes > 0x100000000ull)
     {
-      dmaerr("ERROR: address above 4GB not addressable by PL330\n");
+      dmaerr("ERROR: PA above 4GB not addressable by PL330\n");
       return -EFAULT;
     }
 
@@ -892,11 +893,13 @@ static int rk3576_dma_setup(struct rk3576_dmach_s *ch,
 
   ccr = rk3576_dma_build_ccr(xfer);
 
-  /* Assemble the program. */
+  /* Assemble the program.  src_pa/dst_pa are already the physical addresses
+   * computed above; reuse them directly (no redundant VA→PA conversion).
+   */
 
   p = ch->prog;
-  n += rk3576_dma_emit_mov(&p[n], DMA_MOV_SAR, (uint32_t)xfer->src);
-  n += rk3576_dma_emit_mov(&p[n], DMA_MOV_DAR, (uint32_t)xfer->dst);
+  n += rk3576_dma_emit_mov(&p[n], DMA_MOV_SAR, (uint32_t)src_pa);
+  n += rk3576_dma_emit_mov(&p[n], DMA_MOV_DAR, (uint32_t)dst_pa);
   n += rk3576_dma_emit_mov(&p[n], DMA_MOV_CCR, ccr);
 
   if (xfer->direction != RK3576_DMA_M2M)
@@ -965,7 +968,13 @@ static int rk3576_dma_launch(struct rk3576_dmach_s *ch)
     }
 
   ctrl = rk3576_dma_ctrl_of(ch);
-  prog = (uint32_t)(uintptr_t)ch->prog;
+  prog = (uint32_t)up_addrenv_va_to_pa(ch->prog);
+
+  /* The micro-code buffer lives in kernel static memory; its PA must fit
+   * in 32 bits for the PL330 debug interface.
+   */
+
+  DEBUGASSERT(up_addrenv_va_to_pa(ch->prog) < 0x100000000ull);
 
   /* DMAGO: byte0 = opcode | NS, byte1 = channel, bytes2..5 = program addr. */
 

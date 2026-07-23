@@ -52,5 +52,5 @@ CHIP_CSRCS += rk3576_emmc.c
 endif
 
 ifeq ($(CONFIG_RK3576_DMA),y)
-CHIP_CSRCS += rk3576_dma.c
+CHIP_CSRCS += rk3576_addrenv.c rk3576_dma.c
 endif
