@@ -261,6 +261,7 @@ struct skw_bss_s
   uint8_t  ssid[33];
   uint8_t  ssid_len;
   uint8_t  channel;
+  uint8_t  band;     /* 0 = 2.4 GHz, 1 = 5 GHz */
   int16_t  rssi;
   uint16_t capability;             /* beacon capability field */
   uint16_t beacon_int;             /* beacon interval (TU) */
@@ -891,6 +892,7 @@ static void skw_handle_event(uint8_t id, const uint8_t *ev, int len)
       memset(bss, 0, sizeof(*bss));
       memcpy(bss->bssid, mgmt + 16, 6);
       bss->channel = chan;
+      bss->band    = ev[1];  /* band from skw_mgmt_hdr */
       bss->rssi = signal;
 
       /* Beacon/probe-resp body: timestamp(8) beacon_int(2) capability(2)
@@ -1528,25 +1530,41 @@ static int skw_wifi_bringup_cmds(void)
 
 static int skw_scan(void)
 {
-  /* skw_scan_param (32-byte fixed head) + a 2.4 GHz channel list in the
-   * variable tail.  flags/rand_mac 0; nr_chan=13 at chan_offset=32; each
-   * skw_scan_chan_info is {chan_num, band, scan_flags} = 3 bytes.
+  /* skw_scan_param (32-byte fixed head) + 2.4 GHz (ch 1-13, band 0) and
+   * 5 GHz non-DFS channels (band 1) in the variable tail.
+   * skw_scan_chan_info = {chan_num, band, scan_flags} = 3 bytes each.
    */
 
-  uint8_t sp[32 + 13 * 3];
+  static const uint8_t g_5g_chans[] =
+  {
+    36, 40, 44, 48,              /* UNII-1          */
+    52, 56, 60, 64,              /* UNII-2 no DFS   */
+    149, 153, 157, 161, 165      /* UNII-3          */
+  };
+
+  enum { N_2G = 13, N_5G = sizeof(g_5g_chans), N_CH = N_2G + N_5G };
+
+  uint8_t sp[32 + N_CH * 3];
   int ret;
   int wait;
   int ch;
 
   memset(sp, 0, sizeof(sp));
-  sp[8]  = 13;                      /* nr_chan (u32 LE) */
+  sp[8]  = N_CH;                    /* nr_chan (u32 LE) */
   sp[12] = 32;                      /* chan_offset = end of fixed head */
 
-  for (ch = 0; ch < 13; ch++)
+  for (ch = 0; ch < N_2G; ch++)
     {
-      sp[32 + ch * 3 + 0] = ch + 1; /* chan_num 1..13 */
-      sp[32 + ch * 3 + 1] = 0;      /* band 2.4 GHz */
-      sp[32 + ch * 3 + 2] = 0;      /* scan_flags (active) */
+      sp[32 + ch * 3 + 0] = ch + 1; /* chan_num 1..13   */
+      sp[32 + ch * 3 + 1] = 0;      /* band 2.4 GHz    */
+      sp[32 + ch * 3 + 2] = 0;      /* scan_flags      */
+    }
+
+  for (ch = 0; ch < N_5G; ch++)
+    {
+      sp[32 + (N_2G + ch) * 3 + 0] = g_5g_chans[ch]; /* chan_num */
+      sp[32 + (N_2G + ch) * 3 + 1] = 1;              /* band 5 GHz */
+      sp[32 + (N_2G + ch) * 3 + 2] = 0;              /* scan_flags */
     }
 
   g_skw_scan_n = 0;
@@ -1939,7 +1957,7 @@ static int skw_connect(const struct skw_bss_s *bss)
   buf[0] = bss->channel;                        /* chan_num */
   buf[1] = bss->channel;                        /* center_chn1 (20 MHz) */
   buf[3] = 0;                                   /* bandwidth 20 MHz */
-  buf[4] = 0;                                   /* band 2.4 GHz */
+  buf[4] = bss->band;                           /* band: 0=2.4 GHz, 1=5 GHz */
   buf[5] = bss->beacon_int & 0xff;              /* beacon_interval u16 */
   buf[6] = (bss->beacon_int >> 8) & 0xff;
   buf[7] = bss->capability & 0xff;              /* capability u16 */
@@ -2189,6 +2207,7 @@ int rk3576_skw_scan(struct rk3576_skw_bss_s *list, int max)
           memcpy(list[i].ssid, g_skw_scan[i].ssid, 33);
           list[i].ssid_len = g_skw_scan[i].ssid_len;
           list[i].channel  = g_skw_scan[i].channel;
+      list[i].band     = g_skw_scan[i].band;
           list[i].rssi     = g_skw_scan[i].rssi;
         }
     }

@@ -79,6 +79,7 @@ struct rk3576_skw_bss_s
   uint8_t  ssid[33];
   uint8_t  ssid_len;
   uint8_t  channel;
+  uint8_t  band;     /* 0 = 2.4 GHz, 1 = 5 GHz */
   int16_t  rssi;
 };
 
