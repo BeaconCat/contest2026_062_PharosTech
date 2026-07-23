@@ -155,19 +155,23 @@ static uint32_t rk3576_fracpll_recalc_rate(struct clk_s *clk,
  * PWM:  00=CPLL/10, 01=CPLL/20, 10=XIN_OSC0, 11=invalid
  */
 
+#ifdef CONFIG_RK3576_I2C
 static const char *g_i2c_sel_parents[] = {
   "clk_gpll_div6",  /* 0b00 */
   "clk_cpll_div10", /* 0b01 */
   "clk_cpll_div20", /* 0b10 */
   "xin_osc0",       /* 0b11 */
 };
+#endif
 
+#ifdef CONFIG_RK3576_PWM
 static const char *g_pwm_sel_parents[] = {
   "clk_cpll_div10", /* 0b00 */
   "clk_cpll_div20", /* 0b01 */
   "xin_osc0",       /* 0b10 */
   "xin_osc0",       /* 0b11 — undefined, fallback */
 };
+#endif
 
 /****************************************************************************
  * Private Functions
@@ -299,6 +303,7 @@ static void rk3576_clk_register_pll_factors(void)
  *   - clk_i2cX_en    : SCL functional clock gate
  ****************************************************************************/
 
+#ifdef CONFIG_RK3576_I2C
 static void rk3576_clk_register_i2c(void)
 {
   const unsigned long cru = RK3576_CRU_ADDR;
@@ -351,6 +356,7 @@ static void rk3576_clk_register_i2c(void)
                               cru + RK3576_CRU_GATE_CON(12), 8,
                               cru + RK3576_CRU_GATE_CON(13), 4);
 }
+#endif /* CONFIG_RK3576_I2C */
 
 #undef RK3576_CLK_REGISTER_I2C_ONE
 
@@ -431,6 +437,7 @@ static void rk3576_clk_register_i2c(void)
  *   - clk_pwmX_rc_en  : Internal RC oscillator alternative gate
  ****************************************************************************/
 
+#ifdef CONFIG_RK3576_PWM
 static void rk3576_clk_register_pwm(void)
 {
   const unsigned long cru = RK3576_CRU_ADDR;
@@ -454,6 +461,7 @@ static void rk3576_clk_register_pwm(void)
                               cru + RK3576_CRU_GATE_CON(20), 4, 5, 7,
                               cru + RK3576_CRU_GATE_CON(20), 6);
 }
+#endif /* CONFIG_RK3576_PWM */
 
 #undef RK3576_CLK_REGISTER_PWM_ONE
 
@@ -473,6 +481,12 @@ static void rk3576_clk_register_pwm(void)
 void rk3576_clk_tree_initialize(void)
 {
   rk3576_clk_register_pll_factors();
+
+#ifdef CONFIG_RK3576_I2C
   rk3576_clk_register_i2c();
+#endif
+
+#ifdef CONFIG_RK3576_PWM
   rk3576_clk_register_pwm();
+#endif
 }
