@@ -73,9 +73,6 @@
  * instance of struct rk3576_dma_ctrl_s.
  */
 
-#ifndef CONFIG_RK3576_DMAC0_BASE
-#define CONFIG_RK3576_DMAC0_BASE 0x2ab90000
-#endif
 
 /* GIC INTIDs for dmac0 (from arch/arm64/include/rk3576/irq.h).  The "event"
  * line signals DMASEV completion and normal channel interrupts; the "abort"
@@ -84,8 +81,6 @@
  * DMA request table if a controller other than dmac0 is added.
  */
 
-#define RK3576_DMA_IRQ_EVENT RK3576_IRQ_DMAC0       /* INTID 64      */
-#define RK3576_DMA_IRQ_ABORT RK3576_IRQ_DMAC0_ABORT /* INTID 65      */
 
 /* DMAGO launch state.  openvela runs non-secure at EL1, so the DMA manager
  * is expected to have booted non-secure and DMAGO must carry the NS bit.
@@ -272,9 +267,9 @@ static struct rk3576_dma_ctrl_s g_rk3576_dmac0 = {
       .get_chan = rk3576_dma_get_chan,
       .put_chan = rk3576_dma_put_chan,
     },
-  .base = CONFIG_RK3576_DMAC0_BASE,
-  .irq_event = RK3576_DMA_IRQ_EVENT,
-  .irq_abort = RK3576_DMA_IRQ_ABORT,
+  .base = RK3576_DMAC0_ADDR,
+  .irq_event = RK3576_IRQ_DMAC0,
+  .irq_abort = RK3576_IRQ_DMAC0_ABORT,
   .lock = SP_UNLOCKED,
 };
 
