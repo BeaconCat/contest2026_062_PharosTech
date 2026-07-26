@@ -31,6 +31,8 @@
 
 #include <stdint.h>
 
+#include "hardware/rk3576_memorymap.h"
+
 #ifdef CONFIG_RK3576_IR
 
 /****************************************************************************

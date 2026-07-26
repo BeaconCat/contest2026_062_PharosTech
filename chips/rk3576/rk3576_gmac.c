@@ -68,6 +68,7 @@
 #include <nuttx/clk/clk.h>
 #include <nuttx/clock.h>
 #include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/net/arp.h>
 #include <nuttx/net/ethernet.h>
 #include <nuttx/net/ioctl.h>

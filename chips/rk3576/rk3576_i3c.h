@@ -34,6 +34,8 @@
 
 #include <nuttx/i2c/i2c_master.h>
 
+#include "hardware/rk3576_memorymap.h"
+
 #ifdef CONFIG_RK3576_I3C
 
 /****************************************************************************

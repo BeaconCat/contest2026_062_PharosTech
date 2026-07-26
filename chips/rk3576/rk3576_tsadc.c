@@ -71,6 +71,7 @@
 #include <nuttx/clk/clk.h>
 #include <nuttx/clock.h>
 #include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 
 #ifdef CONFIG_SENSORS
 #  include <nuttx/fs/fs.h>
