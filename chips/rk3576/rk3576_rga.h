@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/rockchip/chips/rk3576/rk3576_rga.h
+ * chips/rk3576/rk3576_rga.h
  *
  * SPDX-License-Identifier: Apache-2.0
  *

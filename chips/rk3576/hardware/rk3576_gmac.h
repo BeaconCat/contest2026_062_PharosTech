@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/rockchip/chips/rk3576/hardware/rk3576_gmac.h
+ * chips/rk3576/hardware/rk3576_gmac.h
  *
  * SPDX-License-Identifier: Apache-2.0
  *

@@ -1,5 +1,5 @@
 /****************************************************************************
- * arch/arm64/include/rk3576/irq.h
+ * chips/rk3576/include/irq.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with

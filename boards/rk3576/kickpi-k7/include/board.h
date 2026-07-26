@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/arm64/rk3576/kickpi_k7/include/board.h
+ * boards/rk3576/kickpi-k7/include/board.h
  *
  * SPDX-License-Identifier: Apache-2.0
  *
