@@ -1,0 +1,39 @@
+#
+# For a description of the syntax of this configuration file,
+# see the file kconfig-language.txt in the NuttX tools repository.
+#
+
+config EXAMPLES_LLM
+	tristate "端侧 LLM 推理引擎 (CPU transformer + 可选 NPU matmul)"
+	default n
+	depends on LIBM && LIBC_FLOATINGPOINT && PTHREAD_MUTEX_TYPES
+	---help---
+		LLaMA 系（LLaMA / TinyLlama / Qwen2 / Qwen2.5）decoder-only
+		transformer 的完整推理引擎，纯 CPU（NEON + pthread 多核）即可跑通，
+		这是 L2 保底路线。matmul 可在运行时切到 RKNPU（见 EXAMPLES_LLM_NPU）。
+		权重 int4 分块量化（q4_0 布局），激活 fp32，KV-cache 增量解码。
+
+if EXAMPLES_LLM
+
+config EXAMPLES_LLM_NPU
+	bool "把 matmul 卸载到 RKNPU"
+	default n
+	depends on RK3576_DMA_ALLOC
+	---help---
+		编入 NPU 卸载路径：激活转 fp16 暂存到 DMA 堆，调用
+		rk3576_rknn_matmul_run()（弱符号，缺失则运行时自动回落 CPU）。
+		未使能时引擎仍然完整可用，只是永远走 CPU 内核。
+
+config EXAMPLES_LLM_PROGNAME
+	string "Program name"
+	default "llm"
+
+config EXAMPLES_LLM_PRIORITY
+	int "llm task priority"
+	default 100
+
+config EXAMPLES_LLM_STACKSIZE
+	int "llm stack size"
+	default 16384
+
+endif

@@ -1,5 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 set(SRCS kickpi_k7_boardinit.c kickpi_k7_appinit.c kickpi_k7_reset.c)
+
+if(CONFIG_KICKPI_K7_RK806)
+  list(APPEND SRCS kickpi_k7_rk806.c)
+endif()
+
+if(CONFIG_KICKPI_K7_HYM8563)
+  list(APPEND SRCS kickpi_k7_hym8563.c)
+endif()
+
+if(CONFIG_KICKPI_K7_HUSB311)
+  list(APPEND SRCS kickpi_k7_husb311.c)
+endif()
+
+if(CONFIG_KICKPI_K7_IMX415)
+  list(APPEND SRCS kickpi_k7_imx415.c)
+endif()
 target_sources(board PRIVATE ${SRCS})
 
 if(CONFIG_ETC_ROMFS)

@@ -12,5 +12,9 @@
     <linkfile src="boards" dest="vendor/rockchip/boards"/>
     <linkfile src="chips" dest="vendor/rockchip/chips"/>
     <linkfile src="app/k7flash" dest="apps/examples/k7flash"/>
+    <linkfile src="app/rebootm" dest="apps/examples/rebootm"/>
+    <linkfile src="app/usbsw" dest="apps/examples/usbsw"/>
+    <linkfile src="app/llm" dest="apps/examples/llm"/>
+    <linkfile src="app/softgl" dest="apps/examples/softgl"/>
   </project>
 </manifest>

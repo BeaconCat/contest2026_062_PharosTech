@@ -54,3 +54,121 @@ endif
 ifeq ($(CONFIG_RK3576_DMA),y)
 CHIP_CSRCS += rk3576_addrenv.c rk3576_dma.c
 endif
+
+# Peripheral clock registration with the CLK framework.  The per-peripheral
+# registration functions inside the file are guarded by the individual
+# CONFIG_RK3576_* symbols, so the file itself is built unconditionally.
+
+CHIP_CSRCS += rk3576_clk_tree_periph.c
+
+ifeq ($(CONFIG_RK3576_PD),y)
+CHIP_CSRCS += rk3576_pd.c
+endif
+
+ifeq ($(CONFIG_RK3576_PINCTRL),y)
+CHIP_CSRCS += rk3576_pinctrl.c
+endif
+
+ifeq ($(CONFIG_RK3576_MAILBOX),y)
+CHIP_CSRCS += rk3576_mailbox.c
+endif
+
+ifeq ($(CONFIG_RK3576_OTP),y)
+CHIP_CSRCS += rk3576_otp.c
+endif
+
+ifeq ($(CONFIG_RK3576_RNG),y)
+CHIP_CSRCS += rk3576_rng.c
+endif
+
+ifeq ($(CONFIG_RK3576_WDT),y)
+CHIP_CSRCS += rk3576_wdt.c
+endif
+
+ifeq ($(CONFIG_RK3576_SPI),y)
+CHIP_CSRCS += rk3576_spi.c
+endif
+
+ifeq ($(CONFIG_RK3576_I3C),y)
+CHIP_CSRCS += rk3576_i3c.c
+endif
+
+ifeq ($(CONFIG_RK3576_SARADC),y)
+CHIP_CSRCS += rk3576_saradc.c
+endif
+
+ifeq ($(CONFIG_RK3576_TSADC),y)
+CHIP_CSRCS += rk3576_tsadc.c
+endif
+
+ifeq ($(CONFIG_RK3576_IR),y)
+CHIP_CSRCS += rk3576_ir.c
+endif
+
+ifeq ($(CONFIG_RK3576_CRYPTO),y)
+CHIP_CSRCS += rk3576_crypto.c
+endif
+
+ifeq ($(CONFIG_RK3576_GMAC),y)
+CHIP_CSRCS += rk3576_gmac.c
+endif
+
+ifeq ($(CONFIG_RK3576_PDM),y)
+CHIP_CSRCS += rk3576_pdm.c
+endif
+
+ifeq ($(CONFIG_RK3576_COMBPHY),y)
+CHIP_CSRCS += rk3576_combphy.c
+endif
+
+ifeq ($(CONFIG_RK3576_PCIE),y)
+CHIP_CSRCS += rk3576_pcie.c
+endif
+
+ifeq ($(CONFIG_RK3576_SKW_BT),y)
+CHIP_CSRCS += rk3576_skw_bt.c
+endif
+
+ifeq ($(CONFIG_RK3576_VOP),y)
+CHIP_CSRCS += rk3576_vop.c
+endif
+
+ifeq ($(CONFIG_RK3576_HDMI),y)
+CHIP_CSRCS += rk3576_hdmi.c
+endif
+
+ifeq ($(CONFIG_RK3576_RGA),y)
+CHIP_CSRCS += rk3576_rga.c
+endif
+
+ifeq ($(CONFIG_RK3576_VDEC),y)
+CHIP_CSRCS += rk3576_vdec.c
+endif
+
+ifeq ($(CONFIG_RK3576_CSI),y)
+CHIP_CSRCS += rk3576_csi.c rk3576_dphy.c
+endif
+
+ifeq ($(CONFIG_RK3576_VICAP),y)
+CHIP_CSRCS += rk3576_vicap.c
+endif
+
+ifeq ($(CONFIG_RK3576_ISP),y)
+CHIP_CSRCS += rk3576_isp.c
+endif
+
+ifeq ($(CONFIG_RK3576_MALI),y)
+CHIP_CSRCS += rk3576_mali.c
+endif
+
+ifeq ($(CONFIG_RK3576_RKNPU),y)
+CHIP_CSRCS += rk3576_rknpu.c
+endif
+
+ifeq ($(CONFIG_RK3576_RKNN_MATMUL),y)
+CHIP_CSRCS += rk3576_rknn_matmul.c
+endif
+
+ifeq ($(CONFIG_SMP),y)
+CHIP_CSRCS += rk3576_cpuboot.c
+endif

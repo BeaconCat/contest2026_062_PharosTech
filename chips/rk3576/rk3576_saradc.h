@@ -1,5 +1,5 @@
 /****************************************************************************
- * chips/rk3576/rk3576_saradc.h
+ * vendor/rockchip/chips/rk3576/rk3576_saradc.h
  *
  * SPDX-License-Identifier: Apache-2.0
  *

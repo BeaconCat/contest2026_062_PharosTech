@@ -109,24 +109,9 @@
  * GIC INTID = SPI number + 32.  The "vop-sys" line is shared with the
  * VOP IOMMU (iommu@27d07e00 uses the same SPI 342).
  *
- * TODO: move these into chips/rk3576/include/irq.h as RK3576_IRQ_VOP_*.
+ * The vector numbers themselves live in chips/rk3576/include/irq.h as
+ * RK3576_IRQ_VOP (vop-sys) and RK3576_IRQ_VOP_VP0..VP2.
  */
-
-#ifndef RK3576_IRQ_VOP_SYS
-#  define RK3576_IRQ_VOP_SYS   (342 + 32) /* 374 - VOP system / IOMMU    */
-#endif
-
-#ifndef RK3576_IRQ_VOP_VP0
-#  define RK3576_IRQ_VOP_VP0   (379 + 32) /* 411 - Video port 0          */
-#endif
-
-#ifndef RK3576_IRQ_VOP_VP1
-#  define RK3576_IRQ_VOP_VP1   (380 + 32) /* 412 - Video port 1          */
-#endif
-
-#ifndef RK3576_IRQ_VOP_VP2
-#  define RK3576_IRQ_VOP_VP2   (381 + 32) /* 413 - Video port 2          */
-#endif
 
 /* Block bases (offsets from RK3576_VOP_ADDR) ******************************/
 

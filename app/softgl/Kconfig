@@ -1,0 +1,34 @@
+#
+# For a description of the syntax of this configuration file,
+# see the file kconfig-language.txt in the NuttX tools repository.
+#
+
+config EXAMPLES_SOFTGL
+	tristate "SoftGL CPU 3D 软件光栅化渲染器"
+	default n
+	depends on LIBC_FLOATINGPOINT
+	---help---
+		纯 CPU 软件 3D 渲染器 + Demo(GPU 路线2)。Z-buffer、透视正确插值、
+		RGB565 纹理、Blinn-Phong 光照、pthread 分带多核并行、NEON 加速。
+		有 /dev/fb0 就直接上屏,否则可导出 PPM 或纯跑分。
+
+if EXAMPLES_SOFTGL
+
+config EXAMPLES_SOFTGL_PROGNAME
+	string "Program name"
+	default "softgl"
+
+config EXAMPLES_SOFTGL_PRIORITY
+	int "softgl task priority"
+	default 100
+
+config EXAMPLES_SOFTGL_STACKSIZE
+	int "softgl stack size"
+	default 8192
+
+config EXAMPLES_SOFTGL_HEAPSIZE
+	int "softgl heap size"
+	depends on MM_TASK_HEAP
+	default MM_TASK_HEAP_DEFAULT_SIZE
+
+endif

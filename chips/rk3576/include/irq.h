@@ -35,10 +35,11 @@
  * "RK3576 Interrupt Connection List".  The numbers below are GIC INTIDs
  * as listed in the TRM (SPI number + 32 already applied by Rockchip).
  * IDs 0-15 are SGIs and 16-31 are PPIs, handled by the common GIC layer.
- * Highest INTID in the TRM table is 411.
+ * Highest INTID in the TRM table is 411; the vendor device tree adds the
+ * extra VOP video ports and CSI-2 hosts 3/4 up to INTID 418.
  */
 
-#define NR_IRQS                             416 /* Total number of interrupts */
+#define NR_IRQS                             419 /* Total number of interrupts */
 
 #define RK3576_IRQ_NPMUIRQ_0                (32)
 #define RK3576_IRQ_NPMUIRQ_1                (33)
@@ -399,5 +400,18 @@
 #define RK3576_IRQ_OTG1_VBUSVALID           (409)
 #define RK3576_IRQ_MAINTIMEOUT              (410)
 #define RK3576_IRQ_VOP_VP0                  (411)
+
+/* Additional sources present in the vendor device tree but not listed in
+ * the TRM interrupt-connection table.  vop@27d00000 declares four lines
+ * (vop-sys plus one per video port) and csi2@27cb0000 / csi2@27cc0000
+ * declare two lines each.
+ */
+
+#define RK3576_IRQ_VOP_VP1                  (412)
+#define RK3576_IRQ_VOP_VP2                  (413)
+#define RK3576_IRQ_CSIHOST3_1               (415)
+#define RK3576_IRQ_CSIHOST3_2               (416)
+#define RK3576_IRQ_CSIHOST4_1               (417)
+#define RK3576_IRQ_CSIHOST4_2               (418)
 
 #endif /* __ARCH_ARM64_INCLUDE_RK3576_IRQ_H */

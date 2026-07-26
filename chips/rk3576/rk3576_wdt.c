@@ -41,6 +41,11 @@
  * Note that WDT_CR.EN is sticky: once the watchdog has been enabled it can
  * only be cleared by a system reset.  stop() reflects this by returning
  * -ENOSYS when the hardware refuses to disable.
+ *
+ * The two input clocks (pclk for the register interface, tclk for the down
+ * counter) are taken from the NuttX CLK framework; the tclk rate is read
+ * back with clk_get_rate() and is what every tick/millisecond conversion in
+ * this file is based on.
  ****************************************************************************/
 
 /****************************************************************************
@@ -57,6 +62,7 @@
 #include <stdio.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/clk/clk.h>
 #include <nuttx/irq.h>
 #include <nuttx/spinlock.h>
 #include <nuttx/timers/watchdog.h>
@@ -75,9 +81,10 @@
 
 #define RK3576_WDT_RPL WDT_CR_RPL_256PCLK
 
-/* Ticks per millisecond of the watchdog counting clock. */
+/* CLK framework node names of the two input clocks. */
 
-#define RK3576_WDT_TICKS_PER_MS ((uint32_t)(RK3576_WDT_CLK_HZ / 1000))
+#define RK3576_WDT_PCLK_NAME "pclk_wdt_ns_en"
+#define RK3576_WDT_TCLK_NAME "tclk_wdt_ns_en"
 
 /* Default timeout applied at initialisation time (milliseconds). */
 
@@ -95,6 +102,7 @@ struct rk3576_wdt_lowerhalf_s
   xcpt_t handler;                   /* Capture handler, NULL if unused     */
   uint32_t timeout;                 /* Requested timeout, milliseconds     */
   uint32_t period;                  /* Rounded timeout, milliseconds       */
+  uint32_t tclk_hz;                 /* Counter clock rate from the CLK fw  */
   uint8_t torr;                     /* WDT_TORR timeout period index       */
   bool started;                     /* Watchdog currently running          */
   spinlock_t lock;                  /* Protects read-modify-write of CR    */
@@ -108,8 +116,11 @@ static uint32_t rk3576_wdt_getreg(struct rk3576_wdt_lowerhalf_s *priv,
                                   unsigned int off);
 static void rk3576_wdt_putreg(struct rk3576_wdt_lowerhalf_s *priv,
                               unsigned int off, uint32_t val);
-static uint32_t rk3576_wdt_ticks_to_ms(uint32_t ticks);
-static uint8_t rk3576_wdt_select_torr(uint32_t timeout_ms,
+static int rk3576_wdt_clk_init(void);
+static uint32_t rk3576_wdt_ticks_to_ms(struct rk3576_wdt_lowerhalf_s *priv,
+                                       uint32_t ticks);
+static uint8_t rk3576_wdt_select_torr(struct rk3576_wdt_lowerhalf_s *priv,
+                                      uint32_t timeout_ms,
                                       uint32_t *actual_ms);
 static void rk3576_wdt_kick(struct rk3576_wdt_lowerhalf_s *priv);
 static int rk3576_wdt_interrupt(int irq, void *context, void *arg);
@@ -168,6 +179,70 @@ static void rk3576_wdt_putreg(struct rk3576_wdt_lowerhalf_s *priv,
 }
 
 /****************************************************************************
+ * Name: rk3576_wdt_clk_init
+ *
+ * Description:
+ *   Ungate the two WDT_NS input clocks through the NuttX CLK framework and
+ *   latch the counter clock rate.  All clock handling of this driver lives
+ *   here.
+ *
+ * Returned Value:
+ *   OK on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+static int rk3576_wdt_clk_init(void)
+{
+  struct rk3576_wdt_lowerhalf_s *priv = &g_rk3576_wdt;
+  struct clk_s *pclk;
+  struct clk_s *tclk;
+  int ret;
+
+  /* APB register interface clock. */
+
+  pclk = clk_get(RK3576_WDT_PCLK_NAME);
+  if (pclk == NULL)
+    {
+      wderr("ERROR: failed to get %s\n", RK3576_WDT_PCLK_NAME);
+      return -ENODEV;
+    }
+
+  ret = clk_enable(pclk);
+  if (ret < 0)
+    {
+      wderr("ERROR: failed to enable %s: %d\n", RK3576_WDT_PCLK_NAME, ret);
+      return ret;
+    }
+
+  /* Down-counter clock.  Its rate defines every timeout period the block
+   * can produce, so it is read back rather than assumed.
+   */
+
+  tclk = clk_get(RK3576_WDT_TCLK_NAME);
+  if (tclk == NULL)
+    {
+      wderr("ERROR: failed to get %s\n", RK3576_WDT_TCLK_NAME);
+      return -ENODEV;
+    }
+
+  ret = clk_enable(tclk);
+  if (ret < 0)
+    {
+      wderr("ERROR: failed to enable %s: %d\n", RK3576_WDT_TCLK_NAME, ret);
+      return ret;
+    }
+
+  priv->tclk_hz = clk_get_rate(tclk);
+  if (priv->tclk_hz == 0)
+    {
+      wderr("ERROR: %s reports a zero rate\n", RK3576_WDT_TCLK_NAME);
+      return -EINVAL;
+    }
+
+  return OK;
+}
+
+/****************************************************************************
  * Name: rk3576_wdt_ticks_to_ms
  *
  * Description:
@@ -175,9 +250,10 @@ static void rk3576_wdt_putreg(struct rk3576_wdt_lowerhalf_s *priv,
  *   intermediate avoids overflow: the largest tick count is 0x7fffffff.
  ****************************************************************************/
 
-static uint32_t rk3576_wdt_ticks_to_ms(uint32_t ticks)
+static uint32_t rk3576_wdt_ticks_to_ms(struct rk3576_wdt_lowerhalf_s *priv,
+                                       uint32_t ticks)
 {
-  return (uint32_t)(((uint64_t)ticks * 1000ull) / RK3576_WDT_CLK_HZ);
+  return (uint32_t)(((uint64_t)ticks * 1000ull) / priv->tclk_hz);
 }
 
 /****************************************************************************
@@ -188,6 +264,7 @@ static uint32_t rk3576_wdt_ticks_to_ms(uint32_t ticks)
  *   closest to the requested timeout.
  *
  * Input Parameters:
+ *   priv       - Device state, holding the counter clock rate.
  *   timeout_ms - Requested timeout in milliseconds.
  *   actual_ms  - [out] Period actually obtained, in milliseconds.
  *
@@ -196,7 +273,8 @@ static uint32_t rk3576_wdt_ticks_to_ms(uint32_t ticks)
  *
  ****************************************************************************/
 
-static uint8_t rk3576_wdt_select_torr(uint32_t timeout_ms,
+static uint8_t rk3576_wdt_select_torr(struct rk3576_wdt_lowerhalf_s *priv,
+                                      uint32_t timeout_ms,
                                       uint32_t *actual_ms)
 {
   uint32_t best_ms = 0;
@@ -206,7 +284,7 @@ static uint8_t rk3576_wdt_select_torr(uint32_t timeout_ms,
 
   for (i = 0; i < WDT_TORR_PERIOD_NR; i++)
     {
-      uint32_t ms = rk3576_wdt_ticks_to_ms(WDT_TORR_TICKS(i));
+      uint32_t ms = rk3576_wdt_ticks_to_ms(priv, WDT_TORR_TICKS(i));
       uint64_t diff = (ms > timeout_ms) ? (uint64_t)(ms - timeout_ms)
                                         : (uint64_t)(timeout_ms - ms);
 
@@ -387,7 +465,7 @@ static int rk3576_wdt_getstatus(struct watchdog_lowerhalf_s *lower,
 
   status->timeout  = priv->period;
   status->timeleft =
-    rk3576_wdt_ticks_to_ms(rk3576_wdt_getreg(priv, RK3576_WDT_CCVR));
+    rk3576_wdt_ticks_to_ms(priv, rk3576_wdt_getreg(priv, RK3576_WDT_CCVR));
 
   return OK;
 }
@@ -407,8 +485,8 @@ static int rk3576_wdt_settimeout(struct watchdog_lowerhalf_s *lower,
   struct rk3576_wdt_lowerhalf_s *priv =
     (struct rk3576_wdt_lowerhalf_s *)lower;
   uint32_t max_ms = rk3576_wdt_ticks_to_ms(
-    WDT_TORR_TICKS(WDT_TORR_PERIOD_NR - 1));
-  uint32_t min_ms = rk3576_wdt_ticks_to_ms(WDT_TORR_TICKS(0));
+    priv, WDT_TORR_TICKS(WDT_TORR_PERIOD_NR - 1));
+  uint32_t min_ms = rk3576_wdt_ticks_to_ms(priv, WDT_TORR_TICKS(0));
   irqstate_t flags;
 
   if (timeout < min_ms || timeout > max_ms)
@@ -421,7 +499,7 @@ static int rk3576_wdt_settimeout(struct watchdog_lowerhalf_s *lower,
   flags = spin_lock_irqsave(&priv->lock);
 
   priv->timeout = timeout;
-  priv->torr    = rk3576_wdt_select_torr(timeout, &priv->period);
+  priv->torr    = rk3576_wdt_select_torr(priv, timeout, &priv->period);
 
   rk3576_wdt_putreg(priv, RK3576_WDT_TORR,
                     (uint32_t)priv->torr << WDT_TORR_PERIOD_SHIFT);
@@ -516,13 +594,15 @@ int rk3576_wdt_initialize(int minor)
   char devpath[16];
   int ret;
 
-  /* The WDT_NS tclk and pclk gates live in the CRU and are open out of
-   * reset (the RK3576 gate bits disable a clock when set, and all reset to
-   * zero), so no clock ungating call is required to reach the registers.
-   *
-   * TODO: call an explicit rk3576_cru_set_wdt_clock_gate(pclk, tclk) once
-   * that API exists in rk3576_cru.c, instead of relying on the reset state.
+  /* Ungate pclk and tclk and learn the counter clock rate before touching
+   * any register of the block.
    */
+
+  ret = rk3576_wdt_clk_init();
+  if (ret < 0)
+    {
+      return ret;
+    }
 
   /* Allow WDT_NS to drive the global SoC reset.  The bit lives in the
    * hiword-masked SYS_GRF_SOC_CON4 register.  The pause bit is left alone.
@@ -539,7 +619,8 @@ int rk3576_wdt_initialize(int minor)
   priv->handler = NULL;
   priv->started = false;
   priv->timeout = RK3576_WDT_DEFAULT_TIMEOUT_MS;
-  priv->torr    = rk3576_wdt_select_torr(priv->timeout, &priv->period);
+  priv->torr    = rk3576_wdt_select_torr(priv, priv->timeout,
+                                         &priv->period);
 
   rk3576_wdt_putreg(priv, RK3576_WDT_TORR,
                     (uint32_t)priv->torr << WDT_TORR_PERIOD_SHIFT);
@@ -567,8 +648,8 @@ int rk3576_wdt_initialize(int minor)
       return -EEXIST;
     }
 
-  wdinfo("%s registered: base=%08" PRIxPTR " tclk=%uHz period=%" PRIu32
-         "ms\n", devpath, priv->base, RK3576_WDT_CLK_HZ, priv->period);
+  wdinfo("%s registered: base=%08" PRIxPTR " tclk=%" PRIu32 "Hz period=%"
+         PRIu32 "ms\n", devpath, priv->base, priv->tclk_hz, priv->period);
   return OK;
 }
 

@@ -25,10 +25,12 @@
  *
  * Source: Rockchip RK3576 TRM Part1 V1.2, chapter 19 "Temperature-Sensor
  * ADC (TS-ADC)".  Single controller at 0x2AE70000, 0x400 register window,
- * six conversion channels (TRM Table 19-1):
+ * six conversion channels.  The channel-to-block assignment below is taken
+ * from the thermal-zones of the vendor device tree
+ * (4-HardwareData/k7_debian_vendor.dts, "thermal-sensors = <&tsadc N>"):
  *
- *   0 near chip center   1 big core   2 little core
- *   3 GPU                4 NPU        5 DDR
+ *   0 SoC (near chip center)   1 big core   2 little core
+ *   3 DDR                      4 NPU        5 GPU
  *
  * The controller converts every enabled channel in a loop ("auto mode")
  * and compares each result against a per-channel high-temperature
@@ -71,18 +73,21 @@
 
 #define RK3576_TSADC_NCHAN 6
 
-/* Channel index -> monitored block. */
+/* Channel index -> monitored block (device-tree thermal-zones order). */
 
-#define RK3576_TSADC_CH_CENTER   0 /* Near chip center */
+#define RK3576_TSADC_CH_SOC      0 /* Near chip center */
 #define RK3576_TSADC_CH_BIGCORE  1 /* Cortex-A72 cluster */
 #define RK3576_TSADC_CH_LITCORE  2 /* Cortex-A53 cluster */
-#define RK3576_TSADC_CH_GPU      3 /* Mali GPU */
+#define RK3576_TSADC_CH_DDR      3 /* DDR controller */
 #define RK3576_TSADC_CH_NPU      4 /* NPU */
-#define RK3576_TSADC_CH_DDR      5 /* DDR controller */
+#define RK3576_TSADC_CH_GPU      5 /* Mali GPU */
 
 /* clk_tsadc frequency.  CRU_CLKSEL_CON59[7:0] (clk_tsadc_div) resets to
- * 0x0b, i.e. the 24 MHz oscillator divided by 12.  TRM section 19.5.2
- * requires this clock to be 2 MHz.
+ * 0x0b, i.e. the 24 MHz oscillator divided by 12.  The vendor device tree
+ * pins the rate to 2 MHz ("assigned-clock-rates = <0x1E8480>").
+ *
+ * This constant is only a fallback for the case where the CLK framework
+ * cannot report a rate; the driver uses clk_get_rate() when it can.
  */
 
 #define RK3576_TSADC_CLK_HZ 2000000
@@ -158,9 +163,14 @@
 #define TSADC_EOC_HSHUT_PD_USR_EOC  (1 << 16) /* User-mode conversion done */
 #define TSADC_EOC_HSHUT_PD_ROUND    (1 << 17) /* Auto-mode round complete  */
 
-/* TSADC_DATA / TSADC_COMP_* payload **************************************/
+/* TSADC_DATA / TSADC_COMP_* payload.
+ *
+ * The v4/v7 conversion result is 12 bits wide; the calibration table runs
+ * up to code 2517 for +125 C, so a 10-bit mask would truncate everything
+ * above roughly +5 C.
+ */
 
-#define TSADC_DATA_MASK 0x03ff /* [9:0] 10-bit conversion result */
+#define TSADC_DATA_MASK 0x0fff /* [11:0] conversion result */
 
 /* Debounce counters, TSADC_HIGH_{INT,TSHUT}_DEBOUNCE [7:0] ***************/
 

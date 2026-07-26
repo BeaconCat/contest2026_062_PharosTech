@@ -43,12 +43,9 @@
  * locally administered station address so that boards no longer need a
  * hard-coded (and therefore colliding) WLAN MAC.
  *
- * Clocking: the OTP controller runs off "otpc" and "apb" gates which the
- * boot loader already opens (the BootROM and the MiniLoader both read
- * fuses before handing over).  No CRU call is made here because the CRU
- * driver currently exposes only per-module I2C/PWM helpers.
- * TODO: gate the clocks explicitly once rk3576_cru.h grows a generic
- * gate API, so that the driver no longer depends on loader state.
+ * Clocking: the controller needs its APB interface clock (pclk_otpc_ns_en)
+ * and its fuse-array user clock (clk_otpc_ns_en), both taken from the NuttX
+ * CLK framework in rk3576_otp_clk_init().
  ****************************************************************************/
 
 /****************************************************************************
@@ -66,6 +63,7 @@
 #include <sys/types.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/clk/clk.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/mutex.h>
 
@@ -83,6 +81,11 @@
 
 #define RK3576_OTP_DEVPATH "/dev/otp"
 #define RK3576_OTP_DEVMODE 0444 /* World readable, never writable      */
+
+/* CLK framework node names of the two input clocks. */
+
+#define RK3576_OTP_PCLK_NAME "pclk_otpc_ns_en"
+#define RK3576_OTP_CLK_NAME  "clk_otpc_ns_en"
 
 /* The read state machine needs a short settling delay after the user mode
  * bit is toggled, and completes a word in well under a microsecond.  Poll
@@ -120,6 +123,7 @@ struct rk3576_otp_dev_s
 
 static uint32_t rk3576_otp_getreg(unsigned int offset);
 static void rk3576_otp_putreg(unsigned int offset, uint32_t value);
+static int rk3576_otp_clk_init(void);
 static int rk3576_otp_wait_done(uint32_t flag);
 static int rk3576_otp_read_word(uint32_t wordaddr, uint16_t *value);
 
@@ -172,6 +176,64 @@ static uint32_t rk3576_otp_getreg(unsigned int offset)
 static void rk3576_otp_putreg(unsigned int offset, uint32_t value)
 {
   putreg32(value, RK3576_OTP_ADDR + offset);
+}
+
+/****************************************************************************
+ * Name: rk3576_otp_clk_init
+ *
+ * Description:
+ *   Ungate the OTP controller clocks through the NuttX CLK framework.  All
+ *   clock handling of this driver lives here.
+ *
+ * Returned Value:
+ *   OK (0) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+static int rk3576_otp_clk_init(void)
+{
+  struct clk_s *pclk;
+  struct clk_s *clk;
+  int ret;
+
+  /* APB register interface clock. */
+
+  pclk = clk_get(RK3576_OTP_PCLK_NAME);
+  if (pclk == NULL)
+    {
+      _err("ERROR: OTP: failed to get %s\n", RK3576_OTP_PCLK_NAME);
+      return -ENODEV;
+    }
+
+  ret = clk_enable(pclk);
+  if (ret < 0)
+    {
+      _err("ERROR: OTP: failed to enable %s: %d\n", RK3576_OTP_PCLK_NAME,
+           ret);
+      return ret;
+    }
+
+  /* Fuse-array user clock driving the read state machine.  Its rate is not
+   * used by this driver: every timing here is an absolute delay measured in
+   * microseconds by up_udelay().
+   */
+
+  clk = clk_get(RK3576_OTP_CLK_NAME);
+  if (clk == NULL)
+    {
+      _err("ERROR: OTP: failed to get %s\n", RK3576_OTP_CLK_NAME);
+      return -ENODEV;
+    }
+
+  ret = clk_enable(clk);
+  if (ret < 0)
+    {
+      _err("ERROR: OTP: failed to enable %s: %d\n", RK3576_OTP_CLK_NAME,
+           ret);
+      return ret;
+    }
+
+  return OK;
 }
 
 /****************************************************************************
@@ -618,6 +680,14 @@ int rk3576_otp_initialize(void)
   if (g_rk3576_otp.initialized)
     {
       return OK;
+    }
+
+  /* The clocks must be up before the first fuse read below. */
+
+  ret = rk3576_otp_clk_init();
+  if (ret < 0)
+    {
+      return ret;
     }
 
   ret = register_driver(RK3576_OTP_DEVPATH, &g_rk3576_otp_fops,

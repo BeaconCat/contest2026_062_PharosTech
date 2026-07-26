@@ -6,4 +6,59 @@ config ARCH_BOARD_KICKPI_K7
 	default y
 
 if ARCH_BOARD_KICKPI_K7
+
+config KICKPI_K7_RK806
+	bool "RK806 companion PMIC (I2C1, addr 0x23)"
+	default n
+	depends on RK3576_I2C
+	select REGULATOR
+	---help---
+		Register every KICKPI-K7 power rail supplied by the Rockchip RK806
+		PMIC with the NuttX regulator framework.  Required for runtime
+		control of vccio_sd_s0 (PLDO5), which the SD/SDIO 1.8V signal
+		voltage switch (CMD11) depends on.
+
+config KICKPI_K7_HYM8563
+	bool "HYM8563 external RTC on i2c2"
+	default n
+	depends on RK3576_I2C && RTC_DRIVER
+	select RTC_EXTERNAL
+	---help---
+		Enable the on-board Haoyu HYM8563 real time clock (i2c2 @ 0x51).
+		Registered as /dev/rtc0 through the NuttX RTC upper half.
+		Its 32.768kHz CLKOUT is the low-speed clock of the SV6621
+		WiFi/BT companion chip and is never disabled by the driver.
+		Alarm support additionally requires RTC_ALARM and SCHED_LPWORK.
+
+config KICKPI_K7_HUSB311
+	bool "HUSB311 USB Type-C port controller (i2c2 @0x4e)"
+	default n
+	depends on RK3576_I2C && RK3576_GPIO
+	---help---
+		Enable the Hynetek HUSB311 USB Type-C port controller (USB TCPCI
+		compliant) attached to I2C2 at address 0x4e, with its ALERT line
+		on GPIO4_D1.  Registers /dev/typec0.
+
+if KICKPI_K7_HUSB311
+
+config KICKPI_K7_HUSB311_PRIORITY
+	int "HUSB311 service thread priority"
+	default 110
+
+config KICKPI_K7_HUSB311_STACKSIZE
+	int "HUSB311 service thread stack size"
+	default 2048
+
+endif # KICKPI_K7_HUSB311
+
+config KICKPI_K7_IMX415
+	bool "Sony IMX415 camera sensors"
+	default n
+	depends on RK3576_I2C
+	select RK3576_CSI
+	---help---
+		Enable the IMX415 sensor driver for the three on-board
+		CMK-OT2022-PX1 modules (I2C4/I2C5/I2C8, slave address 0x37,
+		4-lane MIPI CSI-2 RAW10, 37.125 MHz external master clock).
+
 endif # ARCH_BOARD_KICKPI_K7

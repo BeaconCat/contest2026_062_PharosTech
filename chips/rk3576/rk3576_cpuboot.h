@@ -59,6 +59,12 @@
 #define RK3576_MPIDR_AFF1_SHIFT   8
 #define RK3576_MPIDR_AFF_MASK     0xffull
 
+/* Mask selecting the two affinity fields the RK3576 actually uses, so that
+ * the U/MT/RES1 flag bits of a raw MPIDR_EL1 read can be discarded.
+ */
+
+#define RK3576_MPIDR_AFF01_MASK   0xffffull
+
 /* Build an MPIDR affinity value (the PSCI "target_cpu" argument) from a
  * cluster number and the core index inside that cluster.
  */

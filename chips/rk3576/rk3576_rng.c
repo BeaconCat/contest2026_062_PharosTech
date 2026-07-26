@@ -57,6 +57,7 @@
 #include <sys/types.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/clk/clk.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/mutex.h>
 
@@ -90,6 +91,20 @@
   (RK3576_RNG_CTL_ENABLE | RK3576_RNG_CTL_LEN_256BIT | \
    RK3576_RNG_CTL_RING_FASTEST)
 
+/* CLK framework node name of the AHB interface clock. */
+
+#define RK3576_RNG_HCLK_NAME "hclk_trng_ns_en"
+
+/****************************************************************************
+ * Private Function Prototypes
+ ****************************************************************************/
+
+static void rk3576_rng_reset_release(void);
+static int rk3576_rng_clk_init(void);
+static int rk3576_rng_convert(uint8_t *dest, size_t len);
+static ssize_t rk3576_rng_fops_read(struct file *filep, char *buffer,
+                                    size_t buflen);
+
 /****************************************************************************
  * Private Data
  ****************************************************************************/
@@ -117,27 +132,58 @@ static inline void rk3576_rng_putreg(unsigned int off, uint32_t val)
 }
 
 /****************************************************************************
- * Name: rk3576_rng_clk_enable
+ * Name: rk3576_rng_reset_release
  *
  * Description:
- *   Ungate hclk_trng_ns and release hresetn_trng_ns in the secure CRU.
- *   Both registers are HIWORD write-masked and a set bit means "disabled" /
- *   "in reset", so enabling means writing the mask with a zero data bit.
+ *   Take the TRNG out of reset.  SECURECRU_SOFTRST_CON00 is HIWORD write-
+ *   masked and a set bit holds the block in reset, so releasing it means
+ *   writing the bit's mask with a zero data bit.  Only the TRNG bit is
+ *   touched; the other blocks sharing this register keep their state.
  *
- *   TODO: fold this into the rk3576_cru driver once it grows a secure CRU
- *   clock domain API; it is open coded here to keep the CRU driver
- *   untouched.
+ *   Reset control has no representation in the NuttX CLK framework, so it
+ *   stays open coded here.
  *
  ****************************************************************************/
 
-static void rk3576_rng_clk_enable(void)
+static void rk3576_rng_reset_release(void)
 {
-  /* Release the reset first, then open the clock gate. */
-
-  putreg32(RK3576_SECURE_CRU_WRITE_MASK,
+  putreg32((uint32_t)RK3576_SECURE_RST_HRESETN_TRNG_NS << 16,
            RK3576_SECURE_CRU_ADDR + RK3576_SECURE_CRU_SOFTRST_CON00);
-  putreg32(RK3576_SECURE_CRU_WRITE_MASK,
-           RK3576_SECURE_CRU_ADDR + RK3576_SECURE_CRU_GATE_CON00);
+}
+
+/****************************************************************************
+ * Name: rk3576_rng_clk_init
+ *
+ * Description:
+ *   Ungate hclk_trng_ns through the NuttX CLK framework.  All clock
+ *   handling of this driver lives here.
+ *
+ * Returned Value:
+ *   OK on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+static int rk3576_rng_clk_init(void)
+{
+  struct clk_s *hclk;
+  int ret;
+
+  hclk = clk_get(RK3576_RNG_HCLK_NAME);
+  if (hclk == NULL)
+    {
+      _err("ERROR: RKRNG: failed to get %s\n", RK3576_RNG_HCLK_NAME);
+      return -ENODEV;
+    }
+
+  ret = clk_enable(hclk);
+  if (ret < 0)
+    {
+      _err("ERROR: RKRNG: failed to enable %s: %d\n", RK3576_RNG_HCLK_NAME,
+           ret);
+      return ret;
+    }
+
+  return OK;
 }
 
 /****************************************************************************
@@ -272,7 +318,14 @@ int rk3576_rng_initialize(void)
 
   if (!g_rk3576_rng_ready)
     {
-      rk3576_rng_clk_enable();
+      ret = rk3576_rng_clk_init();
+      if (ret < 0)
+        {
+          nxmutex_unlock(&g_rk3576_rng_lock);
+          return ret;
+        }
+
+      rk3576_rng_reset_release();
 
       /* Program the automatic reseed interval and enable the ring
        * oscillator.  START is left low; it is pulsed per conversion.

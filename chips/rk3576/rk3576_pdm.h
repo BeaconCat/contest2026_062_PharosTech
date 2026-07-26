@@ -22,14 +22,17 @@
 
 /****************************************************************************
  * Public interface of the RK3576 PDM microphone-array capture driver.  The
- * controller is exposed as a NuttX audio lower half (include/nuttx/audio),
- * so a board registers it with audio_register():
+ * controller is exposed through the standard NuttX I2S interface
+ * (include/nuttx/audio/i2s.h); only the receive half is implemented, since
+ * the PDM block has no transmit path.  A board typically registers it with
+ * the generic i2schar character driver:
  *
- *   lower = rk3576_pdm_initialize(RK3576_PDM1);
- *   audio_register("pcm0c", lower);
+ *   struct i2s_dev_s *i2s = rk3576_pdm_initialize(RK3576_PDM1);
+ *   i2schar_register(i2s, 0);
  *
- * The board is responsible for muxing the PDM clock and data pins and for
- * providing the PDM output clock rate before the device is opened.
+ * The board is responsible for muxing the PDM clock and data pins before
+ * the first capture is started.  All clocking is taken from the NuttX CLK
+ * framework, so rk3576_clk_tree_initialize() must have run first.
  ****************************************************************************/
 
 #ifndef __VENDOR_ROCKCHIP_RK3576_RK3576_PDM_H
@@ -41,7 +44,7 @@
 
 #include <nuttx/config.h>
 
-#include <stdint.h>
+#include <nuttx/audio/i2s.h>
 
 #ifdef CONFIG_RK3576_PDM
 
@@ -58,12 +61,6 @@
 #define RK3576_PDM_NCTRL 2
 
 /****************************************************************************
- * Public Types
- ****************************************************************************/
-
-struct audio_lowerhalf_s;
-
-/****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
@@ -71,42 +68,25 @@ struct audio_lowerhalf_s;
  * Name: rk3576_pdm_initialize
  *
  * Description:
- *   Create the audio lower half for one PDM controller.  The hardware is
- *   not touched here; it is brought up when the upper half configures and
- *   starts a capture session.
+ *   Create the I2S (receive-only) interface for one PDM controller.  The
+ *   controller clocks are enabled and the block is placed in a known idle
+ *   state; capture parameters are applied later through the I2S
+ *   rxsamplerate / rxdatawidth / rxchannels methods, and default to
+ *   16 kHz / 16-bit / 2 channels (the voice wake-word configuration).
+ *
+ *   Must be called after rk3576_clk_tree_initialize(), i.e. from
+ *   board_late_initialize().
  *
  * Input Parameters:
  *   controller - RK3576_PDM0 or RK3576_PDM1.
  *
  * Returned Value:
- *   An audio lower-half handle to hand to audio_register(), or NULL on an
- *   invalid controller index.
+ *   An I2S device handle on success, or NULL on an invalid controller
+ *   index or a clock/DMA bring-up failure.
  *
  ****************************************************************************/
 
-struct audio_lowerhalf_s *rk3576_pdm_initialize(int controller);
-
-/****************************************************************************
- * Name: rk3576_pdm_set_clkout
- *
- * Description:
- *   Tell the driver the actual frequency, in Hz, of the controller's
- *   "pdm_clk_out" root clock.  The driver divides this clock down to the
- *   microphone bit clock and needs the real rate to pick the decimation
- *   ratio for a requested sample rate.  A board calls this after it has
- *   programmed the CRU, before the device is opened.  When it is never
- *   called the driver assumes the reset default documented in rk3576_pdm.c.
- *
- * Input Parameters:
- *   controller - RK3576_PDM0 or RK3576_PDM1.
- *   clkout_hz  - Root clock frequency in Hz.
- *
- * Returned Value:
- *   OK on success; -EINVAL on an invalid controller or zero frequency.
- *
- ****************************************************************************/
-
-int rk3576_pdm_set_clkout(int controller, uint32_t clkout_hz);
+struct i2s_dev_s *rk3576_pdm_initialize(int controller);
 
 #endif /* CONFIG_RK3576_PDM */
 #endif /* __VENDOR_ROCKCHIP_RK3576_RK3576_PDM_H */

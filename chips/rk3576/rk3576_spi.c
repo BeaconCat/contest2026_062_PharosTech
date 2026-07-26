@@ -39,6 +39,11 @@
  * this file.  Only SPI4 is routed on the KICKPI-K7, but all five instances
  * are selectable by port index.
  *
+ * Both input clocks come from the NuttX CLK framework: pclk_spiN_en drives
+ * the register interface and clk_spiN_en is the functional clock the BAUDR
+ * divider works on, so its rate is read back with clk_get_rate() and used
+ * for every frequency calculation.
+ *
  * This IP is single-lane only.  Dual/quad (QSPI) peripherals must use the
  * separate RK3576 FSPI controller; see RK3576_SPI_LANES_MAX.
  ****************************************************************************/
@@ -55,8 +60,10 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/clk/clk.h>
 #include <nuttx/compiler.h>
 #include <nuttx/mutex.h>
 #include <nuttx/spi/spi.h>
@@ -72,19 +79,15 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* Functional clock feeding the BAUDR divider, in Hz.
- *
- * TODO: query the CRU once it exposes a clk_spi rate/gate API
- * (rk3576_cru_set_spi_clock_gate() / _selection() do not exist yet).  The
- * bootloader leaves clk_spi on its reset parent, which is the 200 MHz
- * gpll_div6 branch used by the vendor kernel for every SPI instance.
- */
-
-#define RK3576_SPI_CLKIN 200000000
-
 /* Default bus frequency used until the first SPI_SETFREQUENCY(). */
 
 #define RK3576_SPI_DEFAULT_HZ 1000000
+
+/* Longest CLK framework node name built for one controller, e.g.
+ * "pclk_spi4_en" - 12 characters plus the terminator.
+ */
+
+#define RK3576_SPI_CLKNAME_LEN 16
 
 /* Number of consecutive polls that may make no forward progress (no FIFO
  * slot freed, no word received) before a transfer is abandoned.  At the
@@ -132,6 +135,7 @@ struct rk3576_spi_priv_s
  ****************************************************************************/
 
 static int rk3576_spi_lock(struct spi_dev_s *dev, bool lock);
+static int rk3576_spi_clk_init(struct rk3576_spi_priv_s *priv);
 static void rk3576_spi_select(struct spi_dev_s *dev, uint32_t devid,
                               bool selected);
 static uint32_t rk3576_spi_setfrequency(struct spi_dev_s *dev,
@@ -271,6 +275,80 @@ static int rk3576_spi_dfs(int nbits)
       default:
         return -EINVAL;
     }
+}
+
+/****************************************************************************
+ * Name: rk3576_spi_clk_init
+ *
+ * Description:
+ *   Ungate the APB interface clock and the functional clock of one
+ *   controller through the NuttX CLK framework, and latch the functional
+ *   clock rate that BAUDR divides down.  All clock handling of this driver
+ *   lives here.
+ *
+ * Input Parameters:
+ *   priv - Controller state; priv->port must already be set.
+ *
+ * Returned Value:
+ *   OK on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+static int rk3576_spi_clk_init(struct rk3576_spi_priv_s *priv)
+{
+  char name[RK3576_SPI_CLKNAME_LEN];
+  struct clk_s *pclk;
+  struct clk_s *fclk;
+  int ret;
+
+  /* APB register interface clock. */
+
+  snprintf(name, sizeof(name), "pclk_spi%d_en", priv->port);
+
+  pclk = clk_get(name);
+  if (pclk == NULL)
+    {
+      spierr("ERROR: SPI%d: failed to get %s\n", priv->port, name);
+      return -ENODEV;
+    }
+
+  ret = clk_enable(pclk);
+  if (ret < 0)
+    {
+      spierr("ERROR: SPI%d: failed to enable %s: %d\n", priv->port, name,
+             ret);
+      return ret;
+    }
+
+  /* Functional clock.  Its rate is the numerator of the BAUDR divider, so
+   * it is read back rather than assumed.
+   */
+
+  snprintf(name, sizeof(name), "clk_spi%d_en", priv->port);
+
+  fclk = clk_get(name);
+  if (fclk == NULL)
+    {
+      spierr("ERROR: SPI%d: failed to get %s\n", priv->port, name);
+      return -ENODEV;
+    }
+
+  ret = clk_enable(fclk);
+  if (ret < 0)
+    {
+      spierr("ERROR: SPI%d: failed to enable %s: %d\n", priv->port, name,
+             ret);
+      return ret;
+    }
+
+  priv->clkin = clk_get_rate(fclk);
+  if (priv->clkin == 0)
+    {
+      spierr("ERROR: SPI%d: %s reports a zero rate\n", priv->port, name);
+      return -EINVAL;
+    }
+
+  return OK;
 }
 
 /****************************************************************************
@@ -835,6 +913,7 @@ static void rk3576_spi_hwinit(struct rk3576_spi_priv_s *priv)
 struct spi_dev_s *rk3576_spi_initialize(int port)
 {
   struct rk3576_spi_priv_s *priv;
+  int ret;
 
   if (port < 0 || port >= RK3576_SPI_NPORTS)
     {
@@ -851,7 +930,16 @@ struct spi_dev_s *rk3576_spi_initialize(int port)
   priv->dev.ops = &g_rk3576_spi_ops;
   priv->base    = g_rk3576_spi_desc[port].base;
   priv->port    = port;
-  priv->clkin   = RK3576_SPI_CLKIN;
+
+  /* The clocks must be up before the first register access, and clkin must
+   * be known before the first BAUDR programming in rk3576_spi_hwinit().
+   */
+
+  ret = rk3576_spi_clk_init(priv);
+  if (ret < 0)
+    {
+      return NULL;
+    }
 
   nxmutex_init(&priv->lock);
 

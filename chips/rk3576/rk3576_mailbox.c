@@ -35,6 +35,10 @@
  * this driver exposes a small in-kernel API (see rk3576_mailbox.h) that
  * rptun and other in-kernel users bind to directly; no /dev node is
  * created.
+ *
+ * A single CRU gate (pclk_mailbox0) feeds the register interface of every
+ * instance, so it is taken from the NuttX CLK framework once, when the
+ * first instance is initialised.
  ****************************************************************************/
 
 /****************************************************************************
@@ -52,6 +56,7 @@
 #include <string.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/clk/clk.h>
 #include <nuttx/irq.h>
 #include <nuttx/spinlock.h>
 
@@ -62,6 +67,16 @@
 #include "rk3576_mailbox.h"
 
 #ifdef CONFIG_RK3576_MAILBOX
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+/* CLK framework node name of the APB interface clock.  A single gate feeds
+ * the register interface of every mailbox instance.
+ */
+
+#define RK3576_MAILBOX_PCLK_NAME "pclk_mailbox0_en"
 
 /****************************************************************************
  * Private Types
@@ -95,6 +110,7 @@ static uint32_t rk3576_mailbox_getreg(struct rk3576_mailbox_dev_s *priv,
 static void rk3576_mailbox_putreg(struct rk3576_mailbox_dev_s *priv,
                                   unsigned int off, uint32_t val);
 static struct rk3576_mailbox_dev_s *rk3576_mailbox_lookup(int instance);
+static int rk3576_mailbox_clk_init(void);
 static int rk3576_mailbox_interrupt(int irq, void *context, void *arg);
 
 /****************************************************************************
@@ -103,6 +119,10 @@ static int rk3576_mailbox_interrupt(int irq, void *context, void *arg);
 
 static struct rk3576_mailbox_dev_s
   g_rk3576_mailbox[RK3576_MAILBOX_NINSTANCES];
+
+/* The APB gate is shared by all instances, so it is opened only once. */
+
+static bool g_rk3576_mailbox_clk_ready;
 
 /****************************************************************************
  * Private Functions
@@ -155,6 +175,48 @@ static struct rk3576_mailbox_dev_s *rk3576_mailbox_lookup(int instance)
     }
 
   return priv;
+}
+
+/****************************************************************************
+ * Name: rk3576_mailbox_clk_init
+ *
+ * Description:
+ *   Ungate the shared mailbox APB clock through the NuttX CLK framework.
+ *   All clock handling of this driver lives here; the gate is opened on the
+ *   first instance brought up and left open afterwards.
+ *
+ * Returned Value:
+ *   OK on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+static int rk3576_mailbox_clk_init(void)
+{
+  struct clk_s *pclk;
+  int ret;
+
+  if (g_rk3576_mailbox_clk_ready)
+    {
+      return OK;
+    }
+
+  pclk = clk_get(RK3576_MAILBOX_PCLK_NAME);
+  if (pclk == NULL)
+    {
+      _err("mailbox: failed to get %s\n", RK3576_MAILBOX_PCLK_NAME);
+      return -ENODEV;
+    }
+
+  ret = clk_enable(pclk);
+  if (ret < 0)
+    {
+      _err("mailbox: failed to enable %s: %d\n", RK3576_MAILBOX_PCLK_NAME,
+           ret);
+      return ret;
+    }
+
+  g_rk3576_mailbox_clk_ready = true;
+  return OK;
 }
 
 /****************************************************************************
@@ -252,6 +314,14 @@ int rk3576_mailbox_initialize(int instance)
   if (priv->initialized)
     {
       return OK;
+    }
+
+  /* The APB clock must be up before the register file is touched below. */
+
+  ret = rk3576_mailbox_clk_init();
+  if (ret < 0)
+    {
+      return ret;
     }
 
   spin_lock_init(&priv->lock);

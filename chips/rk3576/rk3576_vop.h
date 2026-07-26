@@ -20,6 +20,15 @@
  *
  ****************************************************************************/
 
+/****************************************************************************
+ * RK3576 VOP (Video Output Processor) module public interface.
+ *
+ * This header is shared between the VOP driver and the display encoder
+ * drivers (HDMI TX, MIPI DSI, ...): the display timing description lives
+ * here so that a mode selected by an encoder can be handed straight to the
+ * video port without a second, duplicated definition.
+ ****************************************************************************/
+
 #ifndef __VENDOR_ROCKCHIP_CHIPS_RK3576_RK3576_VOP_H
 #define __VENDOR_ROCKCHIP_CHIPS_RK3576_RK3576_VOP_H
 
@@ -33,8 +42,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef CONFIG_RK3576_VOP
-
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -46,6 +53,14 @@
 #define RK3576_VOP_IF_MIPI1   2
 #define RK3576_VOP_IF_LVDS0   3
 #define RK3576_VOP_IF_EDP0    4
+
+/* Largest mode the driver accepts.  The VOP hardware timing registers are
+ * 16-bit, but the post-scaler line buffer limits a single video port to
+ * 4096 active pixels; the vertical limit below is the practical 4K one.
+ */
+
+#define RK3576_VOP_MAX_HACT   4096
+#define RK3576_VOP_MAX_VACT   2304
 
 /****************************************************************************
  * Public Types
@@ -61,9 +76,13 @@
  * pixclk is the required dclk frequency in Hz:
  *
  *   pixclk = htotal * vtotal * refresh
+ *
+ * htotal/vtotal are stored explicitly (rather than derived) because the
+ * encoder drivers need them for their own PHY rate maths; the VOP driver
+ * validates that they agree with the porch values.
  */
 
-struct rk3576_vop_timing_s
+struct rk3576_display_timing_s
 {
   uint32_t pixclk;   /* Pixel (dclk) frequency in Hz                     */
 
@@ -71,15 +90,19 @@ struct rk3576_vop_timing_s
   uint16_t hfp;      /* Horizontal front porch                           */
   uint16_t hsync;    /* Horizontal sync width                            */
   uint16_t hbp;      /* Horizontal back porch                            */
+  uint16_t htotal;   /* hact + hfp + hsync + hbp                         */
 
   uint16_t vact;     /* Vertical active lines                            */
   uint16_t vfp;      /* Vertical front porch                             */
   uint16_t vsync;    /* Vertical sync width                              */
   uint16_t vbp;      /* Vertical back porch                              */
+  uint16_t vtotal;   /* vact + vfp + vsync + vbp                         */
 
   bool hsync_active_high; /* HSYNC polarity on the display interface     */
   bool vsync_active_high; /* VSYNC polarity on the display interface     */
 };
+
+#ifdef CONFIG_RK3576_VOP
 
 /****************************************************************************
  * Public Function Prototypes
@@ -93,7 +116,7 @@ struct rk3576_vop_timing_s
  *
  ****************************************************************************/
 
-const struct rk3576_vop_timing_s *rk3576_vop_timing_1080p60(void);
+const struct rk3576_display_timing_s *rk3576_vop_timing_1080p60(void);
 
 /****************************************************************************
  * Name: rk3576_vop_timing_720p60
@@ -103,7 +126,7 @@ const struct rk3576_vop_timing_s *rk3576_vop_timing_1080p60(void);
  *
  ****************************************************************************/
 
-const struct rk3576_vop_timing_s *rk3576_vop_timing_720p60(void);
+const struct rk3576_display_timing_s *rk3576_vop_timing_720p60(void);
 
 /****************************************************************************
  * Name: rk3576_vop_set_timing
@@ -112,18 +135,19 @@ const struct rk3576_vop_timing_s *rk3576_vop_timing_720p60(void);
  *   Select the display timing used by the framebuffer video port.  Must be
  *   called before up_fbinitialize(); afterwards the mode is fixed because
  *   the framebuffer geometry reported to the FB upper half would otherwise
- *   change underneath the application.
+ *   change underneath the application.  When it is never called the driver
+ *   falls back to rk3576_vop_timing_1080p60().
  *
  * Input Parameters:
  *   timing - Timing to use.  The structure is copied.
  *
  * Returned Value:
  *   OK on success; -EBUSY if the VOP has already been initialised,
- *   -EINVAL if the timing does not fit the compiled framebuffer.
+ *   -EINVAL if the timing is inconsistent or too large.
  *
  ****************************************************************************/
 
-int rk3576_vop_set_timing(const struct rk3576_vop_timing_s *timing);
+int rk3576_vop_set_timing(const struct rk3576_display_timing_s *timing);
 
 /****************************************************************************
  * Name: rk3576_vop_set_interface
@@ -145,6 +169,20 @@ int rk3576_vop_set_timing(const struct rk3576_vop_timing_s *timing);
 int rk3576_vop_set_interface(int iface);
 
 /****************************************************************************
+ * Name: rk3576_vop_get_timing
+ *
+ * Description:
+ *   Return the timing the framebuffer video port is configured with.  An
+ *   encoder driver uses this to program its PHY for the very same mode.
+ *
+ * Returned Value:
+ *   Pointer to the active timing.  Never NULL.
+ *
+ ****************************************************************************/
+
+const struct rk3576_display_timing_s *rk3576_vop_get_timing(void);
+
+/****************************************************************************
  * Name: rk3576_vop_get_fbmem
  *
  * Description:
@@ -155,7 +193,8 @@ int rk3576_vop_set_interface(int iface);
  *   fbsize - If non-NULL, receives the framebuffer size in bytes.
  *
  * Returned Value:
- *   Physical address of the framebuffer.
+ *   Physical address of the framebuffer, or 0 if the VOP has not been
+ *   initialised yet.
  *
  ****************************************************************************/
 

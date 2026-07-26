@@ -42,9 +42,18 @@
 /* clang-format off */
 #ifdef __ASSEMBLY__
 
+/* Logical CPU index from MPIDR_EL1.  The RK3576 has two clusters
+ * (Aff1 = 0: 4 x Cortex-A53, Aff1 = 1: 4 x Cortex-A72), so the index is
+ * (Aff1 * 4) + Aff0.  Aff1 is 0/1 and Aff0 is 0..3, hence folding bit 8
+ * down onto bit 2 with a single shift-or is exact.  Must stay in sync with
+ * g_rk3576_cpu_mpid[] in rk3576_cpuboot.c.
+ */
+
 .macro  get_cpu_id xreg0
   mrs    \xreg0, mpidr_el1
-  ubfx   \xreg0, \xreg0, #0, #8
+  ubfx   \xreg0, \xreg0, #0, #16
+  orr    \xreg0, \xreg0, \xreg0, lsr #6
+  and    \xreg0, \xreg0, #7
 .endm
 
 #endif /* __ASSEMBLY__ */

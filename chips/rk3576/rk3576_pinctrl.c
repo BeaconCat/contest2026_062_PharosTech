@@ -34,6 +34,16 @@
  * schmitt region table is owned here, expressed with the same bank-origin
  * offset convention so the two paths can be diffed against each other.
  *
+ * No clock is requested from the CLK framework.  The IOC pad-control
+ * registers are reached over the APB gates of their own domains
+ * (pclk_busioc, pclk_vccio_ioc, pclk_vccio6_ioc, pclk_vccio7_ioc,
+ * pclk_pmu1_ioc, pclk_pmu0ioc), all of which are open out of reset - the
+ * RK3576 gate bits disable a clock when set and every one of them resets to
+ * zero - and none of which may be gated off again, because pad
+ * configuration has to stay reachable for the whole lifetime of the system.
+ * The vendor device tree likewise gives its pinctrl node no "clocks"
+ * property.
+ *
  * TODO: rk3576_gpio.c still carries its own private copies of the pull /
  * drive / schmitt routing chains.  Once this module has been validated on
  * silicon for all five banks, rk3576_config_gpio() should call into

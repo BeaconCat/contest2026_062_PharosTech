@@ -211,11 +211,19 @@
 #define RK3576_GMAC_MDIO_PA_SHIFT 21
 #define RK3576_GMAC_MDIO_PA_MASK  (0x1fu << 21)
 
-/* CSR clock range encoding.  aclk_mac on the RK3576 runs at up to 300 MHz;
- * 0x5 divides by 124 which keeps MDC below the 2.5 MHz clause-22 limit.
+/* CSR clock range encoding.  The field selects the divider applied to the
+ * CSR (application) clock to produce MDC, which clause 22 caps at 2.5 MHz.
+ * The driver picks the entry matching the measured aclk_mac rate.
  */
 
-#define RK3576_GMAC_MDIO_CR_DIV124 0x5
+#define RK3576_GMAC_MDIO_CR_DIV42  0x0 /*  60 ..  100 MHz */
+#define RK3576_GMAC_MDIO_CR_DIV62  0x1 /* 100 ..  150 MHz */
+#define RK3576_GMAC_MDIO_CR_DIV16  0x2 /*  20 ..   35 MHz */
+#define RK3576_GMAC_MDIO_CR_DIV26  0x3 /*  35 ..   60 MHz */
+#define RK3576_GMAC_MDIO_CR_DIV102 0x4 /* 150 ..  250 MHz */
+#define RK3576_GMAC_MDIO_CR_DIV124 0x5 /* 250 ..  300 MHz */
+#define RK3576_GMAC_MDIO_CR_DIV204 0x6 /* 300 ..  500 MHz */
+#define RK3576_GMAC_MDIO_CR_DIV324 0x7 /* 500 ..  800 MHz */
 
 #define RK3576_GMAC_MDIO_DATA_MASK 0xffffu
 

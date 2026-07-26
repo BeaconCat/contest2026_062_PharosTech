@@ -110,6 +110,454 @@ config RK3576_DMA
 		Chief consumer is the SAI/I2S audio driver.  Cyclic and
 		scatter/gather transfers are not yet implemented.
 
+config RK3576_PD
+	bool "PMU power domains"
+	default n
+	---help---
+		PMU power-domain control (power-management@27380000).  Required by
+		the NPU, GPU, VPU, VDEC, VI, VOP, USB and PHP drivers: while a
+		domain is gated its register window reads back as zero.  Exports
+		rk3576_pd_on() / rk3576_pd_off() / rk3576_pd_is_on().
+
+config RK3576_PINCTRL
+	bool "Pin controller (batch pad configuration)"
+	default n
+	---help---
+		Enable the RK3576 pinctrl helper.  It applies a whole "pin group"
+		-- the set of pads belonging to one peripheral instance, described
+		the way the Linux device tree does with rockchip,pins -- in a
+		single call.  It owns the IOMUX / pull / drive-strength / schmitt
+		pad registers only and never touches the GPIO controller, so it is
+		safe to use alongside RK3576_GPIO.
+
+config RK3576_MAILBOX
+	bool "Mailbox (inter-core doorbell)"
+	default n
+	---help---
+		Enable the RK3576 mailbox driver (mailbox@2a140000).  Provides the
+		A2B / B2A command+data doorbell registers used to signal the other
+		cores of the SoC, and is the notification back end of an AMP
+		(rpmsg) transport.
+
+config RK3576_OTP
+	bool "OTP (eFuse) controller"
+	default n
+	---help---
+		Enable the RK3576 OTP / eFuse reader (otp@2a580000).  Gives
+		read-only access to the factory-programmed fuse cells published by
+		the vendor device tree: CPU code and version, the 128-bit chip
+		unique ID, the per-domain leakage values and the OPP trim data.
+
+config RK3576_RNG
+	bool "TRNG (hardware random number generator)"
+	default n
+	select ARCH_HAVE_RNG
+	---help---
+		Enable the RK3576 RKRNG hardware true random number generator.
+		Provides the up_rnginitialize() / devurandom_register() arch hooks
+		used by the NuttX devrandom framework (/dev/random, /dev/urandom)
+		plus the in-kernel rk3576_rng_read() API.
+
+config RK3576_WDT
+	bool "Watchdog timer (DesignWare WDT)"
+	default n
+	select WATCHDOG
+	---help---
+		Enable the RK3576 non-secure watchdog (WDT_NS, a Synopsys
+		DesignWare watchdog).  Registered with the NuttX watchdog upper
+		half as /dev/watchdogN and configured to reset the SoC on timeout.
+
+config RK3576_SPI
+	bool "SPI master"
+	default n
+	select SPI
+	select SPI_EXCHANGE
+	---help---
+		Enable the RK3576 SPI master driver (Rockchip SPI block).  Each
+		controller is returned as a struct spi_dev_s by
+		rk3576_spi_initialize(); pin muxing is the board's
+		responsibility.
+
+config RK3576_I3C
+	bool "I3C master"
+	default n
+	select I2C
+	---help---
+		Enable the RK3576 I3C master controller driver (DesignWare MIPI
+		I3C host controller, "rockchip,i3c-master").  The controller is
+		exposed through the standard NuttX struct i2c_master_s so that
+		legacy I2C device drivers work unmodified on the I3C bus, plus a
+		native API for CCC transfers, ENTDAA dynamic address assignment
+		and in-band interrupts.
+
+config RK3576_SARADC
+	bool "SARADC (Rockchip SAR-ADC v2)"
+	default n
+	depends on ANALOG
+	select ADC
+	---help---
+		Enable the RK3576 12-bit, 8-channel SAR-ADC at 0x2AE00000.
+		Provides a NuttX /dev/adcN character device (interrupt driven
+		single-shot conversions) plus the polled helper
+		rk3576_saradc_read_channel() used for head-set key detection.
+
+config RK3576_TSADC
+	bool "TS-ADC (on-die temperature sensors)"
+	default n
+	---help---
+		Enable the RK3576 Temperature-Sensor ADC at 0x2AE70000.  Runs the
+		six on-die sensors (SoC / big core / little core / DDR / NPU / GPU)
+		in auto-conversion mode, raises an interrupt above 115 C and
+		asserts the TSADC_SHUT pad above 120 C, matching the vendor device
+		tree.  When SENSORS is enabled the channels can be registered as
+		SENSOR_TYPE_AMBIENT_TEMPERATURE devices.
+
+config RK3576_IR
+	bool "Infrared remote-control receiver (NEC)"
+	default n
+	---help---
+		Enable the RK3576 infrared receiver.  There is no dedicated IR
+		block: PWM0 channel 0 (0x27330000) runs in capture mode and its
+		power-key match hardware decodes NEC frames in hardware.  The
+		driver registers a character device (/dev/ir0) returning one
+		uint32_t per key event, plus an in-kernel callback API.  The
+		board muxes the PWM0_CH0 pad and calls rk3576_ir_initialize().
+
+config RK3576_CRYPTO
+	bool "Hardware crypto engine (AES / SHA)"
+	default n
+	depends on CRYPTO
+	select RK3576_DMA_ALLOC
+	---help---
+		Enable the Rockchip crypto-v4 accelerator at 0x2A400000.
+		Provides hardware AES (ECB/CBC/CTR, 128/192/256-bit) behind the
+		NuttX aes_cypher() arch hook, and hardware SHA-256 through
+		rk3576_crypto_sha256*().  Uses the DMA-safe heap for its
+		descriptor and bounce buffers, so RK3576_DMA_ALLOC is required.
+
+config RK3576_GMAC
+	bool "Gigabit Ethernet (GMAC / dwmac-4.20a)"
+	default n
+	depends on NET && ARCH_HAVE_PHY
+	select ARCH_HAVE_NETDEV_STATISTICS
+	select NETDEV_LATEINIT
+	select RK3576_DMA_ALLOC
+	select SCHED_WORKQUEUE
+	---help---
+		Enable the driver for the two Synopsys DesignWare MAC 4.20a
+		controllers at 0x2A220000 (gmac0) and 0x2A230000 (gmac1).
+		Both are wired as RGMII with the receive delay generated by
+		the PHY ("rgmii-rxid").
+
+if RK3576_GMAC
+
+config RK3576_GMAC0
+	bool "Enable GMAC0 (0x2A220000)"
+	default y
+
+config RK3576_GMAC1
+	bool "Enable GMAC1 (0x2A230000)"
+	default n
+
+config RK3576_GMAC_PHYADDR
+	int "PHY address on the MDIO bus"
+	default 0
+	range 0 31
+	---help---
+		Address the driver probes first.  If the PHY does not answer
+		there the whole bus is scanned.  The vendor device tree puts
+		both PHYs at address 0.
+
+config RK3576_GMAC_NTXDESC
+	int "Number of transmit descriptors"
+	default 8
+	---help---
+		Must be a power of two.
+
+config RK3576_GMAC_NRXDESC
+	int "Number of receive descriptors"
+	default 8
+	---help---
+		Must be a power of two.
+
+endif # RK3576_GMAC
+
+config RK3576_PDM
+	bool "PDM microphone array (PDM0/PDM1)"
+	default n
+	depends on AUDIO
+	select I2S
+	select RK3576_DMA
+	select RK3576_DMA_ALLOC
+	---help---
+		Enable the RK3576 PDM controller driver.  It exposes the
+		receive half of the NuttX I2S interface (a board registers
+		it with i2schar_register()) and captures a PDM MEMS
+		microphone array, defaulting to 16 kHz / 16-bit / 2
+		channels for voice wake-word use.  Data is moved by the
+		PL330 into a buffer from the DMA-safe heap.
+
+config RK3576_COMBPHY
+	bool "Naneng COMBPHY (PCIe personality)"
+	default n
+	---help---
+		Enable the RK3576 combo SerDes PHY driver.  Required by the PCIe
+		root complex driver; currently only the PCIe personality of the
+		PHY is implemented (no USB3 / SATA / SGMII).
+
+config RK3576_PCIE
+	bool "PCIe root complex"
+	default n
+	depends on PCI
+	select RK3576_COMBPHY
+	---help---
+		Enable the Synopsys DesignWare PCIe 2.1 root complex driver for
+		the RK3576.  Registers a struct pci_controller_s with the NuttX
+		PCI subsystem, which then enumerates the bus.  Port 0 is the
+		one routed to the M.2 slot on the KICKPI-K7.
+
+config RK3576_SKW_BT
+	bool "SeekWave SV6621 Bluetooth (HCI over SDIO virtual channel)"
+	default n
+	depends on RK3576_SKW
+	select DRIVERS_BLUETOOTH
+	select WIRELESS_BLUETOOTH
+	---help---
+		HCI transport for the Bluetooth side of the on-board SeekWave
+		SV6621 (SWT6621-S) Wi-Fi/BT combo chip.  The part has no HCI
+		UART; HCI is multiplexed over the same SDIO data window as
+		Wi-Fi using virtual channels 2/3/4/5.  Requires the SeekWave
+		SDIO core driver (RK3576_SKW) which downloads and boots the CP
+		firmware.
+
+if RK3576_SKW_BT
+
+config RK3576_SKW_BT_DEVID
+	int "Bluetooth device minor number"
+	default 0
+	---help---
+		Minor number passed to rk3576_skw_bt_initialize(); 0 gives
+		/dev/ttyBT0.
+
+endif # RK3576_SKW_BT
+
+config RK3576_VOP
+	bool "VOP (Video Output Processor / display controller)"
+	default n
+	depends on VIDEO_FB
+	select ARCH_HAVE_FB
+	select RK3576_DMA_ALLOC
+	select RK3576_PD
+	---help---
+		RK3576 VOP2 display controller.  Drives one linear framebuffer
+		(Esmart0 window -> VP0 -> HDMI TX0) through the standard NuttX
+		framebuffer interface.
+
+if RK3576_VOP
+
+config RK3576_VOP_FB_RGB888
+	bool "24-bit RGB888 framebuffer"
+	default n
+	---help---
+		Use a packed 24bpp RGB888 framebuffer instead of the default
+		32bpp ARGB8888 one.  Saves a quarter of the framebuffer memory
+		at the cost of unaligned pixel access.
+
+endif # RK3576_VOP
+
+config RK3576_HDMI
+	bool "HDMI TX encoder"
+	default n
+	depends on RK3576_VOP
+	---help---
+		Enable the RK3576 HDMI transmitter (Synopsys DesignWare HDMI TX
+		QP controller at 0x27DA0000 plus the Rockchip HDPTX PHY at
+		0x2B000000).  The HDMI block is the downstream encoder of the
+		VOP: it turns the pixel stream produced by a video port into
+		TMDS, handles the AVI InfoFrame, hot-plug detect and EDID
+		read-back over DDC.
+
+		On KICKPI-K7 the on-board MIPI DSI is disabled, so HDMI is the
+		only usable display output.
+
+if RK3576_HDMI
+
+config RK3576_HDMI_AUDIO
+	bool "HDMI audio (I2S from SAI6)"
+	default n
+	---help---
+		Route the SAI6 I2S stream into the HDMI audio sample packets
+		and enable audio clock regeneration (N/CTS).
+
+endif # RK3576_HDMI
+
+config RK3576_RGA
+	bool "RGA2 2D graphics accelerator"
+	default n
+	select RK3576_DMA_ALLOC
+	---help---
+		Enable the Rockchip RGA2 2D acceleration engine driver
+		(BitBLT, colour fill, scaling, rotation, mirroring, alpha
+		blending, ROP and RGB/YUV colour-space conversion).  Exposes
+		/dev/rga0 and /dev/rga1 plus the in-kernel rk3576_rga_* API.
+		The internal IOMMU is bypassed, so all surfaces must be
+		physically contiguous below 4GB.
+
+config RK3576_VDEC
+	bool "RKVDEC video decoder"
+	default n
+	select RK3576_DMA_ALLOC
+	select RK3576_PD
+	---help---
+		Enable the RK3576 RKVDEC v383 hardware video decoder
+		(rkvdec@27b00000).  Registers the character device
+		/dev/vdec0; one ioctl submits one picture.  H.264 is
+		implemented; H.265/VP9 are not yet programmed.
+
+config RK3576_CSI
+	bool "MIPI CSI-2 receiver (host controller + RX D-PHY)"
+	default n
+	select RK3576_DMA_ALLOC
+	---help---
+		Enable the RK3576 MIPI CSI-2 host controllers (5 instances at
+		0x27C80000..0x27CC0000) and the two Innosilicon RX D-PHYs
+		(0x2B030000, 0x2B070000).  Required by any camera capture path
+		(IMX415 sensors on the KICKPI-K7).
+
+config RK3576_VICAP
+	bool "VICAP (rkcif) image capture"
+	default n
+	select RK3576_CSI
+	select RK3576_DMA_ALLOC
+	select RK3576_PD
+	---help---
+		Enable the RK3576 VICAP (rkcif) capture block at 0x27C10000.
+		Streams a DVP or MIPI CSI-2 virtual channel straight to memory
+		(bypass path) using the FRM0/FRM1 ping-pong DMA pair.
+
+if RK3576_VICAP
+
+config RK3576_VICAP_VIDEO
+	bool "Expose VICAP through the NuttX video stack"
+	default n
+	depends on VIDEO
+	---help---
+		Build the struct imgdata_s lower half so board logic can call
+		video_register() with an image sensor lower half and obtain a
+		V4L2-style /dev/videoN.  In this mode the video stack owns the
+		frame buffers and the capture runs single-shot per frame.
+
+config RK3576_VICAP_VIDEO_INPUT
+	int "Capture input for the video stack front end"
+	default 1
+	range 0 1
+	depends on RK3576_VICAP_VIDEO
+	---help---
+		0 = parallel DVP interface, 1 = MIPI CSI-2 host.
+
+endif # RK3576_VICAP
+
+config RK3576_ISP
+	bool "ISP (rkisp) Bayer pipeline"
+	default n
+	select RK3576_DMA_ALLOC
+	select RK3576_PD
+	---help---
+		Enable the RK3576 ISP at 0x27C00000: black level correction,
+		demosaic, static white balance, gamma and NV12 output through
+		the memory interface.  3A statistics, denoise and sharpening
+		are not implemented yet.
+
+config RK3576_MALI
+	bool "Mali-G52 GPU Job Manager (command replay)"
+	default n
+	select RK3576_DMA_ALLOC
+	select RK3576_PD
+	---help---
+		Enable the minimal ARM Mali-G52 MC3 (Bifrost) Job Manager driver
+		(gpu@27800000, GIC INTID 379/380/381).  It powers the VD_GPU
+		domain and the shader cores up, configures address space 0 as a
+		1:1 identity mapping and submits pre-built job chains to the job
+		slots.  There is no shader compiler and no graphics state
+		tracker: command streams and shader binaries are produced offline
+		on a host PC with Mesa/Panfrost and replayed through
+		rk3576_mali_replay().
+
+config RK3576_RKNPU
+	bool "RKNPU (6 TOPS NPU)"
+	default n
+	select RK3576_DMA_ALLOC
+	select RK3576_PD
+	---help---
+		Enable the RK3576 RKNPU driver: two RKNN cores at 0x27700000 and
+		0x27708000, 3 TOPS INT8 each.  Brings up the VD_NPU power domains
+		and the NPU clock tree, releases the four CRU soft resets, puts
+		both per-core IOMMUs into bypass and registers /dev/rknpu.  The
+		ioctl set (ACTION / SUBMIT / MEM_CREATE / MEM_MAP / MEM_DESTROY /
+		MEM_SYNC) mirrors the Linux rknpu driver so that a matmul layer
+		written against the public rknn_matmul_api model can be ported
+		directly.  All NPU-visible memory comes from the DMA heap.
+
+if RK3576_RKNPU
+
+config RK3576_RKNPU_MAX_MEMS
+	int "RKNPU memory handle table size"
+	default 64
+	range 1 1024
+	---help---
+		Maximum number of buffers that may be registered through
+		RK3576_RKNPUIOC_MEM_CREATE at the same time.  Each entry costs
+		two pointers; a transformer layer typically needs one handle per
+		resident weight tile plus a handful of scratch buffers.
+
+endif # RK3576_RKNPU
+
+config RK3576_RKNN_MATMUL
+	bool "RKNN typed quantised matrix multiply"
+	default n
+	select RK3576_DMA_ALLOC
+	---help---
+		Enable the typed quantised matrix-multiply submission layer used
+		by the on-device LLM runtime.  It implements C = A x B for the
+		fp16 x fp16, fp16 x int4 and int8 x int8 operand combinations the
+		RKNPU exposes, packing the operands into the NPU tile layout and
+		submitting a register-command stream through the RKNPU core
+		driver.
+
+		A scalar CPU reference implementation is always built.  It is
+		both the fallback when the NPU is unavailable and the golden
+		reference used to validate NPU results, so this option is useful
+		on its own even before the NPU core driver works.
+
+config RK3576_RKNN_MATMUL_SELFTEST
+	bool "RKNN matmul self-test"
+	default n
+	depends on RK3576_RKNN_MATMUL
+	---help---
+		Build rk3576_rknn_matmul_selftest(), which runs one small
+		fp16 x int4 problem through a double-precision naive reference,
+		the CPU kernel and the NPU back end, and diffs the three.  This
+		is the first bring-up step on hardware.
+
+config RK3576_SMP_MPID_MAP
+	bool "Override arm64 logical CPU <-> MPIDR mapping"
+	depends on SMP
+	default y
+	---help---
+		Provide arm64_get_mpid() / arm64_get_cpuid() in rk3576_cpuboot.c.
+		The arm64 common default assumes a single cluster (Aff0 == cpu
+		index), which is wrong for the two-cluster RK3576.  Disable only
+		if the common implementation stops being overridable.
+
+config RK3576_SMP_CPUSTART
+	bool "Provide chip level up_cpu_start()"
+	depends on SMP
+	default n
+	---help---
+		Build up_cpu_start() in rk3576_cpuboot.c.  Leave disabled when
+		the arm64 common arm64_cpustart.c is part of the build (normal
+		case), otherwise the two definitions collide at link time.
+
 endmenu # Rockchip RK3576 Peripheral Selection
 
 endif # ARCH_CHIP_RK3576
