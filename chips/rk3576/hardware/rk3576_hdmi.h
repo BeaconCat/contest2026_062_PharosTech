@@ -87,24 +87,6 @@
  * bases are also exported through rk3576_memorymap.h once integrated.
  */
 
-#ifndef RK3576_HDMITX0_ADDR
-#  define RK3576_HDMITX0_ADDR      0x27DA0000 /* DW HDMI TX QP controller  */
-#endif
-#ifndef RK3576_HDMITX0_QP_ADDR
-#  define RK3576_HDMITX0_QP_ADDR   0x27DB0000 /* QP extension window       */
-#endif
-#ifndef RK3576_HDPTXPHY_ADDR
-#  define RK3576_HDPTXPHY_ADDR     0x2B000000 /* HDPTX PHY register file   */
-#endif
-#ifndef RK3576_HDPTXPHY_GRF_ADDR
-#  define RK3576_HDPTXPHY_GRF_ADDR 0x26032000 /* HDPTX PHY GRF             */
-#endif
-#ifndef RK3576_VO0_GRF_ADDR
-#  define RK3576_VO0_GRF_ADDR      0x2601A000 /* VO0 GRF                   */
-#endif
-#ifndef RK3576_VO1_GRF_ADDR
-#  define RK3576_VO1_GRF_ADDR      0x26036000 /* VO1 GRF (HDMI TX side)    */
-#endif
 
 #define RK3576_HDMITX0_SIZE        0x10000
 #define RK3576_HDPTXPHY_SIZE       0x2000

@@ -64,9 +64,6 @@
  * TODO: move to rk3576_memorymap.h once the integration branch takes it.
  */
 
-#ifndef RK3576_CRYPTO_ADDR
-#  define RK3576_CRYPTO_ADDR 0x2a400000
-#endif
 
 #define RK3576_CRYPTO_SIZE 0x2000
 

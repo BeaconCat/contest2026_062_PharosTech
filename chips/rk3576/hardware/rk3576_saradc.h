@@ -62,9 +62,6 @@
  * guard keeps this header working either way.
  */
 
-#ifndef RK3576_SARADC_ADDR
-#define RK3576_SARADC_ADDR 0x2ae00000
-#endif
 
 /* Hardware capabilities.  CONV_CON.channel_sel is four bits wide, but
  * RK3576 only routes eight analog inputs and only implements DATA0..DATA7.

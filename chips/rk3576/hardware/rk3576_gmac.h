@@ -64,13 +64,7 @@
  * defined here (conditionally) until they are moved there.
  */
 
-#ifndef RK3576_GMAC0_ADDR
-#  define RK3576_GMAC0_ADDR 0x2A220000
-#endif
 
-#ifndef RK3576_GMAC1_ADDR
-#  define RK3576_GMAC1_ADDR 0x2A230000
-#endif
 
 #define RK3576_GMAC_REGION_SIZE 0x10000
 
@@ -91,9 +85,6 @@
  * rk3576_memorymap.h as well.
  */
 
-#ifndef RK3576_SDGMAC_GRF_ADDR
-#  define RK3576_SDGMAC_GRF_ADDR 0x26038000
-#endif
 
 #define RK3576_GMAC_GRF_CON_OFFSET(n)  (0x0020 + ((n) * 4))
 #define RK3576_GMAC_GRF_CLK_CON_OFFSET (0x0070)

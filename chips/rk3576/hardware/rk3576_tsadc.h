@@ -63,9 +63,6 @@
  * lands; kept local so this driver builds standalone.
  */
 
-#ifndef RK3576_TSADC_ADDR
-#  define RK3576_TSADC_ADDR 0x2ae70000
-#endif
 
 #define RK3576_TSADC_SIZE 0x400
 

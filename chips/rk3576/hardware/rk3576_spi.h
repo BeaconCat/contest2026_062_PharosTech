@@ -73,9 +73,6 @@
 #ifndef RK3576_SPI3_ADDR
 #  define RK3576_SPI3_ADDR 0x2ad20000
 #endif
-#ifndef RK3576_SPI4_ADDR
-#  define RK3576_SPI4_ADDR 0x2ad30000
-#endif
 
 /* Number of controller instances and per-controller hardware limits. */
 

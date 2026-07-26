@@ -134,11 +134,14 @@
 #define RK3576_PDM0_ADDR 0x273b0000 /* PMU bus domain  */
 #define RK3576_PDM1_ADDR 0x2a6e0000 /* main bus domain */
 
-/* Mailboxes: 14 identical 4KB windows, AP<->BB inter-core doorbells */
+/* Mailboxes: 14 identical 4KB windows, AP<->BB inter-core doorbells.
+ * NINSTANCES counts the register windows; the number of doorbell channels
+ * inside one window is RK3576_MAILBOX_NCHANNELS in hardware/rk3576_mailbox.h.
+ */
 
-#define RK3576_MAILBOX_ADDR      0x2ae50000
-#define RK3576_MAILBOX_STRIDE    0x1000
-#define RK3576_MAILBOX_NCHANNELS 14
+#define RK3576_MAILBOX_ADDR       0x2ae50000
+#define RK3576_MAILBOX_STRIDE     0x1000
+#define RK3576_MAILBOX_NINSTANCES 14
 #define RK3576_MAILBOXN_ADDR(n) \
   (RK3576_MAILBOX_ADDR + (n) * RK3576_MAILBOX_STRIDE)
 

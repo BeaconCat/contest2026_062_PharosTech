@@ -63,13 +63,7 @@
  * driver does not conflict with other in-flight work on that header.
  */
 
-#ifndef RK3576_PDM0_ADDR
-#  define RK3576_PDM0_ADDR 0x273b0000 /* PDM0, PMU bus domain  */
-#endif
 
-#ifndef RK3576_PDM1_ADDR
-#  define RK3576_PDM1_ADDR 0x2a6e0000 /* PDM1, main bus domain */
-#endif
 
 /* GIC interrupt IDs.  The device tree carries the GIC SPI number; the NuttX
  * IRQ number (== GIC INTID) is SPI + 32.
@@ -80,13 +74,7 @@
  * TODO: move to chips/rk3576/include/irq.h as RK3576_IRQ_PDM0 / _PDM1.
  */
 
-#ifndef RK3576_IRQ_PDM0
-#  define RK3576_IRQ_PDM0 (202 + 32)
-#endif
 
-#ifndef RK3576_IRQ_PDM1
-#  define RK3576_IRQ_PDM1 (203 + 32)
-#endif
 
 /* PL330 peripheral request line feeding the PDM receive FIFO.  Both device
  * tree nodes declare "dmas = <&dmacN 4>, dma-names = rx".

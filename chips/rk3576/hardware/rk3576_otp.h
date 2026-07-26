@@ -58,9 +58,6 @@
  * local for now so that this driver is self-contained.
  */
 
-#ifndef RK3576_OTP_ADDR
-#  define RK3576_OTP_ADDR 0x2a580000 /* otp@2a580000, 0x400 window     */
-#endif
 
 /* Geometry of the fuse array as seen through the user-mode read path. */
 

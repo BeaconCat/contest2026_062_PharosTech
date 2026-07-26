@@ -67,9 +67,6 @@
  * bases when a GRF driver is introduced.
  */
 
-#ifndef RK3576_SYS_GRF_ADDR
-#  define RK3576_SYS_GRF_ADDR 0x2600A000
-#endif
 
 /* GIC interrupt number.
  *

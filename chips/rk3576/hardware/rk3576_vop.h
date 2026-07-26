@@ -87,9 +87,6 @@
  * hardware/rk3576_memorymap.h once the shared header is updated.
  */
 
-#ifndef RK3576_VOP_ADDR
-#  define RK3576_VOP_ADDR      0x27d00000 /* VOP main register file      */
-#endif
 
 #ifndef RK3576_VOP_MMU_ADDR
 #  define RK3576_VOP_MMU_ADDR  0x27d07e00 /* rockchip,iommu-v2 for VOP   */
