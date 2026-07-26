@@ -94,7 +94,7 @@ void arm64_el_init(void)
 
   if (el == 3)
     {
-      write_sysreg(RK3576_OSC_FREQ, cntfrq_el0);
+      write_sysreg(CONFIG_RK3576_OSC_FREQ, cntfrq_el0);
       UP_ISB();
     }
 }

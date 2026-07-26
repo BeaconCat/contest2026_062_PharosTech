@@ -12,6 +12,7 @@ config ARCH_CHIP_RK3576
 	select ARCH_NEED_ADDRENV_MAPPING
 	select ARM64_HAVE_PSCI
 	select ARCH_HAVE_IRQPRIO
+	select CLK
 
 if ARCH_CHIP_RK3576
 
@@ -559,5 +560,13 @@ config RK3576_SMP_CPUSTART
 		case), otherwise the two definitions collide at link time.
 
 endmenu # Rockchip RK3576 Peripheral Selection
+
+config RK3576_OSC_FREQ
+	int "RK3576 OSC Crystal Frequency (Hz)"
+	default 24000000
+	range 24000000 24000000 if !EXPERT
+	help
+		RK3576 only supports 24MHz crystal on hardware.
+		Keep default unless you need fine-tune for clock calibration.
 
 endif # ARCH_CHIP_RK3576

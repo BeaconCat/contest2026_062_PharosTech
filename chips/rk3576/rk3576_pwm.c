@@ -41,13 +41,14 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/clk/clk.h>
 #include <nuttx/timers/pwm.h>
 
 #include "arm64_internal.h"
 #include "hardware/rk3576_pwm.h"
-#include "rk3576_cru.h"
 
 #ifdef CONFIG_RK3576_PWM
 
@@ -76,6 +77,7 @@ struct rk3576_pwm_s
   const struct pwm_ops_s *ops; /* Lower-half operations (must be first) */
   uintptr_t base;              /* Channel register base address          */
   unsigned int ctrl;           /* Parent controller index (0..2)         */
+  struct clk_s *clk;           /* Counting-clock source (shared per ctrl)*/
   bool started;                /* Output currently running              */
 };
 
@@ -128,6 +130,16 @@ static const struct rk3576_pwm_ctrl_desc_s g_pwm_ctrls[RK3576_PWM_NCTRL] =
   },
 };
 
+/* Per-controller clock-enable tracking; each controller's pclk + counting
+ * clock are enabled once in rk3576_pwm_initialize(), before any channel is
+ * registered.  Subsequent calls for the same controller are no-ops.
+ * g_pwm_clk[] caches the counting-clock handle so channels can query the
+ * actual rate with clk_get_rate() instead of a hard-coded constant.
+ */
+
+static bool g_pwm_clk_ready[RK3576_PWM_NCTRL];
+static struct clk_s *g_pwm_clk[RK3576_PWM_NCTRL];
+
 /* Per-channel instance array; only the slots a board actually uses are
  * handed out by rk3576_pwm_initialize().  Dimensioned for the worst-case
  * (PWM2, 8 channels).
@@ -154,31 +166,18 @@ static void rk3576_pwm_putreg(struct rk3576_pwm_s *priv, unsigned int off,
  * Name: rk3576_pwm_setup
  *
  * Description:
- *   Ungate the PWM1 clocks (pclk + 24 MHz oscillator), select the
- *   oscillator as the counting-clock source and program the fixed scale.
- *   The controller register block is accessible once pclk is running.
+ *   Per-device setup, called once when a /dev/pwmN device is first
+ *   opened.  Controller-level clocks are already enabled by
+ *   rk3576_pwm_initialize(), so this is a no-op.
  ****************************************************************************/
 
 static int rk3576_pwm_setup(struct pwm_lowerhalf_s *dev)
 {
   struct rk3576_pwm_s *priv = (struct rk3576_pwm_s *)dev;
 
-  /* Ungate pclk + osc_clk for this controller via the CRU driver.
-   * PLL clock (clk_pwm) and RC clock are left gated — only the 24 MHz
-   * oscillator is used as the counting-clock source.
-   *
-   * The clock divisor (prescale/scale) is computed per-start in
-   * rk3576_pwm_start() based on the requested frequency.
+  /* Controller-level clocks (pclk + osc_clk) are already enabled by
+   * rk3576_pwm_initialize() — nothing to do here.
    */
-
-  /* TODO: don't use hard-coded clock sel
-   * allow users to select clock
-   */
-
-  rk3576_cru_set_pwm_clock_gate(priv->ctrl, true, /* pclk    */
-                                false,            /* clk_pwm */
-                                false,            /* rc_clk  */
-                                true);            /* osc_clk */
 
   pwminfo("PWM%u setup base=%08" PRIxPTR " version=%08" PRIx32 "\n",
           priv->ctrl, priv->base, rk3576_pwm_getreg(priv, RK3576_PWM_VERSION));
@@ -328,8 +327,8 @@ static int rk3576_pwm_start(struct pwm_lowerhalf_s *dev,
   uint32_t prescale, scale, period, duty;
   uint32_t clk_ctrl_reg_bits = 0;
 
-  int ret = _pwm_auto_scale(info->frequency, RK3576_PWM_OSC_HZ, &prescale,
-                            &scale, &period);
+  int ret = _pwm_auto_scale(info->frequency, clk_get_rate(priv->clk),
+                            &prescale, &scale, &period);
   if (ret < 0)
     {
       return ret;
@@ -471,9 +470,62 @@ struct pwm_lowerhalf_s *rk3576_pwm_initialize(int pwm_controller_id,
     }
 
   priv = &g_rk3576_pwm[pwm_controller_id][channel];
+
+  /* Enable controller-level clocks the first time this controller is
+   * used.  pclk makes the register block accessible; clk_osc is the
+   * 24 MHz counting-clock source selected in rk3576_pwm_start().
+   */
+
+  if (!g_pwm_clk_ready[pwm_controller_id])
+    {
+      char name[32];
+      struct clk_s *pclk;
+      struct clk_s *clk;
+      int ret;
+
+      snprintf(name, sizeof(name), "pclk_pwm%d_en", pwm_controller_id);
+      pclk = clk_get(name);
+      if (!pclk)
+        {
+          pwmerr("PWM%u: failed to get clock %s\n", pwm_controller_id, name);
+          return NULL;
+        }
+
+      ret = clk_enable(pclk);
+      if (ret < 0)
+        {
+          pwmerr("PWM%u: failed to enable clock %s\n", pwm_controller_id,
+                 name);
+          return NULL;
+        }
+
+      /* TODO: don't use hard-coded clock sel, allow users to select clock */
+      snprintf(name, sizeof(name), "clk_pwm%d_osc_en", pwm_controller_id);
+      clk = clk_get(name);
+      if (!clk)
+        {
+          pwmerr("PWM%u: failed to get clock %s\n", pwm_controller_id, name);
+          clk_disable(pclk);
+          return NULL;
+        }
+
+      ret = clk_enable(clk);
+      if (ret < 0)
+        {
+          pwmerr("PWM%u: failed to enable clock %s\n", pwm_controller_id,
+                 name);
+          clk_disable(pclk);
+          return NULL;
+        }
+
+      g_pwm_clk_ready[pwm_controller_id] = true;
+      g_pwm_clk[pwm_controller_id] = clk;
+    }
+
   priv->ops = &g_rk3576_pwm_ops;
   priv->base = desc->base_addr + channel * RK3576_PWM_CH_STRIDE;
   priv->ctrl = pwm_controller_id;
+  priv->clk = g_pwm_clk[pwm_controller_id];
   priv->started = false;
 
   return (struct pwm_lowerhalf_s *)priv;

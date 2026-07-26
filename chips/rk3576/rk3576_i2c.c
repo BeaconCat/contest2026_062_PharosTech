@@ -42,16 +42,18 @@
 #include <errno.h>
 #include <nuttx/config.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include <nuttx/arch.h>
 #include <nuttx/i2c/i2c_master.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/mutex.h>
 
+#include <nuttx/clk/clk.h>
+
 #include "arm64_internal.h"
 #include "hardware/rk3576_i2c.h"
 #include "hardware/rk3576_memorymap.h"
-#include "rk3576_cru.h"
 #include "rk3576_i2c.h"
 
 #ifdef CONFIG_RK3576_I2C
@@ -63,13 +65,6 @@
 #define RK3576_I2C_FIFO_BYTES 32
 #define RK3576_I2C_POLL_LIMIT 1000000 /* busy-wait iterations */
 #define RK3576_I2C_NUM        10      /* I2C0 .. I2C9 */
-
-/* Default functional clock into the divider (Hz).
- * TODO: calculate clock frequency automatically
- * after cru driver is ready
- */
-
-#define RK3576_I2C_CLKIN 200000000
 
 /* I2C controller base addresses (TRM §32.4.1). */
 
@@ -87,7 +82,7 @@ struct rk3576_i2c_priv_s
 {
   struct i2c_master_s dev; /* Base class (must be first) */
   uintptr_t base;          /* Controller base address */
-  uint32_t clkin;          /* Functional clock into the divider (Hz) */
+  struct clk_s *clk;       /* clk — SCL functional clock */
   mutex_t lock;            /* Serialize bus access */
 };
 
@@ -147,7 +142,7 @@ static void rk3576_i2c_setclk(struct rk3576_i2c_priv_s *priv,
 
   /* total = clkin / freq = 8 * (divh + divl + 2) */
 
-  div = (priv->clkin + (frequency * 8) - 1) / (frequency * 8);
+  div = (clk_get_rate(priv->clk) + (frequency * 8) - 1) / (frequency * 8);
   if (div < 2)
     {
       div = 2;
@@ -514,12 +509,48 @@ struct i2c_master_s *rk3576_i2c_initialize(int bus)
 
   if (!g_rk3576_i2c_inited[bus])
     {
-      g_rk3576_i2c_inited[bus] = true;
+      char name[32];
+      struct clk_s *pclk;
+      int ret;
+
+      snprintf(name, sizeof(name), "pclk_i2c%d_en", bus);
+      pclk = clk_get(name);
+      if (!pclk)
+        {
+          i2cerr("ERROR: I2C%d: failed to get clock %s\n", bus, name);
+          return NULL;
+        }
+
+      ret = clk_enable(pclk);
+      if (ret < 0)
+        {
+          i2cerr("ERROR: I2C%d: failed to enable clock %s\n", bus, name);
+          return NULL;
+        }
+
+      snprintf(name, sizeof(name), "clk_i2c%d_en", bus);
+      priv->clk = clk_get(name);
+      if (!priv->clk)
+        {
+          i2cerr("ERROR: I2C%d: failed to get clock %s\n", bus, name);
+          clk_disable(pclk);
+          return NULL;
+        }
+
+      ret = clk_enable(priv->clk);
+      if (ret < 0)
+        {
+          i2cerr("ERROR: I2C%d: failed to enable clock %s\n", bus, name);
+          clk_disable(pclk);
+          return NULL;
+        }
+
       priv->dev.ops = &g_rk3576_i2c_ops;
       priv->base = g_rk3576_i2c_base[bus];
-      priv->clkin = RK3576_I2C_CLKIN;
       nxmutex_init(&priv->lock);
-      rk3576_cru_set_i2c_clock_gate(bus, true, true);
+
+      g_rk3576_i2c_inited[bus] = true;
+
       i2c_putreg(priv, RK3576_I2C_CON, 0);
     }
 
