@@ -26,12 +26,15 @@
 
 #include <assert.h>
 #include <debug.h>
+#include <errno.h>
 #include <stdint.h>
 
 #include <nuttx/cache.h>
 #ifdef CONFIG_LEGACY_PAGING
 #include <nuttx/page.h>
 #endif
+
+#include <nuttx/kmalloc.h>
 
 #include <arch/chip/chip.h>
 
@@ -46,6 +49,10 @@
 #include "rk3576_boot.h"
 #include "rk3576_serial.h"
 
+#ifdef CONFIG_RK3576_DMA_ALLOC
+#include "rk3576_dma_alloc.h"
+#endif
+
 /****************************************************************************
  * Private Data
  ****************************************************************************/
@@ -55,8 +62,16 @@ static const struct arm_mmu_region g_mmu_regions[] = {
                         CONFIG_DEVICEIO_SIZE,
                         MT_DEVICE_NGNRNE | MT_RW | MT_SECURE),
 
-  MMU_REGION_FLAT_ENTRY("DRAM0_S0", CONFIG_RAMBANK1_ADDR, CONFIG_RAMBANK1_SIZE,
+  MMU_REGION_FLAT_ENTRY("DRAM0_BANK1", CONFIG_RAMBANK1_ADDR,
+                        CONFIG_RAMBANK1_SIZE, MT_NORMAL | MT_RW | MT_SECURE),
+
+#ifdef CONFIG_RK3576_DMA_ALLOC
+  MMU_REGION_FLAT_ENTRY("DMA_HEAP", RK3576_DMA_HEAP_ADDR, RK3576_DMA_HEAP_SIZE,
                         MT_NORMAL | MT_RW | MT_SECURE),
+#endif
+
+  MMU_REGION_FLAT_ENTRY("DRAM0_BANK2", CONFIG_RAMBANK2_ADDR,
+                        CONFIG_RAMBANK2_SIZE, MT_NORMAL | MT_RW | MT_SECURE),
 };
 
 const struct arm_mmu_config g_mmu_config = {
@@ -138,3 +153,40 @@ void arm64_netinitialize(void)
 { /* TODO: Support net initialize */
 }
 #endif
+
+/****************************************************************************
+ * Name: arm64_addregion
+ *
+ * Description:
+ *   Add the second DRAM bank (above OP-TEE) to the user heap.  This is
+ *   called from up_initialize() when CONFIG_MM_REGIONS > 1.
+ *
+ *   Bank2 is split: the first 16MB (RK3576_DMA_HEAP) is reserved for DMA
+ *   and managed by the granule allocator; the remainder is added to the
+ *   user heap.
+ *
+ ****************************************************************************/
+
+#if CONFIG_MM_REGIONS > 1
+void arm64_addregion(void)
+{
+#ifdef CONFIG_RK3576_DMA_ALLOC
+  {
+    int ret;
+
+    /* Initialise the DMA heap before adding Bank2 to the user heap.
+     * If kumm_addregion ran first, the heap manager could allocate
+     * from Bank2 and clobber the DMA region.
+     */
+
+    ret = rk3576_dma_alloc_init();
+    if (ret < 0)
+      {
+        _err("arm64_addregion: DMA heap init failed: %d\n", ret);
+      }
+  }
+#endif /* CONFIG_RK3576_DMA_ALLOC */
+
+  kumm_addregion((void *)CONFIG_RAMBANK2_ADDR, CONFIG_RAMBANK2_SIZE);
+}
+#endif /* CONFIG_MM_REGIONS > 1 */

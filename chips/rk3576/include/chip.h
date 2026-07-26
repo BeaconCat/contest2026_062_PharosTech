@@ -22,20 +22,58 @@
  * Device I/O window: peripherals span 0x20000000..0x2FFFFFFF, e.g. UART0
  * 0x2AD40000 (cmdline earlycon confirmed), GIC-400 0x2A700000, CRU 0x27200000.
  *
- * DRAM: 4GB LPDDR5, physically contiguous 0x40000000..0x13FFFFFFF
- * (/proc/iomem). Firmware reserves two holes in the low bank: BL31 @0x40000000
- * (2MB) and OP-TEE
- * @0x48400000 (16MB). NuttX loads and runs at 0x40200000 (== CONFIG_RAM_START,
- * matches the vendor FIT BL33 load address; ELF entry verified 0x40200000).
+ * DRAM: LPDDR5 (2GB/4GB/8GB/16GB selectable via Kconfig), physically
+ * contiguous from 0x40000000. Firmware reserves two holes in the low bank:
+ * BL31 @0x40000000 (2MB) and OP-TEE @0x48400000 (16MB). NuttX loads and runs
+ * at 0x40200000 (== CONFIG_RAM_START, matches the vendor FIT BL33 load
+ * address; ELF entry verified 0x40200000).
  *
  * DRAM0 MMU region: 0x40000000..0x48400000 (132MB) mapped normal secure, i.e.
  * up to the OP-TEE reservation. NuttX only allocates above RAM_START, so the
  * 2MB BL31 hole at the base is mapped but never touched by the allocator.
+ *
+ * DRAM1 MMU region: 0x49400000..end_of_DDR, the remaining physical DRAM above
+ * OP-TEE. Registered as a second heap region via arm64_addregion().
  */
+
+/* Firmware reservation sizes */
+#define RK3576_BL31_SIZE  MB(2)  /* BL31 @ 0x40000000 */
+#define RK3576_OPTEE_SIZE MB(16) /* OP-TEE @ 0x48400000 */
+
+/* Device I/O MMU region */
 #define CONFIG_DEVICEIO_BASEADDR 0x20000000
 #define CONFIG_DEVICEIO_SIZE     MB(256)
-#define CONFIG_RAMBANK1_ADDR     0x40000000
-#define CONFIG_RAMBANK1_SIZE     MB(132) /* base..0x48400000 (OP-TEE) */
+
+/* Bank 1: DRAM base (0x40000000) up to OP-TEE (0x48400000) */
+#define CONFIG_RAMBANK1_ADDR 0x40000000
+#define CONFIG_RAMBANK1_SIZE (MB(130) + RK3576_BL31_SIZE)
+/* 130MB usable + 2MB BL31 hole */
+
+#ifdef CONFIG_RK3576_DMA_ALLOC
+
+/* DMA-dedicated heap: carved from the head of Bank2, always reachable
+ * by the PL330 DMA (32-bit SAR/DAR).  Managed by rk3576_dma_alloc.c
+ * (granule allocator).  Size is configurable via Kconfig.
+ */
+#define RK3576_DMA_HEAP_ADDR \
+  (CONFIG_RAMBANK1_ADDR + CONFIG_RAMBANK1_SIZE + RK3576_OPTEE_SIZE)
+#define RK3576_DMA_HEAP_SIZE MB(CONFIG_RK3576_DMA_HEAP_SIZE_MB)
+
+/* Second DRAM bank: from after the DMA heap to end of DDR */
+#define CONFIG_RAMBANK2_ADDR (RK3576_DMA_HEAP_ADDR + RK3576_DMA_HEAP_SIZE)
+#define CONFIG_RAMBANK2_SIZE                                                  \
+  (GB(CONFIG_RK3576_DDR_SIZE_GB) - RK3576_OPTEE_SIZE - CONFIG_RAMBANK1_SIZE - \
+   RK3576_DMA_HEAP_SIZE)
+
+#else /* !CONFIG_RK3576_DMA_ALLOC */
+
+/* Second DRAM bank: from after OP-TEE (0x49400000) to end of DDR */
+#define CONFIG_RAMBANK2_ADDR \
+  (CONFIG_RAMBANK1_ADDR + CONFIG_RAMBANK1_SIZE + RK3576_OPTEE_SIZE)
+#define CONFIG_RAMBANK2_SIZE \
+  (GB(CONFIG_RK3576_DDR_SIZE_GB) - RK3576_OPTEE_SIZE - CONFIG_RAMBANK1_SIZE)
+
+#endif /* CONFIG_RK3576_DMA_ALLOC */
 
 #define MPID_TO_CLUSTER_ID(mpid) ((mpid) & ~0xff)
 
