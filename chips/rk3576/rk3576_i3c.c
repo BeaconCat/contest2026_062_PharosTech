@@ -77,13 +77,9 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* NuttX has no I3C subsystem and therefore no dedicated debug channel.
- * The controller is published as an I2C master, so reuse the I2C channel
- * for its messages.
+/* NuttX already provides i3cerr()/i3cinfo() in <debug.h>; the controller is
+ * published as an I2C master but keeps its own debug channel.
  */
-
-#define i3cerr  i2cerr
-#define i3cinfo i2cinfo
 
 /* Busy-wait bounds.  The controller either completes a queued command or
  * flags an error; these only guard against a wedged bus.
