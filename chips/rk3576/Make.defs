@@ -55,7 +55,6 @@ ifeq ($(CONFIG_RK3576_DMA),y)
 CHIP_CSRCS += rk3576_addrenv.c rk3576_dma.c
 endif
 
-<<<<<<< HEAD
 # Peripheral clock registration with the CLK framework.  The per-peripheral
 # registration functions inside the file are guarded by the individual
 # CONFIG_RK3576_* symbols, so the file itself is built unconditionally.
@@ -172,8 +171,6 @@ endif
 
 ifeq ($(CONFIG_SMP),y)
 CHIP_CSRCS += rk3576_cpuboot.c
-=======
 ifeq ($(CONFIG_RK3576_DMA_ALLOC),y)
 CHIP_CSRCS += rk3576_dma_alloc.c
->>>>>>> pr45
 endif

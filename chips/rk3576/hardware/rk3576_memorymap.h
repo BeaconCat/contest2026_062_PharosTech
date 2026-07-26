@@ -105,7 +105,6 @@
 
 #define RK3576_DMAC0_ADDR 0x2ab90000
 
-<<<<<<< HEAD
 /* SPI controllers (Synopsys DesignWare SSI) */
 
 #define RK3576_SPI4_ADDR 0x2ad30000
@@ -260,6 +259,4 @@
 
 #define RK3576_GPU_PVTPLL_ADDR 0x27268000
 
-=======
->>>>>>> pr45
 #endif /* __ARCH_ARM64_SRC_RK3576_HARDWARE_RK3576_MEMORYMAP_H */
