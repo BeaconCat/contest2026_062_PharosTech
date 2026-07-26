@@ -171,6 +171,8 @@ endif
 
 ifeq ($(CONFIG_SMP),y)
 CHIP_CSRCS += rk3576_cpuboot.c
+endif
+
 ifeq ($(CONFIG_RK3576_DMA_ALLOC),y)
 CHIP_CSRCS += rk3576_dma_alloc.c
 endif

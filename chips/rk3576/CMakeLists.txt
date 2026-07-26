@@ -149,6 +149,8 @@ endif()
 
 if(CONFIG_SMP)
   list(APPEND SRCS rk3576_cpuboot.c)
+endif()
+
 if(CONFIG_RK3576_DMA_ALLOC)
   list(APPEND SRCS rk3576_dma_alloc.c)
 endif()

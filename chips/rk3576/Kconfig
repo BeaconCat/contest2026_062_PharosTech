@@ -601,7 +601,6 @@ config RK3576_OSC_FREQ
 	help
 		RK3576 only supports 24MHz crystal on hardware.
 		Keep default unless you need fine-tune for clock calibration.
-endmenu # Rockchip RK3576 Peripheral Selection
 
 menu "Rockchip RK3576 DMA allocator"
 
