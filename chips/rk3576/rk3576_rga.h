@@ -80,40 +80,40 @@
  * independent bit flags applied on top.
  */
 
-#define RK3576_RGA_ROTATE_MASK     0x00000003
-#define RK3576_RGA_ROTATE_0        0x00000000
-#define RK3576_RGA_ROTATE_90       0x00000001
-#define RK3576_RGA_ROTATE_180      0x00000002
-#define RK3576_RGA_ROTATE_270      0x00000003
+#define RK3576_RGA_ROTATE_MASK   0x00000003
+#define RK3576_RGA_ROTATE_0      0x00000000
+#define RK3576_RGA_ROTATE_90     0x00000001
+#define RK3576_RGA_ROTATE_180    0x00000002
+#define RK3576_RGA_ROTATE_270    0x00000003
 
-#define RK3576_RGA_MIRROR_X        0x00000004 /* Flip horizontally      */
-#define RK3576_RGA_MIRROR_Y        0x00000008 /* Flip vertically        */
-#define RK3576_RGA_BLEND_SRCOVER   0x00000010 /* Straight alpha blend   */
-#define RK3576_RGA_BLEND_PREMUL    0x00000020 /* Premultiplied blend    */
-#define RK3576_RGA_GLOBAL_ALPHA    0x00000040 /* Apply .galpha below    */
-#define RK3576_RGA_ROP_ENABLE      0x00000080 /* Apply .rop below       */
+#define RK3576_RGA_MIRROR_X      0x00000004 /* Flip horizontally      */
+#define RK3576_RGA_MIRROR_Y      0x00000008 /* Flip vertically        */
+#define RK3576_RGA_BLEND_SRCOVER 0x00000010 /* Straight alpha blend   */
+#define RK3576_RGA_BLEND_PREMUL  0x00000020 /* Premultiplied blend    */
+#define RK3576_RGA_GLOBAL_ALPHA  0x00000040 /* Apply .galpha below    */
+#define RK3576_RGA_ROP_ENABLE    0x00000080 /* Apply .rop below       */
 
-#define RK3576_RGA_FLAGS_ALL       0x000000ff
+#define RK3576_RGA_FLAGS_ALL     0x000000ff
 
 /* Colour-space conversion selection for rk3576_rga_csc() and for the
  * .csc_mode field of a surface.
  */
 
-#define RK3576_RGA_CSC_AUTO        0 /* Pick from the format pair */
-#define RK3576_RGA_CSC_BT601L      1
-#define RK3576_RGA_CSC_BT601F      2
-#define RK3576_RGA_CSC_BT709L      3
+#define RK3576_RGA_CSC_AUTO   0 /* Pick from the format pair */
+#define RK3576_RGA_CSC_BT601L 1
+#define RK3576_RGA_CSC_BT601F 2
+#define RK3576_RGA_CSC_BT709L 3
 
 /* ioctl commands.  _GRAPHIOCBASE is not appropriate here (that range is
  * owned by the frame buffer), so the private RGA range is used.
  */
 
-#define RK3576_RGAIOC_BLIT   _IOC(0x1f00, 1) /* struct rk3576_rga_op_s * */
-#define RK3576_RGAIOC_FILL   _IOC(0x1f00, 2) /* struct rk3576_rga_fill_s * */
-#define RK3576_RGAIOC_SCALE  _IOC(0x1f00, 3) /* struct rk3576_rga_op_s * */
-#define RK3576_RGAIOC_ROTATE _IOC(0x1f00, 4) /* struct rk3576_rga_op_s * */
-#define RK3576_RGAIOC_CSC    _IOC(0x1f00, 5) /* struct rk3576_rga_op_s * */
-#define RK3576_RGAIOC_SYNC   _IOC(0x1f00, 6) /* void — wait for idle     */
+#define RK3576_RGAIOC_BLIT    _IOC(0x1f00, 1) /* struct rk3576_rga_op_s * */
+#define RK3576_RGAIOC_FILL    _IOC(0x1f00, 2) /* struct rk3576_rga_fill_s * */
+#define RK3576_RGAIOC_SCALE   _IOC(0x1f00, 3) /* struct rk3576_rga_op_s * */
+#define RK3576_RGAIOC_ROTATE  _IOC(0x1f00, 4) /* struct rk3576_rga_op_s * */
+#define RK3576_RGAIOC_CSC     _IOC(0x1f00, 5) /* struct rk3576_rga_op_s * */
+#define RK3576_RGAIOC_SYNC    _IOC(0x1f00, 6) /* void — wait for idle     */
 #define RK3576_RGAIOC_VERSION _IOC(0x1f00, 7) /* uint32_t *              */
 
 /****************************************************************************
@@ -133,18 +133,18 @@
 
 struct rk3576_rga_surface_s
 {
-  uint32_t yrgb;     /* Physical address of the Y / RGB plane      */
-  uint32_t cb;       /* Physical address of the Cb (or CbCr) plane */
-  uint32_t cr;       /* Physical address of the Cr plane           */
-  uint32_t stride;   /* Line pitch of the Y / RGB plane, in bytes  */
-  uint16_t width;    /* Active rectangle width, in pixels          */
-  uint16_t height;   /* Active rectangle height, in pixels         */
-  uint16_t xoffset;  /* Active rectangle X origin, in pixels       */
-  uint16_t yoffset;  /* Active rectangle Y origin, in pixels       */
-  uint8_t format;    /* RK3576_RGA_FORMAT_*                        */
-  uint8_t csc_mode;  /* RK3576_RGA_CSC_*                           */
-  uint8_t rb_swap;   /* Non-zero to swap the R and B components    */
-  uint8_t uv_swap;   /* Non-zero to swap the U and V components    */
+  uint32_t yrgb;    /* Physical address of the Y / RGB plane      */
+  uint32_t cb;      /* Physical address of the Cb (or CbCr) plane */
+  uint32_t cr;      /* Physical address of the Cr plane           */
+  uint32_t stride;  /* Line pitch of the Y / RGB plane, in bytes  */
+  uint16_t width;   /* Active rectangle width, in pixels          */
+  uint16_t height;  /* Active rectangle height, in pixels         */
+  uint16_t xoffset; /* Active rectangle X origin, in pixels       */
+  uint16_t yoffset; /* Active rectangle Y origin, in pixels       */
+  uint8_t format;   /* RK3576_RGA_FORMAT_*                        */
+  uint8_t csc_mode; /* RK3576_RGA_CSC_*                           */
+  uint8_t rb_swap;  /* Non-zero to swap the R and B components    */
+  uint8_t uv_swap;  /* Non-zero to swap the U and V components    */
 };
 
 /* Generic two-surface operation descriptor, shared by the BLIT, SCALE,
@@ -173,8 +173,7 @@ struct rk3576_rga_fill_s
  ****************************************************************************/
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /****************************************************************************
@@ -220,8 +219,7 @@ int rk3576_rga_initialize(int core);
  ****************************************************************************/
 
 int rk3576_rga_blit(const struct rk3576_rga_surface_s *src,
-                    const struct rk3576_rga_surface_s *dst,
-                    uint32_t flags);
+                    const struct rk3576_rga_surface_s *dst, uint32_t flags);
 
 /****************************************************************************
  * Name: rk3576_rga_fill
@@ -276,8 +274,7 @@ int rk3576_rga_scale(const struct rk3576_rga_surface_s *src,
  ****************************************************************************/
 
 int rk3576_rga_rotate(const struct rk3576_rga_surface_s *src,
-                      const struct rk3576_rga_surface_s *dst,
-                      int degrees);
+                      const struct rk3576_rga_surface_s *dst, int degrees);
 
 /****************************************************************************
  * Name: rk3576_rga_csc
@@ -297,8 +294,7 @@ int rk3576_rga_rotate(const struct rk3576_rga_surface_s *src,
  ****************************************************************************/
 
 int rk3576_rga_csc(const struct rk3576_rga_surface_s *src,
-                   const struct rk3576_rga_surface_s *dst,
-                   int mode);
+                   const struct rk3576_rga_surface_s *dst, int mode);
 
 #ifdef __cplusplus
 }

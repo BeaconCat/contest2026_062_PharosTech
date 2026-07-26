@@ -115,42 +115,42 @@
  * captured golden streams installed with set_template().
  */
 
-#define RK3576_RKNN_MM_REGCMD_WORDS   1024
+#define RK3576_RKNN_MM_REGCMD_WORDS 1024
 
 /* Default NPU job timeout.  A single tile of an LLM projection completes in
  * tens of microseconds; this is a hang detector, not a budget.
  */
 
-#define RK3576_RKNN_MM_TIMEOUT_MS     1000
+#define RK3576_RKNN_MM_TIMEOUT_MS 1000
 
 /* Only NPU core 0 by default.  RK3576 has two cores (npu0_irq, npu1_irq in
  * the vendor device tree); using both requires splitting the N range, which
  * the caller can do by creating two contexts.
  */
 
-#define RK3576_RKNN_MM_CORE_DEFAULT   0x1
-#define RK3576_RKNN_MM_CORE_MASK_ALL  0x3
+#define RK3576_RKNN_MM_CORE_DEFAULT  0x1
+#define RK3576_RKNN_MM_CORE_MASK_ALL 0x3
 
 /* Do not spawn a worker thread unless it gets at least this many output
  * columns; below that the thread creation dominates.
  */
 
-#define RK3576_RKNN_MM_MIN_COLS       32
+#define RK3576_RKNN_MM_MIN_COLS 32
 
 /* Stack for a CPU back-end worker.  The kernel is scalar and iterative, so
  * this only has to cover the frame plus the accessor calls.
  */
 
-#define RK3576_RKNN_MM_WORKER_STACK   4096
+#define RK3576_RKNN_MM_WORKER_STACK 4096
 
 /* Sanity limits on the problem shape.  K is bounded by the NPU input buffer
  * and by the fact that an fp32 accumulator loses resolution long before
  * this; M and N are bounded to keep the staging allocations sane.
  */
 
-#define RK3576_RKNN_MM_MAX_M          65536
-#define RK3576_RKNN_MM_MAX_K          65536
-#define RK3576_RKNN_MM_MAX_N          65536
+#define RK3576_RKNN_MM_MAX_M 65536
+#define RK3576_RKNN_MM_MAX_K 65536
+#define RK3576_RKNN_MM_MAX_N 65536
 
 /* Element type selectors written into the CNA/DPU type registers.
  *
@@ -158,11 +158,11 @@
  * against a captured golden stream before trusting the NPU path.
  */
 
-#define RK3576_RKNN_MM_DTYPE_INT4     0
-#define RK3576_RKNN_MM_DTYPE_INT8     1
-#define RK3576_RKNN_MM_DTYPE_FP16     2
-#define RK3576_RKNN_MM_DTYPE_INT32    3
-#define RK3576_RKNN_MM_DTYPE_FP32     4
+#define RK3576_RKNN_MM_DTYPE_INT4  0
+#define RK3576_RKNN_MM_DTYPE_INT8  1
+#define RK3576_RKNN_MM_DTYPE_FP16  2
+#define RK3576_RKNN_MM_DTYPE_INT32 3
+#define RK3576_RKNN_MM_DTYPE_FP32  4
 
 /* Static values for the pipeline-mode registers: 1x1 kernel, stride 1, no
  * padding, single group, accumulate-and-store.
@@ -171,9 +171,9 @@
  * with the register offsets.
  */
 
-#define RK3576_RKNN_MM_CONV_CON1_1X1  0x00000000
-#define RK3576_RKNN_MM_DPU_MODE_GEMM  0x00000000
-#define RK3576_RKNN_MM_MAC_GATE_ALL   0xffffffff
+#define RK3576_RKNN_MM_CONV_CON1_1X1 0x00000000
+#define RK3576_RKNN_MM_DPU_MODE_GEMM 0x00000000
+#define RK3576_RKNN_MM_MAC_GATE_ALL  0xffffffff
 
 /* Two-dimensional extent encoding used by the CNA/DPU size registers:
  * width in the low half, height in the high half, both stored biased by one.
@@ -182,16 +182,16 @@
  */
 
 #define RK3576_RKNN_MM_SIZE_ENC(w, h) \
-  ((((uint32_t)(h) - 1u) << 16) | (((uint32_t)(w) - 1u) & 0xffffu))
+  ((((uint32_t)(h)-1u) << 16) | (((uint32_t)(w)-1u) & 0xffffu))
 
 /* Integer helpers. */
 
-#define RK3576_RKNN_MM_DIV_UP(a, b)   (((a) + (b) - 1u) / (b))
+#define RK3576_RKNN_MM_DIV_UP(a, b)   (((a) + (b)-1u) / (b))
 #define RK3576_RKNN_MM_ALIGN_UP(a, b) (RK3576_RKNN_MM_DIV_UP(a, b) * (b))
 
 /* The NPU address registers are 32 bits wide. */
 
-#define RK3576_RKNN_MM_ADDR_LIMIT     0x100000000ull
+#define RK3576_RKNN_MM_ADDR_LIMIT 0x100000000ull
 
 /* Native fp16 is available on every aarch64 tool chain we build with; the
  * software path exists so the conversions stay testable elsewhere and so
@@ -199,7 +199,7 @@
  */
 
 #if defined(__ARM_FP16_FORMAT_IEEE)
-#  define RK3576_RKNN_MM_NATIVE_FP16  1
+#define RK3576_RKNN_MM_NATIVE_FP16 1
 #endif
 
 #ifdef CONFIG_RK3576_RKNN_MATMUL_SELFTEST
@@ -209,10 +209,10 @@
  * groups of 32, which is the shape RKLLM-style w4a16 weights use.
  */
 
-#  define RK3576_RKNN_MM_SELFTEST_M     1
-#  define RK3576_RKNN_MM_SELFTEST_K     64
-#  define RK3576_RKNN_MM_SELFTEST_N     32
-#  define RK3576_RKNN_MM_SELFTEST_GROUP 32
+#define RK3576_RKNN_MM_SELFTEST_M     1
+#define RK3576_RKNN_MM_SELFTEST_K     64
+#define RK3576_RKNN_MM_SELFTEST_N     32
+#define RK3576_RKNN_MM_SELFTEST_GROUP 32
 
 /* Tolerance against the double-precision reference.  The kernels round
  * every product through fp32 and the operands are fp16, so a few ulp of
@@ -220,7 +220,7 @@
  * rounding.
  */
 
-#  define RK3576_RKNN_MM_SELFTEST_EPS   1.0e-3
+#define RK3576_RKNN_MM_SELFTEST_EPS 1.0e-3
 
 #endif /* CONFIG_RK3576_RKNN_MATMUL_SELFTEST */
 
@@ -232,17 +232,17 @@
 
 struct rk3576_rknn_mm_traits_s
 {
-  int      type;      /* enum rk3576_rknn_matmul_type_e                   */
-  uint8_t  a_bits;    /* Bits per A element                               */
-  uint8_t  b_bits;    /* Bits per B element                               */
-  uint8_t  c_bits;    /* Bits per C element                               */
-  uint8_t  subk_a;    /* A native K tile                                  */
-  uint8_t  subn_b;    /* B native N lane count                            */
-  uint8_t  subn_c;    /* C native N lane count                            */
-  uint16_t k_align;   /* Required padding of K, in elements               */
-  uint16_t n_align;   /* Required padding of N, in elements               */
-  bool     c_float;   /* C holds float rather than integer                */
-  bool     b_int;     /* B is an integer type and may carry quant params  */
+  int type;         /* enum rk3576_rknn_matmul_type_e                   */
+  uint8_t a_bits;   /* Bits per A element                               */
+  uint8_t b_bits;   /* Bits per B element                               */
+  uint8_t c_bits;   /* Bits per C element                               */
+  uint8_t subk_a;   /* A native K tile                                  */
+  uint8_t subn_b;   /* B native N lane count                            */
+  uint8_t subn_c;   /* C native N lane count                            */
+  uint16_t k_align; /* Required padding of K, in elements               */
+  uint16_t n_align; /* Required padding of N, in elements               */
+  bool c_float;     /* C holds float rather than integer                */
+  bool b_int;       /* B is an integer type and may carry quant params  */
 };
 
 /* Per-problem context.  Opaque to callers. */
@@ -252,18 +252,18 @@ struct rk3576_rknn_matmul_ctx_s
   struct rk3576_rknn_matmul_info_s info;
   const struct rk3576_rknn_mm_traits_s *tr;
 
-  uint32_t kal;              /* K padded to tr->k_align                   */
-  uint32_t nal;              /* N padded to tr->n_align                   */
+  uint32_t kal; /* K padded to tr->k_align                   */
+  uint32_t nal; /* N padded to tr->n_align                   */
 
-  const void *a_src;         /* Caller operands, not owned                */
+  const void *a_src; /* Caller operands, not owned                */
   const void *b_src;
-  void       *c_dst;
+  void *c_dst;
 
   struct rk3576_rknn_matmul_quant_s quant;
 
-  void  *a_dma;              /* Packed staging buffers, DMA-safe          */
-  void  *b_dma;
-  void  *c_dma;
+  void *a_dma; /* Packed staging buffers, DMA-safe          */
+  void *b_dma;
+  void *c_dma;
   uint32_t *regcmd;
   size_t a_size;
   size_t b_size;
@@ -274,9 +274,9 @@ struct rk3576_rknn_matmul_ctx_s
 
   uint32_t core_mask;
   uint32_t timeout_ms;
-  int      backend;
-  bool     b_dirty;          /* B changed since the last pack             */
-  bool     npu_warned;       /* AUTO fallback already reported            */
+  int backend;
+  bool b_dirty;    /* B changed since the last pack             */
+  bool npu_warned; /* AUTO fallback already reported            */
 
   mutex_t lock;
 };
@@ -298,58 +298,59 @@ struct rk3576_rknn_mm_work_s
 static float rk3576_rknn_mm_fp16_to_fp32_sw(uint16_t h);
 static uint16_t rk3576_rknn_mm_fp32_to_fp16_sw(float f);
 #endif
-static const struct rk3576_rknn_mm_traits_s *
-  rk3576_rknn_mm_traits(int type);
-static size_t rk3576_rknn_mm_a_index(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m, uint32_t k);
-static size_t rk3576_rknn_mm_b_index(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t k, uint32_t n);
-static size_t rk3576_rknn_mm_c_index(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m, uint32_t n);
-static uint32_t rk3576_rknn_mm_a_raw(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m, uint32_t k);
-static uint32_t rk3576_rknn_mm_b_raw(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t k, uint32_t n);
-static int32_t rk3576_rknn_mm_sext(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t raw);
-static float rk3576_rknn_mm_a_float(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m, uint32_t k);
-static void rk3576_rknn_mm_c_store_f(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m, uint32_t n,
-  float v);
-static void rk3576_rknn_mm_c_store_i(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m, uint32_t n,
-  int32_t v);
-static void rk3576_rknn_mm_quant_at(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t group, uint32_t n,
-  float *scale, int32_t *zp);
-static void rk3576_rknn_mm_cpu_float(
-  struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t n0, uint32_t n1);
-static void rk3576_rknn_mm_cpu_int(
-  struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t n0, uint32_t n1);
-static void rk3576_rknn_mm_cpu_range(
-  struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t n0, uint32_t n1);
+static const struct rk3576_rknn_mm_traits_s *rk3576_rknn_mm_traits(int type);
+static size_t
+rk3576_rknn_mm_a_index(const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m,
+                       uint32_t k);
+static size_t
+rk3576_rknn_mm_b_index(const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t k,
+                       uint32_t n);
+static size_t
+rk3576_rknn_mm_c_index(const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m,
+                       uint32_t n);
+static uint32_t
+rk3576_rknn_mm_a_raw(const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m,
+                     uint32_t k);
+static uint32_t
+rk3576_rknn_mm_b_raw(const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t k,
+                     uint32_t n);
+static int32_t rk3576_rknn_mm_sext(const struct rk3576_rknn_matmul_ctx_s *ctx,
+                                   uint32_t raw);
+static float rk3576_rknn_mm_a_float(const struct rk3576_rknn_matmul_ctx_s *ctx,
+                                    uint32_t m, uint32_t k);
+static void
+rk3576_rknn_mm_c_store_f(const struct rk3576_rknn_matmul_ctx_s *ctx,
+                         uint32_t m, uint32_t n, float v);
+static void
+rk3576_rknn_mm_c_store_i(const struct rk3576_rknn_matmul_ctx_s *ctx,
+                         uint32_t m, uint32_t n, int32_t v);
+static void rk3576_rknn_mm_quant_at(const struct rk3576_rknn_matmul_ctx_s *ctx,
+                                    uint32_t group, uint32_t n, float *scale,
+                                    int32_t *zp);
+static void rk3576_rknn_mm_cpu_float(struct rk3576_rknn_matmul_ctx_s *ctx,
+                                     uint32_t n0, uint32_t n1);
+static void rk3576_rknn_mm_cpu_int(struct rk3576_rknn_matmul_ctx_s *ctx,
+                                   uint32_t n0, uint32_t n1);
+static void rk3576_rknn_mm_cpu_range(struct rk3576_rknn_matmul_ctx_s *ctx,
+                                     uint32_t n0, uint32_t n1);
 static void *rk3576_rknn_mm_worker(void *arg);
 static int rk3576_rknn_mm_cpu_exec(struct rk3576_rknn_matmul_ctx_s *ctx);
 static void rk3576_rknn_mm_pack_a(struct rk3576_rknn_matmul_ctx_s *ctx);
 static void rk3576_rknn_mm_pack_b(struct rk3576_rknn_matmul_ctx_s *ctx);
 static void rk3576_rknn_mm_unpack_c(struct rk3576_rknn_matmul_ctx_s *ctx);
-static int rk3576_rknn_mm_build_regcmd(
-  struct rk3576_rknn_matmul_ctx_s *ctx, uintptr_t a_pa, uintptr_t b_pa,
-  uintptr_t c_pa);
-static int rk3576_rknn_mm_apply_template(
-  struct rk3576_rknn_matmul_ctx_s *ctx, uintptr_t a_pa, uintptr_t b_pa,
-  uintptr_t c_pa);
+static int rk3576_rknn_mm_build_regcmd(struct rk3576_rknn_matmul_ctx_s *ctx,
+                                       uintptr_t a_pa, uintptr_t b_pa,
+                                       uintptr_t c_pa);
+static int rk3576_rknn_mm_apply_template(struct rk3576_rknn_matmul_ctx_s *ctx,
+                                         uintptr_t a_pa, uintptr_t b_pa,
+                                         uintptr_t c_pa);
 static int rk3576_rknn_mm_phys(void *va, uintptr_t *pa);
 static int rk3576_rknn_mm_run_npu(struct rk3576_rknn_matmul_ctx_s *ctx);
-static void rk3576_rknn_mm_free_buffers(
-  struct rk3576_rknn_matmul_ctx_s *ctx);
+static void rk3576_rknn_mm_free_buffers(struct rk3576_rknn_matmul_ctx_s *ctx);
 #ifdef CONFIG_RK3576_RKNN_MATMUL_SELFTEST
-static void rk3576_rknn_mm_selftest_naive(const uint16_t *a,
-                                          const uint8_t *b,
-                                          const float *scale,
-                                          double *c, uint32_t m,
-                                          uint32_t k, uint32_t n,
+static void rk3576_rknn_mm_selftest_naive(const uint16_t *a, const uint8_t *b,
+                                          const float *scale, double *c,
+                                          uint32_t m, uint32_t k, uint32_t n,
                                           uint32_t group);
 #endif
 
@@ -391,42 +392,71 @@ int rk3576_rknpu_submit_regcmd(uint32_t core_mask, uintptr_t regcmd_pa,
  * fp32/int32, 8 lanes of fp16.
  */
 
-static const struct rk3576_rknn_mm_traits_s g_rk3576_rknn_mm_traits[] =
-{
+static const struct rk3576_rknn_mm_traits_s g_rk3576_rknn_mm_traits[] = {
   {
-    .type = RK3576_RKNN_FLOAT16_MM_FLOAT16_TO_FLOAT32,
-    .a_bits = 16, .b_bits = 16, .c_bits = 32,
-    .subk_a = 32, .subn_b = 16, .subn_c = 4,
-    .k_align = 32, .n_align = 16,
-    .c_float = true, .b_int = false,
+      .type = RK3576_RKNN_FLOAT16_MM_FLOAT16_TO_FLOAT32,
+      .a_bits = 16,
+      .b_bits = 16,
+      .c_bits = 32,
+      .subk_a = 32,
+      .subn_b = 16,
+      .subn_c = 4,
+      .k_align = 32,
+      .n_align = 16,
+      .c_float = true,
+      .b_int = false,
   },
   {
-    .type = RK3576_RKNN_FLOAT16_MM_FLOAT16_TO_FLOAT16,
-    .a_bits = 16, .b_bits = 16, .c_bits = 16,
-    .subk_a = 32, .subn_b = 16, .subn_c = 8,
-    .k_align = 32, .n_align = 16,
-    .c_float = true, .b_int = false,
+      .type = RK3576_RKNN_FLOAT16_MM_FLOAT16_TO_FLOAT16,
+      .a_bits = 16,
+      .b_bits = 16,
+      .c_bits = 16,
+      .subk_a = 32,
+      .subn_b = 16,
+      .subn_c = 8,
+      .k_align = 32,
+      .n_align = 16,
+      .c_float = true,
+      .b_int = false,
   },
   {
-    .type = RK3576_RKNN_FLOAT16_MM_INT4_TO_FLOAT32,
-    .a_bits = 16, .b_bits = 4, .c_bits = 32,
-    .subk_a = 32, .subn_b = 32, .subn_c = 4,
-    .k_align = 64, .n_align = 32,
-    .c_float = true, .b_int = true,
+      .type = RK3576_RKNN_FLOAT16_MM_INT4_TO_FLOAT32,
+      .a_bits = 16,
+      .b_bits = 4,
+      .c_bits = 32,
+      .subk_a = 32,
+      .subn_b = 32,
+      .subn_c = 4,
+      .k_align = 64,
+      .n_align = 32,
+      .c_float = true,
+      .b_int = true,
   },
   {
-    .type = RK3576_RKNN_FLOAT16_MM_INT4_TO_FLOAT16,
-    .a_bits = 16, .b_bits = 4, .c_bits = 16,
-    .subk_a = 32, .subn_b = 32, .subn_c = 8,
-    .k_align = 64, .n_align = 32,
-    .c_float = true, .b_int = true,
+      .type = RK3576_RKNN_FLOAT16_MM_INT4_TO_FLOAT16,
+      .a_bits = 16,
+      .b_bits = 4,
+      .c_bits = 16,
+      .subk_a = 32,
+      .subn_b = 32,
+      .subn_c = 8,
+      .k_align = 64,
+      .n_align = 32,
+      .c_float = true,
+      .b_int = true,
   },
   {
-    .type = RK3576_RKNN_INT8_MM_INT8_TO_INT32,
-    .a_bits = 8, .b_bits = 8, .c_bits = 32,
-    .subk_a = 32, .subn_b = 32, .subn_c = 4,
-    .k_align = 32, .n_align = 32,
-    .c_float = false, .b_int = true,
+      .type = RK3576_RKNN_INT8_MM_INT8_TO_INT32,
+      .a_bits = 8,
+      .b_bits = 8,
+      .c_bits = 32,
+      .subk_a = 32,
+      .subn_b = 32,
+      .subn_c = 4,
+      .k_align = 32,
+      .n_align = 32,
+      .c_float = false,
+      .b_int = true,
   },
 };
 
@@ -436,21 +466,20 @@ static const struct rk3576_rknn_mm_traits_s g_rk3576_rknn_mm_traits[] =
  * rk3576_rknn_matmul_set_regmap().
  */
 
-static struct rk3576_rknn_matmul_regmap_s g_rk3576_rknn_mm_regmap =
-{
-  .op_enable        = RK3576_RKNN_MM_REG_UNKNOWN,
-  .cna_conv_con1    = RK3576_RKNN_MM_REG_UNKNOWN,
-  .cna_data_size    = RK3576_RKNN_MM_REG_UNKNOWN,
-  .cna_weight_size  = RK3576_RKNN_MM_REG_UNKNOWN,
-  .cna_data_base    = RK3576_RKNN_MM_REG_UNKNOWN,
-  .cna_weight_base  = RK3576_RKNN_MM_REG_UNKNOWN,
-  .cna_data_type    = RK3576_RKNN_MM_REG_UNKNOWN,
-  .cna_weight_type  = RK3576_RKNN_MM_REG_UNKNOWN,
-  .core_mac_gate    = RK3576_RKNN_MM_REG_UNKNOWN,
+static struct rk3576_rknn_matmul_regmap_s g_rk3576_rknn_mm_regmap = {
+  .op_enable = RK3576_RKNN_MM_REG_UNKNOWN,
+  .cna_conv_con1 = RK3576_RKNN_MM_REG_UNKNOWN,
+  .cna_data_size = RK3576_RKNN_MM_REG_UNKNOWN,
+  .cna_weight_size = RK3576_RKNN_MM_REG_UNKNOWN,
+  .cna_data_base = RK3576_RKNN_MM_REG_UNKNOWN,
+  .cna_weight_base = RK3576_RKNN_MM_REG_UNKNOWN,
+  .cna_data_type = RK3576_RKNN_MM_REG_UNKNOWN,
+  .cna_weight_type = RK3576_RKNN_MM_REG_UNKNOWN,
+  .core_mac_gate = RK3576_RKNN_MM_REG_UNKNOWN,
   .dpu_feature_mode = RK3576_RKNN_MM_REG_UNKNOWN,
-  .dpu_dst_base     = RK3576_RKNN_MM_REG_UNKNOWN,
-  .dpu_dst_size     = RK3576_RKNN_MM_REG_UNKNOWN,
-  .dpu_out_cvt      = RK3576_RKNN_MM_REG_UNKNOWN,
+  .dpu_dst_base = RK3576_RKNN_MM_REG_UNKNOWN,
+  .dpu_dst_size = RK3576_RKNN_MM_REG_UNKNOWN,
+  .dpu_out_cvt = RK3576_RKNN_MM_REG_UNKNOWN,
 };
 
 /****************************************************************************
@@ -477,8 +506,8 @@ static float rk3576_rknn_mm_fp16_to_fp32_sw(uint16_t h)
   } cvt;
 
   uint32_t sign = (uint32_t)(h & 0x8000) << 16;
-  uint32_t exp  = (uint32_t)(h >> 10) & 0x1f;
-  uint32_t man  = (uint32_t)h & 0x3ff;
+  uint32_t exp = (uint32_t)(h >> 10) & 0x1f;
+  uint32_t man = (uint32_t)h & 0x3ff;
 
   if (exp == 0)
     {
@@ -542,7 +571,7 @@ static uint16_t rk3576_rknn_mm_fp32_to_fp16_sw(float f)
   cvt.f = f;
   sign = (cvt.u >> 16) & 0x8000;
   bexp = (cvt.u >> 23) & 0xff;
-  man  = cvt.u & 0x7fffff;
+  man = cvt.u & 0x7fffff;
 
   if (bexp == 0xff)
     {
@@ -574,9 +603,9 @@ static uint16_t rk3576_rknn_mm_fp32_to_fp16_sw(float f)
 
       man |= 0x800000;
       shift = (uint32_t)(14 - exp);
-      sub   = man >> shift;
-      rem   = man & ((1u << shift) - 1u);
-      half  = 1u << (shift - 1);
+      sub = man >> shift;
+      rem = man & ((1u << shift) - 1u);
+      half = 1u << (shift - 1);
 
       if (rem > half || (rem == half && (sub & 1) != 0))
         {
@@ -593,7 +622,7 @@ static uint16_t rk3576_rknn_mm_fp32_to_fp16_sw(float f)
 
   {
     uint32_t bits = ((uint32_t)exp << 10) | (man >> 13);
-    uint32_t rem  = man & 0x1fff;
+    uint32_t rem = man & 0x1fff;
 
     if (rem > 0x1000 || (rem == 0x1000 && (bits & 1) != 0))
       {
@@ -640,8 +669,9 @@ static const struct rk3576_rknn_mm_traits_s *rk3576_rknn_mm_traits(int type)
  *
  ****************************************************************************/
 
-static size_t rk3576_rknn_mm_a_index(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m, uint32_t k)
+static size_t
+rk3576_rknn_mm_a_index(const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m,
+                       uint32_t k)
 {
   switch (ctx->info.a_layout)
     {
@@ -668,8 +698,9 @@ static size_t rk3576_rknn_mm_a_index(
  *
  ****************************************************************************/
 
-static size_t rk3576_rknn_mm_b_index(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t k, uint32_t n)
+static size_t
+rk3576_rknn_mm_b_index(const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t k,
+                       uint32_t n)
 {
   switch (ctx->info.b_layout)
     {
@@ -696,8 +727,9 @@ static size_t rk3576_rknn_mm_b_index(
  *
  ****************************************************************************/
 
-static size_t rk3576_rknn_mm_c_index(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m, uint32_t n)
+static size_t
+rk3576_rknn_mm_c_index(const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m,
+                       uint32_t n)
 {
   switch (ctx->info.ac_layout)
     {
@@ -724,8 +756,9 @@ static size_t rk3576_rknn_mm_c_index(
  *
  ****************************************************************************/
 
-static uint32_t rk3576_rknn_mm_a_raw(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m, uint32_t k)
+static uint32_t
+rk3576_rknn_mm_a_raw(const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m,
+                     uint32_t k)
 {
   size_t idx = rk3576_rknn_mm_a_index(ctx, m, k);
 
@@ -747,8 +780,9 @@ static uint32_t rk3576_rknn_mm_a_raw(
  *
  ****************************************************************************/
 
-static uint32_t rk3576_rknn_mm_b_raw(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t k, uint32_t n)
+static uint32_t
+rk3576_rknn_mm_b_raw(const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t k,
+                     uint32_t n)
 {
   size_t idx = rk3576_rknn_mm_b_index(ctx, k, n);
 
@@ -780,8 +814,8 @@ static uint32_t rk3576_rknn_mm_b_raw(
  *
  ****************************************************************************/
 
-static int32_t rk3576_rknn_mm_sext(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t raw)
+static int32_t rk3576_rknn_mm_sext(const struct rk3576_rknn_matmul_ctx_s *ctx,
+                                   uint32_t raw)
 {
   if (!ctx->quant.b_signed)
     {
@@ -804,8 +838,8 @@ static int32_t rk3576_rknn_mm_sext(
  *
  ****************************************************************************/
 
-static float rk3576_rknn_mm_a_float(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m, uint32_t k)
+static float rk3576_rknn_mm_a_float(const struct rk3576_rknn_matmul_ctx_s *ctx,
+                                    uint32_t m, uint32_t k)
 {
   uint32_t raw = rk3576_rknn_mm_a_raw(ctx, m, k);
 
@@ -826,9 +860,9 @@ static float rk3576_rknn_mm_a_float(
  *
  ****************************************************************************/
 
-static void rk3576_rknn_mm_c_store_f(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m, uint32_t n,
-  float v)
+static void
+rk3576_rknn_mm_c_store_f(const struct rk3576_rknn_matmul_ctx_s *ctx,
+                         uint32_t m, uint32_t n, float v)
 {
   size_t idx = rk3576_rknn_mm_c_index(ctx, m, n);
 
@@ -850,9 +884,9 @@ static void rk3576_rknn_mm_c_store_f(
  *
  ****************************************************************************/
 
-static void rk3576_rknn_mm_c_store_i(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t m, uint32_t n,
-  int32_t v)
+static void
+rk3576_rknn_mm_c_store_i(const struct rk3576_rknn_matmul_ctx_s *ctx,
+                         uint32_t m, uint32_t n, int32_t v)
 {
   size_t idx = rk3576_rknn_mm_c_index(ctx, m, n);
 
@@ -876,14 +910,14 @@ static void rk3576_rknn_mm_c_store_i(
  *
  ****************************************************************************/
 
-static void rk3576_rknn_mm_quant_at(
-  const struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t group, uint32_t n,
-  float *scale, int32_t *zp)
+static void rk3576_rknn_mm_quant_at(const struct rk3576_rknn_matmul_ctx_s *ctx,
+                                    uint32_t group, uint32_t n, float *scale,
+                                    int32_t *zp)
 {
   size_t idx = (size_t)group * ctx->info.n + n;
 
   *scale = (ctx->quant.b_scale != NULL) ? ctx->quant.b_scale[idx] : 1.0f;
-  *zp    = (ctx->quant.b_zp != NULL) ? (int32_t)ctx->quant.b_zp[idx] : 0;
+  *zp = (ctx->quant.b_zp != NULL) ? (int32_t)ctx->quant.b_zp[idx] : 0;
 }
 
 /****************************************************************************
@@ -901,12 +935,11 @@ static void rk3576_rknn_mm_quant_at(
  *
  ****************************************************************************/
 
-static void rk3576_rknn_mm_cpu_float(
-  struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t n0, uint32_t n1)
+static void rk3576_rknn_mm_cpu_float(struct rk3576_rknn_matmul_ctx_s *ctx,
+                                     uint32_t n0, uint32_t n1)
 {
   const uint32_t kdim = ctx->info.k;
-  const uint32_t group = (ctx->quant.b_group != 0) ? ctx->quant.b_group
-                                                   : kdim;
+  const uint32_t group = (ctx->quant.b_group != 0) ? ctx->quant.b_group : kdim;
   uint32_t m;
   uint32_t n;
   uint32_t k;
@@ -933,8 +966,8 @@ static void rk3576_rknn_mm_cpu_float(
                   for (k = k0; k < kend; k++)
                     {
                       int32_t w = rk3576_rknn_mm_sext(
-                                    ctx, rk3576_rknn_mm_b_raw(ctx, k, n))
-                                  - zp;
+                                      ctx, rk3576_rknn_mm_b_raw(ctx, k, n)) -
+                                  zp;
 
                       gacc += rk3576_rknn_mm_a_float(ctx, m, k) * (float)w;
                     }
@@ -947,7 +980,7 @@ static void rk3576_rknn_mm_cpu_float(
               for (k = 0; k < kdim; k++)
                 {
                   float w = rk3576_rknn_fp16_to_fp32(
-                              (uint16_t)rk3576_rknn_mm_b_raw(ctx, k, n));
+                      (uint16_t)rk3576_rknn_mm_b_raw(ctx, k, n));
 
                   acc += rk3576_rknn_mm_a_float(ctx, m, k) * w;
                 }
@@ -969,12 +1002,11 @@ static void rk3576_rknn_mm_cpu_float(
  *
  ****************************************************************************/
 
-static void rk3576_rknn_mm_cpu_int(
-  struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t n0, uint32_t n1)
+static void rk3576_rknn_mm_cpu_int(struct rk3576_rknn_matmul_ctx_s *ctx,
+                                   uint32_t n0, uint32_t n1)
 {
   const uint32_t kdim = ctx->info.k;
-  const uint32_t group = (ctx->quant.b_group != 0) ? ctx->quant.b_group
-                                                   : kdim;
+  const uint32_t group = (ctx->quant.b_group != 0) ? ctx->quant.b_group : kdim;
   uint32_t m;
   uint32_t n;
   uint32_t k;
@@ -998,9 +1030,10 @@ static void rk3576_rknn_mm_cpu_int(
               for (k = k0; k < kend; k++)
                 {
                   int32_t w = rk3576_rknn_mm_sext(
-                                ctx, rk3576_rknn_mm_b_raw(ctx, k, n)) - zp;
-                  int32_t a = (int32_t)(int8_t)(uint8_t)
-                                rk3576_rknn_mm_a_raw(ctx, m, k);
+                                  ctx, rk3576_rknn_mm_b_raw(ctx, k, n)) -
+                              zp;
+                  int32_t a = (int32_t)(int8_t)(uint8_t)rk3576_rknn_mm_a_raw(
+                      ctx, m, k);
 
                   acc += a * w;
                 }
@@ -1019,8 +1052,8 @@ static void rk3576_rknn_mm_cpu_int(
  *
  ****************************************************************************/
 
-static void rk3576_rknn_mm_cpu_range(
-  struct rk3576_rknn_matmul_ctx_s *ctx, uint32_t n0, uint32_t n1)
+static void rk3576_rknn_mm_cpu_range(struct rk3576_rknn_matmul_ctx_s *ctx,
+                                     uint32_t n0, uint32_t n1)
 {
   if (ctx->tr->c_float)
     {
@@ -1093,8 +1126,8 @@ static int rk3576_rknn_mm_cpu_exec(struct rk3576_rknn_matmul_ctx_s *ctx)
   for (i = 0; i < nthreads - 1; i++)
     {
       work[i].ctx = ctx;
-      work[i].n0  = chunk * (uint32_t)i;
-      work[i].n1  = chunk * (uint32_t)(i + 1);
+      work[i].n0 = chunk * (uint32_t)i;
+      work[i].n1 = chunk * (uint32_t)(i + 1);
 
       if (pthread_create(&tid[started], &attr, rk3576_rknn_mm_worker,
                          &work[i]) == 0)
@@ -1111,8 +1144,7 @@ static int rk3576_rknn_mm_cpu_exec(struct rk3576_rknn_matmul_ctx_s *ctx)
 
   /* The last slice absorbs the remainder and runs on the calling thread. */
 
-  rk3576_rknn_mm_cpu_range(ctx, chunk * (uint32_t)(nthreads - 1),
-                           ctx->info.n);
+  rk3576_rknn_mm_cpu_range(ctx, chunk * (uint32_t)(nthreads - 1), ctx->info.n);
 
   for (i = 0; i < started; i++)
     {
@@ -1154,8 +1186,8 @@ static void rk3576_rknn_mm_pack_a(struct rk3576_rknn_matmul_ctx_s *ctx)
             {
               uint32_t k = kb * sub + kk;
               size_t dst = ((size_t)kb * ctx->info.m + m) * sub + kk;
-              uint32_t val = (k < ctx->info.k) ?
-                             rk3576_rknn_mm_a_raw(ctx, m, k) : 0;
+              uint32_t val =
+                  (k < ctx->info.k) ? rk3576_rknn_mm_a_raw(ctx, m, k) : 0;
 
               if (ctx->tr->a_bits == 16)
                 {
@@ -1228,8 +1260,8 @@ static void rk3576_rknn_mm_pack_b(struct rk3576_rknn_matmul_ctx_s *ctx)
 
                       if ((dst & 1) != 0)
                         {
-                          *byte = (uint8_t)((*byte & 0x0f) |
-                                            ((val & 0x0f) << 4));
+                          *byte =
+                              (uint8_t)((*byte & 0x0f) | ((val & 0x0f) << 4));
                         }
                       else
                         {
@@ -1276,23 +1308,22 @@ static void rk3576_rknn_mm_unpack_c(struct rk3576_rknn_matmul_ctx_s *ctx)
     {
       for (n = 0; n < ctx->info.n; n++)
         {
-          size_t src = ((size_t)(n / sub) * ctx->info.m + m) * sub +
-                       (n % sub);
+          size_t src = ((size_t)(n / sub) * ctx->info.m + m) * sub + (n % sub);
 
           if (ctx->tr->c_float)
             {
-              float v = (ctx->tr->c_bits == 16) ?
-                        rk3576_rknn_fp16_to_fp32(
-                          ((const uint16_t *)ctx->c_dma)[src]) :
-                        ((const float *)ctx->c_dma)[src];
+              float v = (ctx->tr->c_bits == 16)
+                            ? rk3576_rknn_fp16_to_fp32(
+                                  ((const uint16_t *)ctx->c_dma)[src])
+                            : ((const float *)ctx->c_dma)[src];
 
               rk3576_rknn_mm_c_store_f(ctx, m, n, v);
             }
           else
             {
-              int32_t v = (ctx->tr->c_bits == 16) ?
-                          ((const int16_t *)ctx->c_dma)[src] :
-                          ((const int32_t *)ctx->c_dma)[src];
+              int32_t v = (ctx->tr->c_bits == 16)
+                              ? ((const int16_t *)ctx->c_dma)[src]
+                              : ((const int32_t *)ctx->c_dma)[src];
 
               rk3576_rknn_mm_c_store_i(ctx, m, n, v);
             }
@@ -1314,9 +1345,9 @@ static void rk3576_rknn_mm_unpack_c(struct rk3576_rknn_matmul_ctx_s *ctx)
  *
  ****************************************************************************/
 
-static int rk3576_rknn_mm_build_regcmd(
-  struct rk3576_rknn_matmul_ctx_s *ctx, uintptr_t a_pa, uintptr_t b_pa,
-  uintptr_t c_pa)
+static int rk3576_rknn_mm_build_regcmd(struct rk3576_rknn_matmul_ctx_s *ctx,
+                                       uintptr_t a_pa, uintptr_t b_pa,
+                                       uintptr_t c_pa)
 {
   const struct rk3576_rknn_matmul_regmap_s *map = &g_rk3576_rknn_mm_regmap;
   uint32_t *cmd = ctx->regcmd;
@@ -1325,28 +1356,28 @@ static int rk3576_rknn_mm_build_regcmd(
   uint32_t b_dtype;
   uint32_t c_dtype;
 
-#define RK3576_RKNN_MM_EMIT(off, val)                                     \
-  do                                                                      \
-    {                                                                     \
-      if ((off) != RK3576_RKNN_MM_REG_UNKNOWN)                            \
-        {                                                                 \
-          cmd[w++] = (uint32_t)(off);                                     \
-          cmd[w++] = (uint32_t)(val);                                     \
-        }                                                                 \
-    }                                                                     \
+#define RK3576_RKNN_MM_EMIT(off, val)          \
+  do                                           \
+    {                                          \
+      if ((off) != RK3576_RKNN_MM_REG_UNKNOWN) \
+        {                                      \
+          cmd[w++] = (uint32_t)(off);          \
+          cmd[w++] = (uint32_t)(val);          \
+        }                                      \
+    }                                          \
   while (0)
 
   a_dtype = (ctx->tr->a_bits == 16) ? RK3576_RKNN_MM_DTYPE_FP16
                                     : RK3576_RKNN_MM_DTYPE_INT8;
 
-  b_dtype = (ctx->tr->b_bits == 16) ? RK3576_RKNN_MM_DTYPE_FP16 :
-            (ctx->tr->b_bits == 8)  ? RK3576_RKNN_MM_DTYPE_INT8 :
-                                      RK3576_RKNN_MM_DTYPE_INT4;
+  b_dtype = (ctx->tr->b_bits == 16)  ? RK3576_RKNN_MM_DTYPE_FP16
+            : (ctx->tr->b_bits == 8) ? RK3576_RKNN_MM_DTYPE_INT8
+                                     : RK3576_RKNN_MM_DTYPE_INT4;
 
-  c_dtype = ctx->tr->c_float ?
-            ((ctx->tr->c_bits == 16) ? RK3576_RKNN_MM_DTYPE_FP16
-                                     : RK3576_RKNN_MM_DTYPE_FP32) :
-            RK3576_RKNN_MM_DTYPE_INT32;
+  c_dtype = ctx->tr->c_float
+                ? ((ctx->tr->c_bits == 16) ? RK3576_RKNN_MM_DTYPE_FP16
+                                           : RK3576_RKNN_MM_DTYPE_FP32)
+                : RK3576_RKNN_MM_DTYPE_INT32;
 
   /* Pipeline configuration first, then the operand descriptors, then the
    * output descriptor, and only then the enable - the program counter
@@ -1393,9 +1424,9 @@ static int rk3576_rknn_mm_build_regcmd(
  *
  ****************************************************************************/
 
-static int rk3576_rknn_mm_apply_template(
-  struct rk3576_rknn_matmul_ctx_s *ctx, uintptr_t a_pa, uintptr_t b_pa,
-  uintptr_t c_pa)
+static int rk3576_rknn_mm_apply_template(struct rk3576_rknn_matmul_ctx_s *ctx,
+                                         uintptr_t a_pa, uintptr_t b_pa,
+                                         uintptr_t c_pa)
 {
   const struct rk3576_rknn_matmul_template_s *tpl = ctx->tpl;
   uint32_t *cmd = ctx->regcmd;
@@ -1455,7 +1486,8 @@ static int rk3576_rknn_mm_phys(void *va, uintptr_t *pa)
   if ((uint64_t)addr >= RK3576_RKNN_MM_ADDR_LIMIT)
     {
       _err("ERROR: buffer %p maps to 0x%" PRIxPTR ", beyond the NPU 32-bit "
-           "address range\n", va, addr);
+           "address range\n",
+           va, addr);
       return -EFAULT;
     }
 
@@ -1547,18 +1579,15 @@ static int rk3576_rknn_mm_run_npu(struct rk3576_rknn_matmul_ctx_s *ctx)
    * D-cache before the job starts.
    */
 
-  up_clean_dcache((uintptr_t)ctx->a_dma,
-                  (uintptr_t)ctx->a_dma + ctx->a_size);
-  up_clean_dcache((uintptr_t)ctx->b_dma,
-                  (uintptr_t)ctx->b_dma + ctx->b_size);
-  up_clean_dcache((uintptr_t)ctx->c_dma,
-                  (uintptr_t)ctx->c_dma + ctx->c_size);
+  up_clean_dcache((uintptr_t)ctx->a_dma, (uintptr_t)ctx->a_dma + ctx->a_size);
+  up_clean_dcache((uintptr_t)ctx->b_dma, (uintptr_t)ctx->b_dma + ctx->b_size);
+  up_clean_dcache((uintptr_t)ctx->c_dma, (uintptr_t)ctx->c_dma + ctx->c_size);
   up_clean_dcache((uintptr_t)ctx->regcmd,
                   (uintptr_t)ctx->regcmd +
-                  (size_t)ctx->regcmd_words * sizeof(uint32_t));
+                      (size_t)ctx->regcmd_words * sizeof(uint32_t));
 
-  ret = rk3576_rknpu_submit_regcmd(ctx->core_mask, cmd_pa,
-                                   ctx->regcmd_words, 1, ctx->timeout_ms);
+  ret = rk3576_rknpu_submit_regcmd(ctx->core_mask, cmd_pa, ctx->regcmd_words,
+                                   1, ctx->timeout_ms);
   if (ret < 0)
     {
       _err("ERROR: NPU submission failed: %d\n", ret);
@@ -1580,8 +1609,7 @@ static int rk3576_rknn_mm_run_npu(struct rk3576_rknn_matmul_ctx_s *ctx)
  *
  ****************************************************************************/
 
-static void rk3576_rknn_mm_free_buffers(
-  struct rk3576_rknn_matmul_ctx_s *ctx)
+static void rk3576_rknn_mm_free_buffers(struct rk3576_rknn_matmul_ctx_s *ctx)
 {
   if (ctx->a_dma != NULL)
     {
@@ -1689,8 +1717,7 @@ int rk3576_rknn_matmul_create(const struct rk3576_rknn_matmul_info_s *info,
     }
 
   if (info->m == 0 || info->k == 0 || info->n == 0 ||
-      info->m > RK3576_RKNN_MM_MAX_M ||
-      info->k > RK3576_RKNN_MM_MAX_K ||
+      info->m > RK3576_RKNN_MM_MAX_M || info->k > RK3576_RKNN_MM_MAX_K ||
       info->n > RK3576_RKNN_MM_MAX_N)
     {
       _err("ERROR: bad matmul shape %" PRIu32 "x%" PRIu32 "x%" PRIu32 "\n",
@@ -1729,14 +1756,14 @@ int rk3576_rknn_matmul_create(const struct rk3576_rknn_matmul_info_s *info,
       return -ENOMEM;
     }
 
-  ctx->info       = *info;
-  ctx->tr         = tr;
-  ctx->kal        = RK3576_RKNN_MM_ALIGN_UP(info->k, tr->k_align);
-  ctx->nal        = RK3576_RKNN_MM_ALIGN_UP(info->n, tr->n_align);
-  ctx->core_mask  = RK3576_RKNN_MM_CORE_DEFAULT;
+  ctx->info = *info;
+  ctx->tr = tr;
+  ctx->kal = RK3576_RKNN_MM_ALIGN_UP(info->k, tr->k_align);
+  ctx->nal = RK3576_RKNN_MM_ALIGN_UP(info->n, tr->n_align);
+  ctx->core_mask = RK3576_RKNN_MM_CORE_DEFAULT;
   ctx->timeout_ms = RK3576_RKNN_MM_TIMEOUT_MS;
-  ctx->backend    = RK3576_RKNN_MM_BACKEND_AUTO;
-  ctx->b_dirty    = true;
+  ctx->backend = RK3576_RKNN_MM_BACKEND_AUTO;
+  ctx->b_dirty = true;
 
   /* Default quantisation: symmetric, unit scale, one group over the whole
    * reduction axis.  This makes a plain integer GEMM behave sensibly
@@ -1753,16 +1780,16 @@ int rk3576_rknn_matmul_create(const struct rk3576_rknn_matmul_info_s *info,
   ctx->c_size = (size_t)((bits + 7) / 8);
   ctx->regcmd_size = RK3576_RKNN_MM_REGCMD_WORDS * sizeof(uint32_t);
 
-  ctx->a_dma   = rk3576_dma_alloc(ctx->a_size);
-  ctx->b_dma   = rk3576_dma_alloc(ctx->b_size);
-  ctx->c_dma   = rk3576_dma_alloc(ctx->c_size);
-  ctx->regcmd  = rk3576_dma_alloc(ctx->regcmd_size);
+  ctx->a_dma = rk3576_dma_alloc(ctx->a_size);
+  ctx->b_dma = rk3576_dma_alloc(ctx->b_size);
+  ctx->c_dma = rk3576_dma_alloc(ctx->c_size);
+  ctx->regcmd = rk3576_dma_alloc(ctx->regcmd_size);
 
   if (ctx->a_dma == NULL || ctx->b_dma == NULL || ctx->c_dma == NULL ||
       ctx->regcmd == NULL)
     {
-      _err("ERROR: DMA heap exhausted (need %zu+%zu+%zu bytes)\n",
-           ctx->a_size, ctx->b_size, ctx->c_size);
+      _err("ERROR: DMA heap exhausted (need %zu+%zu+%zu bytes)\n", ctx->a_size,
+           ctx->b_size, ctx->c_size);
       rk3576_rknn_mm_free_buffers(ctx);
       kmm_free(ctx);
       return -ENOMEM;
@@ -1770,10 +1797,10 @@ int rk3576_rknn_matmul_create(const struct rk3576_rknn_matmul_info_s *info,
 
   nxmutex_init(&ctx->lock);
 
-  _info("matmul %" PRIu32 "x%" PRIu32 "x%" PRIu32 " type %d, padded K=%"
-        PRIu32 " N=%" PRIu32 ", staging %zu/%zu/%zu bytes\n",
-        info->m, info->k, info->n, info->type, ctx->kal, ctx->nal,
-        ctx->a_size, ctx->b_size, ctx->c_size);
+  _info("matmul %" PRIu32 "x%" PRIu32 "x%" PRIu32 " type %d, padded K=%" PRIu32
+        " N=%" PRIu32 ", staging %zu/%zu/%zu bytes\n",
+        info->m, info->k, info->n, info->type, ctx->kal, ctx->nal, ctx->a_size,
+        ctx->b_size, ctx->c_size);
 
   *ctxp = ctx;
   return OK;
@@ -1923,8 +1950,8 @@ int rk3576_rknn_matmul_set_template(
       if (tpl->nwords > RK3576_RKNN_MM_REGCMD_WORDS)
         {
           _err("ERROR: template of %" PRIu32 " words exceeds the %d word "
-               "command buffer\n", tpl->nwords,
-               RK3576_RKNN_MM_REGCMD_WORDS);
+               "command buffer\n",
+               tpl->nwords, RK3576_RKNN_MM_REGCMD_WORDS);
           return -E2BIG;
         }
     }
@@ -1946,8 +1973,7 @@ void rk3576_rknn_matmul_set_regmap(
     }
   else
     {
-      memset(&g_rk3576_rknn_mm_regmap, 0xff,
-             sizeof(g_rk3576_rknn_mm_regmap));
+      memset(&g_rk3576_rknn_mm_regmap, 0xff, sizeof(g_rk3576_rknn_mm_regmap));
     }
 }
 
@@ -2019,7 +2045,8 @@ int rk3576_rknn_matmul_run(struct rk3576_rknn_matmul_ctx_s *ctx)
           if (!ctx->npu_warned)
             {
               _warn("WARNING: NPU path unavailable (%d), using the CPU "
-                    "reference\n", ret);
+                    "reference\n",
+                    ret);
               ctx->npu_warned = true;
             }
 
@@ -2045,11 +2072,9 @@ int rk3576_rknn_matmul_run(struct rk3576_rknn_matmul_ctx_s *ctx)
  *
  ****************************************************************************/
 
-static void rk3576_rknn_mm_selftest_naive(const uint16_t *a,
-                                          const uint8_t *b,
-                                          const float *scale,
-                                          double *c, uint32_t m,
-                                          uint32_t k, uint32_t n,
+static void rk3576_rknn_mm_selftest_naive(const uint16_t *a, const uint8_t *b,
+                                          const float *scale, double *c,
+                                          uint32_t m, uint32_t k, uint32_t n,
                                           uint32_t group)
 {
   uint32_t row;
@@ -2073,10 +2098,10 @@ static void rk3576_rknn_mm_selftest_naive(const uint16_t *a,
                   code -= 16;
                 }
 
-              acc += (double)rk3576_rknn_fp16_to_fp32(a[(size_t)row * k +
-                                                        idx]) *
-                     (double)code *
-                     (double)scale[(size_t)(idx / group) * n + col];
+              acc +=
+                  (double)rk3576_rknn_fp16_to_fp32(a[(size_t)row * k + idx]) *
+                  (double)code *
+                  (double)scale[(size_t)(idx / group) * n + col];
             }
 
           c[(size_t)row * n + col] = acc;
@@ -2109,12 +2134,12 @@ int rk3576_rknn_matmul_selftest(void)
   size_t i;
   int ret;
 
-  a      = kmm_malloc((size_t)m * k * sizeof(uint16_t));
-  b      = kmm_malloc((size_t)k * n / 2);
-  scale  = kmm_malloc((size_t)ngroups * n * sizeof(float));
-  c_cpu  = kmm_malloc((size_t)m * n * sizeof(float));
-  c_npu  = kmm_malloc((size_t)m * n * sizeof(float));
-  c_ref  = kmm_malloc((size_t)m * n * sizeof(double));
+  a = kmm_malloc((size_t)m * k * sizeof(uint16_t));
+  b = kmm_malloc((size_t)k * n / 2);
+  scale = kmm_malloc((size_t)ngroups * n * sizeof(float));
+  c_cpu = kmm_malloc((size_t)m * n * sizeof(float));
+  c_npu = kmm_malloc((size_t)m * n * sizeof(float));
+  c_ref = kmm_malloc((size_t)m * n * sizeof(double));
 
   if (a == NULL || b == NULL || scale == NULL || c_cpu == NULL ||
       c_npu == NULL || c_ref == NULL)
@@ -2132,7 +2157,7 @@ int rk3576_rknn_matmul_selftest(void)
     {
       seed = seed * 1664525u + 1013904223u;
       a[i] = rk3576_rknn_fp32_to_fp16(
-               (float)((int32_t)((seed >> 16) & 0x7ff) - 1024) / 1024.0f);
+          (float)((int32_t)((seed >> 16) & 0x7ff) - 1024) / 1024.0f);
     }
 
   for (i = 0; i < (size_t)k * n / 2; i++)
@@ -2150,12 +2175,12 @@ int rk3576_rknn_matmul_selftest(void)
   rk3576_rknn_mm_selftest_naive(a, b, scale, c_ref, m, k, n, group);
 
   memset(&info, 0, sizeof(info));
-  info.m         = m;
-  info.k         = k;
-  info.n         = n;
-  info.type      = RK3576_RKNN_FLOAT16_MM_INT4_TO_FLOAT32;
-  info.a_layout  = RK3576_RKNN_MM_LAYOUT_NORM;
-  info.b_layout  = RK3576_RKNN_MM_LAYOUT_NORM;
+  info.m = m;
+  info.k = k;
+  info.n = n;
+  info.type = RK3576_RKNN_FLOAT16_MM_INT4_TO_FLOAT32;
+  info.a_layout = RK3576_RKNN_MM_LAYOUT_NORM;
+  info.b_layout = RK3576_RKNN_MM_LAYOUT_NORM;
   info.ac_layout = RK3576_RKNN_MM_LAYOUT_NORM;
 
   ret = rk3576_rknn_matmul_create(&info, &ctx);
@@ -2165,8 +2190,8 @@ int rk3576_rknn_matmul_selftest(void)
     }
 
   memset(&quant, 0, sizeof(quant));
-  quant.b_scale  = scale;
-  quant.b_group  = group;
+  quant.b_scale = scale;
+  quant.b_group = group;
   quant.b_signed = true;
 
   ret = rk3576_rknn_matmul_set_quant(ctx, &quant);
@@ -2205,13 +2230,15 @@ int rk3576_rknn_matmul_selftest(void)
   if (worst > RK3576_RKNN_MM_SELFTEST_EPS)
     {
       _err("ERROR: CPU kernel disagrees with the naive reference, worst "
-           "absolute error %ld ppm\n", (long)(worst * 1.0e6));
+           "absolute error %ld ppm\n",
+           (long)(worst * 1.0e6));
       ret = -EIO;
       goto out;
     }
 
   _info("CPU reference matches the naive computation, worst error "
-        "%ld ppm\n", (long)(worst * 1.0e6));
+        "%ld ppm\n",
+        (long)(worst * 1.0e6));
 
   /* Now the same problem on the NPU, diffed against the CPU result. */
 
@@ -2227,7 +2254,8 @@ int rk3576_rknn_matmul_selftest(void)
   if (ret < 0)
     {
       _warn("WARNING: NPU path not exercised (%d); the CPU reference is "
-            "validated and usable\n", ret);
+            "validated and usable\n",
+            ret);
       ret = OK;
       goto out;
     }
@@ -2252,7 +2280,8 @@ int rk3576_rknn_matmul_selftest(void)
     {
       _err("ERROR: NPU result differs from the CPU reference, worst "
            "absolute error %ld ppm -- check the tile geometry and the "
-           "register map\n", (long)(worst * 1.0e6));
+           "register map\n",
+           (long)(worst * 1.0e6));
       ret = -EIO;
       goto out;
     }

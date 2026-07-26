@@ -73,17 +73,17 @@
  *   [tensor.offset]           raw tensor payloads, 64-byte aligned
  */
 
-#define LLM_MODEL_MAGIC        0x4d4c594eu  /* "NYLM" */
-#define LLM_MODEL_VERSION      1u
-#define LLM_TENSOR_NAME_MAX    32
-#define LLM_HEADER_BYTES       128
-#define LLM_FILE_TENSOR_BYTES  64
+#define LLM_MODEL_MAGIC       0x4d4c594eu /* "NYLM" */
+#define LLM_MODEL_VERSION     1u
+#define LLM_TENSOR_NAME_MAX   32
+#define LLM_HEADER_BYTES      128
+#define LLM_FILE_TENSOR_BYTES 64
 
 /* llm_file_header_s.flags */
 
-#define LLM_FLAG_TIE_EMBED     (1u << 0)  /* lm_head shares tok_emb        */
-#define LLM_FLAG_QKV_BIAS      (1u << 1)  /* Q/K/V projections have a bias */
-#define LLM_FLAG_ROPE_NEOX     (1u << 2)  /* HF rotate_half RoPE layout    */
+#define LLM_FLAG_TIE_EMBED (1u << 0) /* lm_head shares tok_emb        */
+#define LLM_FLAG_QKV_BIAS  (1u << 1) /* Q/K/V projections have a bias */
+#define LLM_FLAG_ROPE_NEOX (1u << 2) /* HF rotate_half RoPE layout    */
 
 /* int4 block quantisation (q4_0 compatible) -------------------------------
  *
@@ -96,13 +96,13 @@
  * Dequantised value = ((int)nibble - 8) * d.
  */
 
-#define LLM_Q4_BLOCK_SIZE      32
-#define LLM_Q4_BLOCK_BYTES     18
+#define LLM_Q4_BLOCK_SIZE  32
+#define LLM_Q4_BLOCK_BYTES 18
 
 /* Worker pool -------------------------------------------------------------*/
 
-#define LLM_MAX_THREADS        8
-#define LLM_WORKER_STACKSIZE   8192
+#define LLM_MAX_THREADS      8
+#define LLM_WORKER_STACKSIZE 8192
 
 /* Tokenizer blob ----------------------------------------------------------
  *
@@ -114,23 +114,23 @@
  *   n_merges   x { uint32 a; uint32 b; uint32 ab }  in ascending rank
  */
 
-#define LLM_TOKENIZER_MAGIC    0x4b54594eu  /* "NYTK" */
-#define LLM_TOKFLAG_ADD_BOS    (1u << 0)
+#define LLM_TOKENIZER_MAGIC 0x4b54594eu /* "NYTK" */
+#define LLM_TOKFLAG_ADD_BOS (1u << 0)
 
 /* NPU matmul operation type, mirrors RKNN_FLOAT16_MM_INT4_TO_FLOAT32. */
 
-#define LLM_NPU_MM_F16_I4_F32  0u
+#define LLM_NPU_MM_F16_I4_F32 0u
 
 /* NPU tile constraints.  A matmul is only offloaded when it satisfies them;
  * otherwise the CPU kernel runs.  Values are conservative and can be raised
  * once measured on silicon.
  */
 
-#define LLM_NPU_K_ALIGN        32
-#define LLM_NPU_N_ALIGN        16
-#define LLM_NPU_MIN_WORK       (256 * 256)
+#define LLM_NPU_K_ALIGN  32
+#define LLM_NPU_N_ALIGN  16
+#define LLM_NPU_MIN_WORK (256 * 256)
 
-#define LLM_WEAK __attribute__((weak))
+#define LLM_WEAK         __attribute__((weak))
 
 /****************************************************************************
  * Public Types
@@ -140,8 +140,8 @@
 
 enum llm_dtype_e
 {
-  LLM_DTYPE_F32  = 0,
-  LLM_DTYPE_F16  = 1,
+  LLM_DTYPE_F32 = 0,
+  LLM_DTYPE_F16 = 1,
   LLM_DTYPE_Q4_0 = 2,
 };
 
@@ -149,9 +149,9 @@ enum llm_dtype_e
 
 enum llm_backend_e
 {
-  LLM_BACKEND_CPU  = 0,  /* never touch the NPU                           */
-  LLM_BACKEND_NPU  = 1,  /* prefer the NPU, same fallback as AUTO         */
-  LLM_BACKEND_AUTO = 2,  /* NPU when the shape is eligible, CPU otherwise */
+  LLM_BACKEND_CPU = 0,  /* never touch the NPU                           */
+  LLM_BACKEND_NPU = 1,  /* prefer the NPU, same fallback as AUTO         */
+  LLM_BACKEND_AUTO = 2, /* NPU when the shape is eligible, CPU otherwise */
 };
 
 /* On-disk header.  Packed so that the C view matches the file byte for
@@ -162,18 +162,18 @@ begin_packed_struct struct llm_file_header_s
 {
   uint32_t magic;
   uint32_t version;
-  uint32_t arch;               /* 0 = llama-family                        */
-  uint32_t flags;              /* LLM_FLAG_*                              */
-  int32_t  hidden_dim;
-  int32_t  ffn_dim;
-  int32_t  n_layers;
-  int32_t  n_heads;
-  int32_t  n_kv_heads;
-  int32_t  head_dim;
-  int32_t  vocab_size;
-  int32_t  max_seq_len;
-  float    rope_theta;
-  float    rms_eps;
+  uint32_t arch;  /* 0 = llama-family                        */
+  uint32_t flags; /* LLM_FLAG_*                              */
+  int32_t hidden_dim;
+  int32_t ffn_dim;
+  int32_t n_layers;
+  int32_t n_heads;
+  int32_t n_kv_heads;
+  int32_t head_dim;
+  int32_t vocab_size;
+  int32_t max_seq_len;
+  float rope_theta;
+  float rms_eps;
   uint32_t n_tensors;
   uint32_t tensor_table_off;
   uint32_t tensor_table_bytes;
@@ -181,19 +181,19 @@ begin_packed_struct struct llm_file_header_s
   uint32_t tokenizer_bytes;
   uint32_t bos_id;
   uint32_t eos_id;
-  uint8_t  reserved[44];
+  uint8_t reserved[44];
 } end_packed_struct;
 
 /* On-disk tensor directory entry. */
 
 begin_packed_struct struct llm_file_tensor_s
 {
-  char     name[LLM_TENSOR_NAME_MAX];
-  uint32_t dtype;              /* enum llm_dtype_e                        */
-  uint32_t rows;               /* output features                         */
-  uint32_t cols;               /* input features                          */
+  char name[LLM_TENSOR_NAME_MAX];
+  uint32_t dtype; /* enum llm_dtype_e                        */
+  uint32_t rows;  /* output features                         */
+  uint32_t cols;  /* input features                          */
   uint32_t pad;
-  uint64_t offset;             /* payload offset from start of file       */
+  uint64_t offset; /* payload offset from start of file       */
   uint64_t nbytes;
 } end_packed_struct;
 
@@ -205,31 +205,31 @@ begin_packed_struct struct llm_file_tensor_s
 struct llm_tensor_s
 {
   const void *data;
-  uint32_t    rows;
-  uint32_t    cols;
-  uint8_t     dtype;
+  uint32_t rows;
+  uint32_t cols;
+  uint8_t dtype;
 };
 
 /* Hyper-parameters. */
 
 struct llm_config_s
 {
-  int   hidden_dim;            /* model width                             */
-  int   ffn_dim;               /* SwiGLU intermediate width               */
-  int   n_layers;
-  int   n_heads;               /* query heads                             */
-  int   n_kv_heads;            /* key/value heads (GQA), <= n_heads       */
-  int   head_dim;              /* per-head width                          */
-  int   q_dim;                 /* n_heads    * head_dim                   */
-  int   kv_dim;                /* n_kv_heads * head_dim                   */
-  int   kv_mul;                /* n_heads / n_kv_heads                    */
-  int   vocab_size;
-  int   max_seq_len;
+  int hidden_dim; /* model width                             */
+  int ffn_dim;    /* SwiGLU intermediate width               */
+  int n_layers;
+  int n_heads;    /* query heads                             */
+  int n_kv_heads; /* key/value heads (GQA), <= n_heads       */
+  int head_dim;   /* per-head width                          */
+  int q_dim;      /* n_heads    * head_dim                   */
+  int kv_dim;     /* n_kv_heads * head_dim                   */
+  int kv_mul;     /* n_heads / n_kv_heads                    */
+  int vocab_size;
+  int max_seq_len;
   float rope_theta;
   float rms_eps;
-  bool  tie_embed;
-  bool  qkv_bias;
-  bool  rope_neox;
+  bool tie_embed;
+  bool qkv_bias;
+  bool rope_neox;
 };
 
 /* One transformer block. */
@@ -254,10 +254,10 @@ struct llm_layer_s
 
 struct llm_weights_s
 {
-  struct llm_tensor_s  tok_emb;   /* [vocab , hidden]                     */
-  struct llm_tensor_s  out_norm;  /* [hidden]                             */
-  struct llm_tensor_s  output;    /* [vocab , hidden], tied -> tok_emb    */
-  struct llm_layer_s  *layers;
+  struct llm_tensor_s tok_emb;  /* [vocab , hidden]                     */
+  struct llm_tensor_s out_norm; /* [hidden]                             */
+  struct llm_tensor_s output;   /* [vocab , hidden], tied -> tok_emb    */
+  struct llm_layer_s *layers;
 };
 
 /* Scratch activations plus the KV-cache.  Everything here is allocated once
@@ -266,21 +266,21 @@ struct llm_weights_s
 
 struct llm_state_s
 {
-  float *x;            /* [hidden]  residual stream                       */
-  float *xb;           /* [max(hidden,q_dim)] scratch                     */
-  float *xb2;          /* [max(hidden,q_dim)] scratch                     */
-  float *hb;           /* [ffn]     SwiGLU gate                           */
-  float *hb2;          /* [ffn]     SwiGLU up                             */
-  float *q;            /* [q_dim]                                         */
-  float *att;          /* [n_heads * max_seq_len]                         */
-  float *logits;       /* [vocab]                                         */
-  float *key_cache;    /* [layers * max_seq_len * kv_dim]                 */
-  float *value_cache;  /* [layers * max_seq_len * kv_dim]                 */
-  float *rope_freq;    /* [head_dim / 2] inverse frequencies              */
-  uint16_t *npu_act;   /* [max activation width] fp16 staging, DMA heap   */
-  float    *npu_out;   /* [max output width]     fp32 staging, DMA heap   */
-  size_t    npu_act_bytes;
-  size_t    npu_out_bytes;
+  float *x;           /* [hidden]  residual stream                       */
+  float *xb;          /* [max(hidden,q_dim)] scratch                     */
+  float *xb2;         /* [max(hidden,q_dim)] scratch                     */
+  float *hb;          /* [ffn]     SwiGLU gate                           */
+  float *hb2;         /* [ffn]     SwiGLU up                             */
+  float *q;           /* [q_dim]                                         */
+  float *att;         /* [n_heads * max_seq_len]                         */
+  float *logits;      /* [vocab]                                         */
+  float *key_cache;   /* [layers * max_seq_len * kv_dim]                 */
+  float *value_cache; /* [layers * max_seq_len * kv_dim]                 */
+  float *rope_freq;   /* [head_dim / 2] inverse frequencies              */
+  uint16_t *npu_act;  /* [max activation width] fp16 staging, DMA heap   */
+  float *npu_out;     /* [max output width]     fp32 staging, DMA heap   */
+  size_t npu_act_bytes;
+  size_t npu_out_bytes;
 };
 
 /* Worker pool used to split a matmul row range across CPU cores. */
@@ -290,23 +290,23 @@ struct llm_pool_s;
 struct llm_worker_arg_s
 {
   struct llm_pool_s *pool;
-  int                id;
+  int id;
 };
 
 struct llm_pool_s
 {
-  int        nthreads;                 /* including the calling thread    */
-  bool       running;
+  int nthreads; /* including the calling thread    */
+  bool running;
   volatile bool quit;
-  pthread_t  tid[LLM_MAX_THREADS];
-  sem_t      start[LLM_MAX_THREADS];
-  sem_t      done;
+  pthread_t tid[LLM_MAX_THREADS];
+  sem_t start[LLM_MAX_THREADS];
+  sem_t done;
   struct llm_worker_arg_s arg[LLM_MAX_THREADS];
 
   /* Current job, published before the start semaphores are posted. */
 
-  float                     *job_out;
-  const float               *job_x;
+  float *job_out;
+  const float *job_x;
   const struct llm_tensor_s *job_w;
 };
 
@@ -314,46 +314,46 @@ struct llm_pool_s
 
 struct llm_bpe_entry_s
 {
-  const uint8_t *bytes;   /* points into the model image                  */
-  uint16_t       len;
+  const uint8_t *bytes; /* points into the model image                  */
+  uint16_t len;
 };
 
 struct llm_merge_slot_s
 {
-  uint64_t key;           /* (a << 32) | b, 0 = empty                     */
+  uint64_t key; /* (a << 32) | b, 0 = empty                     */
   uint32_t rank;
   uint32_t result;
-  bool     used;
+  bool used;
 };
 
 struct llm_tokenizer_s
 {
-  struct llm_bpe_entry_s  *vocab;
-  uint32_t                 vocab_size;
-  uint32_t                 n_merges;
-  struct llm_merge_slot_s *table;   /* open-addressed merge hash          */
-  uint32_t                 mask;    /* table size - 1                     */
-  int32_t                  byte_tok[256];
-  uint32_t                 bos_id;
-  uint32_t                 eos_id;
-  bool                     add_bos;
+  struct llm_bpe_entry_s *vocab;
+  uint32_t vocab_size;
+  uint32_t n_merges;
+  struct llm_merge_slot_s *table; /* open-addressed merge hash          */
+  uint32_t mask;                  /* table size - 1                     */
+  int32_t byte_tok[256];
+  uint32_t bos_id;
+  uint32_t eos_id;
+  bool add_bos;
 };
 
 /* Sampler. */
 
 struct llm_prob_s
 {
-  float    p;
+  float p;
   uint32_t index;
 };
 
 struct llm_sampler_s
 {
-  float              temperature;
-  float              topp;
-  int                topk;
-  uint64_t           rng;
-  int                vocab_size;
+  float temperature;
+  float topp;
+  int topk;
+  uint64_t rng;
+  int vocab_size;
   struct llm_prob_s *cand;
 };
 
@@ -361,18 +361,18 @@ struct llm_sampler_s
 
 struct llm_model_s
 {
-  struct llm_config_s    cfg;
-  struct llm_weights_s   w;
-  struct llm_state_s     s;
-  struct llm_pool_s      pool;
+  struct llm_config_s cfg;
+  struct llm_weights_s w;
+  struct llm_state_s s;
+  struct llm_pool_s pool;
   struct llm_tokenizer_s tok;
 
-  void   *image;             /* whole model file, weights point into it   */
-  size_t  image_bytes;
+  void *image; /* whole model file, weights point into it   */
+  size_t image_bytes;
 
   enum llm_backend_e backend;
-  uint32_t npu_calls;        /* matmuls actually run on the NPU           */
-  uint32_t cpu_calls;        /* matmuls run on the CPU kernel             */
+  uint32_t npu_calls; /* matmuls actually run on the NPU           */
+  uint32_t cpu_calls; /* matmuls run on the CPU kernel             */
 };
 
 /* Generation parameters for llm_generate(). */
@@ -380,9 +380,9 @@ struct llm_model_s
 struct llm_genopt_s
 {
   const char *prompt;
-  int         max_new;       /* number of tokens to decode                */
-  bool        chat;          /* wrap the prompt in the ChatML template    */
-  bool        quiet;         /* suppress token streaming                  */
+  int max_new; /* number of tokens to decode                */
+  bool chat;   /* wrap the prompt in the ChatML template    */
+  bool quiet;  /* suppress token streaming                  */
 };
 
 /****************************************************************************
@@ -408,8 +408,8 @@ struct llm_genopt_s
  */
 
 int rk3576_rknn_matmul_run(uint32_t type, const void *a, const void *b,
-                           void *c, uint32_t m, uint32_t k, uint32_t n)
-                           LLM_WEAK;
+                           void *c, uint32_t m, uint32_t k,
+                           uint32_t n) LLM_WEAK;
 
 /* DMA-safe allocator (chips/rk3576/rk3576_dma_alloc.h).  The chip header is
  * not on the application include path, so the prototypes are mirrored here;
@@ -441,8 +441,8 @@ void rk3576_dma_free(void *memory, size_t size) LLM_WEAK;
  *
  ****************************************************************************/
 
-int llm_model_load(struct llm_model_s *model, const char *path,
-                   int nthreads, int maxseq);
+int llm_model_load(struct llm_model_s *model, const char *path, int nthreads,
+                   int maxseq);
 
 /****************************************************************************
  * Name: llm_model_free
@@ -505,19 +505,19 @@ void llm_attention(struct llm_model_s *model, int layer, int pos);
 void llm_matmul(struct llm_model_s *model, float *out, const float *x,
                 const struct llm_tensor_s *w);
 void llm_matmul_cpu_rows(float *out, const float *x,
-                         const struct llm_tensor_s *w,
-                         int row_begin, int row_end);
+                         const struct llm_tensor_s *w, int row_begin,
+                         int row_end);
 
 /* Numeric helpers ---------------------------------------------------------*/
 
-float    llm_fp16_to_fp32(uint16_t h);
+float llm_fp16_to_fp32(uint16_t h);
 uint16_t llm_fp32_to_fp16(float f);
-void     llm_fp32_to_fp16_vec(uint16_t *out, const float *in, int n);
+void llm_fp32_to_fp16_vec(uint16_t *out, const float *in, int n);
 
 /* Tokenizer (llm_tokenizer.c) ---------------------------------------------*/
 
-int  llm_tokenizer_init(struct llm_tokenizer_s *tok, const uint8_t *blob,
-                        size_t blob_bytes, uint32_t bos_id, uint32_t eos_id);
+int llm_tokenizer_init(struct llm_tokenizer_s *tok, const uint8_t *blob,
+                       size_t blob_bytes, uint32_t bos_id, uint32_t eos_id);
 void llm_tokenizer_free(struct llm_tokenizer_s *tok);
 
 /****************************************************************************
@@ -555,15 +555,13 @@ int llm_tokenizer_encode(struct llm_tokenizer_s *tok, const char *text,
 const uint8_t *llm_tokenizer_decode(struct llm_tokenizer_s *tok, int token,
                                     int *len);
 
-int llm_tokenizer_lookup(struct llm_tokenizer_s *tok, const char *s,
-                         int len);
+int llm_tokenizer_lookup(struct llm_tokenizer_s *tok, const char *s, int len);
 
 /* Sampler (llm_sample.c) --------------------------------------------------*/
 
-int  llm_sampler_init(struct llm_sampler_s *sampler, int vocab_size,
-                      float temperature, int topk, float topp,
-                      uint64_t seed);
+int llm_sampler_init(struct llm_sampler_s *sampler, int vocab_size,
+                     float temperature, int topk, float topp, uint64_t seed);
 void llm_sampler_free(struct llm_sampler_s *sampler);
-int  llm_sample(struct llm_sampler_s *sampler, float *logits);
+int llm_sample(struct llm_sampler_s *sampler, float *logits);
 
 #endif /* __APP_LLM_LLM_TRANSFORMER_H */

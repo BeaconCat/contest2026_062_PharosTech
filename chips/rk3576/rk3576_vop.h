@@ -48,19 +48,19 @@
 
 /* Display interface a video port can be routed to. */
 
-#define RK3576_VOP_IF_HDMI0   0
-#define RK3576_VOP_IF_MIPI0   1
-#define RK3576_VOP_IF_MIPI1   2
-#define RK3576_VOP_IF_LVDS0   3
-#define RK3576_VOP_IF_EDP0    4
+#define RK3576_VOP_IF_HDMI0 0
+#define RK3576_VOP_IF_MIPI0 1
+#define RK3576_VOP_IF_MIPI1 2
+#define RK3576_VOP_IF_LVDS0 3
+#define RK3576_VOP_IF_EDP0  4
 
 /* Largest mode the driver accepts.  The VOP hardware timing registers are
  * 16-bit, but the post-scaler line buffer limits a single video port to
  * 4096 active pixels; the vertical limit below is the practical 4K one.
  */
 
-#define RK3576_VOP_MAX_HACT   4096
-#define RK3576_VOP_MAX_VACT   2304
+#define RK3576_VOP_MAX_HACT 4096
+#define RK3576_VOP_MAX_VACT 2304
 
 /****************************************************************************
  * Public Types
@@ -84,19 +84,19 @@
 
 struct rk3576_display_timing_s
 {
-  uint32_t pixclk;   /* Pixel (dclk) frequency in Hz                     */
+  uint32_t pixclk; /* Pixel (dclk) frequency in Hz                     */
 
-  uint16_t hact;     /* Horizontal active pixels                         */
-  uint16_t hfp;      /* Horizontal front porch                           */
-  uint16_t hsync;    /* Horizontal sync width                            */
-  uint16_t hbp;      /* Horizontal back porch                            */
-  uint16_t htotal;   /* hact + hfp + hsync + hbp                         */
+  uint16_t hact;   /* Horizontal active pixels                         */
+  uint16_t hfp;    /* Horizontal front porch                           */
+  uint16_t hsync;  /* Horizontal sync width                            */
+  uint16_t hbp;    /* Horizontal back porch                            */
+  uint16_t htotal; /* hact + hfp + hsync + hbp                         */
 
-  uint16_t vact;     /* Vertical active lines                            */
-  uint16_t vfp;      /* Vertical front porch                             */
-  uint16_t vsync;    /* Vertical sync width                              */
-  uint16_t vbp;      /* Vertical back porch                              */
-  uint16_t vtotal;   /* vact + vfp + vsync + vbp                         */
+  uint16_t vact;   /* Vertical active lines                            */
+  uint16_t vfp;    /* Vertical front porch                             */
+  uint16_t vsync;  /* Vertical sync width                              */
+  uint16_t vbp;    /* Vertical back porch                              */
+  uint16_t vtotal; /* vact + vfp + vsync + vbp                         */
 
   bool hsync_active_high; /* HSYNC polarity on the display interface     */
   bool vsync_active_high; /* VSYNC polarity on the display interface     */

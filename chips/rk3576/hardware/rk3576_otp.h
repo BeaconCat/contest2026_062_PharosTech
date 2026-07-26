@@ -58,7 +58,6 @@
  * local for now so that this driver is self-contained.
  */
 
-
 /* Geometry of the fuse array as seen through the user-mode read path. */
 
 #define RK3576_OTP_NBYTES 2     /* One OTP word is 16 bits            */
@@ -75,14 +74,15 @@
 
 /* USER_CTRL (0x100) ********************************************************/
 
-#define OTP_USER_CTRL_USE_USER      (1 << 0)  /* Take the array into user
+#define OTP_USER_CTRL_USE_USER                                            \
+  (1 << 0)                                    /* Take the array into user \
                                                * mode                     */
 #define OTP_USER_CTRL_USE_USER_MASK (1 << 16) /* Write-enable for bit 0   */
 
 /* USER_ADDR (0x104) ********************************************************/
 
-#define OTP_USER_ADDR_MASK      0xffff0000 /* Write-enable for [15:0]     */
-#define OTP_USER_ADDR_VAL_MASK  0x0000ffff /* Word address field          */
+#define OTP_USER_ADDR_MASK     0xffff0000 /* Write-enable for [15:0]     */
+#define OTP_USER_ADDR_VAL_MASK 0x0000ffff /* Word address field          */
 
 /* USER_ENABLE (0x108) ******************************************************/
 

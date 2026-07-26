@@ -52,16 +52,15 @@
  * repeat flag; use RK3576_IR_ADDR()/RK3576_IR_CMD() to unpack.
  */
 
-#define RK3576_IR_KEY_REPEAT     (1u << 31)
-#define RK3576_IR_ADDR_SHIFT     16
-#define RK3576_IR_ADDR_MASK      0x7fff0000u
-#define RK3576_IR_CMD_MASK       0x000000ffu
+#define RK3576_IR_KEY_REPEAT (1u << 31)
+#define RK3576_IR_ADDR_SHIFT 16
+#define RK3576_IR_ADDR_MASK  0x7fff0000u
+#define RK3576_IR_CMD_MASK   0x000000ffu
 
 #define RK3576_IR_ADDR(key) \
-  (((uint32_t)(key) & RK3576_IR_ADDR_MASK) >> RK3576_IR_ADDR_SHIFT)
-#define RK3576_IR_CMD(key)  ((uint32_t)(key) & RK3576_IR_CMD_MASK)
-#define RK3576_IR_IS_REPEAT(key) \
-  (((uint32_t)(key) & RK3576_IR_KEY_REPEAT) != 0)
+  (((uint32_t)(key)&RK3576_IR_ADDR_MASK) >> RK3576_IR_ADDR_SHIFT)
+#define RK3576_IR_CMD(key)       ((uint32_t)(key)&RK3576_IR_CMD_MASK)
+#define RK3576_IR_IS_REPEAT(key) (((uint32_t)(key)&RK3576_IR_KEY_REPEAT) != 0)
 
 /****************************************************************************
  * Public Types

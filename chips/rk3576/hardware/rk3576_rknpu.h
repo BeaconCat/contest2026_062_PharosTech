@@ -76,12 +76,12 @@
 
 /* Controller instances *****************************************************/
 
-#define RK3576_RKNPU_NCORES        2  /* Two identical RKNN cores        */
+#define RK3576_RKNPU_NCORES        2   /* Two identical RKNN cores        */
 #define RK3576_RKNPU_CORE_MASK_ALL 0x3 /* Bit per core, both present     */
 
 /* Size of one core register window (device tree "reg" length). */
 
-#define RK3576_RKNPU_CORE_WINSIZE  0x8000
+#define RK3576_RKNPU_CORE_WINSIZE 0x8000
 
 /* Core register offsets, relative to the core base *************************/
 
@@ -164,9 +164,9 @@
  * block Linux drives from drivers/iommu/rockchip-iommu.c).
  */
 
-#define RK3576_RKNPU_MMU_NBANKS  2
-#define RK3576_RKNPU_MMU0_OFFSET 0x2000
-#define RK3576_RKNPU_MMU1_OFFSET 0x2100
+#define RK3576_RKNPU_MMU_NBANKS          2
+#define RK3576_RKNPU_MMU0_OFFSET         0x2000
+#define RK3576_RKNPU_MMU1_OFFSET         0x2100
 
 #define RK3576_RKNPU_MMU_DTE_ADDR        0x00 /* Directory table base    */
 #define RK3576_RKNPU_MMU_STATUS          0x04 /* Status, read-only       */
@@ -221,12 +221,12 @@
  * usual Rockchip layout and a useful cross-check.
  */
 
-#define RK3576_RKNPU_RST_A0     0x1c9
-#define RK3576_RKNPU_RST_A1     0x1d0
-#define RK3576_RKNPU_RST_A_CBUF 0x200
-#define RK3576_RKNPU_RST_H_CBUF 0x20c
+#define RK3576_RKNPU_RST_A0       0x1c9
+#define RK3576_RKNPU_RST_A1       0x1d0
+#define RK3576_RKNPU_RST_A_CBUF   0x200
+#define RK3576_RKNPU_RST_H_CBUF   0x20c
 
 #define RK3576_RKNPU_RST_BANK(id) ((id) >> 4)
-#define RK3576_RKNPU_RST_BIT(id)  ((id) & 0xf)
+#define RK3576_RKNPU_RST_BIT(id)  ((id)&0xf)
 
 #endif /* __VENDOR_ROCKCHIP_RK3576_HARDWARE_RK3576_RKNPU_H */

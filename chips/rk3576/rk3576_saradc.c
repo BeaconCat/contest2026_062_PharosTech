@@ -57,8 +57,8 @@
 #include <nuttx/arch.h>
 #include <nuttx/clk/clk.h>
 #include <nuttx/irq.h>
-#include <nuttx/spinlock.h>
 #include <nuttx/mutex.h>
+#include <nuttx/spinlock.h>
 
 #include "arm64_internal.h"
 #include "hardware/rk3576_saradc.h"
@@ -140,26 +140,23 @@ static int rk3576_saradc_ioctl(struct adc_dev_s *dev, int cmd,
  * Private Data
  ****************************************************************************/
 
-static const struct adc_ops_s g_rk3576_saradc_ops =
-{
-  .ao_bind     = rk3576_saradc_bind,
-  .ao_reset    = rk3576_saradc_reset,
-  .ao_setup    = rk3576_saradc_setup,
+static const struct adc_ops_s g_rk3576_saradc_ops = {
+  .ao_bind = rk3576_saradc_bind,
+  .ao_reset = rk3576_saradc_reset,
+  .ao_setup = rk3576_saradc_setup,
   .ao_shutdown = rk3576_saradc_shutdown,
-  .ao_rxint    = rk3576_saradc_rxint,
-  .ao_ioctl    = rk3576_saradc_ioctl,
+  .ao_rxint = rk3576_saradc_rxint,
+  .ao_ioctl = rk3576_saradc_ioctl,
 };
 
 /* There is exactly one SARADC instance on RK3576. */
 
-static struct rk3576_saradc_priv_s g_rk3576_saradc_priv =
-{
+static struct rk3576_saradc_priv_s g_rk3576_saradc_priv = {
   .lock = NXMUTEX_INITIALIZER,
 };
 
-static struct adc_dev_s g_rk3576_saradc_dev =
-{
-  .ad_ops  = &g_rk3576_saradc_ops,
+static struct adc_dev_s g_rk3576_saradc_dev = {
+  .ad_ops = &g_rk3576_saradc_ops,
   .ad_priv = &g_rk3576_saradc_priv,
 };
 
@@ -272,8 +269,7 @@ static uint32_t rk3576_saradc_ns2cycles(uint32_t clk_hz, uint32_t ns)
 {
   uint64_t cycles;
 
-  cycles = ((uint64_t)clk_hz * (uint64_t)ns +
-            RK3576_SARADC_NSEC_PER_SEC - 1) /
+  cycles = ((uint64_t)clk_hz * (uint64_t)ns + RK3576_SARADC_NSEC_PER_SEC - 1) /
            RK3576_SARADC_NSEC_PER_SEC;
 
   if (cycles == 0)
@@ -363,8 +359,7 @@ static void rk3576_saradc_start(uint8_t ch)
         SARADC_CONV_CON_CHANNEL_SEL_MASK;
   con |= SARADC_CONV_CON_START | SARADC_CONV_CON_SINGLE_MODE;
 
-  rk3576_saradc_putreg(RK3576_SARADC_CONV_CON,
-                       RK3576_SARADC_HIWORD_ALL(con));
+  rk3576_saradc_putreg(RK3576_SARADC_CONV_CON, RK3576_SARADC_HIWORD_ALL(con));
 }
 
 /****************************************************************************
@@ -381,9 +376,8 @@ static void rk3576_saradc_stop(void)
   rk3576_saradc_putreg(RK3576_SARADC_END_INT_EN,
                        RK3576_SARADC_HIWORD_CLR(SARADC_END_INT_EN_EN));
   rk3576_saradc_putreg(RK3576_SARADC_CONV_CON,
-                       RK3576_SARADC_HIWORD_CLR(
-                         SARADC_CONV_CON_START |
-                         SARADC_CONV_CON_SINGLE_MODE));
+                       RK3576_SARADC_HIWORD_CLR(SARADC_CONV_CON_START |
+                                                SARADC_CONV_CON_SINGLE_MODE));
   rk3576_saradc_putreg(RK3576_SARADC_END_INT_ST, SARADC_END_INT_ST_ST);
 }
 
@@ -398,8 +392,7 @@ static void rk3576_saradc_stop(void)
 
 static int rk3576_saradc_interrupt(int irq, void *context, void *arg)
 {
-  struct rk3576_saradc_priv_s *priv =
-    (struct rk3576_saradc_priv_s *)arg;
+  struct rk3576_saradc_priv_s *priv = (struct rk3576_saradc_priv_s *)arg;
   uint32_t sample;
   uint8_t ch;
 
@@ -424,8 +417,8 @@ static int rk3576_saradc_interrupt(int irq, void *context, void *arg)
     }
 
   ch = priv->current;
-  sample = rk3576_saradc_getreg(RK3576_SARADC_DATA(ch)) &
-           RK3576_SARADC_DATA_MASK;
+  sample =
+      rk3576_saradc_getreg(RK3576_SARADC_DATA(ch)) & RK3576_SARADC_DATA_MASK;
 
   if (priv->cb != NULL && priv->cb->au_receive != NULL)
     {
@@ -537,8 +530,7 @@ static int rk3576_saradc_setup(struct adc_dev_s *dev)
       ret = irq_attach(RK3576_IRQ_SARADC, rk3576_saradc_interrupt, priv);
       if (ret < 0)
         {
-          aerr("ERROR: failed to attach IRQ %d: %d\n", RK3576_IRQ_SARADC,
-               ret);
+          aerr("ERROR: failed to attach IRQ %d: %d\n", RK3576_IRQ_SARADC, ret);
           nxmutex_unlock(&priv->lock);
           return ret;
         }
@@ -651,8 +643,7 @@ static int rk3576_saradc_ioctl(struct adc_dev_s *dev, int cmd,
 
               priv->current = ch;
               rk3576_saradc_putreg(RK3576_SARADC_END_INT_EN,
-                                   RK3576_SARADC_HIWORD(
-                                     SARADC_END_INT_EN_EN));
+                                   RK3576_SARADC_HIWORD(SARADC_END_INT_EN_EN));
               rk3576_saradc_start(ch);
             }
 

@@ -46,8 +46,8 @@
 
 /* Root port identifiers */
 
-#define RK3576_PCIE_PORT0 0
-#define RK3576_PCIE_PORT1 1
+#define RK3576_PCIE_PORT0  0
+#define RK3576_PCIE_PORT1  1
 #define RK3576_PCIE_NPORTS 2
 
 /****************************************************************************

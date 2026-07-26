@@ -41,19 +41,19 @@
 
 /* Frame geometry limits accepted by rk3576_isp_set_format() */
 
-#define RK3576_ISP_MIN_WIDTH   64
-#define RK3576_ISP_MIN_HEIGHT  64
-#define RK3576_ISP_MAX_WIDTH   4672
-#define RK3576_ISP_MAX_HEIGHT  3504
+#define RK3576_ISP_MIN_WIDTH  64
+#define RK3576_ISP_MIN_HEIGHT 64
+#define RK3576_ISP_MAX_WIDTH  4672
+#define RK3576_ISP_MAX_HEIGHT 3504
 
 /* Ping-pong output buffers owned by the driver */
 
-#define RK3576_ISP_NBUFFERS    2
+#define RK3576_ISP_NBUFFERS 2
 
 /* White balance gains are U4.8: 0x100 is unity, 0xfff the maximum */
 
-#define RK3576_ISP_WB_UNITY    0x100
-#define RK3576_ISP_WB_MAX      0xfff
+#define RK3576_ISP_WB_UNITY 0x100
+#define RK3576_ISP_WB_MAX   0xfff
 
 /* Number of sample points in the output gamma curve */
 
@@ -89,10 +89,10 @@ enum rk3576_isp_rawdepth_e
 
 struct rk3576_isp_format_s
 {
-  uint16_t width;   /* Active pixels per line                            */
-  uint16_t height;  /* Active lines per frame                            */
-  uint8_t bayer;    /* enum rk3576_isp_bayer_e                           */
-  uint8_t depth;    /* enum rk3576_isp_rawdepth_e                        */
+  uint16_t width;  /* Active pixels per line                            */
+  uint16_t height; /* Active lines per frame                            */
+  uint8_t bayer;   /* enum rk3576_isp_bayer_e                           */
+  uint8_t depth;   /* enum rk3576_isp_rawdepth_e                        */
 };
 
 /* Static white balance gains, U4.8 (RK3576_ISP_WB_UNITY == 1.0x). */
@@ -179,8 +179,7 @@ size_t rk3576_isp_get_framesize(void);
  *
  ****************************************************************************/
 
-int rk3576_isp_set_black_level(uint16_t a, uint16_t b, uint16_t c,
-                               uint16_t d);
+int rk3576_isp_set_black_level(uint16_t a, uint16_t b, uint16_t c, uint16_t d);
 
 /****************************************************************************
  * Name: rk3576_isp_set_wbgain

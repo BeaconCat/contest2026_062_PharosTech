@@ -78,29 +78,29 @@
  * because NuttX runs the RK3576 in AArch64 state.
  */
 
-#define RK3576_PSCI_VERSION           0x84000000
-#define RK3576_PSCI_CPU_ON            0xc4000003
-#define RK3576_PSCI_AFFINITY_INFO     0xc4000004
+#define RK3576_PSCI_VERSION       0x84000000
+#define RK3576_PSCI_CPU_ON        0xc4000003
+#define RK3576_PSCI_AFFINITY_INFO 0xc4000004
 
 /* PSCI return codes */
 
-#define RK3576_PSCI_SUCCESS           0
-#define RK3576_PSCI_NOT_SUPPORTED     (-1)
-#define RK3576_PSCI_INVALID_PARAMS    (-2)
-#define RK3576_PSCI_DENIED            (-3)
-#define RK3576_PSCI_ALREADY_ON        (-4)
-#define RK3576_PSCI_ON_PENDING        (-5)
-#define RK3576_PSCI_INTERNAL_FAILURE  (-6)
+#define RK3576_PSCI_SUCCESS          0
+#define RK3576_PSCI_NOT_SUPPORTED    (-1)
+#define RK3576_PSCI_INVALID_PARAMS   (-2)
+#define RK3576_PSCI_DENIED           (-3)
+#define RK3576_PSCI_ALREADY_ON       (-4)
+#define RK3576_PSCI_ON_PENDING       (-5)
+#define RK3576_PSCI_INTERNAL_FAILURE (-6)
 
 /* AFFINITY_INFO states */
 
-#define RK3576_PSCI_AFFINITY_ON       0
-#define RK3576_PSCI_AFFINITY_OFF      1
-#define RK3576_PSCI_AFFINITY_PENDING  2
+#define RK3576_PSCI_AFFINITY_ON      0
+#define RK3576_PSCI_AFFINITY_OFF     1
+#define RK3576_PSCI_AFFINITY_PENDING 2
 
 /* Lowest affinity level, i.e. "the target is a single core" */
 
-#define RK3576_PSCI_AFFINITY_LEVEL0   0
+#define RK3576_PSCI_AFFINITY_LEVEL0 0
 
 /****************************************************************************
  * Private Function Prototypes
@@ -118,34 +118,33 @@ static int rk3576_cpu_psci_errno(int64_t status);
  * the boot core at index 0 and mirrors the get_cpu_id assembly macro.
  */
 
-const uint64_t g_rk3576_cpu_mpid[CONFIG_SMP_NCPUS] =
-{
-  RK3576_MPID(RK3576_CLUSTER_LITTLE, 0),   /* CPU0 A53 (boot core) */
+const uint64_t g_rk3576_cpu_mpid[CONFIG_SMP_NCPUS] = {
+  RK3576_MPID(RK3576_CLUSTER_LITTLE, 0), /* CPU0 A53 (boot core) */
 #if CONFIG_SMP_NCPUS > 1
-  RK3576_MPID(RK3576_CLUSTER_LITTLE, 1),   /* CPU1 A53 */
+  RK3576_MPID(RK3576_CLUSTER_LITTLE, 1), /* CPU1 A53 */
 #endif
 #if CONFIG_SMP_NCPUS > 2
-  RK3576_MPID(RK3576_CLUSTER_LITTLE, 2),   /* CPU2 A53 */
+  RK3576_MPID(RK3576_CLUSTER_LITTLE, 2), /* CPU2 A53 */
 #endif
 #if CONFIG_SMP_NCPUS > 3
-  RK3576_MPID(RK3576_CLUSTER_LITTLE, 3),   /* CPU3 A53 */
+  RK3576_MPID(RK3576_CLUSTER_LITTLE, 3), /* CPU3 A53 */
 #endif
 #if CONFIG_SMP_NCPUS > 4
-  RK3576_MPID(RK3576_CLUSTER_BIG, 0),      /* CPU4 A72 */
+  RK3576_MPID(RK3576_CLUSTER_BIG, 0), /* CPU4 A72 */
 #endif
 #if CONFIG_SMP_NCPUS > 5
-  RK3576_MPID(RK3576_CLUSTER_BIG, 1),      /* CPU5 A72 */
+  RK3576_MPID(RK3576_CLUSTER_BIG, 1), /* CPU5 A72 */
 #endif
 #if CONFIG_SMP_NCPUS > 6
-  RK3576_MPID(RK3576_CLUSTER_BIG, 2),      /* CPU6 A72 */
+  RK3576_MPID(RK3576_CLUSTER_BIG, 2), /* CPU6 A72 */
 #endif
 #if CONFIG_SMP_NCPUS > 7
-  RK3576_MPID(RK3576_CLUSTER_BIG, 3),      /* CPU7 A72 */
+  RK3576_MPID(RK3576_CLUSTER_BIG, 3), /* CPU7 A72 */
 #endif
 };
 
 #if CONFIG_SMP_NCPUS > RK3576_CPU_NCORES
-#  error "CONFIG_SMP_NCPUS exceeds the eight cores of the RK3576"
+#error "CONFIG_SMP_NCPUS exceeds the eight cores of the RK3576"
 #endif
 
 /****************************************************************************
@@ -170,11 +169,11 @@ static int64_t rk3576_cpu_smc(uint64_t func, uint64_t arg0, uint64_t arg1,
   register uint64_t x2 asm("x2") = arg1;
   register uint64_t x3 asm("x3") = arg2;
 
-  asm volatile ("smc #0"
-                : "+r" (x0), "+r" (x1), "+r" (x2), "+r" (x3)
-                :
-                : "memory", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
-                  "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+  asm volatile("smc #0"
+               : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3)
+               :
+               : "memory", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
+                 "x12", "x13", "x14", "x15", "x16", "x17");
 
   return (int64_t)x0;
 }
@@ -335,8 +334,7 @@ bool rk3576_cpu_is_on(int cpu)
       return false;
     }
 
-  status = rk3576_cpu_smc(RK3576_PSCI_AFFINITY_INFO,
-                          g_rk3576_cpu_mpid[cpu],
+  status = rk3576_cpu_smc(RK3576_PSCI_AFFINITY_INFO, g_rk3576_cpu_mpid[cpu],
                           RK3576_PSCI_AFFINITY_LEVEL0, 0);
 
   return status == RK3576_PSCI_AFFINITY_ON;
@@ -357,8 +355,9 @@ const char *rk3576_cpu_corename(int cpu)
       return "invalid";
     }
 
-  return RK3576_MPID_CLUSTER(g_rk3576_cpu_mpid[cpu]) == RK3576_CLUSTER_BIG ?
-         "Cortex-A72" : "Cortex-A53";
+  return RK3576_MPID_CLUSTER(g_rk3576_cpu_mpid[cpu]) == RK3576_CLUSTER_BIG
+             ? "Cortex-A72"
+             : "Cortex-A53";
 }
 
 #ifdef CONFIG_RK3576_SMP_CPUSTART

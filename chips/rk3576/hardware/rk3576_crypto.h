@@ -64,7 +64,6 @@
  * TODO: move to rk3576_memorymap.h once the integration branch takes it.
  */
 
-
 #define RK3576_CRYPTO_SIZE 0x2000
 
 /* HIWORD write-enable mask covering all 16 writable bits. */
@@ -101,9 +100,9 @@
 
 /* Number of key / IV / digest words the block exposes. */
 
-#define RK3576_CRYPTO_KEY_NWORDS   8  /* 256-bit maximum cipher key       */
-#define RK3576_CRYPTO_IV_NWORDS    4  /* 128-bit IV / counter             */
-#define RK3576_CRYPTO_DOUT_NWORDS 16  /* 512-bit maximum digest           */
+#define RK3576_CRYPTO_KEY_NWORDS  8  /* 256-bit maximum cipher key       */
+#define RK3576_CRYPTO_IV_NWORDS   4  /* 128-bit IV / counter             */
+#define RK3576_CRYPTO_DOUT_NWORDS 16 /* 512-bit maximum digest           */
 
 /* CLK_CTL (0x0000), HIWORD write-masked ************************************/
 
@@ -123,12 +122,12 @@
 #define RK3576_CRYPTO_INT_DST_ERR   (1 << 4) /* Destination write error    */
 #define RK3576_CRYPTO_INT_SRC_ERR   (1 << 5) /* Source read error          */
 
-#define RK3576_CRYPTO_INT_ERR_MASK                                        \
-  (RK3576_CRYPTO_INT_LIST_ERR | RK3576_CRYPTO_INT_DST_ERR |               \
+#define RK3576_CRYPTO_INT_ERR_MASK                          \
+  (RK3576_CRYPTO_INT_LIST_ERR | RK3576_CRYPTO_INT_DST_ERR | \
    RK3576_CRYPTO_INT_SRC_ERR)
 
-#define RK3576_CRYPTO_INT_ALL                                             \
-  (RK3576_CRYPTO_INT_LIST_DONE | RK3576_CRYPTO_INT_DST_DONE |             \
+#define RK3576_CRYPTO_INT_ALL                                 \
+  (RK3576_CRYPTO_INT_LIST_DONE | RK3576_CRYPTO_INT_DST_DONE | \
    RK3576_CRYPTO_INT_SRC_DONE | RK3576_CRYPTO_INT_ERR_MASK)
 
 /* DMA_CTL (0x0010), HIWORD write-masked ************************************/
@@ -147,8 +146,8 @@
 
 /* BC_CTL (0x0044), HIWORD write-masked *************************************/
 
-#define RK3576_CRYPTO_BC_ENABLE  (1 << 0) /* Enable the block cipher       */
-#define RK3576_CRYPTO_BC_DECRYPT (1 << 1) /* 0 = encrypt, 1 = decrypt      */
+#define RK3576_CRYPTO_BC_ENABLE        (1 << 0) /* Enable the block cipher       */
+#define RK3576_CRYPTO_BC_DECRYPT       (1 << 1) /* 0 = encrypt, 1 = decrypt      */
 
 #define RK3576_CRYPTO_BC_KEYSIZE_SHIFT 2
 #define RK3576_CRYPTO_BC_KEYSIZE_MASK  (3 << RK3576_CRYPTO_BC_KEYSIZE_SHIFT)
@@ -156,37 +155,37 @@
 #define RK3576_CRYPTO_BC_KEY_192BIT    (1 << RK3576_CRYPTO_BC_KEYSIZE_SHIFT)
 #define RK3576_CRYPTO_BC_KEY_256BIT    (2 << RK3576_CRYPTO_BC_KEYSIZE_SHIFT)
 
-#define RK3576_CRYPTO_BC_MODE_SHIFT 4
-#define RK3576_CRYPTO_BC_MODE_MASK  (15 << RK3576_CRYPTO_BC_MODE_SHIFT)
-#define RK3576_CRYPTO_BC_MODE_ECB   (0 << RK3576_CRYPTO_BC_MODE_SHIFT)
-#define RK3576_CRYPTO_BC_MODE_CBC   (1 << RK3576_CRYPTO_BC_MODE_SHIFT)
-#define RK3576_CRYPTO_BC_MODE_CTS   (2 << RK3576_CRYPTO_BC_MODE_SHIFT)
-#define RK3576_CRYPTO_BC_MODE_CTR   (3 << RK3576_CRYPTO_BC_MODE_SHIFT)
-#define RK3576_CRYPTO_BC_MODE_CFB   (4 << RK3576_CRYPTO_BC_MODE_SHIFT)
-#define RK3576_CRYPTO_BC_MODE_OFB   (5 << RK3576_CRYPTO_BC_MODE_SHIFT)
-#define RK3576_CRYPTO_BC_MODE_XTS   (6 << RK3576_CRYPTO_BC_MODE_SHIFT)
+#define RK3576_CRYPTO_BC_MODE_SHIFT    4
+#define RK3576_CRYPTO_BC_MODE_MASK     (15 << RK3576_CRYPTO_BC_MODE_SHIFT)
+#define RK3576_CRYPTO_BC_MODE_ECB      (0 << RK3576_CRYPTO_BC_MODE_SHIFT)
+#define RK3576_CRYPTO_BC_MODE_CBC      (1 << RK3576_CRYPTO_BC_MODE_SHIFT)
+#define RK3576_CRYPTO_BC_MODE_CTS      (2 << RK3576_CRYPTO_BC_MODE_SHIFT)
+#define RK3576_CRYPTO_BC_MODE_CTR      (3 << RK3576_CRYPTO_BC_MODE_SHIFT)
+#define RK3576_CRYPTO_BC_MODE_CFB      (4 << RK3576_CRYPTO_BC_MODE_SHIFT)
+#define RK3576_CRYPTO_BC_MODE_OFB      (5 << RK3576_CRYPTO_BC_MODE_SHIFT)
+#define RK3576_CRYPTO_BC_MODE_XTS      (6 << RK3576_CRYPTO_BC_MODE_SHIFT)
 
-#define RK3576_CRYPTO_BC_ALG_SHIFT 8
-#define RK3576_CRYPTO_BC_ALG_MASK  (3 << RK3576_CRYPTO_BC_ALG_SHIFT)
-#define RK3576_CRYPTO_BC_ALG_AES   (0 << RK3576_CRYPTO_BC_ALG_SHIFT)
-#define RK3576_CRYPTO_BC_ALG_SM4   (1 << RK3576_CRYPTO_BC_ALG_SHIFT)
-#define RK3576_CRYPTO_BC_ALG_DES   (2 << RK3576_CRYPTO_BC_ALG_SHIFT)
-#define RK3576_CRYPTO_BC_ALG_TDES  (3 << RK3576_CRYPTO_BC_ALG_SHIFT)
+#define RK3576_CRYPTO_BC_ALG_SHIFT     8
+#define RK3576_CRYPTO_BC_ALG_MASK      (3 << RK3576_CRYPTO_BC_ALG_SHIFT)
+#define RK3576_CRYPTO_BC_ALG_AES       (0 << RK3576_CRYPTO_BC_ALG_SHIFT)
+#define RK3576_CRYPTO_BC_ALG_SM4       (1 << RK3576_CRYPTO_BC_ALG_SHIFT)
+#define RK3576_CRYPTO_BC_ALG_DES       (2 << RK3576_CRYPTO_BC_ALG_SHIFT)
+#define RK3576_CRYPTO_BC_ALG_TDES      (3 << RK3576_CRYPTO_BC_ALG_SHIFT)
 
 /* HASH_CTL (0x0048), HIWORD write-masked ***********************************/
 
-#define RK3576_CRYPTO_HASH_ENABLE (1 << 0) /* Enable the hash engine       */
-#define RK3576_CRYPTO_HMAC_ENABLE (1 << 1) /* Wrap the hash in an HMAC     */
+#define RK3576_CRYPTO_HASH_ENABLE     (1 << 0) /* Enable the hash engine       */
+#define RK3576_CRYPTO_HMAC_ENABLE     (1 << 1) /* Wrap the hash in an HMAC     */
 
-#define RK3576_CRYPTO_HASH_ALG_SHIFT   4
-#define RK3576_CRYPTO_HASH_ALG_MASK    (15 << RK3576_CRYPTO_HASH_ALG_SHIFT)
-#define RK3576_CRYPTO_HASH_ALG_SHA1    (0 << RK3576_CRYPTO_HASH_ALG_SHIFT)
-#define RK3576_CRYPTO_HASH_ALG_MD5     (1 << RK3576_CRYPTO_HASH_ALG_SHIFT)
-#define RK3576_CRYPTO_HASH_ALG_SHA256  (2 << RK3576_CRYPTO_HASH_ALG_SHIFT)
-#define RK3576_CRYPTO_HASH_ALG_SHA224  (3 << RK3576_CRYPTO_HASH_ALG_SHIFT)
-#define RK3576_CRYPTO_HASH_ALG_SM3     (6 << RK3576_CRYPTO_HASH_ALG_SHIFT)
-#define RK3576_CRYPTO_HASH_ALG_SHA512  (8 << RK3576_CRYPTO_HASH_ALG_SHIFT)
-#define RK3576_CRYPTO_HASH_ALG_SHA384  (9 << RK3576_CRYPTO_HASH_ALG_SHIFT)
+#define RK3576_CRYPTO_HASH_ALG_SHIFT  4
+#define RK3576_CRYPTO_HASH_ALG_MASK   (15 << RK3576_CRYPTO_HASH_ALG_SHIFT)
+#define RK3576_CRYPTO_HASH_ALG_SHA1   (0 << RK3576_CRYPTO_HASH_ALG_SHIFT)
+#define RK3576_CRYPTO_HASH_ALG_MD5    (1 << RK3576_CRYPTO_HASH_ALG_SHIFT)
+#define RK3576_CRYPTO_HASH_ALG_SHA256 (2 << RK3576_CRYPTO_HASH_ALG_SHIFT)
+#define RK3576_CRYPTO_HASH_ALG_SHA224 (3 << RK3576_CRYPTO_HASH_ALG_SHIFT)
+#define RK3576_CRYPTO_HASH_ALG_SM3    (6 << RK3576_CRYPTO_HASH_ALG_SHIFT)
+#define RK3576_CRYPTO_HASH_ALG_SHA512 (8 << RK3576_CRYPTO_HASH_ALG_SHIFT)
+#define RK3576_CRYPTO_HASH_ALG_SHA384 (9 << RK3576_CRYPTO_HASH_ALG_SHIFT)
 
 /* HASH_VALID (0x0054), write one to clear **********************************/
 

@@ -69,51 +69,51 @@
 
 /* Register map ************************************************************/
 
-#define HYM8563_REG_CTL1          0x00 /* Control_Status1               */
-#define HYM8563_REG_CTL2          0x01 /* Control_Status2               */
-#define HYM8563_REG_SEC           0x02 /* Seconds (BCD) + VL            */
-#define HYM8563_REG_MIN           0x03 /* Minutes (BCD)                 */
-#define HYM8563_REG_HOUR          0x04 /* Hours (BCD)                   */
-#define HYM8563_REG_DAY           0x05 /* Day of month (BCD)            */
-#define HYM8563_REG_WEEKDAY       0x06 /* Day of week (binary 0-6)      */
-#define HYM8563_REG_MONTH         0x07 /* Month (BCD) + century         */
-#define HYM8563_REG_YEAR          0x08 /* Year (BCD, 00-99)             */
-#define HYM8563_REG_ALM_MIN       0x09 /* Minute alarm                  */
-#define HYM8563_REG_ALM_HOUR      0x0a /* Hour alarm                    */
-#define HYM8563_REG_ALM_DAY       0x0b /* Day of month alarm            */
-#define HYM8563_REG_ALM_WEEKDAY   0x0c /* Day of week alarm             */
-#define HYM8563_REG_CLKOUT        0x0d /* CLKOUT frequency              */
-#define HYM8563_REG_TIMER_CTL     0x0e /* Timer control                 */
-#define HYM8563_REG_TIMER         0x0f /* Timer countdown value         */
+#define HYM8563_REG_CTL1        0x00 /* Control_Status1               */
+#define HYM8563_REG_CTL2        0x01 /* Control_Status2               */
+#define HYM8563_REG_SEC         0x02 /* Seconds (BCD) + VL            */
+#define HYM8563_REG_MIN         0x03 /* Minutes (BCD)                 */
+#define HYM8563_REG_HOUR        0x04 /* Hours (BCD)                   */
+#define HYM8563_REG_DAY         0x05 /* Day of month (BCD)            */
+#define HYM8563_REG_WEEKDAY     0x06 /* Day of week (binary 0-6)      */
+#define HYM8563_REG_MONTH       0x07 /* Month (BCD) + century         */
+#define HYM8563_REG_YEAR        0x08 /* Year (BCD, 00-99)             */
+#define HYM8563_REG_ALM_MIN     0x09 /* Minute alarm                  */
+#define HYM8563_REG_ALM_HOUR    0x0a /* Hour alarm                    */
+#define HYM8563_REG_ALM_DAY     0x0b /* Day of month alarm            */
+#define HYM8563_REG_ALM_WEEKDAY 0x0c /* Day of week alarm             */
+#define HYM8563_REG_CLKOUT      0x0d /* CLKOUT frequency              */
+#define HYM8563_REG_TIMER_CTL   0x0e /* Timer control                 */
+#define HYM8563_REG_TIMER       0x0f /* Timer countdown value         */
 
 /* Control_Status1 bits */
 
-#define HYM8563_CTL1_TEST         (1 << 7)
-#define HYM8563_CTL1_STOP         (1 << 5) /* 1: clock chain halted      */
-#define HYM8563_CTL1_TESTC        (1 << 3)
+#define HYM8563_CTL1_TEST  (1 << 7)
+#define HYM8563_CTL1_STOP  (1 << 5) /* 1: clock chain halted      */
+#define HYM8563_CTL1_TESTC (1 << 3)
 
 /* Control_Status2 bits */
 
-#define HYM8563_CTL2_TI_TP        (1 << 4)
-#define HYM8563_CTL2_AF           (1 << 3) /* Alarm flag (W0C)          */
-#define HYM8563_CTL2_TF           (1 << 2) /* Timer flag (W0C)          */
-#define HYM8563_CTL2_AIE          (1 << 1) /* Alarm interrupt enable    */
-#define HYM8563_CTL2_TIE          (1 << 0) /* Timer interrupt enable    */
+#define HYM8563_CTL2_TI_TP (1 << 4)
+#define HYM8563_CTL2_AF    (1 << 3) /* Alarm flag (W0C)          */
+#define HYM8563_CTL2_TF    (1 << 2) /* Timer flag (W0C)          */
+#define HYM8563_CTL2_AIE   (1 << 1) /* Alarm interrupt enable    */
+#define HYM8563_CTL2_TIE   (1 << 0) /* Timer interrupt enable    */
 
 /* Time field masks */
 
-#define HYM8563_SEC_VL            (1 << 7) /* Voltage low: data invalid */
-#define HYM8563_SEC_MASK          0x7f
-#define HYM8563_MIN_MASK          0x7f
-#define HYM8563_HOUR_MASK         0x3f
-#define HYM8563_DAY_MASK          0x3f
-#define HYM8563_WEEKDAY_MASK      0x07
-#define HYM8563_MONTH_MASK        0x1f
-#define HYM8563_MONTH_CENTURY     (1 << 7) /* 1: year is 2100..2199     */
+#define HYM8563_SEC_VL        (1 << 7) /* Voltage low: data invalid */
+#define HYM8563_SEC_MASK      0x7f
+#define HYM8563_MIN_MASK      0x7f
+#define HYM8563_HOUR_MASK     0x3f
+#define HYM8563_DAY_MASK      0x3f
+#define HYM8563_WEEKDAY_MASK  0x07
+#define HYM8563_MONTH_MASK    0x1f
+#define HYM8563_MONTH_CENTURY (1 << 7) /* 1: year is 2100..2199     */
 
 /* Alarm registers: bit 7 set disables comparison of that field */
 
-#define HYM8563_ALM_DISABLE       (1 << 7)
+#define HYM8563_ALM_DISABLE (1 << 7)
 
 /* CLKOUT register.  0xC4 is the value measured on the KICKPI-K7 while the
  * SV6621 WiFi/BT companion was running: FE=1 (output enabled), FD=00
@@ -127,26 +127,26 @@
 
 /* I2C transfer parameters */
 
-#define HYM8563_I2C_FREQUENCY     400000
-#define HYM8563_I2C_ADDRLEN       7
+#define HYM8563_I2C_FREQUENCY 400000
+#define HYM8563_I2C_ADDRLEN   7
 
 /* Number of consecutive time registers read in one burst (0x02..0x08) */
 
-#define HYM8563_TIME_NREGS        7
+#define HYM8563_TIME_NREGS 7
 
 /* struct tm year origin, and the two centuries the part can express */
 
-#define HYM8563_TM_YEAR_BASE      1900
-#define HYM8563_YEAR_2000         100 /* tm_year for the year 2000      */
-#define HYM8563_YEAR_2100         200 /* tm_year for the year 2100      */
+#define HYM8563_TM_YEAR_BASE 1900
+#define HYM8563_YEAR_2000    100 /* tm_year for the year 2000      */
+#define HYM8563_YEAR_2100    200 /* tm_year for the year 2100      */
 
 /* Only a single alarm is implemented (the part has exactly one) */
 
-#define HYM8563_ALARM_ID          0
+#define HYM8563_ALARM_ID 0
 
 /* Alarm flag poll period */
 
-#define HYM8563_ALARM_POLL_TICKS  SEC2TICK(1)
+#define HYM8563_ALARM_POLL_TICKS SEC2TICK(1)
 
 /****************************************************************************
  * Private Types
@@ -158,19 +158,19 @@ struct kickpi_k7_hym8563_s
    * cast between the two.
    */
 
-  struct rtc_lowerhalf_s   lower;
+  struct rtc_lowerhalf_s lower;
 
-  struct i2c_master_s     *i2c;
-  struct i2c_config_s      config;
-  mutex_t                  lock;
-  bool                     timeset;  /* Time believed valid (VL clear)  */
+  struct i2c_master_s *i2c;
+  struct i2c_config_s config;
+  mutex_t lock;
+  bool timeset; /* Time believed valid (VL clear)  */
 
 #ifdef CONFIG_RTC_ALARM
-  struct work_s            work;     /* Alarm flag poller               */
-  rtc_alarm_callback_t     cb;       /* Client callback                 */
-  void                    *priv;     /* Client private data             */
-  struct rtc_time          alarm;    /* Alarm time as programmed        */
-  bool                     armed;    /* Alarm currently armed           */
+  struct work_s work;      /* Alarm flag poller               */
+  rtc_alarm_callback_t cb; /* Client callback                 */
+  void *priv;              /* Client private data             */
+  struct rtc_time alarm;   /* Alarm time as programmed        */
+  bool armed;              /* Alarm currently armed           */
 #endif
 };
 
@@ -180,67 +180,63 @@ struct kickpi_k7_hym8563_s
 
 /* Register level helpers */
 
-static int  rk3576_hym8563_getregs(struct kickpi_k7_hym8563_s *priv,
-                                   uint8_t regaddr, uint8_t *regval,
-                                   int nregs);
-static int  rk3576_hym8563_putregs(struct kickpi_k7_hym8563_s *priv,
-                                   uint8_t regaddr, const uint8_t *regval,
-                                   int nregs);
-static int  rk3576_hym8563_getreg(struct kickpi_k7_hym8563_s *priv,
-                                  uint8_t regaddr, uint8_t *regval);
-static int  rk3576_hym8563_putreg(struct kickpi_k7_hym8563_s *priv,
-                                  uint8_t regaddr, uint8_t regval);
+static int rk3576_hym8563_getregs(struct kickpi_k7_hym8563_s *priv,
+                                  uint8_t regaddr, uint8_t *regval, int nregs);
+static int rk3576_hym8563_putregs(struct kickpi_k7_hym8563_s *priv,
+                                  uint8_t regaddr, const uint8_t *regval,
+                                  int nregs);
+static int rk3576_hym8563_getreg(struct kickpi_k7_hym8563_s *priv,
+                                 uint8_t regaddr, uint8_t *regval);
+static int rk3576_hym8563_putreg(struct kickpi_k7_hym8563_s *priv,
+                                 uint8_t regaddr, uint8_t regval);
 
 /* BCD and calendar helpers */
 
 static uint8_t rk3576_hym8563_bin2bcd(int bin);
-static int     rk3576_hym8563_bcd2bin(uint8_t bcd);
-static int     rk3576_hym8563_weekday(int year, int mon, int mday);
+static int rk3576_hym8563_bcd2bin(uint8_t bcd);
+static int rk3576_hym8563_weekday(int year, int mon, int mday);
 
 /* Board glue */
 
-static int  rk3576_hym8563_clkout_check(struct kickpi_k7_hym8563_s *priv);
+static int rk3576_hym8563_clkout_check(struct kickpi_k7_hym8563_s *priv);
 
 /* rtc_ops_s methods */
 
-static int  rk3576_hym8563_rdtime(struct rtc_lowerhalf_s *lower,
-                                  struct rtc_time *rtctime);
-static int  rk3576_hym8563_settime(struct rtc_lowerhalf_s *lower,
-                                   const struct rtc_time *rtctime);
+static int rk3576_hym8563_rdtime(struct rtc_lowerhalf_s *lower,
+                                 struct rtc_time *rtctime);
+static int rk3576_hym8563_settime(struct rtc_lowerhalf_s *lower,
+                                  const struct rtc_time *rtctime);
 static bool rk3576_hym8563_havesettime(struct rtc_lowerhalf_s *lower);
 
 #ifdef CONFIG_RTC_ALARM
 static void rk3576_hym8563_worker(void *arg);
-static int  rk3576_hym8563_setalarm(struct rtc_lowerhalf_s *lower,
-                                    const struct lower_setalarm_s *alarm);
-static int  rk3576_hym8563_setrelative(
-                struct rtc_lowerhalf_s *lower,
-                const struct lower_setrelative_s *alarm);
-static int  rk3576_hym8563_cancelalarm(struct rtc_lowerhalf_s *lower,
-                                       int alarmid);
-static int  rk3576_hym8563_rdalarm(struct rtc_lowerhalf_s *lower,
-                                   struct lower_rdalarm_s *alarm);
+static int rk3576_hym8563_setalarm(struct rtc_lowerhalf_s *lower,
+                                   const struct lower_setalarm_s *alarm);
+static int rk3576_hym8563_setrelative(struct rtc_lowerhalf_s *lower,
+                                      const struct lower_setrelative_s *alarm);
+static int rk3576_hym8563_cancelalarm(struct rtc_lowerhalf_s *lower,
+                                      int alarmid);
+static int rk3576_hym8563_rdalarm(struct rtc_lowerhalf_s *lower,
+                                  struct lower_rdalarm_s *alarm);
 #endif
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static const struct rtc_ops_s g_hym8563_ops =
-{
-  .rdtime      = rk3576_hym8563_rdtime,
-  .settime     = rk3576_hym8563_settime,
+static const struct rtc_ops_s g_hym8563_ops = {
+  .rdtime = rk3576_hym8563_rdtime,
+  .settime = rk3576_hym8563_settime,
   .havesettime = rk3576_hym8563_havesettime,
 #ifdef CONFIG_RTC_ALARM
-  .setalarm    = rk3576_hym8563_setalarm,
+  .setalarm = rk3576_hym8563_setalarm,
   .setrelative = rk3576_hym8563_setrelative,
   .cancelalarm = rk3576_hym8563_cancelalarm,
-  .rdalarm     = rk3576_hym8563_rdalarm,
+  .rdalarm = rk3576_hym8563_rdalarm,
 #endif
 };
 
-static struct kickpi_k7_hym8563_s g_hym8563 =
-{
+static struct kickpi_k7_hym8563_s g_hym8563 = {
   .lock = NXMUTEX_INITIALIZER,
 };
 
@@ -258,8 +254,7 @@ static struct kickpi_k7_hym8563_s g_hym8563 =
  ****************************************************************************/
 
 static int rk3576_hym8563_getregs(struct kickpi_k7_hym8563_s *priv,
-                                  uint8_t regaddr, uint8_t *regval,
-                                  int nregs)
+                                  uint8_t regaddr, uint8_t *regval, int nregs)
 {
   int ret;
 
@@ -359,10 +354,7 @@ static int rk3576_hym8563_bcd2bin(uint8_t bcd)
 
 static int rk3576_hym8563_weekday(int year, int mon, int mday)
 {
-  static const int offset[12] =
-    {
-      0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4
-    };
+  static const int offset[12] = { 0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4 };
 
   int y = year;
 
@@ -450,15 +442,15 @@ static int rk3576_hym8563_rdtime(struct rtc_lowerhalf_s *lower,
 
   memset(rtctime, 0, sizeof(*rtctime));
 
-  rtctime->tm_sec  = rk3576_hym8563_bcd2bin(buffer[0] & HYM8563_SEC_MASK);
-  rtctime->tm_min  = rk3576_hym8563_bcd2bin(buffer[1] & HYM8563_MIN_MASK);
+  rtctime->tm_sec = rk3576_hym8563_bcd2bin(buffer[0] & HYM8563_SEC_MASK);
+  rtctime->tm_min = rk3576_hym8563_bcd2bin(buffer[1] & HYM8563_MIN_MASK);
   rtctime->tm_hour = rk3576_hym8563_bcd2bin(buffer[2] & HYM8563_HOUR_MASK);
   rtctime->tm_mday = rk3576_hym8563_bcd2bin(buffer[3] & HYM8563_DAY_MASK);
-  rtctime->tm_mon  = rk3576_hym8563_bcd2bin(buffer[5] & HYM8563_MONTH_MASK)
-                     - 1;
-  rtctime->tm_year = rk3576_hym8563_bcd2bin(buffer[6]) +
-                     (((buffer[5] & HYM8563_MONTH_CENTURY) != 0) ?
-                      HYM8563_YEAR_2100 : HYM8563_YEAR_2000);
+  rtctime->tm_mon = rk3576_hym8563_bcd2bin(buffer[5] & HYM8563_MONTH_MASK) - 1;
+  rtctime->tm_year =
+      rk3576_hym8563_bcd2bin(buffer[6]) +
+      (((buffer[5] & HYM8563_MONTH_CENTURY) != 0) ? HYM8563_YEAR_2100
+                                                  : HYM8563_YEAR_2000);
 
 #if defined(CONFIG_LIBC_LOCALTIME) || defined(CONFIG_TIME_EXTENDED)
   rtctime->tm_wday = buffer[4] & HYM8563_WEEKDAY_MASK;
@@ -507,8 +499,7 @@ static int rk3576_hym8563_settime(struct rtc_lowerhalf_s *lower,
       return -EINVAL;
     }
 
-  wday = rk3576_hym8563_weekday(year, rtctime->tm_mon + 1,
-                                rtctime->tm_mday);
+  wday = rk3576_hym8563_weekday(year, rtctime->tm_mon + 1, rtctime->tm_mday);
 
   buffer[0] = rk3576_hym8563_bin2bcd(rtctime->tm_sec);
   buffer[1] = rk3576_hym8563_bin2bcd(rtctime->tm_min);
@@ -519,13 +510,11 @@ static int rk3576_hym8563_settime(struct rtc_lowerhalf_s *lower,
   if (rtctime->tm_year >= HYM8563_YEAR_2100)
     {
       buffer[5] |= HYM8563_MONTH_CENTURY;
-      buffer[6] = rk3576_hym8563_bin2bcd(rtctime->tm_year -
-                                         HYM8563_YEAR_2100);
+      buffer[6] = rk3576_hym8563_bin2bcd(rtctime->tm_year - HYM8563_YEAR_2100);
     }
   else
     {
-      buffer[6] = rk3576_hym8563_bin2bcd(rtctime->tm_year -
-                                         HYM8563_YEAR_2000);
+      buffer[6] = rk3576_hym8563_bin2bcd(rtctime->tm_year - HYM8563_YEAR_2000);
     }
 
   ret = nxmutex_lock(&priv->lock);
@@ -542,8 +531,8 @@ static int rk3576_hym8563_settime(struct rtc_lowerhalf_s *lower,
       goto errout;
     }
 
-  ret = rk3576_hym8563_putreg(priv, HYM8563_REG_CTL1,
-                              ctl1 | HYM8563_CTL1_STOP);
+  ret =
+      rk3576_hym8563_putreg(priv, HYM8563_REG_CTL1, ctl1 | HYM8563_CTL1_STOP);
   if (ret < 0)
     {
       goto errout;
@@ -563,9 +552,9 @@ static int rk3576_hym8563_settime(struct rtc_lowerhalf_s *lower,
   if (ret >= 0)
     {
       priv->timeset = true;
-      rtcinfo("Set %04d-%02d-%02d %02d:%02d:%02d (wday %d)\n",
-              year, rtctime->tm_mon + 1, rtctime->tm_mday,
-              rtctime->tm_hour, rtctime->tm_min, rtctime->tm_sec, wday);
+      rtcinfo("Set %04d-%02d-%02d %02d:%02d:%02d (wday %d)\n", year,
+              rtctime->tm_mon + 1, rtctime->tm_mday, rtctime->tm_hour,
+              rtctime->tm_min, rtctime->tm_sec, wday);
     }
 
 errout:
@@ -654,11 +643,11 @@ static void rk3576_hym8563_worker(void *arg)
       ctl2 |= HYM8563_CTL2_TF; /* Write 1 to preserve the timer flag */
       rk3576_hym8563_putreg(priv, HYM8563_REG_CTL2, ctl2);
 
-      cb            = priv->cb;
-      cbpriv        = priv->priv;
-      priv->cb      = NULL;
-      priv->priv    = NULL;
-      priv->armed   = false;
+      cb = priv->cb;
+      cbpriv = priv->priv;
+      priv->cb = NULL;
+      priv->priv = NULL;
+      priv->armed = false;
     }
   else
     {
@@ -704,8 +693,7 @@ static int rk3576_hym8563_setalarm(struct rtc_lowerhalf_s *lower,
     }
 
   wday = rk3576_hym8563_weekday(alarm->time.tm_year + HYM8563_TM_YEAR_BASE,
-                                alarm->time.tm_mon + 1,
-                                alarm->time.tm_mday);
+                                alarm->time.tm_mon + 1, alarm->time.tm_mday);
 
   buffer[0] = rk3576_hym8563_bin2bcd(alarm->time.tm_min);
   buffer[1] = rk3576_hym8563_bin2bcd(alarm->time.tm_hour);
@@ -750,14 +738,13 @@ static int rk3576_hym8563_setalarm(struct rtc_lowerhalf_s *lower,
       goto errout;
     }
 
-  priv->cb    = alarm->cb;
-  priv->priv  = alarm->priv;
+  priv->cb = alarm->cb;
+  priv->priv = alarm->priv;
   priv->alarm = alarm->time;
   priv->armed = true;
 
-  rtcinfo("Alarm armed for day %d %02d:%02d (wday %d)\n",
-          alarm->time.tm_mday, alarm->time.tm_hour, alarm->time.tm_min,
-          wday);
+  rtcinfo("Alarm armed for day %d %02d:%02d (wday %d)\n", alarm->time.tm_mday,
+          alarm->time.tm_hour, alarm->time.tm_min, wday);
 
   work_queue(LPWORK, &priv->work, rk3576_hym8563_worker, priv,
              HYM8563_ALARM_POLL_TICKS);
@@ -777,9 +764,8 @@ errout:
  *
  ****************************************************************************/
 
-static int rk3576_hym8563_setrelative(
-              struct rtc_lowerhalf_s *lower,
-              const struct lower_setrelative_s *alarm)
+static int rk3576_hym8563_setrelative(struct rtc_lowerhalf_s *lower,
+                                      const struct lower_setrelative_s *alarm)
 {
   struct lower_setalarm_s setalarm;
   struct rtc_time now;
@@ -801,8 +787,8 @@ static int rk3576_hym8563_setrelative(
 
   abstime = timegm((struct tm *)&now) + alarm->reltime;
 
-  setalarm.id   = alarm->id;
-  setalarm.cb   = alarm->cb;
+  setalarm.id = alarm->id;
+  setalarm.cb = alarm->cb;
   setalarm.priv = alarm->priv;
 
   if (gmtime_r(&abstime, (struct tm *)&setalarm.time) == NULL)
@@ -858,12 +844,11 @@ static int rk3576_hym8563_cancelalarm(struct rtc_lowerhalf_s *lower,
   buffer[1] = HYM8563_ALM_DISABLE;
   buffer[2] = HYM8563_ALM_DISABLE;
   buffer[3] = HYM8563_ALM_DISABLE;
-  rk3576_hym8563_putregs(priv, HYM8563_REG_ALM_MIN, buffer,
-                         sizeof(buffer));
+  rk3576_hym8563_putregs(priv, HYM8563_REG_ALM_MIN, buffer, sizeof(buffer));
 
   priv->armed = false;
-  priv->cb    = NULL;
-  priv->priv  = NULL;
+  priv->cb = NULL;
+  priv->priv = NULL;
 
   nxmutex_unlock(&priv->lock);
   work_cancel(LPWORK, &priv->work);
@@ -935,12 +920,12 @@ int kickpi_k7_hym8563_initialize(struct i2c_master_s *i2c)
 
   DEBUGASSERT(i2c != NULL);
 
-  priv->lower.ops       = &g_hym8563_ops;
-  priv->i2c             = i2c;
+  priv->lower.ops = &g_hym8563_ops;
+  priv->i2c = i2c;
   priv->config.frequency = HYM8563_I2C_FREQUENCY;
-  priv->config.address   = KICKPI_K7_HYM8563_I2C_ADDR;
-  priv->config.addrlen   = HYM8563_I2C_ADDRLEN;
-  priv->timeset          = false;
+  priv->config.address = KICKPI_K7_HYM8563_I2C_ADDR;
+  priv->config.addrlen = HYM8563_I2C_ADDRLEN;
+  priv->timeset = false;
 
   /* Probe: Control_Status1 must be readable and the part must not be stuck
    * in test mode.
@@ -954,8 +939,8 @@ int kickpi_k7_hym8563_initialize(struct i2c_master_s *i2c)
       return ret;
     }
 
-  if ((regval & (HYM8563_CTL1_TEST | HYM8563_CTL1_STOP |
-                 HYM8563_CTL1_TESTC)) != 0)
+  if ((regval &
+       (HYM8563_CTL1_TEST | HYM8563_CTL1_STOP | HYM8563_CTL1_TESTC)) != 0)
     {
       rtcwarn("Control_Status1 is 0x%02x, releasing test/stop\n", regval);
       ret = rk3576_hym8563_putreg(priv, HYM8563_REG_CTL1, 0);

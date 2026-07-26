@@ -140,10 +140,10 @@
 
 struct rk3576_mali_slot_s
 {
-  sem_t donesem;    /* Posted by the job interrupt handler       */
-  uint32_t status;  /* JS_STATUS latched by the handler          */
-  bool failed;      /* Set when the "job failed" bit came up     */
-  bool busy;        /* A chain is outstanding on this slot       */
+  sem_t donesem;   /* Posted by the job interrupt handler       */
+  uint32_t status; /* JS_STATUS latched by the handler          */
+  bool failed;     /* Set when the "job failed" bit came up     */
+  bool busy;       /* A chain is outstanding on this slot       */
 };
 
 /* Driver state.  There is exactly one Mali block on the RK3576. */
@@ -154,7 +154,7 @@ struct rk3576_mali_dev_s
   struct rk3576_mali_info_s info; /* Identity / feature snapshot      */
   mutex_t lock;                   /* Serialises submissions           */
   struct rk3576_mali_slot_s slot[RK3576_MALI_NSLOTS];
-  uint32_t mmu_faultstatus;       /* Last MMU fault, for diagnostics  */
+  uint32_t mmu_faultstatus; /* Last MMU fault, for diagnostics  */
   uint64_t mmu_faultaddress;
   bool initialized;
 };
@@ -181,15 +181,14 @@ static int rk3576_mali_mmu_interrupt(int irq, void *context, void *arg);
 static int rk3576_mali_gpu_interrupt(int irq, void *context, void *arg);
 
 static const char *rk3576_mali_status_name(uint32_t status);
-static void rk3576_mali_relocate(uint64_t *words, size_t nwords,
-                                 uint64_t from, uint64_t size, uint64_t to);
+static void rk3576_mali_relocate(uint64_t *words, size_t nwords, uint64_t from,
+                                 uint64_t size, uint64_t to);
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static struct rk3576_mali_dev_s g_rk3576_mali =
-{
+static struct rk3576_mali_dev_s g_rk3576_mali = {
   .base = RK3576_MALI_ADDR,
 };
 
@@ -198,14 +197,9 @@ static struct rk3576_mali_dev_s g_rk3576_mali =
  * APB side and clk_gpu is the shader core clock.
  */
 
-static const char *g_rk3576_mali_clocks[] =
-{
-  "pclk_gpu_root_en",
-  "pclk_gpu_biu_en",
-  "pclk_gpu_grf_en",
-  "aclk_s_gpu_biu_en",
-  "aclk_m0_gpu_biu_en",
-  "clk_gpu_src_pre_en",
+static const char *g_rk3576_mali_clocks[] = {
+  "pclk_gpu_root_en",  "pclk_gpu_biu_en",    "pclk_gpu_grf_en",
+  "aclk_s_gpu_biu_en", "aclk_m0_gpu_biu_en", "clk_gpu_src_pre_en",
   "clk_gpu_inner_en",
 };
 
@@ -290,8 +284,8 @@ static int rk3576_mali_clk_init(void)
       ret = clk_enable(clk);
       if (ret < 0)
         {
-          gerr("ERROR: failed to enable %s: %d\n",
-               g_rk3576_mali_clocks[i], ret);
+          gerr("ERROR: failed to enable %s: %d\n", g_rk3576_mali_clocks[i],
+               ret);
           return ret;
         }
     }
@@ -375,8 +369,7 @@ static void rk3576_mali_read_features(void)
   info->mmu_features = rk3576_mali_getreg(RK3576_MALI_MMU_FEATURES);
   info->as_present = rk3576_mali_getreg(RK3576_MALI_AS_PRESENT);
   info->js_present = rk3576_mali_getreg(RK3576_MALI_JS_PRESENT);
-  info->shader_present =
-      rk3576_mali_getreg64(RK3576_MALI_SHADER_PRESENT_LO);
+  info->shader_present = rk3576_mali_getreg64(RK3576_MALI_SHADER_PRESENT_LO);
   info->tiler_present = rk3576_mali_getreg64(RK3576_MALI_TILER_PRESENT_LO);
   info->l2_present = rk3576_mali_getreg64(RK3576_MALI_L2_PRESENT_LO);
   info->stack_present = rk3576_mali_getreg64(RK3576_MALI_STACK_PRESENT_LO);
@@ -439,8 +432,8 @@ static int rk3576_mali_power_on(void)
   int ret;
 
   rk3576_mali_putreg64(RK3576_MALI_L2_PWRON_LO, info->l2_present);
-  ret = rk3576_mali_wait_ready(RK3576_MALI_L2_READY_LO, info->l2_present,
-                               "L2");
+  ret =
+      rk3576_mali_wait_ready(RK3576_MALI_L2_READY_LO, info->l2_present, "L2");
   if (ret < 0)
     {
       return ret;
@@ -531,9 +524,9 @@ static int rk3576_mali_as_identity(void)
 
   rk3576_mali_putreg(RK3576_MALI_AS_TRANSCFG_LO(RK3576_MALI_AS),
                      RK3576_MALI_AS_TRANSCFG_ADRMODE_IDENTITY |
-                     RK3576_MALI_AS_TRANSCFG_PTW_MEMATTR_WB |
-                     RK3576_MALI_AS_TRANSCFG_PTW_SH_OS |
-                     RK3576_MALI_AS_TRANSCFG_PTW_RA);
+                         RK3576_MALI_AS_TRANSCFG_PTW_MEMATTR_WB |
+                         RK3576_MALI_AS_TRANSCFG_PTW_SH_OS |
+                         RK3576_MALI_AS_TRANSCFG_PTW_RA);
   rk3576_mali_putreg(RK3576_MALI_AS_TRANSCFG_HI(RK3576_MALI_AS), 0);
 
   /* Legacy MMU interface: the addressing mode lives in TRANSTAB[1:0] and
@@ -542,8 +535,8 @@ static int rk3576_mali_as_identity(void)
 
   rk3576_mali_putreg(RK3576_MALI_AS_TRANSTAB_LO(RK3576_MALI_AS),
                      RK3576_MALI_AS_TRANSTAB_ADRMODE_IDENTITY |
-                     RK3576_MALI_AS_TRANSTAB_READ_INNER |
-                     RK3576_MALI_AS_TRANSTAB_SHARE_OUTER);
+                         RK3576_MALI_AS_TRANSTAB_READ_INNER |
+                         RK3576_MALI_AS_TRANSTAB_SHARE_OUTER);
   rk3576_mali_putreg(RK3576_MALI_AS_TRANSTAB_HI(RK3576_MALI_AS), 0);
 
   rk3576_mali_putreg(RK3576_MALI_AS_MEMATTR_LO(RK3576_MALI_AS),
@@ -681,8 +674,8 @@ static int rk3576_mali_job_interrupt(int irq, void *context, void *arg)
           continue;
         }
 
-      priv->slot[slot].status = rk3576_mali_getreg(
-          RK3576_MALI_JS_STATUS(slot));
+      priv->slot[slot].status =
+          rk3576_mali_getreg(RK3576_MALI_JS_STATUS(slot));
       priv->slot[slot].failed = failed;
 
       if (priv->slot[slot].busy)
@@ -774,8 +767,7 @@ static int rk3576_mali_gpu_interrupt(int irq, void *context, void *arg)
       return OK;
     }
 
-  if ((status & (RK3576_MALI_GPU_IRQ_FAULT |
-                 RK3576_MALI_GPU_IRQ_PROTM_FAULT |
+  if ((status & (RK3576_MALI_GPU_IRQ_FAULT | RK3576_MALI_GPU_IRQ_PROTM_FAULT |
                  RK3576_MALI_GPU_IRQ_MULTIPLE_FAULT)) != 0)
     {
       gerr("ERROR: GPU fault: status=%08" PRIx32 " faultstatus=%08" PRIx32
@@ -811,8 +803,8 @@ static int rk3576_mali_gpu_interrupt(int irq, void *context, void *arg)
  *
  ****************************************************************************/
 
-static void rk3576_mali_relocate(uint64_t *words, size_t nwords,
-                                 uint64_t from, uint64_t size, uint64_t to)
+static void rk3576_mali_relocate(uint64_t *words, size_t nwords, uint64_t from,
+                                 uint64_t size, uint64_t to)
 {
   size_t i;
 
@@ -873,8 +865,8 @@ int rk3576_mali_initialize(void)
   ret = rk3576_pd_on(RK3576_PD_GPU);
   if (ret < 0)
     {
-      gerr("ERROR: failed to power up %s: %d\n",
-           rk3576_pd_name(RK3576_PD_GPU), ret);
+      gerr("ERROR: failed to power up %s: %d\n", rk3576_pd_name(RK3576_PD_GPU),
+           ret);
       return ret;
     }
 
@@ -890,8 +882,7 @@ int rk3576_mali_initialize(void)
     {
       gerr("ERROR: unexpected GPU_ID %08" PRIx32 " (product %04" PRIx32
            ", expected %04x)\n",
-           priv->info.gpu_id, priv->info.product_id,
-           RK3576_MALI_PRODUCT_G52);
+           priv->info.gpu_id, priv->info.product_id, RK3576_MALI_PRODUCT_G52);
       return -ENODEV;
     }
 
@@ -950,20 +941,18 @@ int rk3576_mali_initialize(void)
 
   priv->initialized = true;
 
-  ginfo("Mali-G52 at %08lx: GPU_ID=%08" PRIx32 " (r%up%u), core clock %"
-        PRIu32 " Hz\n",
+  ginfo("Mali-G52 at %08lx: GPU_ID=%08" PRIx32 " (r%up%u), core clock %" PRIu32
+        " Hz\n",
         (unsigned long)priv->base, priv->info.gpu_id,
         RK3576_MALI_GPU_ID_VER_MAJOR(priv->info.gpu_id),
-        RK3576_MALI_GPU_ID_VER_MINOR(priv->info.gpu_id),
-        priv->info.coreclk);
-  ginfo("  shader=%" PRIx64 " tiler=%" PRIx64 " l2=%" PRIx64
-        " stack=%" PRIx64 "\n",
+        RK3576_MALI_GPU_ID_VER_MINOR(priv->info.gpu_id), priv->info.coreclk);
+  ginfo("  shader=%" PRIx64 " tiler=%" PRIx64 " l2=%" PRIx64 " stack=%" PRIx64
+        "\n",
         priv->info.shader_present, priv->info.tiler_present,
         priv->info.l2_present, priv->info.stack_present);
   ginfo("  as_present=%02" PRIx32 " js_present=%02" PRIx32
         " mmu_features=%08" PRIx32 "\n",
-        priv->info.as_present, priv->info.js_present,
-        priv->info.mmu_features);
+        priv->info.as_present, priv->info.js_present, priv->info.mmu_features);
 
   return OK;
 
@@ -1174,16 +1163,15 @@ int rk3576_mali_run_job(unsigned int slot, uintptr_t job_chain_phys,
  ****************************************************************************/
 
 void rk3576_mali_job_header_init(struct rk3576_mali_job_header_s *hdr,
-                                 uint8_t type, uint16_t index,
-                                 uint64_t next)
+                                 uint8_t type, uint16_t index, uint64_t next)
 {
   DEBUGASSERT(hdr != NULL);
 
   memset(hdr, 0, sizeof(*hdr));
 
-  hdr->type_and_size = RK3576_MALI_JOB_SIZE_64BIT |
-                       ((type & RK3576_MALI_JOB_TYPE_MASK) <<
-                        RK3576_MALI_JOB_TYPE_SHIFT);
+  hdr->type_and_size =
+      RK3576_MALI_JOB_SIZE_64BIT |
+      ((type & RK3576_MALI_JOB_TYPE_MASK) << RK3576_MALI_JOB_TYPE_SHIFT);
   hdr->index = index;
   hdr->next = next;
 }
@@ -1219,8 +1207,7 @@ int rk3576_mali_null_job(void)
                               RK3576_MALI_FIRST_JOB_INDEX, 0);
 
   pa = up_addrenv_va_to_pa(hdr);
-  up_clean_dcache((uintptr_t)hdr,
-                  (uintptr_t)hdr + RK3576_MALI_NULL_JOB_BYTES);
+  up_clean_dcache((uintptr_t)hdr, (uintptr_t)hdr + RK3576_MALI_NULL_JOB_BYTES);
 
   ret = rk3576_mali_run_job(RK3576_MALI_SLOT_VERTEX, pa, 0, 0);
 
@@ -1326,8 +1313,7 @@ int rk3576_mali_replay(const struct rk3576_mali_replay_s *replay)
    */
 
   rk3576_mali_relocate(cmd, replay->cmdsize / sizeof(uint64_t),
-                       replay->capture_cva, replay->cmdsize,
-                       (uint64_t)cmdpa);
+                       replay->capture_cva, replay->cmdsize, (uint64_t)cmdpa);
 
   if (shader != NULL)
     {
@@ -1351,8 +1337,8 @@ int rk3576_mali_replay(const struct rk3576_mali_replay_s *replay)
   if (ret < 0)
     {
       const struct rk3576_mali_job_header_s *hdr =
-          (const struct rk3576_mali_job_header_s *)
-          ((uintptr_t)cmd + replay->job_offset);
+          (const struct rk3576_mali_job_header_s *)((uintptr_t)cmd +
+                                                    replay->job_offset);
 
       gerr("ERROR: replay failed: exception_status=%08" PRIx32
            " fault_pointer=%" PRIx64 "\n",

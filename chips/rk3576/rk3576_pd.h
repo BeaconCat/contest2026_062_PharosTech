@@ -72,25 +72,25 @@
  * rk3576_pd_on() walks that chain automatically.
  */
 
-#define RK3576_PD_NPU         0  /* VD_NPU voltage domain (NPU root)      */
-#define RK3576_PD_NPUTOP      1  /* RKNN_TOP, NPU MCU/WDT/timer, BIU      */
-#define RK3576_PD_NPU0        2  /* RKNN_CORE0                            */
-#define RK3576_PD_NPU1        3  /* RKNN_CORE1                            */
-#define RK3576_PD_GPU         4  /* VD_GPU: Mali, GPU PVTPLL, GPU_GRF     */
-#define RK3576_PD_NVM         5  /* eMMC, FSPI0                           */
-#define RK3576_PD_SDGMAC      6  /* SDMMC, SDIO, GMAC0/1, FSPI1, DSMC     */
-#define RK3576_PD_USB         7  /* USB0 (DWC3), UFSHC, MMU2              */
-#define RK3576_PD_PHP         8  /* USB1, PCIE0, SATA*, MMU0/1            */
-#define RK3576_PD_SUBPHP      9  /* PCIE1, SATA0/1                        */
-#define RK3576_PD_AUDIO       10 /* SAI0-4, SPDIF, ASRC, PDM1             */
-#define RK3576_PD_VEPU0       11 /* Video encoder core 0                  */
-#define RK3576_PD_VEPU1       12 /* Video encoder core 1                  */
-#define RK3576_PD_VPU         13 /* JPEG, EBC, VDPP, RGA0/1               */
-#define RK3576_PD_VDEC        14 /* VDPU (rkvdec)                         */
-#define RK3576_PD_VI          15 /* ISP, VICAP, VPSS, CSI hosts           */
-#define RK3576_PD_VO0         16 /* HDMITX, EDP, DSI host, HDCP0          */
-#define RK3576_PD_VO1         17 /* DP, HDCP1, SAI7-9                     */
-#define RK3576_PD_VOP         18 /* VOP core + VOP_GRF                    */
+#define RK3576_PD_NPU    0  /* VD_NPU voltage domain (NPU root)      */
+#define RK3576_PD_NPUTOP 1  /* RKNN_TOP, NPU MCU/WDT/timer, BIU      */
+#define RK3576_PD_NPU0   2  /* RKNN_CORE0                            */
+#define RK3576_PD_NPU1   3  /* RKNN_CORE1                            */
+#define RK3576_PD_GPU    4  /* VD_GPU: Mali, GPU PVTPLL, GPU_GRF     */
+#define RK3576_PD_NVM    5  /* eMMC, FSPI0                           */
+#define RK3576_PD_SDGMAC 6  /* SDMMC, SDIO, GMAC0/1, FSPI1, DSMC     */
+#define RK3576_PD_USB    7  /* USB0 (DWC3), UFSHC, MMU2              */
+#define RK3576_PD_PHP    8  /* USB1, PCIE0, SATA*, MMU0/1            */
+#define RK3576_PD_SUBPHP 9  /* PCIE1, SATA0/1                        */
+#define RK3576_PD_AUDIO  10 /* SAI0-4, SPDIF, ASRC, PDM1             */
+#define RK3576_PD_VEPU0  11 /* Video encoder core 0                  */
+#define RK3576_PD_VEPU1  12 /* Video encoder core 1                  */
+#define RK3576_PD_VPU    13 /* JPEG, EBC, VDPP, RGA0/1               */
+#define RK3576_PD_VDEC   14 /* VDPU (rkvdec)                         */
+#define RK3576_PD_VI     15 /* ISP, VICAP, VPSS, CSI hosts           */
+#define RK3576_PD_VO0    16 /* HDMITX, EDP, DSI host, HDCP0          */
+#define RK3576_PD_VO1    17 /* DP, HDCP1, SAI7-9                     */
+#define RK3576_PD_VOP    18 /* VOP core + VOP_GRF                    */
 
 /* SoC-internal sub-domains of PD_VOP.  These have their own power gate
  * bits but no device tree node, because Linux folds them into the VOP
@@ -108,8 +108,7 @@
  ****************************************************************************/
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /****************************************************************************

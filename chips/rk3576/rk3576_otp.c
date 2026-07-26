@@ -136,14 +136,12 @@ static off_t rk3576_otp_file_seek(struct file *filep, off_t offset,
  * Private Data
  ****************************************************************************/
 
-static struct rk3576_otp_dev_s g_rk3576_otp =
-{
-  .lock        = NXMUTEX_INITIALIZER,
+static struct rk3576_otp_dev_s g_rk3576_otp = {
+  .lock = NXMUTEX_INITIALIZER,
   .initialized = false,
 };
 
-static const struct file_operations g_rk3576_otp_fops =
-{
+static const struct file_operations g_rk3576_otp_fops = {
   .read = rk3576_otp_file_read,
   .seek = rk3576_otp_file_seek,
 };
@@ -208,8 +206,7 @@ static int rk3576_otp_clk_init(void)
   ret = clk_enable(pclk);
   if (ret < 0)
     {
-      _err("ERROR: OTP: failed to enable %s: %d\n", RK3576_OTP_PCLK_NAME,
-           ret);
+      _err("ERROR: OTP: failed to enable %s: %d\n", RK3576_OTP_PCLK_NAME, ret);
       return ret;
     }
 
@@ -228,8 +225,7 @@ static int rk3576_otp_clk_init(void)
   ret = clk_enable(clk);
   if (ret < 0)
     {
-      _err("ERROR: OTP: failed to enable %s: %d\n", RK3576_OTP_CLK_NAME,
-           ret);
+      _err("ERROR: OTP: failed to enable %s: %d\n", RK3576_OTP_CLK_NAME, ret);
       return ret;
     }
 
@@ -301,8 +297,7 @@ static int rk3576_otp_read_word(uint32_t wordaddr, uint16_t *value)
   /* Select the word and start the read state machine. */
 
   rk3576_otp_putreg(RK3576_OTP_USER_ADDR,
-                    (wordaddr & OTP_USER_ADDR_VAL_MASK) |
-                    OTP_USER_ADDR_MASK);
+                    (wordaddr & OTP_USER_ADDR_VAL_MASK) | OTP_USER_ADDR_MASK);
   rk3576_otp_putreg(RK3576_OTP_USER_ENABLE,
                     OTP_USER_ENABLE_FSM | OTP_USER_ENABLE_FSM_MASK);
 
@@ -318,7 +313,8 @@ static int rk3576_otp_read_word(uint32_t wordaddr, uint16_t *value)
       if (status != 0 && status != OTP_USER_QP_ECC_MASK)
         {
           _err("ERROR: OTP: word %" PRIu32 " ECC failure, QP=0x%08" PRIx32
-               "\n", wordaddr, status);
+               "\n",
+               wordaddr, status);
           ret = -EIO;
         }
       else
@@ -383,8 +379,7 @@ static ssize_t rk3576_otp_file_read(struct file *filep, char *buffer,
  *
  ****************************************************************************/
 
-static off_t rk3576_otp_file_seek(struct file *filep, off_t offset,
-                                  int whence)
+static off_t rk3576_otp_file_seek(struct file *filep, off_t offset, int whence)
 {
   off_t pos;
 
@@ -456,7 +451,7 @@ ssize_t rk3576_otp_read(uint32_t offset, void *buf, size_t len)
    */
 
   wordaddr = offset / RK3576_OTP_NBYTES;
-  skip     = offset % RK3576_OTP_NBYTES;
+  skip = offset % RK3576_OTP_NBYTES;
 
   ret = nxmutex_lock(&g_rk3576_otp.lock);
   if (ret < 0)
@@ -491,7 +486,7 @@ ssize_t rk3576_otp_read(uint32_t offset, void *buf, size_t len)
       memcpy(&dest[done], &bytes[skip], chunk);
 
       done += chunk;
-      skip  = 0;
+      skip = 0;
       wordaddr++;
     }
 
@@ -563,8 +558,8 @@ int rk3576_otp_read_cpu_version(uint8_t *version)
       return -EIO;
     }
 
-  *version = (raw >> RK3576_OTP_CPU_VERSION_SHIFT) &
-             RK3576_OTP_CPU_VERSION_MASK;
+  *version =
+      (raw >> RK3576_OTP_CPU_VERSION_SHIFT) & RK3576_OTP_CPU_VERSION_MASK;
   return OK;
 }
 

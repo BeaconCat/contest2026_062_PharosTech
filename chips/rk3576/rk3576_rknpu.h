@@ -106,13 +106,13 @@
  * Linux rknpu driver so that ported user code keeps working.
  */
 
-#define RK3576_RKNPU_ACT_GET_HW_VERSION   0  /* Core VERSION register    */
-#define RK3576_RKNPU_ACT_GET_DRV_VERSION  1  /* RK3576_RKNPU_DRV_VERSION */
-#define RK3576_RKNPU_ACT_GET_FREQ         2  /* Core clock, in Hz        */
-#define RK3576_RKNPU_ACT_SET_FREQ         3  /* Core clock, in Hz        */
-#define RK3576_RKNPU_ACT_RESET            6  /* Soft-reset both cores    */
-#define RK3576_RKNPU_ACT_GET_IOMMU_EN     16 /* 0: bypass, 1: paging     */
-#define RK3576_RKNPU_ACT_GET_TOTAL_RW     15 /* Bytes moved by last job  */
+#define RK3576_RKNPU_ACT_GET_HW_VERSION  0  /* Core VERSION register    */
+#define RK3576_RKNPU_ACT_GET_DRV_VERSION 1  /* RK3576_RKNPU_DRV_VERSION */
+#define RK3576_RKNPU_ACT_GET_FREQ        2  /* Core clock, in Hz        */
+#define RK3576_RKNPU_ACT_SET_FREQ        3  /* Core clock, in Hz        */
+#define RK3576_RKNPU_ACT_RESET           6  /* Soft-reset both cores    */
+#define RK3576_RKNPU_ACT_GET_IOMMU_EN    16 /* 0: bypass, 1: paging     */
+#define RK3576_RKNPU_ACT_GET_TOTAL_RW    15 /* Bytes moved by last job  */
 
 /* ioctl commands.  0x1e00 is the private RKNPU range; the RGA driver owns
  * 0x1f00.  Every argument is a pointer to the structure named in the
@@ -181,13 +181,13 @@ struct rk3576_rknpu_hw_task_s
 
 struct rk3576_rknpu_task_s
 {
-  uint32_t core_mask;                            /* RK3576_RKNPU_CORExx  */
-  uint32_t task_start;                           /* First task index     */
-  uint32_t task_number;                          /* Tasks to execute     */
-  uint32_t timeout_ms;                           /* 0: driver default    */
-  uint64_t task_addr;                            /* DMA addr of array    */
-  uint32_t int_status[RK3576_RKNPU_NCORES_ABI];  /* Out: raw INT status  */
-  uint32_t task_counter[RK3576_RKNPU_NCORES_ABI];/* Out: retired tasks   */
+  uint32_t core_mask;                             /* RK3576_RKNPU_CORExx  */
+  uint32_t task_start;                            /* First task index     */
+  uint32_t task_number;                           /* Tasks to execute     */
+  uint32_t timeout_ms;                            /* 0: driver default    */
+  uint64_t task_addr;                             /* DMA addr of array    */
+  uint32_t int_status[RK3576_RKNPU_NCORES_ABI];   /* Out: raw INT status  */
+  uint32_t task_counter[RK3576_RKNPU_NCORES_ABI]; /* Out: retired tasks   */
 };
 
 /* Memory object descriptor, shared by MEM_CREATE / MEM_MAP / MEM_DESTROY.
@@ -233,8 +233,7 @@ struct rk3576_rknpu_action_s
  ****************************************************************************/
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /****************************************************************************

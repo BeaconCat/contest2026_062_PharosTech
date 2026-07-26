@@ -123,9 +123,9 @@
 
 struct rk3576_dphy_desc_s
 {
-  uintptr_t base;         /* PHY register window base            */
-  uintptr_t grf;          /* Associated MIPI D-PHY GRF base      */
-  const char *pclk_name;  /* APB clock gate name in the CLK tree */
+  uintptr_t base;        /* PHY register window base            */
+  uintptr_t grf;         /* Associated MIPI D-PHY GRF base      */
+  const char *pclk_name; /* APB clock gate name in the CLK tree */
 };
 
 /* Runtime state of one PHY. */
@@ -133,9 +133,9 @@ struct rk3576_dphy_desc_s
 struct rk3576_dphy_s
 {
   const struct rk3576_dphy_desc_s *desc;
-  uint32_t pclk_hz;  /* Reference clock rate, read via clk framework */
-  int num_lanes;     /* Data lanes currently enabled                 */
-  bool initialized;  /* Clocks acquired and PHY configured           */
+  uint32_t pclk_hz; /* Reference clock rate, read via clk framework */
+  int num_lanes;    /* Data lanes currently enabled                 */
+  bool initialized; /* Clocks acquired and PHY configured           */
 };
 
 /****************************************************************************
@@ -147,38 +147,34 @@ static void rk3576_dphy_putreg(struct rk3576_dphy_s *priv, unsigned int off,
 static uint32_t rk3576_dphy_getreg(struct rk3576_dphy_s *priv,
                                    unsigned int off);
 static int rk3576_dphy_clk_init(struct rk3576_dphy_s *priv);
-static uint32_t rk3576_dphy_settle_count(uint32_t settle_ns,
-                                         uint32_t ref_hz);
+static uint32_t rk3576_dphy_settle_count(uint32_t settle_ns, uint32_t ref_hz);
 static void rk3576_dphy_program_settle(struct rk3576_dphy_s *priv,
-                                       uint32_t lane_rate_mbps,
-                                       int num_lanes);
+                                       uint32_t lane_rate_mbps, int num_lanes);
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
 static const struct rk3576_dphy_desc_s
-  g_rk3576_dphy_desc[RK3576_CSI2DPHY_NPHY] =
-{
-  {
-    .base      = RK3576_CSI2DPHY0_ADDR,
-    .grf       = RK3576_CSI2DPHY0_GRF_ADDR,
-    .pclk_name = "pclk_csidphy0_en",
-  },
-  {
-    .base      = RK3576_CSI2DPHY1_ADDR,
-    .grf       = RK3576_CSI2DPHY1_GRF_ADDR,
-    .pclk_name = "pclk_csidphy1_en",
-  },
-};
+    g_rk3576_dphy_desc[RK3576_CSI2DPHY_NPHY] = {
+      {
+          .base = RK3576_CSI2DPHY0_ADDR,
+          .grf = RK3576_CSI2DPHY0_GRF_ADDR,
+          .pclk_name = "pclk_csidphy0_en",
+      },
+      {
+          .base = RK3576_CSI2DPHY1_ADDR,
+          .grf = RK3576_CSI2DPHY1_GRF_ADDR,
+          .pclk_name = "pclk_csidphy1_en",
+      },
+    };
 
-static struct rk3576_dphy_s g_rk3576_dphy[RK3576_CSI2DPHY_NPHY] =
-{
+static struct rk3576_dphy_s g_rk3576_dphy[RK3576_CSI2DPHY_NPHY] = {
   {
-    .desc = &g_rk3576_dphy_desc[0],
+      .desc = &g_rk3576_dphy_desc[0],
   },
   {
-    .desc = &g_rk3576_dphy_desc[1],
+      .desc = &g_rk3576_dphy_desc[1],
   },
 };
 
@@ -267,8 +263,9 @@ static uint32_t rk3576_dphy_settle_count(uint32_t settle_ns, uint32_t ref_hz)
 {
   uint64_t cycles;
 
-  cycles = ((uint64_t)settle_ns * (uint64_t)ref_hz +
-            RK3576_DPHY_NS_PER_SEC - 1) / RK3576_DPHY_NS_PER_SEC;
+  cycles =
+      ((uint64_t)settle_ns * (uint64_t)ref_hz + RK3576_DPHY_NS_PER_SEC - 1) /
+      RK3576_DPHY_NS_PER_SEC;
 
   if (cycles == 0)
     {
@@ -295,8 +292,7 @@ static uint32_t rk3576_dphy_settle_count(uint32_t settle_ns, uint32_t ref_hz)
  ****************************************************************************/
 
 static void rk3576_dphy_program_settle(struct rk3576_dphy_s *priv,
-                                       uint32_t lane_rate_mbps,
-                                       int num_lanes)
+                                       uint32_t lane_rate_mbps, int num_lanes)
 {
   uint32_t ui_ps;
   uint32_t settle_ns;
@@ -315,16 +311,17 @@ static void rk3576_dphy_program_settle(struct rk3576_dphy_s *priv,
               (RK3576_DPHY_SETTLE_UI_FACTOR * ui_ps + 999) / 1000;
 
   data_count = rk3576_dphy_settle_count(settle_ns, priv->pclk_hz);
-  clk_count  = rk3576_dphy_settle_count(RK3576_DPHY_CLK_SETTLE_NS,
-                                        priv->pclk_hz);
+  clk_count =
+      rk3576_dphy_settle_count(RK3576_DPHY_CLK_SETTLE_NS, priv->pclk_hz);
 
   vinfo("DPHY%d rate=%" PRIu32 "Mbps UI=%" PRIu32 "ps settle=%" PRIu32
         "ns ref=%" PRIu32 "Hz clkcnt=%" PRIu32 " datacnt=%" PRIu32 "\n",
         (int)(priv - g_rk3576_dphy), lane_rate_mbps, ui_ps, settle_ns,
         priv->pclk_hz, clk_count, data_count);
 
-  calib = lane_rate_mbps > RK3576_DPHY_CALIB_THRESHOLD_MBPS ?
-          RK3576_DPHY_CALIB_ENABLE : RK3576_DPHY_CALIB_DISABLE;
+  calib = lane_rate_mbps > RK3576_DPHY_CALIB_THRESHOLD_MBPS
+              ? RK3576_DPHY_CALIB_ENABLE
+              : RK3576_DPHY_CALIB_DISABLE;
 
   rk3576_dphy_putreg(priv, RK3576_DPHY_CLK_WR_THS_SETTLE_OFFSET, clk_count);
   rk3576_dphy_putreg(priv, RK3576_DPHY_CLK_CALIB_EN_OFFSET, calib);
@@ -332,12 +329,14 @@ static void rk3576_dphy_program_settle(struct rk3576_dphy_s *priv,
   for (lane = 0; lane < num_lanes; lane++)
     {
       rk3576_dphy_putreg(priv,
-        RK3576_DPHY_LANE0_WR_THS_SETTLE_OFFSET +
-        lane * RK3576_DPHY_LANE_WR_THS_SETTLE_STRIDE, data_count);
+                         RK3576_DPHY_LANE0_WR_THS_SETTLE_OFFSET +
+                             lane * RK3576_DPHY_LANE_WR_THS_SETTLE_STRIDE,
+                         data_count);
 
       rk3576_dphy_putreg(priv,
-        RK3576_DPHY_LANE0_CALIB_EN_OFFSET +
-        lane * RK3576_DPHY_LANE_CALIB_EN_STRIDE, calib);
+                         RK3576_DPHY_LANE0_CALIB_EN_OFFSET +
+                             lane * RK3576_DPHY_LANE_CALIB_EN_STRIDE,
+                         calib);
     }
 }
 
@@ -379,8 +378,7 @@ uint32_t rk3576_dphy_lane_rate_mbps(uint64_t pixel_rate, uint32_t bpp,
  *
  ****************************************************************************/
 
-int rk3576_dphy_initialize(int phy_id, uint32_t lane_rate_mbps,
-                           int num_lanes)
+int rk3576_dphy_initialize(int phy_id, uint32_t lane_rate_mbps, int num_lanes)
 {
   struct rk3576_dphy_s *priv;
   uint32_t lane_mask;
@@ -402,8 +400,7 @@ int rk3576_dphy_initialize(int phy_id, uint32_t lane_rate_mbps,
   if (lane_rate_mbps < RK3576_DPHY_MIN_LANE_RATE_MBPS ||
       lane_rate_mbps > RK3576_DPHY_MAX_LANE_RATE_MBPS)
     {
-      verr("ERROR: lane rate %" PRIu32 "Mbps out of range\n",
-           lane_rate_mbps);
+      verr("ERROR: lane rate %" PRIu32 "Mbps out of range\n", lane_rate_mbps);
       return -ERANGE;
     }
 
@@ -425,11 +422,11 @@ int rk3576_dphy_initialize(int phy_id, uint32_t lane_rate_mbps,
    */
 
   putreg32(RK3576_DPHY_GRF_HIWORD(RK3576_DPHY_GRF_CON0_LANE_MASK |
-                                  RK3576_DPHY_GRF_CON0_CLK_LANE_EN |
-                                  RK3576_DPHY_GRF_CON0_PHY_MODE_CSI,
+                                      RK3576_DPHY_GRF_CON0_CLK_LANE_EN |
+                                      RK3576_DPHY_GRF_CON0_PHY_MODE_CSI,
                                   lane_mask |
-                                  RK3576_DPHY_GRF_CON0_CLK_LANE_EN |
-                                  RK3576_DPHY_GRF_CON0_PHY_MODE_CSI),
+                                      RK3576_DPHY_GRF_CON0_CLK_LANE_EN |
+                                      RK3576_DPHY_GRF_CON0_PHY_MODE_CSI),
            priv->desc->grf + RK3576_DPHY_GRF_CON0_OFFSET);
 
   /* Hold the digital core in reset while the lanes are configured. */
@@ -442,8 +439,8 @@ int rk3576_dphy_initialize(int phy_id, uint32_t lane_rate_mbps,
   /* Enable the clock lane and the requested data lanes. */
 
   val = rk3576_dphy_getreg(priv, RK3576_DPHY_CTRL_LANE_ENABLE_OFFSET);
-  val &= ~(RK3576_DPHY_CTRL_LANE_ENABLE_MASK |
-           RK3576_DPHY_CTRL_LANE_ENABLE_CK);
+  val &=
+      ~(RK3576_DPHY_CTRL_LANE_ENABLE_MASK | RK3576_DPHY_CTRL_LANE_ENABLE_CK);
   val |= (lane_mask << RK3576_DPHY_CTRL_LANE_ENABLE_SHIFT) &
          RK3576_DPHY_CTRL_LANE_ENABLE_MASK;
   val |= RK3576_DPHY_CTRL_LANE_ENABLE_CK | RK3576_DPHY_CTRL_ENABLE;
@@ -457,7 +454,7 @@ int rk3576_dphy_initialize(int phy_id, uint32_t lane_rate_mbps,
                      RK3576_DPHY_CTRL_DIG_RST_RUN);
   up_udelay(1);
 
-  priv->num_lanes   = num_lanes;
+  priv->num_lanes = num_lanes;
   priv->initialized = true;
 
   vinfo("DPHY%d up: %d lanes @ %" PRIu32 "Mbps\n", phy_id, num_lanes,
@@ -493,7 +490,8 @@ int rk3576_dphy_uninitialize(int phy_id)
                      RK3576_DPHY_CTRL_DIG_RST_RESET);
 
   putreg32(RK3576_DPHY_GRF_HIWORD(RK3576_DPHY_GRF_CON0_LANE_MASK |
-                                  RK3576_DPHY_GRF_CON0_CLK_LANE_EN, 0),
+                                      RK3576_DPHY_GRF_CON0_CLK_LANE_EN,
+                                  0),
            priv->desc->grf + RK3576_DPHY_GRF_CON0_OFFSET);
 
   priv->num_lanes = 0;

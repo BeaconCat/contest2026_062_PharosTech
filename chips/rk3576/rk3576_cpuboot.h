@@ -45,34 +45,32 @@
  * cluster 0 / core 0 (MPIDR Aff1:Aff0 = 0:0).
  */
 
-#define RK3576_CPU_NCLUSTERS      2
-#define RK3576_CPU_PER_CLUSTER    4
-#define RK3576_CPU_NCORES         (RK3576_CPU_NCLUSTERS * \
-                                   RK3576_CPU_PER_CLUSTER)
+#define RK3576_CPU_NCLUSTERS   2
+#define RK3576_CPU_PER_CLUSTER 4
+#define RK3576_CPU_NCORES      (RK3576_CPU_NCLUSTERS * RK3576_CPU_PER_CLUSTER)
 
-#define RK3576_CLUSTER_LITTLE     0  /* Cortex-A53 */
-#define RK3576_CLUSTER_BIG        1  /* Cortex-A72 */
+#define RK3576_CLUSTER_LITTLE  0 /* Cortex-A53 */
+#define RK3576_CLUSTER_BIG     1 /* Cortex-A72 */
 
 /* MPIDR_EL1 affinity field layout (ARMv8-A, Aff2/Aff3 are zero on RK3576) */
 
-#define RK3576_MPIDR_AFF0_SHIFT   0
-#define RK3576_MPIDR_AFF1_SHIFT   8
-#define RK3576_MPIDR_AFF_MASK     0xffull
+#define RK3576_MPIDR_AFF0_SHIFT 0
+#define RK3576_MPIDR_AFF1_SHIFT 8
+#define RK3576_MPIDR_AFF_MASK   0xffull
 
 /* Mask selecting the two affinity fields the RK3576 actually uses, so that
  * the U/MT/RES1 flag bits of a raw MPIDR_EL1 read can be discarded.
  */
 
-#define RK3576_MPIDR_AFF01_MASK   0xffffull
+#define RK3576_MPIDR_AFF01_MASK 0xffffull
 
 /* Build an MPIDR affinity value (the PSCI "target_cpu" argument) from a
  * cluster number and the core index inside that cluster.
  */
 
-#define RK3576_MPID(cluster, core) \
-  ((((uint64_t)(cluster) & RK3576_MPIDR_AFF_MASK) <<                       \
-    RK3576_MPIDR_AFF1_SHIFT) |                                             \
-   (((uint64_t)(core) & RK3576_MPIDR_AFF_MASK) << RK3576_MPIDR_AFF0_SHIFT))
+#define RK3576_MPID(cluster, core)                                            \
+  ((((uint64_t)(cluster)&RK3576_MPIDR_AFF_MASK) << RK3576_MPIDR_AFF1_SHIFT) | \
+   (((uint64_t)(core)&RK3576_MPIDR_AFF_MASK) << RK3576_MPIDR_AFF0_SHIFT))
 
 /* Extract the affinity fields out of an MPIDR value */
 
@@ -94,7 +92,7 @@
 
 #define RK3576_CPU_TO_MPID(cpu) \
   RK3576_MPID((cpu) / RK3576_CPU_PER_CLUSTER, (cpu) % RK3576_CPU_PER_CLUSTER)
-#define RK3576_MPID_TO_CPU(mpid) \
+#define RK3576_MPID_TO_CPU(mpid)                                \
   ((int)((RK3576_MPID_CLUSTER(mpid) * RK3576_CPU_PER_CLUSTER) + \
          RK3576_MPID_CORE(mpid)))
 
@@ -109,8 +107,7 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C"
-{
+extern "C" {
 #else
 #define EXTERN extern
 #endif

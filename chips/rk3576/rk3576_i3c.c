@@ -85,7 +85,7 @@
  * flags an error; these only guard against a wedged bus.
  */
 
-#define RK3576_I3C_POLL_LIMIT     1000000
+#define RK3576_I3C_POLL_LIMIT 1000000
 
 /* Bus timing targets (MIPI I3C Basic v1.1). */
 
@@ -104,27 +104,27 @@
  * the split can be computed in integer arithmetic.
  */
 
-#define RK3576_I3C_FM_LOW_NUM     13
-#define RK3576_I3C_FM_LOW_DEN     25
-#define RK3576_I3C_FMP_LOW_NUM    1
-#define RK3576_I3C_FMP_LOW_DEN    2
+#define RK3576_I3C_FM_LOW_NUM  13
+#define RK3576_I3C_FM_LOW_DEN  25
+#define RK3576_I3C_FMP_LOW_NUM 1
+#define RK3576_I3C_FMP_LOW_DEN 2
 
 /* Minimum counter value the controller accepts in a timing register. */
 
-#define RK3576_I3C_CNT_MIN        2
-#define RK3576_I3C_CNT_MAX        0xffff
-#define RK3576_I3C_EXT_LCNT_MAX   0xff
+#define RK3576_I3C_CNT_MIN      2
+#define RK3576_I3C_CNT_MAX      0xffff
+#define RK3576_I3C_EXT_LCNT_MAX 0xff
 
 /* Dynamic addresses handed out by ENTDAA start here (0x08 is the lowest
  * address usable by an I3C target).
  */
 
-#define RK3576_I3C_DYNADDR_BASE   0x08
+#define RK3576_I3C_DYNADDR_BASE 0x08
 
 /* Transaction ID used for driver-issued commands. */
 
-#define RK3576_I3C_TID_XFER       0x1
-#define RK3576_I3C_TID_DAA        0x2
+#define RK3576_I3C_TID_XFER 0x1
+#define RK3576_I3C_TID_DAA  0x2
 
 /* Device characteristics table entry layout (4 words per device). */
 
@@ -137,7 +137,7 @@
 
 /* Number of nanoseconds in one second, for count computations. */
 
-#define RK3576_I3C_NSEC_PER_SEC   1000000000ULL
+#define RK3576_I3C_NSEC_PER_SEC 1000000000ULL
 
 /* Controller base addresses (see DTS i3c-master@2abe0000/@2abf0000). */
 
@@ -157,18 +157,18 @@ static const int g_rk3576_i3c_irq[RK3576_I3C_NUM] = {
 
 struct rk3576_i3c_priv_s
 {
-  struct i2c_master_s dev;  /* Base class (must be first) */
-  uintptr_t base;           /* Controller base address */
-  int port;                 /* Controller index */
-  int irq;                  /* GIC interrupt number */
-  struct clk_s *fclk;       /* Functional (core) clock */
-  uint32_t fclk_hz;         /* Cached core clock rate */
-  uint32_t i2c_freq;        /* Currently programmed legacy I2C rate */
-  uint8_t datdepth;         /* Usable device address table entries */
-  uintptr_t dat;            /* Device address table base address */
-  uintptr_t dct;            /* Device characteristics table base address */
-  mutex_t lock;             /* Serialize bus access */
-  bool inited;              /* Controller brought up */
+  struct i2c_master_s dev; /* Base class (must be first) */
+  uintptr_t base;          /* Controller base address */
+  int port;                /* Controller index */
+  int irq;                 /* GIC interrupt number */
+  struct clk_s *fclk;      /* Functional (core) clock */
+  uint32_t fclk_hz;        /* Cached core clock rate */
+  uint32_t i2c_freq;       /* Currently programmed legacy I2C rate */
+  uint8_t datdepth;        /* Usable device address table entries */
+  uintptr_t dat;           /* Device address table base address */
+  uintptr_t dct;           /* Device characteristics table base address */
+  mutex_t lock;            /* Serialize bus access */
+  bool inited;             /* Controller brought up */
 
   /* Devices discovered by ENTDAA */
 
@@ -189,10 +189,8 @@ static inline uint32_t rk3576_i3c_getreg(struct rk3576_i3c_priv_s *priv,
                                          unsigned int off);
 static inline void rk3576_i3c_putreg(struct rk3576_i3c_priv_s *priv,
                                      unsigned int off, uint32_t val);
-static uint32_t rk3576_i3c_ns2cnt(struct rk3576_i3c_priv_s *priv,
-                                  uint32_t ns);
-static uint32_t rk3576_i3c_clamp(uint32_t value, uint32_t min,
-                                 uint32_t max);
+static uint32_t rk3576_i3c_ns2cnt(struct rk3576_i3c_priv_s *priv, uint32_t ns);
+static uint32_t rk3576_i3c_clamp(uint32_t value, uint32_t min, uint32_t max);
 static uint8_t rk3576_i3c_addr_parity(uint8_t addr);
 static void rk3576_i3c_set_dat(struct rk3576_i3c_priv_s *priv, uint8_t slot,
                                uint32_t value);
@@ -205,8 +203,8 @@ static int rk3576_i3c_wait_resp(struct rk3576_i3c_priv_s *priv,
                                 uint32_t *resp);
 static int rk3576_i3c_push_tx(struct rk3576_i3c_priv_s *priv,
                               const uint8_t *buffer, uint16_t length);
-static int rk3576_i3c_pop_rx(struct rk3576_i3c_priv_s *priv,
-                             uint8_t *buffer, uint16_t length);
+static int rk3576_i3c_pop_rx(struct rk3576_i3c_priv_s *priv, uint8_t *buffer,
+                             uint16_t length);
 static int rk3576_i3c_run(struct rk3576_i3c_priv_s *priv, uint32_t arg,
                           uint32_t cmd, uint8_t *buffer, uint16_t length,
                           bool read, uint16_t *xferred);
@@ -258,8 +256,7 @@ static inline void rk3576_i3c_putreg(struct rk3576_i3c_priv_s *priv,
  *   Convert a bus time in nanoseconds into core-clock cycles, rounding up.
  ****************************************************************************/
 
-static uint32_t rk3576_i3c_ns2cnt(struct rk3576_i3c_priv_s *priv,
-                                  uint32_t ns)
+static uint32_t rk3576_i3c_ns2cnt(struct rk3576_i3c_priv_s *priv, uint32_t ns)
 {
   uint64_t cycles;
 
@@ -344,8 +341,8 @@ static void rk3576_i3c_i3c_timings(struct rk3576_i3c_priv_s *priv)
   period = priv->fclk_hz / RK3576_I3C_PP_FREQ_HZ;
   if (period <= hcnt)
     {
-      hcnt = (period > RK3576_I3C_CNT_MIN * 2) ? period / 2 :
-                                                 RK3576_I3C_CNT_MIN;
+      hcnt =
+          (period > RK3576_I3C_CNT_MIN * 2) ? period / 2 : RK3576_I3C_CNT_MIN;
     }
 
   hcnt = rk3576_i3c_clamp(hcnt, RK3576_I3C_CNT_MIN, RK3576_I3C_CNT_MAX);
@@ -376,33 +373,31 @@ static void rk3576_i3c_i3c_timings(struct rk3576_i3c_priv_s *priv)
    * count.  The field is only 8 bits wide, so saturate.
    */
 
-  extlcnt = rk3576_i3c_clamp(lcnt * 2, RK3576_I3C_CNT_MIN,
-                             RK3576_I3C_EXT_LCNT_MAX);
-  rk3576_i3c_putreg(priv, RK3576_I3C_SCL_EXT_LCNT_TIMING,
-                    RK3576_I3C_EXT_LCNT(extlcnt,
-                                        rk3576_i3c_clamp(lcnt * 3,
-                                            RK3576_I3C_CNT_MIN,
-                                            RK3576_I3C_EXT_LCNT_MAX),
-                                        rk3576_i3c_clamp(lcnt * 4,
-                                            RK3576_I3C_CNT_MIN,
-                                            RK3576_I3C_EXT_LCNT_MAX),
-                                        rk3576_i3c_clamp(lcnt * 5,
-                                            RK3576_I3C_CNT_MIN,
-                                            RK3576_I3C_EXT_LCNT_MAX)));
+  extlcnt =
+      rk3576_i3c_clamp(lcnt * 2, RK3576_I3C_CNT_MIN, RK3576_I3C_EXT_LCNT_MAX);
+  rk3576_i3c_putreg(
+      priv, RK3576_I3C_SCL_EXT_LCNT_TIMING,
+      RK3576_I3C_EXT_LCNT(extlcnt,
+                          rk3576_i3c_clamp(lcnt * 3, RK3576_I3C_CNT_MIN,
+                                           RK3576_I3C_EXT_LCNT_MAX),
+                          rk3576_i3c_clamp(lcnt * 4, RK3576_I3C_CNT_MIN,
+                                           RK3576_I3C_EXT_LCNT_MAX),
+                          rk3576_i3c_clamp(lcnt * 5, RK3576_I3C_CNT_MIN,
+                                           RK3576_I3C_EXT_LCNT_MAX)));
 
   /* Bus free time gates repeated STARTs, bus idle time gates hot join
    * detection.
    */
 
-  rk3576_i3c_putreg(priv, RK3576_I3C_BUS_FREE_TIMING,
-                    rk3576_i3c_clamp(
-                        rk3576_i3c_ns2cnt(priv, RK3576_I3C_TBUS_FREE_NS),
-                        RK3576_I3C_CNT_MIN, RK3576_I3C_CNT_MAX));
+  rk3576_i3c_putreg(
+      priv, RK3576_I3C_BUS_FREE_TIMING,
+      rk3576_i3c_clamp(rk3576_i3c_ns2cnt(priv, RK3576_I3C_TBUS_FREE_NS),
+                       RK3576_I3C_CNT_MIN, RK3576_I3C_CNT_MAX));
 
-  rk3576_i3c_putreg(priv, RK3576_I3C_BUS_IDLE_TIMING,
-                    rk3576_i3c_clamp(
-                        rk3576_i3c_ns2cnt(priv, RK3576_I3C_TBUS_IDLE_NS),
-                        RK3576_I3C_CNT_MIN, RK3576_I3C_CNT_MAX));
+  rk3576_i3c_putreg(
+      priv, RK3576_I3C_BUS_IDLE_TIMING,
+      rk3576_i3c_clamp(rk3576_i3c_ns2cnt(priv, RK3576_I3C_TBUS_IDLE_NS),
+                       RK3576_I3C_CNT_MIN, RK3576_I3C_CNT_MAX));
 }
 
 /****************************************************************************
@@ -529,8 +524,7 @@ static int rk3576_i3c_resp_errno(uint32_t err)
  *   Spin until the response queue holds at least one entry and pop it.
  ****************************************************************************/
 
-static int rk3576_i3c_wait_resp(struct rk3576_i3c_priv_s *priv,
-                                uint32_t *resp)
+static int rk3576_i3c_wait_resp(struct rk3576_i3c_priv_s *priv, uint32_t *resp)
 {
   uint32_t level;
   int t;
@@ -617,8 +611,8 @@ static int rk3576_i3c_push_tx(struct rk3576_i3c_priv_s *priv,
  *   early, or a negated errno on timeout.
  ****************************************************************************/
 
-static int rk3576_i3c_pop_rx(struct rk3576_i3c_priv_s *priv,
-                             uint8_t *buffer, uint16_t length)
+static int rk3576_i3c_pop_rx(struct rk3576_i3c_priv_s *priv, uint8_t *buffer,
+                             uint16_t length)
 {
   uint16_t offset = 0;
   uint32_t word;
@@ -777,8 +771,7 @@ errout:
 
   rk3576_i3c_putreg(priv, RK3576_I3C_RESET_CTRL,
                     RK3576_I3C_RESET_CMD_QUE | RK3576_I3C_RESET_RESP_QUE |
-                        RK3576_I3C_RESET_TX_FIFO |
-                        RK3576_I3C_RESET_RX_FIFO);
+                        RK3576_I3C_RESET_TX_FIFO | RK3576_I3C_RESET_RX_FIFO);
 
   rk3576_i3c_putreg(priv, RK3576_I3C_DEVICE_CTRL,
                     rk3576_i3c_getreg(priv, RK3576_I3C_DEVICE_CTRL) |
@@ -863,7 +856,7 @@ static void rk3576_i3c_service_ibi(struct rk3576_i3c_priv_s *priv)
   uint8_t i;
   int slot;
 
-  for (; ; )
+  for (;;)
     {
       level = rk3576_i3c_getreg(priv, RK3576_I3C_QUEUE_STATUS_LEVEL);
       if (((level & RK3576_I3C_QSTATUS_IBI_STAT_MASK) >>
@@ -880,7 +873,8 @@ static void rk3576_i3c_service_ibi(struct rk3576_i3c_priv_s *priv)
       /* The IBI ID is (address << 1) | RnW. */
 
       dynaddr = (uint8_t)(((status & RK3576_I3C_IBI_STS_ID_MASK) >>
-                           RK3576_I3C_IBI_STS_ID_SHIFT) >> 1);
+                           RK3576_I3C_IBI_STS_ID_SHIFT) >>
+                          1);
 
       /* Payload words follow the status word in the same queue. */
 
@@ -957,8 +951,7 @@ static int rk3576_i3c_interrupt(int irq, void *context, void *arg)
 
   rk3576_i3c_putreg(priv, RK3576_I3C_INTR_STATUS, status);
 
-  if ((status & (RK3576_I3C_INTR_IBI_THLD |
-                 RK3576_I3C_INTR_IBI_UPDATED)) != 0)
+  if ((status & (RK3576_I3C_INTR_IBI_THLD | RK3576_I3C_INTR_IBI_UPDATED)) != 0)
     {
       rk3576_i3c_service_ibi(priv);
     }
@@ -993,8 +986,7 @@ static int rk3576_i3c_clk_init(struct rk3576_i3c_priv_s *priv)
   ret = clk_enable(hclk);
   if (ret < 0)
     {
-      i3cerr("ERROR: I3C%d: failed to enable %s: %d\n", priv->port, name,
-             ret);
+      i3cerr("ERROR: I3C%d: failed to enable %s: %d\n", priv->port, name, ret);
       return ret;
     }
 
@@ -1011,8 +1003,7 @@ static int rk3576_i3c_clk_init(struct rk3576_i3c_priv_s *priv)
   ret = clk_enable(priv->fclk);
   if (ret < 0)
     {
-      i3cerr("ERROR: I3C%d: failed to enable %s: %d\n", priv->port, name,
-             ret);
+      i3cerr("ERROR: I3C%d: failed to enable %s: %d\n", priv->port, name, ret);
       return ret;
     }
 
@@ -1054,12 +1045,11 @@ static int rk3576_i3c_hw_init(struct rk3576_i3c_priv_s *priv)
   /* Locate the device address / characteristics tables. */
 
   ptr = rk3576_i3c_getreg(priv, RK3576_I3C_DEV_ADDR_TABLE_PTR);
-  priv->dat = priv->base +
-              ((ptr & RK3576_I3C_DAT_PTR_ADDR_MASK) >>
-               RK3576_I3C_DAT_PTR_ADDR_SHIFT);
+  priv->dat = priv->base + ((ptr & RK3576_I3C_DAT_PTR_ADDR_MASK) >>
+                            RK3576_I3C_DAT_PTR_ADDR_SHIFT);
 
-  depth = (ptr & RK3576_I3C_DAT_PTR_DEPTH_MASK) >>
-          RK3576_I3C_DAT_PTR_DEPTH_SHIFT;
+  depth =
+      (ptr & RK3576_I3C_DAT_PTR_DEPTH_MASK) >> RK3576_I3C_DAT_PTR_DEPTH_SHIFT;
 
   if (priv->dat == priv->base || depth == 0)
     {
@@ -1079,9 +1069,8 @@ static int rk3576_i3c_hw_init(struct rk3576_i3c_priv_s *priv)
   priv->datdepth = (uint8_t)depth;
 
   ptr = rk3576_i3c_getreg(priv, RK3576_I3C_DEV_CHAR_TABLE_PTR);
-  priv->dct = priv->base +
-              ((ptr & RK3576_I3C_DAT_PTR_ADDR_MASK) >>
-               RK3576_I3C_DAT_PTR_ADDR_SHIFT);
+  priv->dct = priv->base + ((ptr & RK3576_I3C_DAT_PTR_ADDR_MASK) >>
+                            RK3576_I3C_DAT_PTR_ADDR_SHIFT);
 
   /* The controller itself owns address 0x08 on the bus so that it can be
    * targeted by secondary masters.
@@ -1113,11 +1102,10 @@ static int rk3576_i3c_hw_init(struct rk3576_i3c_priv_s *priv)
    * broadcast address in open drain and tolerate I2C-only devices.
    */
 
-  rk3576_i3c_putreg(priv, RK3576_I3C_DEVICE_CTRL,
-                    RK3576_I3C_DEVCTRL_IBA_INCLUDE |
-                        RK3576_I3C_DEVCTRL_I2C_SLAVE_PRESENT |
-                        RK3576_I3C_DEVCTRL_HOT_JOIN_NACK |
-                        RK3576_I3C_DEVCTRL_ENABLE);
+  rk3576_i3c_putreg(
+      priv, RK3576_I3C_DEVICE_CTRL,
+      RK3576_I3C_DEVCTRL_IBA_INCLUDE | RK3576_I3C_DEVCTRL_I2C_SLAVE_PRESENT |
+          RK3576_I3C_DEVCTRL_HOT_JOIN_NACK | RK3576_I3C_DEVCTRL_ENABLE);
 
   return OK;
 }
@@ -1172,17 +1160,17 @@ static int rk3576_i3c_transfer(struct i2c_master_s *dev,
 
       rk3576_i3c_i2c_timings(priv, msg->frequency);
 
-      speed = (msg->frequency > RK3576_I3C_I2C_FM_HZ) ?
-                  RK3576_I3C_XFER_SPEED_I2C_FMP :
-                  RK3576_I3C_XFER_SPEED_I2C_FM;
+      speed = (msg->frequency > RK3576_I3C_I2C_FM_HZ)
+                  ? RK3576_I3C_XFER_SPEED_I2C_FMP
+                  : RK3576_I3C_XFER_SPEED_I2C_FM;
 
       /* Point the legacy slot at this target. */
 
-      rk3576_i3c_set_dat(priv, RK3576_I3C_I2C_DAT_SLOT,
-                         RK3576_I3C_DAT_LEGACY_I2C_DEVICE |
-                             (((uint32_t)msg->addr &
-                               RK3576_I3C_DAT_STATIC_ADDR_MASK)
-                              << RK3576_I3C_DAT_STATIC_ADDR_SHIFT));
+      rk3576_i3c_set_dat(
+          priv, RK3576_I3C_I2C_DAT_SLOT,
+          RK3576_I3C_DAT_LEGACY_I2C_DEVICE |
+              (((uint32_t)msg->addr & RK3576_I3C_DAT_STATIC_ADDR_MASK)
+               << RK3576_I3C_DAT_STATIC_ADDR_SHIFT));
 
       arg = RK3576_I3C_CMD_ATTR_XFER_ARG |
             ((uint32_t)msg->length << RK3576_I3C_XFER_ARG_DL_SHIFT);
@@ -1344,8 +1332,7 @@ int rk3576_i3c_uninitialize(struct i2c_master_s *dev)
  * Name: rk3576_i3c_send_ccc
  ****************************************************************************/
 
-int rk3576_i3c_send_ccc(struct i2c_master_s *dev,
-                        struct rk3576_i3c_ccc_s *ccc)
+int rk3576_i3c_send_ccc(struct i2c_master_s *dev, struct rk3576_i3c_ccc_s *ccc)
 {
   struct rk3576_i3c_priv_s *priv = (struct rk3576_i3c_priv_s *)dev;
   int ret;
@@ -1461,8 +1448,7 @@ int rk3576_i3c_do_daa(struct i2c_master_s *dev)
    * which is the normal end of enumeration rather than a failure.
    */
 
-  if (err != RK3576_I3C_RESP_ERR_NONE &&
-      err != RK3576_I3C_RESP_ERR_ADDR_NACK)
+  if (err != RK3576_I3C_RESP_ERR_NONE && err != RK3576_I3C_RESP_ERR_ADDR_NACK)
     {
       ret = rk3576_i3c_resp_errno(err);
       goto errout;
@@ -1470,8 +1456,8 @@ int rk3576_i3c_do_daa(struct i2c_master_s *dev)
 
   /* The DL field reports how many of the offered slots were left unused. */
 
-  left = (uint8_t)((resp & RK3576_I3C_RESP_DL_MASK) >>
-                   RK3576_I3C_RESP_DL_SHIFT);
+  left =
+      (uint8_t)((resp & RK3576_I3C_RESP_DL_MASK) >> RK3576_I3C_RESP_DL_SHIFT);
   assigned = (left <= nslots) ? nslots - left : 0;
 
   /* Read the provisional ID and characteristics the controller collected
@@ -1480,8 +1466,7 @@ int rk3576_i3c_do_daa(struct i2c_master_s *dev)
 
   for (i = 0; i < assigned && i < RK3576_I3C_MAX_DEVS; i++)
     {
-      uintptr_t entry = priv->dct +
-                        ((uintptr_t)i * RK3576_I3C_DCT_ENTRY_SIZE);
+      uintptr_t entry = priv->dct + ((uintptr_t)i * RK3576_I3C_DCT_ENTRY_SIZE);
       uint32_t pidmsb;
       uint32_t pidlsb;
       uint32_t chars;
@@ -1498,8 +1483,8 @@ int rk3576_i3c_do_daa(struct i2c_master_s *dev)
       priv->devs[i].dynaddr = addr;
       priv->devs[i].dcr = (uint8_t)(chars & 0xff);
       priv->devs[i].bcr = (uint8_t)((chars >> 8) & 0xff);
-      priv->devs[i].pid = ((uint64_t)pidmsb << RK3576_I3C_PID_LSB_BITS) |
-                          (pidlsb & 0xffff);
+      priv->devs[i].pid =
+          ((uint64_t)pidmsb << RK3576_I3C_PID_LSB_BITS) | (pidlsb & 0xffff);
 
       i3cinfo("I3C%d: device %d at 0x%02x, BCR 0x%02x DCR 0x%02x\n",
               priv->port, i, addr, priv->devs[i].bcr, priv->devs[i].dcr);
@@ -1551,8 +1536,8 @@ int rk3576_i3c_ibi_enable(struct i2c_master_s *dev, uint8_t slot,
   uint32_t reject;
   int ret;
 
-  if (priv == NULL || !priv->inited || cb == NULL ||
-      slot >= priv->datdepth || slot >= RK3576_I3C_MAX_DEVS)
+  if (priv == NULL || !priv->inited || cb == NULL || slot >= priv->datdepth ||
+      slot >= RK3576_I3C_MAX_DEVS)
     {
       return -EINVAL;
     }
@@ -1653,8 +1638,8 @@ int rk3576_i3c_ibi_disable(struct i2c_master_s *dev, uint8_t slot)
  * Name: rk3576_i3c_priv_transfer
  ****************************************************************************/
 
-int rk3576_i3c_priv_transfer(struct i2c_master_s *dev, uint8_t slot,
-                             bool read, uint8_t *buffer, uint16_t length)
+int rk3576_i3c_priv_transfer(struct i2c_master_s *dev, uint8_t slot, bool read,
+                             uint8_t *buffer, uint16_t length)
 {
   struct rk3576_i3c_priv_s *priv = (struct rk3576_i3c_priv_s *)dev;
   uint32_t arg;

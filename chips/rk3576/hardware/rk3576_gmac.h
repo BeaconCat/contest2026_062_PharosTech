@@ -64,8 +64,6 @@
  * defined here (conditionally) until they are moved there.
  */
 
-
-
 #define RK3576_GMAC_REGION_SIZE 0x10000
 
 /* Interrupts (vendor DTS "macirq"):
@@ -85,21 +83,20 @@
  * rk3576_memorymap.h as well.
  */
 
-
-#define RK3576_GMAC_GRF_CON_OFFSET(n)  (0x0020 + ((n) * 4))
+#define RK3576_GMAC_GRF_CON_OFFSET(n)  (0x0020 + ((n)*4))
 #define RK3576_GMAC_GRF_CLK_CON_OFFSET (0x0070)
 
 /* HIWORD helpers: build a value whose upper half enables the written bits. */
 
-#define RK3576_GMAC_HIWORD_BIT(b)     ((1u << ((b) + 16)) | (1u << (b)))
-#define RK3576_GMAC_HIWORD_CLRBIT(b)  (1u << ((b) + 16))
+#define RK3576_GMAC_HIWORD_BIT(b)    ((1u << ((b) + 16)) | (1u << (b)))
+#define RK3576_GMAC_HIWORD_CLRBIT(b) (1u << ((b) + 16))
 #define RK3576_GMAC_HIWORD_FIELD(v, mask, shift) \
   (((mask) << ((shift) + 16)) | (((v) & (mask)) << (shift)))
 
 /* SDGMAC_GRF GMAC_CONn bits */
 
-#define RK3576_GMAC_GRF_RMII_MODE     RK3576_GMAC_HIWORD_BIT(3)
-#define RK3576_GMAC_GRF_RGMII_MODE    RK3576_GMAC_HIWORD_CLRBIT(3)
+#define RK3576_GMAC_GRF_RMII_MODE  RK3576_GMAC_HIWORD_BIT(3)
+#define RK3576_GMAC_GRF_RGMII_MODE RK3576_GMAC_HIWORD_CLRBIT(3)
 
 /* SDGMAC_GRF CLK_CON1 bits.  The gmac1 field set is the gmac0 set shifted
  * up by RK3576_GMAC_GRF_CLK_SHIFT bits.
@@ -113,13 +110,13 @@
 
 /* Divider selector encodings for RGMII (DIV_HI:DIV_LO) */
 
-#define RK3576_GMAC_GRF_DIV_RGMII_1   0 /* 1000 Mbps: 125 MHz            */
-#define RK3576_GMAC_GRF_DIV_RGMII_5   3 /* 100 Mbps:  25 MHz             */
-#define RK3576_GMAC_GRF_DIV_RGMII_50  2 /* 10 Mbps:   2.5 MHz            */
+#define RK3576_GMAC_GRF_DIV_RGMII_1  0 /* 1000 Mbps: 125 MHz            */
+#define RK3576_GMAC_GRF_DIV_RGMII_5  3 /* 100 Mbps:  25 MHz             */
+#define RK3576_GMAC_GRF_DIV_RGMII_50 2 /* 10 Mbps:   2.5 MHz            */
 
 /* IOC_GRF: RGMII delay lines.  One control word per instance. */
 
-#define RK3576_GMAC_IOC_CON_OFFSET(n) (0x0020 + ((n) * 4))
+#define RK3576_GMAC_IOC_CON_OFFSET(n) (0x0020 + ((n)*4))
 
 #define RK3576_GMAC_IOC_RXDLY_EN      RK3576_GMAC_HIWORD_BIT(15)
 #define RK3576_GMAC_IOC_RXDLY_DIS     RK3576_GMAC_HIWORD_CLRBIT(15)
@@ -141,7 +138,7 @@
 #define RK3576_GMAC_MAC_CONFIG        0x0000
 #define RK3576_GMAC_MAC_EXT_CONFIG    0x0004
 #define RK3576_GMAC_MAC_PKT_FILTER    0x0008
-#define RK3576_GMAC_MAC_HASH_TABLE(n) (0x0010 + ((n) * 4))
+#define RK3576_GMAC_MAC_HASH_TABLE(n) (0x0010 + ((n)*4))
 #define RK3576_GMAC_MAC_Q0_TX_FLOW    0x0070
 #define RK3576_GMAC_MAC_RX_FLOW       0x0090
 #define RK3576_GMAC_MAC_RXQ_CTRL0     0x00a0
@@ -154,23 +151,23 @@
 #define RK3576_GMAC_MAC_HW_FEATURE3   0x0128
 #define RK3576_GMAC_MAC_MDIO_ADDR     0x0200
 #define RK3576_GMAC_MAC_MDIO_DATA     0x0204
-#define RK3576_GMAC_MAC_ADDR_HIGH(n)  (0x0300 + ((n) * 8))
-#define RK3576_GMAC_MAC_ADDR_LOW(n)   (0x0304 + ((n) * 8))
+#define RK3576_GMAC_MAC_ADDR_HIGH(n)  (0x0300 + ((n)*8))
+#define RK3576_GMAC_MAC_ADDR_LOW(n)   (0x0304 + ((n)*8))
 
 /* MAC_CONFIG bits */
 
-#define RK3576_GMAC_CFG_RE     (1u << 0)  /* Receiver enable              */
-#define RK3576_GMAC_CFG_TE     (1u << 1)  /* Transmitter enable           */
-#define RK3576_GMAC_CFG_DC     (1u << 4)  /* Deferral check               */
-#define RK3576_GMAC_CFG_DCRS   (1u << 9)  /* Disable carrier sense        */
-#define RK3576_GMAC_CFG_DM     (1u << 13) /* Full duplex                  */
-#define RK3576_GMAC_CFG_FES    (1u << 14) /* Speed: 1 = 100, 0 = 10/1000  */
-#define RK3576_GMAC_CFG_PS     (1u << 15) /* Port select: 1 = MII (10/100)*/
-#define RK3576_GMAC_CFG_JE     (1u << 16) /* Jumbo frame enable           */
-#define RK3576_GMAC_CFG_JD     (1u << 17) /* Jabber disable               */
-#define RK3576_GMAC_CFG_ACS    (1u << 20) /* Auto pad/CRC strip           */
-#define RK3576_GMAC_CFG_CST    (1u << 21) /* CRC strip for type packets   */
-#define RK3576_GMAC_CFG_IPC    (1u << 27) /* Checksum offload (RX)        */
+#define RK3576_GMAC_CFG_RE   (1u << 0)  /* Receiver enable              */
+#define RK3576_GMAC_CFG_TE   (1u << 1)  /* Transmitter enable           */
+#define RK3576_GMAC_CFG_DC   (1u << 4)  /* Deferral check               */
+#define RK3576_GMAC_CFG_DCRS (1u << 9)  /* Disable carrier sense        */
+#define RK3576_GMAC_CFG_DM   (1u << 13) /* Full duplex                  */
+#define RK3576_GMAC_CFG_FES  (1u << 14) /* Speed: 1 = 100, 0 = 10/1000  */
+#define RK3576_GMAC_CFG_PS   (1u << 15) /* Port select: 1 = MII (10/100)*/
+#define RK3576_GMAC_CFG_JE   (1u << 16) /* Jumbo frame enable           */
+#define RK3576_GMAC_CFG_JD   (1u << 17) /* Jabber disable               */
+#define RK3576_GMAC_CFG_ACS  (1u << 20) /* Auto pad/CRC strip           */
+#define RK3576_GMAC_CFG_CST  (1u << 21) /* CRC strip for type packets   */
+#define RK3576_GMAC_CFG_IPC  (1u << 27) /* Checksum offload (RX)        */
 
 /* MAC_PKT_FILTER bits */
 
@@ -185,22 +182,22 @@
 
 /* MAC_ADDR_HIGH bits */
 
-#define RK3576_GMAC_ADDRHI_AE  (1u << 31) /* Address enable               */
+#define RK3576_GMAC_ADDRHI_AE (1u << 31) /* Address enable               */
 
 /* MAC_MDIO_ADDR bits */
 
-#define RK3576_GMAC_MDIO_GB       (1u << 0)  /* Busy / start              */
-#define RK3576_GMAC_MDIO_C45E     (1u << 1)  /* Clause 45 enable          */
+#define RK3576_GMAC_MDIO_GB        (1u << 0) /* Busy / start              */
+#define RK3576_GMAC_MDIO_C45E      (1u << 1) /* Clause 45 enable          */
 #define RK3576_GMAC_MDIO_GOC_SHIFT 2
-#define RK3576_GMAC_MDIO_GOC_MASK (3u << 2)
-#define RK3576_GMAC_MDIO_GOC_WR   (1u << 2)  /* Write operation           */
-#define RK3576_GMAC_MDIO_GOC_RD   (3u << 2)  /* Read operation            */
-#define RK3576_GMAC_MDIO_CR_SHIFT 8
-#define RK3576_GMAC_MDIO_CR_MASK  (0xfu << 8)
+#define RK3576_GMAC_MDIO_GOC_MASK  (3u << 2)
+#define RK3576_GMAC_MDIO_GOC_WR    (1u << 2) /* Write operation           */
+#define RK3576_GMAC_MDIO_GOC_RD    (3u << 2) /* Read operation            */
+#define RK3576_GMAC_MDIO_CR_SHIFT  8
+#define RK3576_GMAC_MDIO_CR_MASK   (0xfu << 8)
 #define RK3576_GMAC_MDIO_RDA_SHIFT 16
-#define RK3576_GMAC_MDIO_RDA_MASK (0x1fu << 16)
-#define RK3576_GMAC_MDIO_PA_SHIFT 21
-#define RK3576_GMAC_MDIO_PA_MASK  (0x1fu << 21)
+#define RK3576_GMAC_MDIO_RDA_MASK  (0x1fu << 16)
+#define RK3576_GMAC_MDIO_PA_SHIFT  21
+#define RK3576_GMAC_MDIO_PA_MASK   (0x1fu << 21)
 
 /* CSR clock range encoding.  The field selects the divider applied to the
  * CSR (application) clock to produce MDC, which clause 22 caps at 2.5 MHz.
@@ -228,8 +225,8 @@
 
 /* MTL_TXQ0_OPMODE bits */
 
-#define RK3576_GMAC_TXQ_FTQ        (1u << 0)  /* Flush queue              */
-#define RK3576_GMAC_TXQ_TSF        (1u << 1)  /* Store and forward        */
+#define RK3576_GMAC_TXQ_FTQ        (1u << 0) /* Flush queue              */
+#define RK3576_GMAC_TXQ_TSF        (1u << 1) /* Store and forward        */
 #define RK3576_GMAC_TXQ_EN_SHIFT   2
 #define RK3576_GMAC_TXQ_EN_MASK    (3u << 2)
 #define RK3576_GMAC_TXQ_EN_ENABLED (2u << 2)
@@ -238,9 +235,9 @@
 
 /* MTL_RXQ0_OPMODE bits */
 
-#define RK3576_GMAC_RXQ_RSF       (1u << 5)  /* Store and forward         */
-#define RK3576_GMAC_RXQ_FEP       (1u << 4)  /* Forward error packets     */
-#define RK3576_GMAC_RXQ_FUP       (1u << 3)  /* Forward undersized good   */
+#define RK3576_GMAC_RXQ_RSF       (1u << 5) /* Store and forward         */
+#define RK3576_GMAC_RXQ_FEP       (1u << 4) /* Forward error packets     */
+#define RK3576_GMAC_RXQ_FUP       (1u << 3) /* Forward undersized good   */
 #define RK3576_GMAC_RXQ_RQS_SHIFT 20
 #define RK3576_GMAC_RXQ_RQS_MASK  (0x3ffu << 20)
 
@@ -254,24 +251,24 @@
 
 /* DMA register offsets *****************************************************/
 
-#define RK3576_GMAC_DMA_MODE            0x1000
-#define RK3576_GMAC_DMA_SYSBUS_MODE     0x1004
-#define RK3576_GMAC_DMA_INT_STATUS      0x1008
-#define RK3576_GMAC_DMA_CH0_CONTROL     0x1100
-#define RK3576_GMAC_DMA_CH0_TX_CONTROL  0x1104
-#define RK3576_GMAC_DMA_CH0_RX_CONTROL  0x1108
-#define RK3576_GMAC_DMA_CH0_TXDESC_HI   0x1110
-#define RK3576_GMAC_DMA_CH0_TXDESC_LO   0x1114
-#define RK3576_GMAC_DMA_CH0_RXDESC_HI   0x1118
-#define RK3576_GMAC_DMA_CH0_RXDESC_LO   0x111c
-#define RK3576_GMAC_DMA_CH0_TXTAIL      0x1120
-#define RK3576_GMAC_DMA_CH0_RXTAIL      0x1128
-#define RK3576_GMAC_DMA_CH0_TXRING_LEN  0x112c
-#define RK3576_GMAC_DMA_CH0_RXRING_LEN  0x1130
-#define RK3576_GMAC_DMA_CH0_INT_ENABLE  0x1134
-#define RK3576_GMAC_DMA_CH0_CUR_TXDESC  0x1144
-#define RK3576_GMAC_DMA_CH0_CUR_RXDESC  0x114c
-#define RK3576_GMAC_DMA_CH0_STATUS      0x1160
+#define RK3576_GMAC_DMA_MODE           0x1000
+#define RK3576_GMAC_DMA_SYSBUS_MODE    0x1004
+#define RK3576_GMAC_DMA_INT_STATUS     0x1008
+#define RK3576_GMAC_DMA_CH0_CONTROL    0x1100
+#define RK3576_GMAC_DMA_CH0_TX_CONTROL 0x1104
+#define RK3576_GMAC_DMA_CH0_RX_CONTROL 0x1108
+#define RK3576_GMAC_DMA_CH0_TXDESC_HI  0x1110
+#define RK3576_GMAC_DMA_CH0_TXDESC_LO  0x1114
+#define RK3576_GMAC_DMA_CH0_RXDESC_HI  0x1118
+#define RK3576_GMAC_DMA_CH0_RXDESC_LO  0x111c
+#define RK3576_GMAC_DMA_CH0_TXTAIL     0x1120
+#define RK3576_GMAC_DMA_CH0_RXTAIL     0x1128
+#define RK3576_GMAC_DMA_CH0_TXRING_LEN 0x112c
+#define RK3576_GMAC_DMA_CH0_RXRING_LEN 0x1130
+#define RK3576_GMAC_DMA_CH0_INT_ENABLE 0x1134
+#define RK3576_GMAC_DMA_CH0_CUR_TXDESC 0x1144
+#define RK3576_GMAC_DMA_CH0_CUR_RXDESC 0x114c
+#define RK3576_GMAC_DMA_CH0_STATUS     0x1160
 
 /* DMA_MODE bits */
 
@@ -279,16 +276,16 @@
 
 /* DMA_SYSBUS_MODE bits */
 
-#define RK3576_GMAC_SYSBUS_FB          (1u << 0)  /* Fixed burst          */
-#define RK3576_GMAC_SYSBUS_BLEN4       (1u << 1)
-#define RK3576_GMAC_SYSBUS_BLEN8       (1u << 2)
-#define RK3576_GMAC_SYSBUS_BLEN16      (1u << 3)
-#define RK3576_GMAC_SYSBUS_AAL         (1u << 12) /* Address aligned beats*/
-#define RK3576_GMAC_SYSBUS_MB          (1u << 14) /* Mixed burst          */
+#define RK3576_GMAC_SYSBUS_FB           (1u << 0) /* Fixed burst          */
+#define RK3576_GMAC_SYSBUS_BLEN4        (1u << 1)
+#define RK3576_GMAC_SYSBUS_BLEN8        (1u << 2)
+#define RK3576_GMAC_SYSBUS_BLEN16       (1u << 3)
+#define RK3576_GMAC_SYSBUS_AAL          (1u << 12) /* Address aligned beats*/
+#define RK3576_GMAC_SYSBUS_MB           (1u << 14) /* Mixed burst          */
 #define RK3576_GMAC_SYSBUS_RD_OSR_SHIFT 16
-#define RK3576_GMAC_SYSBUS_RD_OSR_MASK (0x3fu << 16)
+#define RK3576_GMAC_SYSBUS_RD_OSR_MASK  (0x3fu << 16)
 #define RK3576_GMAC_SYSBUS_WR_OSR_SHIFT 24
-#define RK3576_GMAC_SYSBUS_WR_OSR_MASK (0x3fu << 24)
+#define RK3576_GMAC_SYSBUS_WR_OSR_MASK  (0x3fu << 24)
 
 /* Outstanding request limits from the vendor DTS stmmac-axi-config
  * (snps,rd_osr_lmt = 8, snps,wr_osr_lmt = 4).  The register holds
@@ -300,25 +297,25 @@
 
 /* DMA_CH0_CONTROL bits */
 
-#define RK3576_GMAC_CHCTRL_PBLX8  (1u << 16) /* Multiply PBL by 8         */
-#define RK3576_GMAC_CHCTRL_DSL_SHIFT 18      /* Descriptor skip length    */
-#define RK3576_GMAC_CHCTRL_DSL_MASK (7u << 18)
+#define RK3576_GMAC_CHCTRL_PBLX8     (1u << 16) /* Multiply PBL by 8         */
+#define RK3576_GMAC_CHCTRL_DSL_SHIFT 18         /* Descriptor skip length    */
+#define RK3576_GMAC_CHCTRL_DSL_MASK  (7u << 18)
 
 /* DMA_CH0_TX_CONTROL bits */
 
-#define RK3576_GMAC_TXCTRL_ST       (1u << 0)  /* Start transmission      */
-#define RK3576_GMAC_TXCTRL_OSF      (1u << 4)  /* Operate on second frame */
-#define RK3576_GMAC_TXCTRL_TSE      (1u << 12) /* TCP segmentation        */
+#define RK3576_GMAC_TXCTRL_ST        (1u << 0)  /* Start transmission      */
+#define RK3576_GMAC_TXCTRL_OSF       (1u << 4)  /* Operate on second frame */
+#define RK3576_GMAC_TXCTRL_TSE       (1u << 12) /* TCP segmentation        */
 #define RK3576_GMAC_TXCTRL_PBL_SHIFT 16
-#define RK3576_GMAC_TXCTRL_PBL_MASK (0x3fu << 16)
+#define RK3576_GMAC_TXCTRL_PBL_MASK  (0x3fu << 16)
 
 /* DMA_CH0_RX_CONTROL bits */
 
-#define RK3576_GMAC_RXCTRL_SR        (1u << 0) /* Start receive           */
-#define RK3576_GMAC_RXCTRL_RBSZ_SHIFT 1        /* Buffer size, bits 14:1  */
-#define RK3576_GMAC_RXCTRL_RBSZ_MASK (0x3fffu << 1)
-#define RK3576_GMAC_RXCTRL_PBL_SHIFT 16
-#define RK3576_GMAC_RXCTRL_PBL_MASK  (0x3fu << 16)
+#define RK3576_GMAC_RXCTRL_SR         (1u << 0) /* Start receive           */
+#define RK3576_GMAC_RXCTRL_RBSZ_SHIFT 1         /* Buffer size, bits 14:1  */
+#define RK3576_GMAC_RXCTRL_RBSZ_MASK  (0x3fffu << 1)
+#define RK3576_GMAC_RXCTRL_PBL_SHIFT  16
+#define RK3576_GMAC_RXCTRL_PBL_MASK   (0x3fu << 16)
 
 /* Programmable burst length used for both directions */
 
@@ -362,20 +359,20 @@ struct rk3576_gmac_desc_s
  *   TDES3  frame length, first/last flags, ownership
  */
 
-#define RK3576_GMAC_TDES2_B1L_MASK (0x3fffu << 0)
-#define RK3576_GMAC_TDES2_IOC      (1u << 31) /* Interrupt on completion  */
+#define RK3576_GMAC_TDES2_B1L_MASK  (0x3fffu << 0)
+#define RK3576_GMAC_TDES2_IOC       (1u << 31) /* Interrupt on completion  */
 
-#define RK3576_GMAC_TDES3_FL_MASK  (0x7fffu << 0) /* Frame length         */
-#define RK3576_GMAC_TDES3_CIC_SHIFT 16            /* Checksum insertion   */
-#define RK3576_GMAC_TDES3_CIC_FULL (3u << 16)
-#define RK3576_GMAC_TDES3_LD       (1u << 28)     /* Last descriptor      */
-#define RK3576_GMAC_TDES3_FD       (1u << 29)     /* First descriptor     */
-#define RK3576_GMAC_TDES3_CTXT     (1u << 30)     /* Context descriptor   */
-#define RK3576_GMAC_TDES3_OWN      (1u << 31)     /* Owned by DMA         */
+#define RK3576_GMAC_TDES3_FL_MASK   (0x7fffu << 0) /* Frame length         */
+#define RK3576_GMAC_TDES3_CIC_SHIFT 16             /* Checksum insertion   */
+#define RK3576_GMAC_TDES3_CIC_FULL  (3u << 16)
+#define RK3576_GMAC_TDES3_LD        (1u << 28) /* Last descriptor      */
+#define RK3576_GMAC_TDES3_FD        (1u << 29) /* First descriptor     */
+#define RK3576_GMAC_TDES3_CTXT      (1u << 30) /* Context descriptor   */
+#define RK3576_GMAC_TDES3_OWN       (1u << 31) /* Owned by DMA         */
 
 /* Transmit descriptor, write-back format: TDES3 error summary */
 
-#define RK3576_GMAC_TDES3_ES       (1u << 15)     /* Error summary        */
+#define RK3576_GMAC_TDES3_ES (1u << 15) /* Error summary        */
 
 /* Receive descriptor, read (host owned) format.
  *
@@ -385,52 +382,52 @@ struct rk3576_gmac_desc_s
  *   RDES3  ownership plus buffer valid flags
  */
 
-#define RK3576_GMAC_RDES3_BUF1V    (1u << 24) /* Buffer 1 address valid   */
-#define RK3576_GMAC_RDES3_BUF2V    (1u << 25) /* Buffer 2 address valid   */
-#define RK3576_GMAC_RDES3_IOC      (1u << 30) /* Interrupt on completion  */
-#define RK3576_GMAC_RDES3_OWN      (1u << 31) /* Owned by DMA             */
+#define RK3576_GMAC_RDES3_BUF1V (1u << 24) /* Buffer 1 address valid   */
+#define RK3576_GMAC_RDES3_BUF2V (1u << 25) /* Buffer 2 address valid   */
+#define RK3576_GMAC_RDES3_IOC   (1u << 30) /* Interrupt on completion  */
+#define RK3576_GMAC_RDES3_OWN   (1u << 31) /* Owned by DMA             */
 
 /* Receive descriptor, write-back format */
 
-#define RK3576_GMAC_RDES3_PL_MASK  (0x7fffu << 0) /* Packet length        */
-#define RK3576_GMAC_RDES3_ES       (1u << 15)     /* Error summary        */
-#define RK3576_GMAC_RDES3_LD       (1u << 28)     /* Last descriptor      */
-#define RK3576_GMAC_RDES3_FD       (1u << 29)     /* First descriptor     */
-#define RK3576_GMAC_RDES3_CTXT     (1u << 30)     /* Context descriptor   */
+#define RK3576_GMAC_RDES3_PL_MASK (0x7fffu << 0) /* Packet length        */
+#define RK3576_GMAC_RDES3_ES      (1u << 15)     /* Error summary        */
+#define RK3576_GMAC_RDES3_LD      (1u << 28)     /* Last descriptor      */
+#define RK3576_GMAC_RDES3_FD      (1u << 29)     /* First descriptor     */
+#define RK3576_GMAC_RDES3_CTXT    (1u << 30)     /* Context descriptor   */
 
 /* Generic clause-22 PHY registers ******************************************/
 
-#define RK3576_GMAC_MII_BMCR       0x00 /* Basic mode control            */
-#define RK3576_GMAC_MII_BMSR       0x01 /* Basic mode status             */
-#define RK3576_GMAC_MII_PHYID1     0x02
-#define RK3576_GMAC_MII_PHYID2     0x03
-#define RK3576_GMAC_MII_ADVERTISE  0x04 /* Auto-negotiation advertisement*/
-#define RK3576_GMAC_MII_LPA        0x05 /* Link partner ability          */
-#define RK3576_GMAC_MII_CTRL1000   0x09 /* 1000BASE-T control            */
-#define RK3576_GMAC_MII_STAT1000   0x0a /* 1000BASE-T status             */
+#define RK3576_GMAC_MII_BMCR            0x00 /* Basic mode control            */
+#define RK3576_GMAC_MII_BMSR            0x01 /* Basic mode status             */
+#define RK3576_GMAC_MII_PHYID1          0x02
+#define RK3576_GMAC_MII_PHYID2          0x03
+#define RK3576_GMAC_MII_ADVERTISE       0x04 /* Auto-negotiation advertisement*/
+#define RK3576_GMAC_MII_LPA             0x05 /* Link partner ability          */
+#define RK3576_GMAC_MII_CTRL1000        0x09 /* 1000BASE-T control            */
+#define RK3576_GMAC_MII_STAT1000        0x0a /* 1000BASE-T status             */
 
-#define RK3576_GMAC_BMCR_RESET     (1u << 15)
-#define RK3576_GMAC_BMCR_LOOPBACK  (1u << 14)
-#define RK3576_GMAC_BMCR_SPEED100  (1u << 13)
-#define RK3576_GMAC_BMCR_ANENABLE  (1u << 12)
-#define RK3576_GMAC_BMCR_PDOWN     (1u << 11)
-#define RK3576_GMAC_BMCR_ANRESTART (1u << 9)
-#define RK3576_GMAC_BMCR_FULLDPLX  (1u << 8)
-#define RK3576_GMAC_BMCR_SPEED1000 (1u << 6)
+#define RK3576_GMAC_BMCR_RESET          (1u << 15)
+#define RK3576_GMAC_BMCR_LOOPBACK       (1u << 14)
+#define RK3576_GMAC_BMCR_SPEED100       (1u << 13)
+#define RK3576_GMAC_BMCR_ANENABLE       (1u << 12)
+#define RK3576_GMAC_BMCR_PDOWN          (1u << 11)
+#define RK3576_GMAC_BMCR_ANRESTART      (1u << 9)
+#define RK3576_GMAC_BMCR_FULLDPLX       (1u << 8)
+#define RK3576_GMAC_BMCR_SPEED1000      (1u << 6)
 
-#define RK3576_GMAC_BMSR_LSTATUS   (1u << 2)
-#define RK3576_GMAC_BMSR_ANEGCAPA  (1u << 3)
-#define RK3576_GMAC_BMSR_ANEGDONE  (1u << 5)
+#define RK3576_GMAC_BMSR_LSTATUS        (1u << 2)
+#define RK3576_GMAC_BMSR_ANEGCAPA       (1u << 3)
+#define RK3576_GMAC_BMSR_ANEGDONE       (1u << 5)
 
-#define RK3576_GMAC_ADV_10HALF     (1u << 5)
-#define RK3576_GMAC_ADV_10FULL     (1u << 6)
-#define RK3576_GMAC_ADV_100HALF    (1u << 7)
-#define RK3576_GMAC_ADV_100FULL    (1u << 8)
-#define RK3576_GMAC_ADV_PAUSE      (1u << 10)
-#define RK3576_GMAC_ADV_SELECT_802_3 (1u << 0)
+#define RK3576_GMAC_ADV_10HALF          (1u << 5)
+#define RK3576_GMAC_ADV_10FULL          (1u << 6)
+#define RK3576_GMAC_ADV_100HALF         (1u << 7)
+#define RK3576_GMAC_ADV_100FULL         (1u << 8)
+#define RK3576_GMAC_ADV_PAUSE           (1u << 10)
+#define RK3576_GMAC_ADV_SELECT_802_3    (1u << 0)
 
-#define RK3576_GMAC_CTRL1000_1000FULL (1u << 9)
-#define RK3576_GMAC_CTRL1000_1000HALF (1u << 8)
+#define RK3576_GMAC_CTRL1000_1000FULL   (1u << 9)
+#define RK3576_GMAC_CTRL1000_1000HALF   (1u << 8)
 
 #define RK3576_GMAC_STAT1000_LP1000FULL (1u << 11)
 #define RK3576_GMAC_STAT1000_LP1000HALF (1u << 10)

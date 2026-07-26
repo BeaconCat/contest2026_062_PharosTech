@@ -40,11 +40,10 @@
 
 #undef EXTERN
 #if defined(__cplusplus)
-#  define EXTERN extern "C"
-extern "C"
-{
+#define EXTERN extern "C"
+extern "C" {
 #else
-#  define EXTERN extern
+#define EXTERN extern
 #endif
 
 /****************************************************************************

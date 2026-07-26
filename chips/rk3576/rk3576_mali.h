@@ -80,9 +80,9 @@
  * enable MMU translation and run at the middle thread priority.
  */
 
-#define RK3576_MALI_CONFIG_DEFAULT                                          \
-  (RK3576_MALI_JS_CONFIG_AS(0) | RK3576_MALI_JS_CONFIG_START_FLUSH_INV |    \
-   RK3576_MALI_JS_CONFIG_END_FLUSH_INV | RK3576_MALI_JS_CONFIG_START_MMU |  \
+#define RK3576_MALI_CONFIG_DEFAULT                                         \
+  (RK3576_MALI_JS_CONFIG_AS(0) | RK3576_MALI_JS_CONFIG_START_FLUSH_INV |   \
+   RK3576_MALI_JS_CONFIG_END_FLUSH_INV | RK3576_MALI_JS_CONFIG_START_MMU | \
    RK3576_MALI_JS_CONFIG_THREAD_PRI(8))
 
 /****************************************************************************
@@ -174,8 +174,7 @@ struct rk3576_mali_replay_s
  ****************************************************************************/
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /****************************************************************************
@@ -299,8 +298,7 @@ int rk3576_mali_run_job(unsigned int slot, uintptr_t job_chain_phys,
  ****************************************************************************/
 
 void rk3576_mali_job_header_init(struct rk3576_mali_job_header_s *hdr,
-                                 uint8_t type, uint16_t index,
-                                 uint64_t next);
+                                 uint8_t type, uint16_t index, uint64_t next);
 
 /****************************************************************************
  * Name: rk3576_mali_null_job

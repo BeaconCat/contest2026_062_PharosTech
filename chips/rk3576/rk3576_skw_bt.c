@@ -70,26 +70,26 @@
  * by firmware-version text that differs between firmware builds.
  */
 
-#define RK3576_SKW_BT_READY_TAG      "BTREADY"
+#define RK3576_SKW_BT_READY_TAG "BTREADY"
 
 /* How long to wait for that banner, and the polling granularity. */
 
-#define RK3576_SKW_BT_READY_TMO_MS   3000
-#define RK3576_SKW_BT_POLL_MS        10
+#define RK3576_SKW_BT_READY_TMO_MS 3000
+#define RK3576_SKW_BT_POLL_MS      10
 
 /* Fixed H4 header sizes (indicator byte excluded). */
 
-#define RK3576_SKW_BT_EVT_HDR_LEN    2   /* event code, parameter length   */
-#define RK3576_SKW_BT_ACL_HDR_LEN    4   /* handle (16), data length (16)  */
-#define RK3576_SKW_BT_SCO_HDR_LEN    3   /* handle (16), data length (8)   */
-#define RK3576_SKW_BT_ISO_HDR_LEN    4   /* handle (16), data length (16)  */
+#define RK3576_SKW_BT_EVT_HDR_LEN 2 /* event code, parameter length   */
+#define RK3576_SKW_BT_ACL_HDR_LEN 4 /* handle (16), data length (16)  */
+#define RK3576_SKW_BT_SCO_HDR_LEN 3 /* handle (16), data length (8)   */
+#define RK3576_SKW_BT_ISO_HDR_LEN 4 /* handle (16), data length (16)  */
 
 /* Largest HCI packet accepted in either direction.  The SeekWave command
  * path is limited to 1588 bytes by the CP; ACL fragments never exceed that
  * once the host MTU is negotiated.
  */
 
-#define RK3576_SKW_BT_MAX_FRAME      1588
+#define RK3576_SKW_BT_MAX_FRAME 1588
 
 /****************************************************************************
  * Private Types
@@ -97,26 +97,25 @@
 
 struct rk3576_skw_bt_dev_s
 {
-  struct bt_driver_s drv;         /* NuttX Bluetooth lower half (first!)  */
-  volatile bool      cpready;     /* CP reported BTREADY                  */
-  volatile bool      opened;      /* Upper half has the transport open    */
-  bool               hooked;      /* Channel handlers installed           */
+  struct bt_driver_s drv; /* NuttX Bluetooth lower half (first!)  */
+  volatile bool cpready;  /* CP reported BTREADY                  */
+  volatile bool opened;   /* Upper half has the transport open    */
+  bool hooked;            /* Channel handlers installed           */
 };
 
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
-static int  rk3576_skw_bt_open(struct bt_driver_s *btdev);
-static int  rk3576_skw_bt_send(struct bt_driver_s *btdev,
-                               enum bt_buf_type_e type,
-                               void *data, size_t len);
+static int rk3576_skw_bt_open(struct bt_driver_s *btdev);
+static int rk3576_skw_bt_send(struct bt_driver_s *btdev,
+                              enum bt_buf_type_e type, void *data, size_t len);
 static void rk3576_skw_bt_close(struct bt_driver_s *btdev);
 
-static int  rk3576_skw_bt_channel(uint8_t h4type);
-static int  rk3576_skw_bt_frame_len(const uint8_t *frame, size_t avail);
+static int rk3576_skw_bt_channel(uint8_t h4type);
+static int rk3576_skw_bt_frame_len(const uint8_t *frame, size_t avail);
 static enum bt_buf_type_e rk3576_skw_bt_buftype(uint8_t h4type);
-static int  rk3576_skw_bt_xmit(uint8_t h4type, uint8_t *head, size_t len);
+static int rk3576_skw_bt_xmit(uint8_t h4type, uint8_t *head, size_t len);
 
 static void rk3576_skw_bt_hci_handler(uint8_t channel, const void *data,
                                       size_t len, void *arg);
@@ -125,9 +124,9 @@ static void rk3576_skw_bt_boot_handler(uint8_t channel, const void *data,
 static void rk3576_skw_bt_log_handler(uint8_t channel, const void *data,
                                       size_t len, void *arg);
 
-static int  rk3576_skw_bt_hook_channels(struct rk3576_skw_bt_dev_s *priv);
+static int rk3576_skw_bt_hook_channels(struct rk3576_skw_bt_dev_s *priv);
 static void rk3576_skw_bt_unhook_channels(struct rk3576_skw_bt_dev_s *priv);
-static int  rk3576_skw_bt_start_cp(struct rk3576_skw_bt_dev_s *priv);
+static int rk3576_skw_bt_start_cp(struct rk3576_skw_bt_dev_s *priv);
 
 /****************************************************************************
  * Private Data
@@ -275,8 +274,7 @@ static int rk3576_skw_bt_frame_len(const uint8_t *frame, size_t avail)
          * reserved for future use and must be masked off.
          */
 
-        paylen = ((size_t)frame[3] |
-                  ((size_t)frame[4] << 8)) & 0x3fff;
+        paylen = ((size_t)frame[3] | ((size_t)frame[4] << 8)) & 0x3fff;
         break;
 
       default:
@@ -341,8 +339,7 @@ static int rk3576_skw_bt_xmit(uint8_t h4type, uint8_t *head, size_t len)
 
 static int rk3576_skw_bt_open(struct bt_driver_s *btdev)
 {
-  struct rk3576_skw_bt_dev_s *priv =
-    (struct rk3576_skw_bt_dev_s *)btdev;
+  struct rk3576_skw_bt_dev_s *priv = (struct rk3576_skw_bt_dev_s *)btdev;
 
   if (!priv->cpready)
     {
@@ -367,8 +364,7 @@ static int rk3576_skw_bt_open(struct bt_driver_s *btdev)
 
 static void rk3576_skw_bt_close(struct bt_driver_s *btdev)
 {
-  struct rk3576_skw_bt_dev_s *priv =
-    (struct rk3576_skw_bt_dev_s *)btdev;
+  struct rk3576_skw_bt_dev_s *priv = (struct rk3576_skw_bt_dev_s *)btdev;
 
   priv->opened = false;
   wlinfo("SeekWave HCI transport closed\n");
@@ -385,11 +381,9 @@ static void rk3576_skw_bt_close(struct bt_driver_s *btdev)
  ****************************************************************************/
 
 static int rk3576_skw_bt_send(struct bt_driver_s *btdev,
-                              enum bt_buf_type_e type,
-                              void *data, size_t len)
+                              enum bt_buf_type_e type, void *data, size_t len)
 {
-  struct rk3576_skw_bt_dev_s *priv =
-    (struct rk3576_skw_bt_dev_s *)btdev;
+  struct rk3576_skw_bt_dev_s *priv = (struct rk3576_skw_bt_dev_s *)btdev;
   uint8_t h4type;
   int ret;
 
@@ -420,8 +414,7 @@ static int rk3576_skw_bt_send(struct bt_driver_s *btdev,
     }
 
   ret = rk3576_skw_bt_xmit(h4type,
-                           (uint8_t *)data - RK3576_SKW_BT_HEAD_RESERVE,
-                           len);
+                           (uint8_t *)data - RK3576_SKW_BT_HEAD_RESERVE, len);
   if (ret < 0)
     {
       wlerr("ERROR: HCI transmit failed: %d\n", ret);
@@ -452,14 +445,13 @@ static void rk3576_skw_bt_hci_handler(uint8_t channel, const void *data,
 
   if (len <= RK3576_SKW_LINK_HDR_LEN)
     {
-      wlwarn("WARNING: runt packet on channel %u (%zu bytes)\n",
-             channel, len);
+      wlwarn("WARNING: runt packet on channel %u (%zu bytes)\n", channel, len);
       return;
     }
 
   /* Skip the inner link header; the H4 indicator is the first real byte. */
 
-  frame     = (const uint8_t *)data + RK3576_SKW_LINK_HDR_LEN;
+  frame = (const uint8_t *)data + RK3576_SKW_LINK_HDR_LEN;
   remaining = len - RK3576_SKW_LINK_HDR_LEN;
 
   while (remaining > 0)
@@ -467,8 +459,8 @@ static void rk3576_skw_bt_hci_handler(uint8_t channel, const void *data,
       framelen = rk3576_skw_bt_frame_len(frame, remaining);
       if (framelen < 0)
         {
-          wlerr("ERROR: malformed H4 frame on channel %u: %d\n",
-                channel, framelen);
+          wlerr("ERROR: malformed H4 frame on channel %u: %d\n", channel,
+                framelen);
           return;
         }
 
@@ -476,17 +468,15 @@ static void rk3576_skw_bt_hci_handler(uint8_t channel, const void *data,
         {
           /* The stack takes the frame without the H4 indicator byte. */
 
-          ret = priv->drv.receive(&priv->drv,
-                                  rk3576_skw_bt_buftype(frame[0]),
-                                  (void *)(frame + 1),
-                                  (size_t)framelen - 1);
+          ret = priv->drv.receive(&priv->drv, rk3576_skw_bt_buftype(frame[0]),
+                                  (void *)(frame + 1), (size_t)framelen - 1);
           if (ret < 0)
             {
               wlerr("ERROR: stack refused frame: %d\n", ret);
             }
         }
 
-      frame     += framelen;
+      frame += framelen;
       remaining -= (size_t)framelen;
 
       /* Trailing padding bytes are zero and cannot start a valid frame. */
@@ -522,7 +512,7 @@ static void rk3576_skw_bt_boot_handler(uint8_t channel, const void *data,
       return;
     }
 
-  text    = (const char *)data + RK3576_SKW_LINK_HDR_LEN;
+  text = (const char *)data + RK3576_SKW_LINK_HDR_LEN;
   textlen = len - RK3576_SKW_LINK_HDR_LEN;
 
   /* The banner is not NUL terminated and may be embedded in other text, so
@@ -571,7 +561,7 @@ static void rk3576_skw_bt_log_handler(uint8_t channel, const void *data,
       return;
     }
 
-  text    = (const char *)data + RK3576_SKW_LINK_HDR_LEN;
+  text = (const char *)data + RK3576_SKW_LINK_HDR_LEN;
   textlen = len - RK3576_SKW_LINK_HDR_LEN;
 
   wlinfo("CP BT log: %.*s\n", (int)textlen, text);
@@ -593,13 +583,12 @@ static void rk3576_skw_bt_log_handler(uint8_t channel, const void *data,
 
 static int rk3576_skw_bt_hook_channels(struct rk3576_skw_bt_dev_s *priv)
 {
-  static const uint8_t hcichan[] =
-    {
-      RK3576_SKW_CH_BT_CMD,
-      RK3576_SKW_CH_BT_DATA,
-      RK3576_SKW_CH_BT_AUDIO,
-      RK3576_SKW_CH_BT_ISOC,
-    };
+  static const uint8_t hcichan[] = {
+    RK3576_SKW_CH_BT_CMD,
+    RK3576_SKW_CH_BT_DATA,
+    RK3576_SKW_CH_BT_AUDIO,
+    RK3576_SKW_CH_BT_ISOC,
+  };
 
   int ret;
   int i;
@@ -607,8 +596,7 @@ static int rk3576_skw_bt_hook_channels(struct rk3576_skw_bt_dev_s *priv)
   for (i = 0; i < (int)nitems(hcichan); i++)
     {
       ret = skw_sdio_register_channel_handler(hcichan[i],
-                                              rk3576_skw_bt_hci_handler,
-                                              priv);
+                                              rk3576_skw_bt_hci_handler, priv);
       if (ret < 0)
         {
           wlerr("ERROR: cannot hook channel %u: %d\n", hcichan[i], ret);
@@ -617,8 +605,7 @@ static int rk3576_skw_bt_hook_channels(struct rk3576_skw_bt_dev_s *priv)
     }
 
   ret = skw_sdio_register_channel_handler(RK3576_SKW_CH_LOOPCHECK,
-                                          rk3576_skw_bt_boot_handler,
-                                          priv);
+                                          rk3576_skw_bt_boot_handler, priv);
   if (ret < 0)
     {
       wlerr("ERROR: cannot hook loopcheck channel: %d\n", ret);
@@ -626,8 +613,7 @@ static int rk3576_skw_bt_hook_channels(struct rk3576_skw_bt_dev_s *priv)
     }
 
   ret = skw_sdio_register_channel_handler(RK3576_SKW_CH_BT_LOG,
-                                          rk3576_skw_bt_log_handler,
-                                          priv);
+                                          rk3576_skw_bt_log_handler, priv);
   if (ret < 0)
     {
       /* The firmware log is optional, keep going without it. */
@@ -686,8 +672,7 @@ static int rk3576_skw_bt_start_cp(struct rk3576_skw_bt_dev_s *priv)
       return ret;
     }
 
-  for (elapsed = 0;
-       elapsed < RK3576_SKW_BT_READY_TMO_MS;
+  for (elapsed = 0; elapsed < RK3576_SKW_BT_READY_TMO_MS;
        elapsed += RK3576_SKW_BT_POLL_MS)
     {
       if (priv->cpready)
@@ -696,8 +681,8 @@ static int rk3576_skw_bt_start_cp(struct rk3576_skw_bt_dev_s *priv)
            * arrives; hand it back so the Wi-Fi side keeps ownership.
            */
 
-          skw_sdio_register_channel_handler(RK3576_SKW_CH_LOOPCHECK,
-                                            NULL, NULL);
+          skw_sdio_register_channel_handler(RK3576_SKW_CH_LOOPCHECK, NULL,
+                                            NULL);
           return OK;
         }
 
@@ -811,9 +796,6 @@ int rk3576_skw_bt_send_hci(uint8_t h4type, const void *data, size_t len)
  *
  ****************************************************************************/
 
-bool rk3576_skw_bt_is_ready(void)
-{
-  return g_skw_bt.cpready;
-}
+bool rk3576_skw_bt_is_ready(void) { return g_skw_bt.cpready; }
 
 #endif /* CONFIG_RK3576_SKW_BT */

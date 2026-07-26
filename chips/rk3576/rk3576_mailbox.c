@@ -94,10 +94,10 @@ struct rk3576_mailbox_chan_s
 
 struct rk3576_mailbox_dev_s
 {
-  uintptr_t base;    /* Register block base address                  */
-  int irq;           /* AP-side (B2A) GIC INTID                      */
-  bool initialized;  /* rk3576_mailbox_initialize() has run          */
-  spinlock_t lock;   /* Guards the register file and the bindings    */
+  uintptr_t base;   /* Register block base address                  */
+  int irq;          /* AP-side (B2A) GIC INTID                      */
+  bool initialized; /* rk3576_mailbox_initialize() has run          */
+  spinlock_t lock;  /* Guards the register file and the bindings    */
   struct rk3576_mailbox_chan_s chan[RK3576_MAILBOX_NCHANNELS];
 };
 
@@ -117,8 +117,7 @@ static int rk3576_mailbox_interrupt(int irq, void *context, void *arg);
  * Private Data
  ****************************************************************************/
 
-static struct rk3576_mailbox_dev_s
-  g_rk3576_mailbox[RK3576_MAILBOX_NINSTANCES];
+static struct rk3576_mailbox_dev_s g_rk3576_mailbox[RK3576_MAILBOX_NINSTANCES];
 
 /* The APB gate is shared by all instances, so it is opened only once. */
 
@@ -171,7 +170,7 @@ static struct rk3576_mailbox_dev_s *rk3576_mailbox_lookup(int instance)
   if (priv->base == 0)
     {
       priv->base = RK3576_MAILBOX_BASE(instance);
-      priv->irq  = RK3576_MAILBOX_IRQ(instance);
+      priv->irq = RK3576_MAILBOX_IRQ(instance);
     }
 
   return priv;
@@ -233,8 +232,7 @@ static int rk3576_mailbox_clk_init(void)
 
 static int rk3576_mailbox_interrupt(int irq, void *context, void *arg)
 {
-  struct rk3576_mailbox_dev_s *priv =
-    (struct rk3576_mailbox_dev_s *)arg;
+  struct rk3576_mailbox_dev_s *priv = (struct rk3576_mailbox_dev_s *)arg;
   rk3576_mailbox_callback_t cb;
   irqstate_t flags;
   uint32_t status;
@@ -247,7 +245,7 @@ static int rk3576_mailbox_interrupt(int irq, void *context, void *arg)
   UNUSED(irq);
   UNUSED(context);
 
-  flags  = spin_lock_irqsave(&priv->lock);
+  flags = spin_lock_irqsave(&priv->lock);
   status = rk3576_mailbox_getreg(priv, RK3576_MAILBOX_B2A_STATUS) &
            RK3576_MAILBOX_CHAN_MASK;
 
@@ -258,7 +256,7 @@ static int rk3576_mailbox_interrupt(int irq, void *context, void *arg)
           continue;
         }
 
-      cmd  = rk3576_mailbox_getreg(priv, RK3576_MAILBOX_B2A_CMD(chan));
+      cmd = rk3576_mailbox_getreg(priv, RK3576_MAILBOX_B2A_CMD(chan));
       data = rk3576_mailbox_getreg(priv, RK3576_MAILBOX_B2A_DAT(chan));
 
       /* Acknowledge this channel (write 1 to clear). */
@@ -266,7 +264,7 @@ static int rk3576_mailbox_interrupt(int irq, void *context, void *arg)
       rk3576_mailbox_putreg(priv, RK3576_MAILBOX_B2A_STATUS,
                             RK3576_MAILBOX_CHAN_BIT(chan));
 
-      cb    = priv->chan[chan].cb;
+      cb = priv->chan[chan].cb;
       cbarg = priv->chan[chan].arg;
 
       spin_unlock_irqrestore(&priv->lock, flags);
@@ -346,16 +344,15 @@ int rk3576_mailbox_initialize(int instance)
   ret = irq_attach(priv->irq, rk3576_mailbox_interrupt, priv);
   if (ret < 0)
     {
-      _err("mailbox%d: irq_attach(%d) failed: %d\n", instance, priv->irq,
-            ret);
+      _err("mailbox%d: irq_attach(%d) failed: %d\n", instance, priv->irq, ret);
       return ret;
     }
 
   up_enable_irq(priv->irq);
   priv->initialized = true;
 
-  _info("mailbox%d: base 0x%" PRIxPTR " irq %d ready\n", instance,
-         priv->base, priv->irq);
+  _info("mailbox%d: base 0x%" PRIxPTR " irq %d ready\n", instance, priv->base,
+        priv->irq);
   return OK;
 }
 
@@ -367,8 +364,7 @@ int rk3576_mailbox_initialize(int instance)
  *
  ****************************************************************************/
 
-int rk3576_mailbox_send(int instance, int chan, uint32_t cmd,
-                        uint32_t data)
+int rk3576_mailbox_send(int instance, int chan, uint32_t cmd, uint32_t data)
 {
   struct rk3576_mailbox_dev_s *priv;
   irqstate_t flags;
@@ -407,8 +403,7 @@ int rk3576_mailbox_send(int instance, int chan, uint32_t cmd,
  ****************************************************************************/
 
 int rk3576_mailbox_register_callback(int instance, int chan,
-                                     rk3576_mailbox_callback_t cb,
-                                     void *arg)
+                                     rk3576_mailbox_callback_t cb, void *arg)
 {
   struct rk3576_mailbox_dev_s *priv;
   irqstate_t flags;
@@ -427,7 +422,7 @@ int rk3576_mailbox_register_callback(int instance, int chan,
 
   flags = spin_lock_irqsave(&priv->lock);
 
-  priv->chan[chan].cb  = cb;
+  priv->chan[chan].cb = cb;
   priv->chan[chan].arg = arg;
 
   inten = rk3576_mailbox_getreg(priv, RK3576_MAILBOX_B2A_INTEN);

@@ -86,9 +86,9 @@ struct rk3576_csi_stream_s
 
 struct rk3576_csi_config_s
 {
-  int num_lanes;    /* Active data lanes, 1..4                        */
-  int phy_id;       /* D-PHY feeding this host, RK3576_DPHY0/1        */
-  int nstreams;     /* Number of valid entries in streams[]           */
+  int num_lanes; /* Active data lanes, 1..4                        */
+  int phy_id;    /* D-PHY feeding this host, RK3576_DPHY0/1        */
+  int nstreams;  /* Number of valid entries in streams[]           */
   struct rk3576_csi_stream_s streams[RK3576_CSI_MAX_STREAMS];
 };
 
@@ -126,8 +126,7 @@ struct rk3576_csi_stats_s
  *
  ****************************************************************************/
 
-int rk3576_csi_initialize(int csi_id,
-                          const struct rk3576_csi_config_s *cfg);
+int rk3576_csi_initialize(int csi_id, const struct rk3576_csi_config_s *cfg);
 
 /****************************************************************************
  * Name: rk3576_csi_start

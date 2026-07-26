@@ -84,20 +84,20 @@
  * has 4x Cortex-A72 + 4x Cortex-A53.
  */
 
-#define RK3576_RKNN_MM_MAX_THREADS  8
+#define RK3576_RKNN_MM_MAX_THREADS 8
 
 /* Sentinel for the register-command template patch indices below: the
  * field is absent from this template and must not be patched.
  */
 
-#define RK3576_RKNN_MM_NOPATCH      0xffffffffu
+#define RK3576_RKNN_MM_NOPATCH 0xffffffffu
 
 /* Sentinel for an unknown register offset in
  * struct rk3576_rknn_matmul_regmap_s.  Entries left at this value are
  * skipped by the register-command builder.
  */
 
-#define RK3576_RKNN_MM_REG_UNKNOWN  0xffffffffu
+#define RK3576_RKNN_MM_REG_UNKNOWN 0xffffffffu
 
 /****************************************************************************
  * Public Types
@@ -118,16 +118,16 @@
 enum rk3576_rknn_matmul_type_e
 {
   RK3576_RKNN_FLOAT16_MM_FLOAT16_TO_FLOAT32 = 1,
-  RK3576_RKNN_INT8_MM_INT8_TO_INT32         = 2,
-  RK3576_RKNN_INT8_MM_INT8_TO_FLOAT32       = 3,
-  RK3576_RKNN_FLOAT16_MM_INT8_TO_FLOAT32    = 4,
-  RK3576_RKNN_FLOAT16_MM_INT8_TO_FLOAT16    = 5,
+  RK3576_RKNN_INT8_MM_INT8_TO_INT32 = 2,
+  RK3576_RKNN_INT8_MM_INT8_TO_FLOAT32 = 3,
+  RK3576_RKNN_FLOAT16_MM_INT8_TO_FLOAT32 = 4,
+  RK3576_RKNN_FLOAT16_MM_INT8_TO_FLOAT16 = 5,
   RK3576_RKNN_FLOAT16_MM_FLOAT16_TO_FLOAT16 = 6,
-  RK3576_RKNN_INT8_MM_INT8_TO_INT8          = 7,
-  RK3576_RKNN_FLOAT16_MM_INT4_TO_FLOAT32    = 8,
-  RK3576_RKNN_FLOAT16_MM_INT4_TO_FLOAT16    = 9,
-  RK3576_RKNN_INT4_MM_INT4_TO_INT16         = 10,
-  RK3576_RKNN_INT8_MM_INT4_TO_INT32         = 11,
+  RK3576_RKNN_INT8_MM_INT8_TO_INT8 = 7,
+  RK3576_RKNN_FLOAT16_MM_INT4_TO_FLOAT32 = 8,
+  RK3576_RKNN_FLOAT16_MM_INT4_TO_FLOAT16 = 9,
+  RK3576_RKNN_INT4_MM_INT4_TO_INT16 = 10,
+  RK3576_RKNN_INT8_MM_INT4_TO_INT32 = 11,
 };
 
 /* Memory layout of an operand.
@@ -142,8 +142,8 @@ enum rk3576_rknn_matmul_type_e
 
 enum rk3576_rknn_matmul_layout_e
 {
-  RK3576_RKNN_MM_LAYOUT_NORM    = 0,
-  RK3576_RKNN_MM_LAYOUT_NATIVE  = 1,
+  RK3576_RKNN_MM_LAYOUT_NORM = 0,
+  RK3576_RKNN_MM_LAYOUT_NATIVE = 1,
   RK3576_RKNN_MM_LAYOUT_TP_NORM = 2,
 };
 
@@ -156,15 +156,15 @@ enum rk3576_rknn_matmul_layout_e
 
 struct rk3576_rknn_matmul_info_s
 {
-  uint32_t m;           /* Rows of A / rows of C                          */
-  uint32_t k;           /* Columns of A / rows of B (reduction length)    */
-  uint32_t n;           /* Columns of B / columns of C                    */
-  int      type;        /* enum rk3576_rknn_matmul_type_e                 */
-  int      a_layout;    /* enum rk3576_rknn_matmul_layout_e               */
-  int      b_layout;    /* enum rk3576_rknn_matmul_layout_e               */
-  int      ac_layout;   /* Layout of C (and of A when the NPU consumes    */
-                        /* an already-native activation)                  */
-  int      num_threads; /* CPU back-end worker threads, 0/1 = inline      */
+  uint32_t m;      /* Rows of A / rows of C                          */
+  uint32_t k;      /* Columns of A / rows of B (reduction length)    */
+  uint32_t n;      /* Columns of B / columns of C                    */
+  int type;        /* enum rk3576_rknn_matmul_type_e                 */
+  int a_layout;    /* enum rk3576_rknn_matmul_layout_e               */
+  int b_layout;    /* enum rk3576_rknn_matmul_layout_e               */
+  int ac_layout;   /* Layout of C (and of A when the NPU consumes    */
+                   /* an already-native activation)                  */
+  int num_threads; /* CPU back-end worker threads, 0/1 = inline      */
 };
 
 /* Dequantisation parameters for an integer B operand.
@@ -187,10 +187,10 @@ struct rk3576_rknn_matmul_info_s
 
 struct rk3576_rknn_matmul_quant_s
 {
-  const float  *b_scale; /* [ngroups][N] scales, NULL means 1.0f          */
-  const int8_t *b_zp;    /* [ngroups][N] zero points, NULL means 0        */
-  uint32_t      b_group; /* K elements per group, 0 means the whole K     */
-  bool          b_signed;/* Raw codes are two's complement (int4: -8..7)  */
+  const float *b_scale; /* [ngroups][N] scales, NULL means 1.0f          */
+  const int8_t *b_zp;   /* [ngroups][N] zero points, NULL means 0        */
+  uint32_t b_group;     /* K elements per group, 0 means the whole K     */
+  bool b_signed;        /* Raw codes are two's complement (int4: -8..7)  */
 };
 
 /* Offsets, relative to the NPU core register block, of the fields the
@@ -211,19 +211,19 @@ struct rk3576_rknn_matmul_quant_s
 
 struct rk3576_rknn_matmul_regmap_s
 {
-  uint32_t op_enable;      /* Kick the operation                          */
-  uint32_t cna_conv_con1;  /* Convolution mode: 1x1, no padding, group 1  */
-  uint32_t cna_data_size;  /* Input feature map extent, encodes M and K   */
-  uint32_t cna_weight_size;/* Weight kernel extent, encodes K and N       */
-  uint32_t cna_data_base;  /* Physical base of the packed A operand       */
-  uint32_t cna_weight_base;/* Physical base of the packed B operand       */
-  uint32_t cna_data_type;  /* Input element type selector                 */
-  uint32_t cna_weight_type;/* Weight element type selector                */
-  uint32_t core_mac_gate;  /* MAC array enable mask                       */
+  uint32_t op_enable;        /* Kick the operation                          */
+  uint32_t cna_conv_con1;    /* Convolution mode: 1x1, no padding, group 1  */
+  uint32_t cna_data_size;    /* Input feature map extent, encodes M and K   */
+  uint32_t cna_weight_size;  /* Weight kernel extent, encodes K and N       */
+  uint32_t cna_data_base;    /* Physical base of the packed A operand       */
+  uint32_t cna_weight_base;  /* Physical base of the packed B operand       */
+  uint32_t cna_data_type;    /* Input element type selector                 */
+  uint32_t cna_weight_type;  /* Weight element type selector                */
+  uint32_t core_mac_gate;    /* MAC array enable mask                       */
   uint32_t dpu_feature_mode; /* Accumulator/output mode                   */
-  uint32_t dpu_dst_base;   /* Physical base of the C output               */
-  uint32_t dpu_dst_size;   /* Output extent, encodes M and N              */
-  uint32_t dpu_out_cvt;    /* Output converter (accumulator -> C dtype)   */
+  uint32_t dpu_dst_base;     /* Physical base of the C output               */
+  uint32_t dpu_dst_size;     /* Output extent, encodes M and N              */
+  uint32_t dpu_out_cvt;      /* Output converter (accumulator -> C dtype)   */
 };
 
 /* A verbatim register-command stream captured from a known-good run,
@@ -241,14 +241,14 @@ struct rk3576_rknn_matmul_regmap_s
 
 struct rk3576_rknn_matmul_template_s
 {
-  const uint32_t *words;  /* Register-command words                       */
-  uint32_t nwords;        /* Number of words                              */
-  uint32_t idx_a_addr;    /* Word index holding the A base address        */
-  uint32_t idx_b_addr;    /* Word index holding the B base address        */
-  uint32_t idx_c_addr;    /* Word index holding the C base address        */
-  uint32_t idx_m;         /* Word index holding M, or NOPATCH             */
-  uint32_t idx_k;         /* Word index holding the padded K, or NOPATCH  */
-  uint32_t idx_n;         /* Word index holding the padded N, or NOPATCH  */
+  const uint32_t *words; /* Register-command words                       */
+  uint32_t nwords;       /* Number of words                              */
+  uint32_t idx_a_addr;   /* Word index holding the A base address        */
+  uint32_t idx_b_addr;   /* Word index holding the B base address        */
+  uint32_t idx_c_addr;   /* Word index holding the C base address        */
+  uint32_t idx_m;        /* Word index holding M, or NOPATCH             */
+  uint32_t idx_k;        /* Word index holding the padded K, or NOPATCH  */
+  uint32_t idx_n;        /* Word index holding the padded N, or NOPATCH  */
 };
 
 /* Opaque per-problem context. */
@@ -260,8 +260,7 @@ struct rk3576_rknn_matmul_ctx_s;
  ****************************************************************************/
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /****************************************************************************

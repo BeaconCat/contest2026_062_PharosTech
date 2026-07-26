@@ -67,8 +67,8 @@
 #include <sys/param.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/compiler.h>
 #include <nuttx/clk/clk.h>
+#include <nuttx/compiler.h>
 #include <nuttx/nuttx.h>
 #include <nuttx/pci/pci.h>
 #include <nuttx/pci/pci_regs.h>
@@ -130,7 +130,7 @@
  * (PCIe CEM "T-PVPERL" is 100 ms; the link poll below absorbs the rest).
  */
 
-#define RK3576_PCIE_PERST_LOW_US 200
+#define RK3576_PCIE_PERST_LOW_US    200
 #define RK3576_PCIE_PERST_SETTLE_US 20000
 
 /* Number of lanes wired on the RK3576 root ports (num-lanes = 1). */
@@ -163,17 +163,17 @@
 
 struct rk3576_pcie_config_s
 {
-  uintptr_t apb;      /* Rockchip client block base */
-  uintptr_t dbi;      /* DesignWare DBI base */
-  uintptr_t cfg;      /* Configuration window CPU base */
-  uintptr_t io_base;  /* PCI I/O window CPU base */
+  uintptr_t apb;     /* Rockchip client block base */
+  uintptr_t dbi;     /* DesignWare DBI base */
+  uintptr_t cfg;     /* Configuration window CPU base */
+  uintptr_t io_base; /* PCI I/O window CPU base */
   size_t io_size;
   uintptr_t mem_base; /* PCI MMIO window CPU base */
   size_t mem_size;
   uint32_t pipe_rst_id;
   uint32_t apb_rst_id;
-  int phyid;          /* Combo PHY feeding this port */
-  int legacy_irq;     /* Aggregated INTx GIC interrupt */
+  int phyid;      /* Combo PHY feeding this port */
+  int legacy_irq; /* Aggregated INTx GIC interrupt */
   const char *clk_mst;
   const char *clk_slv;
   const char *clk_dbi;
@@ -207,8 +207,7 @@ struct rk3576_pcie_s
 static void rk3576_pcie_reset_assert(uint32_t id);
 static void rk3576_pcie_reset_deassert(uint32_t id);
 static int rk3576_pcie_clk_init(struct rk3576_pcie_s *priv);
-static void rk3576_pcie_dbi_wr_enable(struct rk3576_pcie_s *priv,
-                                      bool enable);
+static void rk3576_pcie_dbi_wr_enable(struct rk3576_pcie_s *priv, bool enable);
 static void rk3576_pcie_atu_outbound(struct rk3576_pcie_s *priv,
                                      unsigned int index, uint32_t type,
                                      uint64_t cpu_addr, uint64_t pci_addr,
@@ -220,79 +219,74 @@ static void rk3576_pcie_atu_inbound(struct rk3576_pcie_s *priv,
 static void rk3576_pcie_setup_windows(struct rk3576_pcie_s *priv);
 static void rk3576_pcie_setup_rc(struct rk3576_pcie_s *priv);
 static void rk3576_pcie_setup_irq(struct rk3576_pcie_s *priv);
-static void rk3576_pcie_enable_ltssm(struct rk3576_pcie_s *priv,
-                                     bool enable);
+static void rk3576_pcie_enable_ltssm(struct rk3576_pcie_s *priv, bool enable);
 static bool rk3576_pcie_link_is_up(struct rk3576_pcie_s *priv);
 static int rk3576_pcie_wait_link(struct rk3576_pcie_s *priv);
-static int rk3576_pcie_cfg_prepare(struct rk3576_pcie_s *priv,
-                                   uint8_t busno, uint32_t devfn,
-                                   int where, FAR uintptr_t *addr);
-static int rk3576_pcie_read_config(FAR struct pci_bus_s *bus,
-                                   uint32_t devfn, int where, int size,
-                                   FAR uint32_t *val);
-static int rk3576_pcie_write_config(FAR struct pci_bus_s *bus,
-                                    uint32_t devfn, int where, int size,
-                                    uint32_t val);
+static int rk3576_pcie_cfg_prepare(struct rk3576_pcie_s *priv, uint8_t busno,
+                                   uint32_t devfn, int where,
+                                   FAR uintptr_t *addr);
+static int rk3576_pcie_read_config(FAR struct pci_bus_s *bus, uint32_t devfn,
+                                   int where, int size, FAR uint32_t *val);
+static int rk3576_pcie_write_config(FAR struct pci_bus_s *bus, uint32_t devfn,
+                                    int where, int size, uint32_t val);
 static int rk3576_pcie_read_io(FAR struct pci_bus_s *bus, uintptr_t addr,
                                int size, FAR uint32_t *val);
 static int rk3576_pcie_write_io(FAR struct pci_bus_s *bus, uintptr_t addr,
                                 int size, uint32_t val);
-static FAR void *rk3576_pcie_map(FAR struct pci_bus_s *bus,
-                                 uintptr_t start, uintptr_t end);
+static FAR void *rk3576_pcie_map(FAR struct pci_bus_s *bus, uintptr_t start,
+                                 uintptr_t end);
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static const struct pci_ops_s g_rk3576_pcie_ops =
-{
-  .read     = rk3576_pcie_read_config,
-  .write    = rk3576_pcie_write_config,
-  .read_io  = rk3576_pcie_read_io,
+static const struct pci_ops_s g_rk3576_pcie_ops = {
+  .read = rk3576_pcie_read_config,
+  .write = rk3576_pcie_write_config,
+  .read_io = rk3576_pcie_read_io,
   .write_io = rk3576_pcie_write_io,
-  .map      = rk3576_pcie_map,
+  .map = rk3576_pcie_map,
 };
 
 static const struct rk3576_pcie_config_s
-    g_rk3576_pcie_config[RK3576_PCIE_NPORTS] =
-{
-  {
-    .apb         = RK3576_PCIE0_APB_ADDR,
-    .dbi         = RK3576_PCIE0_DBI_ADDR,
-    .cfg         = RK3576_PCIE0_CFG_ADDR,
-    .io_base     = RK3576_PCIE0_IO_ADDR,
-    .io_size     = RK3576_PCIE0_IO_SIZE,
-    .mem_base    = RK3576_PCIE0_MEM_ADDR,
-    .mem_size    = RK3576_PCIE0_MEM_SIZE,
-    .pipe_rst_id = 0x22f,
-    .apb_rst_id  = 0x22d,
-    .phyid       = RK3576_COMBPHY0,
-    .legacy_irq  = RK3576_IRQ_PCIE0_LEGACY,
-    .clk_mst     = "aclk_pcie0_mst_en",
-    .clk_slv     = "aclk_pcie0_slv_en",
-    .clk_dbi     = "aclk_pcie0_dbi_en",
-    .clk_pclk    = "pclk_pcie0_en",
-    .clk_aux     = "clk_pcie0_aux_en",
-  },
-  {
-    .apb         = RK3576_PCIE1_APB_ADDR,
-    .dbi         = RK3576_PCIE1_DBI_ADDR,
-    .cfg         = RK3576_PCIE1_CFG_ADDR,
-    .io_base     = RK3576_PCIE1_IO_ADDR,
-    .io_size     = RK3576_PCIE1_IO_SIZE,
-    .mem_base    = RK3576_PCIE1_MEM_ADDR,
-    .mem_size    = RK3576_PCIE1_MEM_SIZE,
-    .pipe_rst_id = 0x249,
-    .apb_rst_id  = 0x247,
-    .phyid       = RK3576_COMBPHY1,
-    .legacy_irq  = RK3576_IRQ_PCIE1_LEGACY,
-    .clk_mst     = "aclk_pcie1_mst_en",
-    .clk_slv     = "aclk_pcie1_slv_en",
-    .clk_dbi     = "aclk_pcie1_dbi_en",
-    .clk_pclk    = "pclk_pcie1_en",
-    .clk_aux     = "clk_pcie1_aux_en",
-  },
-};
+    g_rk3576_pcie_config[RK3576_PCIE_NPORTS] = {
+      {
+          .apb = RK3576_PCIE0_APB_ADDR,
+          .dbi = RK3576_PCIE0_DBI_ADDR,
+          .cfg = RK3576_PCIE0_CFG_ADDR,
+          .io_base = RK3576_PCIE0_IO_ADDR,
+          .io_size = RK3576_PCIE0_IO_SIZE,
+          .mem_base = RK3576_PCIE0_MEM_ADDR,
+          .mem_size = RK3576_PCIE0_MEM_SIZE,
+          .pipe_rst_id = 0x22f,
+          .apb_rst_id = 0x22d,
+          .phyid = RK3576_COMBPHY0,
+          .legacy_irq = RK3576_IRQ_PCIE0_LEGACY,
+          .clk_mst = "aclk_pcie0_mst_en",
+          .clk_slv = "aclk_pcie0_slv_en",
+          .clk_dbi = "aclk_pcie0_dbi_en",
+          .clk_pclk = "pclk_pcie0_en",
+          .clk_aux = "clk_pcie0_aux_en",
+      },
+      {
+          .apb = RK3576_PCIE1_APB_ADDR,
+          .dbi = RK3576_PCIE1_DBI_ADDR,
+          .cfg = RK3576_PCIE1_CFG_ADDR,
+          .io_base = RK3576_PCIE1_IO_ADDR,
+          .io_size = RK3576_PCIE1_IO_SIZE,
+          .mem_base = RK3576_PCIE1_MEM_ADDR,
+          .mem_size = RK3576_PCIE1_MEM_SIZE,
+          .pipe_rst_id = 0x249,
+          .apb_rst_id = 0x247,
+          .phyid = RK3576_COMBPHY1,
+          .legacy_irq = RK3576_IRQ_PCIE1_LEGACY,
+          .clk_mst = "aclk_pcie1_mst_en",
+          .clk_slv = "aclk_pcie1_slv_en",
+          .clk_dbi = "aclk_pcie1_dbi_en",
+          .clk_pclk = "pclk_pcie1_en",
+          .clk_aux = "clk_pcie1_aux_en",
+      },
+    };
 
 static struct rk3576_pcie_s g_rk3576_pcie[RK3576_PCIE_NPORTS];
 
@@ -310,8 +304,8 @@ static struct rk3576_pcie_s g_rk3576_pcie[RK3576_PCIE_NPORTS];
 
 static void rk3576_pcie_reset_assert(uint32_t id)
 {
-  uintptr_t reg = RK3576_CRU_ADDR +
-                  RK3576_CRU_SOFTRST_CON(RK3576_PCIE_RST_BANK(id));
+  uintptr_t reg =
+      RK3576_CRU_ADDR + RK3576_CRU_SOFTRST_CON(RK3576_PCIE_RST_BANK(id));
   uint32_t bit = 1u << RK3576_PCIE_RST_BIT(id);
 
   putreg32(RK3576_PCIE_HIWORD(bit, bit), reg);
@@ -327,8 +321,8 @@ static void rk3576_pcie_reset_assert(uint32_t id)
 
 static void rk3576_pcie_reset_deassert(uint32_t id)
 {
-  uintptr_t reg = RK3576_CRU_ADDR +
-                  RK3576_CRU_SOFTRST_CON(RK3576_PCIE_RST_BANK(id));
+  uintptr_t reg =
+      RK3576_CRU_ADDR + RK3576_CRU_SOFTRST_CON(RK3576_PCIE_RST_BANK(id));
   uint32_t bit = 1u << RK3576_PCIE_RST_BIT(id);
 
   putreg32(RK3576_PCIE_HIWORD(bit, 0), reg);
@@ -356,14 +350,9 @@ static void rk3576_pcie_reset_deassert(uint32_t id)
 
 static int rk3576_pcie_clk_init(struct rk3576_pcie_s *priv)
 {
-  const char *names[] =
-  {
-    "aclk_php_root_en",
-    priv->cfg->clk_pclk,
-    priv->cfg->clk_dbi,
-    priv->cfg->clk_mst,
-    priv->cfg->clk_slv,
-    priv->cfg->clk_aux,
+  const char *names[] = {
+    "aclk_php_root_en", priv->cfg->clk_pclk, priv->cfg->clk_dbi,
+    priv->cfg->clk_mst, priv->cfg->clk_slv,  priv->cfg->clk_aux,
   };
 
   struct clk_s *clk;
@@ -401,8 +390,7 @@ static int rk3576_pcie_clk_init(struct rk3576_pcie_s *priv)
  *
  ****************************************************************************/
 
-static void rk3576_pcie_dbi_wr_enable(struct rk3576_pcie_s *priv,
-                                      bool enable)
+static void rk3576_pcie_dbi_wr_enable(struct rk3576_pcie_s *priv, bool enable)
 {
   uintptr_t reg = priv->cfg->dbi + RK3576_PCIE_MISC_CONTROL_1;
   uint32_t val = getreg32(reg);
@@ -465,8 +453,8 @@ static void rk3576_pcie_atu_outbound(struct rk3576_pcie_s *priv,
    * issues the access that depends on it.
    */
 
-  while ((getreg32(base + RK3576_PCIE_ATU_CTRL2) &
-          RK3576_PCIE_ATU_ENABLE) == 0)
+  while ((getreg32(base + RK3576_PCIE_ATU_CTRL2) & RK3576_PCIE_ATU_ENABLE) ==
+         0)
     {
     }
 }
@@ -503,8 +491,8 @@ static void rk3576_pcie_atu_inbound(struct rk3576_pcie_s *priv,
 
   putreg32(RK3576_PCIE_ATU_ENABLE, base + RK3576_PCIE_ATU_CTRL2);
 
-  while ((getreg32(base + RK3576_PCIE_ATU_CTRL2) &
-          RK3576_PCIE_ATU_ENABLE) == 0)
+  while ((getreg32(base + RK3576_PCIE_ATU_CTRL2) & RK3576_PCIE_ATU_ENABLE) ==
+         0)
     {
     }
 }
@@ -532,8 +520,8 @@ static void rk3576_pcie_setup_windows(struct rk3576_pcie_s *priv)
                            cfg->mem_base, cfg->mem_size);
 
   rk3576_pcie_atu_outbound(priv, RK3576_PCIE_ATU_OB_IO,
-                           RK3576_PCIE_ATU_TYPE_IO, cfg->io_base,
-                           cfg->io_base, cfg->io_size);
+                           RK3576_PCIE_ATU_TYPE_IO, cfg->io_base, cfg->io_base,
+                           cfg->io_size);
 
   rk3576_pcie_atu_inbound(priv, RK3576_PCIE_ATU_IB_MEM,
                           RK3576_PCIE_ATU_TYPE_MEM, 0, 0,
@@ -610,7 +598,7 @@ static void rk3576_pcie_setup_rc(struct rk3576_pcie_s *priv)
   /* Enable I/O, memory and bus mastering on the root port itself. */
 
   putreg16(PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER |
-           PCI_COMMAND_SERR,
+               PCI_COMMAND_SERR,
            dbi + RK3576_PCIE_DBI_COMMAND);
 }
 
@@ -659,8 +647,7 @@ static void rk3576_pcie_setup_irq(struct rk3576_pcie_s *priv)
  *
  ****************************************************************************/
 
-static void rk3576_pcie_enable_ltssm(struct rk3576_pcie_s *priv,
-                                     bool enable)
+static void rk3576_pcie_enable_ltssm(struct rk3576_pcie_s *priv, bool enable)
 {
   uint32_t val = enable ? RK3576_PCIE_CLIENT_LTSSM_ENABLE
                         : RK3576_PCIE_CLIENT_LTSSM_DISABLE;
@@ -680,12 +667,10 @@ static void rk3576_pcie_enable_ltssm(struct rk3576_pcie_s *priv,
 
 static bool rk3576_pcie_link_is_up(struct rk3576_pcie_s *priv)
 {
-  uint32_t status = getreg32(priv->cfg->apb +
-                             RK3576_PCIE_CLIENT_LTSSM_STATUS);
+  uint32_t status = getreg32(priv->cfg->apb + RK3576_PCIE_CLIENT_LTSSM_STATUS);
 
   return (status & RK3576_PCIE_LINKUP) == RK3576_PCIE_LINKUP &&
-         (status & RK3576_PCIE_LTSSM_STATE_MASK) ==
-             RK3576_PCIE_LTSSM_STATE_L0;
+         (status & RK3576_PCIE_LTSSM_STATE_MASK) == RK3576_PCIE_LTSSM_STATE_L0;
 }
 
 /****************************************************************************
@@ -711,8 +696,7 @@ static int rk3576_pcie_wait_link(struct rk3576_pcie_s *priv)
           pciinfo("pcie%d link up after %" PRIu32 " us, ltssm 0x%08" PRIx32
                   "\n",
                   priv->port, elapsed,
-                  getreg32(priv->cfg->apb +
-                           RK3576_PCIE_CLIENT_LTSSM_STATUS));
+                  getreg32(priv->cfg->apb + RK3576_PCIE_CLIENT_LTSSM_STATUS));
           return OK;
         }
 
@@ -742,9 +726,9 @@ static int rk3576_pcie_wait_link(struct rk3576_pcie_s *priv)
  *
  ****************************************************************************/
 
-static int rk3576_pcie_cfg_prepare(struct rk3576_pcie_s *priv,
-                                   uint8_t busno, uint32_t devfn,
-                                   int where, FAR uintptr_t *addr)
+static int rk3576_pcie_cfg_prepare(struct rk3576_pcie_s *priv, uint8_t busno,
+                                   uint32_t devfn, int where,
+                                   FAR uintptr_t *addr)
 {
   uint32_t target;
   uint32_t type;
@@ -782,8 +766,7 @@ static int rk3576_pcie_cfg_prepare(struct rk3576_pcie_s *priv,
   if (target != priv->cfg_target || type != priv->cfg_type)
     {
       rk3576_pcie_atu_outbound(priv, RK3576_PCIE_ATU_OB_CFG, type,
-                               priv->cfg->cfg, target,
-                               RK3576_PCIE_CFG_SLICE);
+                               priv->cfg->cfg, target, RK3576_PCIE_CFG_SLICE);
       priv->cfg_target = target;
       priv->cfg_type = type;
     }
@@ -801,9 +784,8 @@ static int rk3576_pcie_cfg_prepare(struct rk3576_pcie_s *priv,
  *
  ****************************************************************************/
 
-static int rk3576_pcie_read_config(FAR struct pci_bus_s *bus,
-                                   uint32_t devfn, int where, int size,
-                                   FAR uint32_t *val)
+static int rk3576_pcie_read_config(FAR struct pci_bus_s *bus, uint32_t devfn,
+                                   int where, int size, FAR uint32_t *val)
 {
   FAR struct rk3576_pcie_s *priv =
       container_of(bus->ctrl, struct rk3576_pcie_s, ctrl);
@@ -855,9 +837,8 @@ static int rk3576_pcie_read_config(FAR struct pci_bus_s *bus,
  *
  ****************************************************************************/
 
-static int rk3576_pcie_write_config(FAR struct pci_bus_s *bus,
-                                    uint32_t devfn, int where, int size,
-                                    uint32_t val)
+static int rk3576_pcie_write_config(FAR struct pci_bus_s *bus, uint32_t devfn,
+                                    int where, int size, uint32_t val)
 {
   FAR struct rk3576_pcie_s *priv =
       container_of(bus->ctrl, struct rk3576_pcie_s, ctrl);
@@ -999,8 +980,8 @@ static int rk3576_pcie_write_io(FAR struct pci_bus_s *bus, uintptr_t addr,
  *
  ****************************************************************************/
 
-static FAR void *rk3576_pcie_map(FAR struct pci_bus_s *bus,
-                                 uintptr_t start, uintptr_t end)
+static FAR void *rk3576_pcie_map(FAR struct pci_bus_s *bus, uintptr_t start,
+                                 uintptr_t end)
 {
   UNUSED(bus);
   UNUSED(end);
@@ -1160,8 +1141,7 @@ int rk3576_pcie_initialize(int port)
   ret = pci_register_controller(&priv->ctrl);
   if (ret < 0)
     {
-      pcierr("ERROR: pcie%d controller registration failed: %d\n", port,
-             ret);
+      pcierr("ERROR: pcie%d controller registration failed: %d\n", port, ret);
       return ret;
     }
 

@@ -87,79 +87,79 @@
 
 /* Absolute register addresses *********************************************/
 
-#define RK3576_PMU_REG(o)               (RK3576_PMU_ADDR + (o))
+#define RK3576_PMU_REG(o) (RK3576_PMU_ADDR + (o))
 
 /* HIWORD write mask helper: write bits described by "mask" with "value" and
  * leave every other bit of the register untouched.
  */
 
-#define RK3576_PMU_HIWORD(mask, value)  (((mask) << 16) | ((value) & (mask)))
+#define RK3576_PMU_HIWORD(mask, value) (((mask) << 16) | ((value) & (mask)))
 
 /* PMU_PWR_GATE_CON0 / PMU_PWR_GATE_SFTCON0 bit assignment ******************
  * (1 = power the domain down)
  */
 
-#define RK3576_PMU_PWR0_NPU             (1 << 0)  /* VD_NPU              */
-#define RK3576_PMU_PWR0_BUS             (1 << 1)  /* PD_BUS   (always on) */
-#define RK3576_PMU_PWR0_SECURE          (1 << 2)  /* PD_SECURE(always on) */
-#define RK3576_PMU_PWR0_CENTER          (1 << 3)  /* PD_CENTER           */
-#define RK3576_PMU_PWR0_DDR             (1 << 4)  /* VD_DDR              */
-#define RK3576_PMU_PWR0_CCI             (1 << 5)  /* PD_CCI   (always on) */
-#define RK3576_PMU_PWR0_NVM             (1 << 6)  /* PD_NVM              */
-#define RK3576_PMU_PWR0_SDGMAC          (1 << 7)  /* PD_SDGMAC           */
-#define RK3576_PMU_PWR0_AUDIO           (1 << 8)  /* PD_AUDIO            */
-#define RK3576_PMU_PWR0_PHP             (1 << 9)  /* PD_PHP              */
-#define RK3576_PMU_PWR0_SUBPHP          (1 << 10) /* PD_SUBPHP           */
-#define RK3576_PMU_PWR0_VOP             (1 << 11) /* PD_VOP              */
-#define RK3576_PMU_PWR0_VOP_ESMART      (1 << 12) /* PD_VOP_ESMART       */
-#define RK3576_PMU_PWR0_VOP_CLUSTER     (1 << 13) /* PD_VOP_CLUSTER      */
-#define RK3576_PMU_PWR0_VO1             (1 << 14) /* PD_VO1              */
-#define RK3576_PMU_PWR0_VO0             (1 << 15) /* PD_VO0              */
+#define RK3576_PMU_PWR0_NPU         (1 << 0)  /* VD_NPU              */
+#define RK3576_PMU_PWR0_BUS         (1 << 1)  /* PD_BUS   (always on) */
+#define RK3576_PMU_PWR0_SECURE      (1 << 2)  /* PD_SECURE(always on) */
+#define RK3576_PMU_PWR0_CENTER      (1 << 3)  /* PD_CENTER           */
+#define RK3576_PMU_PWR0_DDR         (1 << 4)  /* VD_DDR              */
+#define RK3576_PMU_PWR0_CCI         (1 << 5)  /* PD_CCI   (always on) */
+#define RK3576_PMU_PWR0_NVM         (1 << 6)  /* PD_NVM              */
+#define RK3576_PMU_PWR0_SDGMAC      (1 << 7)  /* PD_SDGMAC           */
+#define RK3576_PMU_PWR0_AUDIO       (1 << 8)  /* PD_AUDIO            */
+#define RK3576_PMU_PWR0_PHP         (1 << 9)  /* PD_PHP              */
+#define RK3576_PMU_PWR0_SUBPHP      (1 << 10) /* PD_SUBPHP           */
+#define RK3576_PMU_PWR0_VOP         (1 << 11) /* PD_VOP              */
+#define RK3576_PMU_PWR0_VOP_ESMART  (1 << 12) /* PD_VOP_ESMART       */
+#define RK3576_PMU_PWR0_VOP_CLUSTER (1 << 13) /* PD_VOP_CLUSTER      */
+#define RK3576_PMU_PWR0_VO1         (1 << 14) /* PD_VO1              */
+#define RK3576_PMU_PWR0_VO0         (1 << 15) /* PD_VO0              */
 
 /* PMU_PWR_GATE_CON1 / PMU_PWR_GATE_SFTCON1 bit assignment */
 
-#define RK3576_PMU_PWR1_USB             (1 << 0)  /* PD_USB              */
-#define RK3576_PMU_PWR1_VI              (1 << 1)  /* PD_VI               */
-#define RK3576_PMU_PWR1_VEPU0           (1 << 2)  /* PD_VEPU0            */
-#define RK3576_PMU_PWR1_VEPU1           (1 << 3)  /* PD_VEPU1            */
-#define RK3576_PMU_PWR1_VDEC            (1 << 4)  /* PD_VDEC             */
-#define RK3576_PMU_PWR1_VPU             (1 << 5)  /* PD_VPU              */
-#define RK3576_PMU_PWR1_NPUTOP          (1 << 6)  /* PD_NPUTOP           */
-#define RK3576_PMU_PWR1_NPU0            (1 << 7)  /* PD_NPU0             */
-#define RK3576_PMU_PWR1_NPU1            (1 << 8)  /* PD_NPU1             */
-#define RK3576_PMU_PWR1_GPU             (1 << 9)  /* VD_GPU              */
+#define RK3576_PMU_PWR1_USB    (1 << 0) /* PD_USB              */
+#define RK3576_PMU_PWR1_VI     (1 << 1) /* PD_VI               */
+#define RK3576_PMU_PWR1_VEPU0  (1 << 2) /* PD_VEPU0            */
+#define RK3576_PMU_PWR1_VEPU1  (1 << 3) /* PD_VEPU1            */
+#define RK3576_PMU_PWR1_VDEC   (1 << 4) /* PD_VDEC             */
+#define RK3576_PMU_PWR1_VPU    (1 << 5) /* PD_VPU              */
+#define RK3576_PMU_PWR1_NPUTOP (1 << 6) /* PD_NPUTOP           */
+#define RK3576_PMU_PWR1_NPU0   (1 << 7) /* PD_NPU0             */
+#define RK3576_PMU_PWR1_NPU1   (1 << 8) /* PD_NPU1             */
+#define RK3576_PMU_PWR1_GPU    (1 << 9) /* VD_GPU              */
 
 /* PMU_PWR_GATE_STS: SFTCON1 bits are shifted up by this amount */
 
-#define RK3576_PMU_PWR_STS_CON1_SHIFT   16
+#define RK3576_PMU_PWR_STS_CON1_SHIFT 16
 
 /* PMU_VOL_GATE_CON0 / CON1 bit assignment (voltage domain off request) */
 
-#define RK3576_PMU_VOL0_NPU             (1 << 0)  /* VD_NPU              */
-#define RK3576_PMU_VOL0_DDR             (1 << 4)  /* VD_DDR              */
-#define RK3576_PMU_VOL0_CCI             (1 << 5)  /* VD_LITCORE          */
-#define RK3576_PMU_VOL1_GPU             (1 << 9)  /* VD_GPU              */
+#define RK3576_PMU_VOL0_NPU (1 << 0) /* VD_NPU              */
+#define RK3576_PMU_VOL0_DDR (1 << 4) /* VD_DDR              */
+#define RK3576_PMU_VOL0_CCI (1 << 5) /* VD_LITCORE          */
+#define RK3576_PMU_VOL1_GPU (1 << 9) /* VD_GPU              */
 
 /* PMU_BIU_IDLE_CON0 / PMU_BIU_IDLE_SFTCON0 bit assignment ******************
  * (1 = request the BIU to go idle)
  */
 
-#define RK3576_PMU_IDLE0_GPU            (1 << 0)  /* BIU_GPU             */
-#define RK3576_PMU_IDLE0_NPU0           (1 << 1)  /* BIU_NPU0            */
-#define RK3576_PMU_IDLE0_NPU1           (1 << 2)  /* BIU_NPU1            */
-#define RK3576_PMU_IDLE0_NPUTOP         (1 << 3)  /* BIU_NPUTOP          */
-#define RK3576_PMU_IDLE0_NPUSYS         (1 << 4)  /* BIU_NPUSYS          */
-#define RK3576_PMU_IDLE0_VPU            (1 << 5)  /* BIU_VPU             */
-#define RK3576_PMU_IDLE0_VDEC           (1 << 6)  /* BIU_VDEC            */
-#define RK3576_PMU_IDLE0_VEPU0          (1 << 7)  /* BIU_VEPU0           */
-#define RK3576_PMU_IDLE0_VEPU1          (1 << 8)  /* BIU_VEPU1           */
-#define RK3576_PMU_IDLE0_VI             (1 << 9)  /* BIU_VI              */
-#define RK3576_PMU_IDLE0_USB            (1 << 10) /* BIU_USB             */
-#define RK3576_PMU_IDLE0_VO0            (1 << 11) /* BIU_VO0             */
-#define RK3576_PMU_IDLE0_VO1            (1 << 12) /* BIU_VO1             */
-#define RK3576_PMU_IDLE0_VOP            (1 << 13) /* BIU_VOP             */
-#define RK3576_PMU_IDLE0_VOP_DDRSCH     (1 << 14) /* BIU_VOP_DDRSCH      */
-#define RK3576_PMU_IDLE0_PHP            (1 << 15) /* BIU_PHP             */
+#define RK3576_PMU_IDLE0_GPU        (1 << 0)  /* BIU_GPU             */
+#define RK3576_PMU_IDLE0_NPU0       (1 << 1)  /* BIU_NPU0            */
+#define RK3576_PMU_IDLE0_NPU1       (1 << 2)  /* BIU_NPU1            */
+#define RK3576_PMU_IDLE0_NPUTOP     (1 << 3)  /* BIU_NPUTOP          */
+#define RK3576_PMU_IDLE0_NPUSYS     (1 << 4)  /* BIU_NPUSYS          */
+#define RK3576_PMU_IDLE0_VPU        (1 << 5)  /* BIU_VPU             */
+#define RK3576_PMU_IDLE0_VDEC       (1 << 6)  /* BIU_VDEC            */
+#define RK3576_PMU_IDLE0_VEPU0      (1 << 7)  /* BIU_VEPU0           */
+#define RK3576_PMU_IDLE0_VEPU1      (1 << 8)  /* BIU_VEPU1           */
+#define RK3576_PMU_IDLE0_VI         (1 << 9)  /* BIU_VI              */
+#define RK3576_PMU_IDLE0_USB        (1 << 10) /* BIU_USB             */
+#define RK3576_PMU_IDLE0_VO0        (1 << 11) /* BIU_VO0             */
+#define RK3576_PMU_IDLE0_VO1        (1 << 12) /* BIU_VO1             */
+#define RK3576_PMU_IDLE0_VOP        (1 << 13) /* BIU_VOP             */
+#define RK3576_PMU_IDLE0_VOP_DDRSCH (1 << 14) /* BIU_VOP_DDRSCH      */
+#define RK3576_PMU_IDLE0_PHP        (1 << 15) /* BIU_PHP             */
 
 /* PMU_BIU_IDLE_CON1 / PMU_BIU_IDLE_SFTCON1 bit assignment */
 
@@ -182,32 +182,32 @@
  * this amount.
  */
 
-#define RK3576_PMU_IDLE_STS_CON1_SHIFT  16
+#define RK3576_PMU_IDLE_STS_CON1_SHIFT 16
 
 /* PMU_MEM_PWR_GATE_SFTCON0 bit assignment (1 = power the SRAM down) */
 
-#define RK3576_PMU_MEM0_CENTER          (1 << 3)  /* PD_CENTER memory    */
-#define RK3576_PMU_MEM0_NVM             (1 << 6)  /* PD_NVM memory       */
-#define RK3576_PMU_MEM0_SDGMAC          (1 << 7)  /* PD_SDGMAC memory    */
-#define RK3576_PMU_MEM0_AUDIO           (1 << 8)  /* PD_AUDIO memory     */
-#define RK3576_PMU_MEM0_PHP             (1 << 9)  /* PD_PHP memory       */
-#define RK3576_PMU_MEM0_SUBPHP          (1 << 10) /* PD_SUBPHP memory    */
-#define RK3576_PMU_MEM0_VOP             (1 << 11) /* PD_VOP memory       */
-#define RK3576_PMU_MEM0_VOP_ESMART      (1 << 12) /* PD_VOP_ESMART mem   */
-#define RK3576_PMU_MEM0_VOP_CLUSTER     (1 << 13) /* PD_VOP_CLUSTER mem  */
-#define RK3576_PMU_MEM0_VO1             (1 << 14) /* PD_VO1 memory       */
-#define RK3576_PMU_MEM0_VO0             (1 << 15) /* PD_VO0 memory       */
+#define RK3576_PMU_MEM0_CENTER      (1 << 3)  /* PD_CENTER memory    */
+#define RK3576_PMU_MEM0_NVM         (1 << 6)  /* PD_NVM memory       */
+#define RK3576_PMU_MEM0_SDGMAC      (1 << 7)  /* PD_SDGMAC memory    */
+#define RK3576_PMU_MEM0_AUDIO       (1 << 8)  /* PD_AUDIO memory     */
+#define RK3576_PMU_MEM0_PHP         (1 << 9)  /* PD_PHP memory       */
+#define RK3576_PMU_MEM0_SUBPHP      (1 << 10) /* PD_SUBPHP memory    */
+#define RK3576_PMU_MEM0_VOP         (1 << 11) /* PD_VOP memory       */
+#define RK3576_PMU_MEM0_VOP_ESMART  (1 << 12) /* PD_VOP_ESMART mem   */
+#define RK3576_PMU_MEM0_VOP_CLUSTER (1 << 13) /* PD_VOP_CLUSTER mem  */
+#define RK3576_PMU_MEM0_VO1         (1 << 14) /* PD_VO1 memory       */
+#define RK3576_PMU_MEM0_VO0         (1 << 15) /* PD_VO0 memory       */
 
 /* PMU_MEM_PWR_GATE_SFTCON1 bit assignment */
 
-#define RK3576_PMU_MEM1_USB             (1 << 0)  /* PD_USB memory       */
-#define RK3576_PMU_MEM1_VI              (1 << 1)  /* PD_VI memory        */
-#define RK3576_PMU_MEM1_VEPU0           (1 << 2)  /* PD_VEPU0 memory     */
-#define RK3576_PMU_MEM1_VEPU1           (1 << 3)  /* PD_VEPU1 memory     */
-#define RK3576_PMU_MEM1_VDEC            (1 << 4)  /* PD_VDEC memory      */
-#define RK3576_PMU_MEM1_VPU             (1 << 5)  /* PD_VPU memory       */
-#define RK3576_PMU_MEM1_NPUTOP          (1 << 6)  /* PD_NPUTOP memory    */
-#define RK3576_PMU_MEM1_NPU0            (1 << 7)  /* PD_NPU0 memory      */
-#define RK3576_PMU_MEM1_NPU1            (1 << 8)  /* PD_NPU1 memory      */
+#define RK3576_PMU_MEM1_USB    (1 << 0) /* PD_USB memory       */
+#define RK3576_PMU_MEM1_VI     (1 << 1) /* PD_VI memory        */
+#define RK3576_PMU_MEM1_VEPU0  (1 << 2) /* PD_VEPU0 memory     */
+#define RK3576_PMU_MEM1_VEPU1  (1 << 3) /* PD_VEPU1 memory     */
+#define RK3576_PMU_MEM1_VDEC   (1 << 4) /* PD_VDEC memory      */
+#define RK3576_PMU_MEM1_VPU    (1 << 5) /* PD_VPU memory       */
+#define RK3576_PMU_MEM1_NPUTOP (1 << 6) /* PD_NPUTOP memory    */
+#define RK3576_PMU_MEM1_NPU0   (1 << 7) /* PD_NPU0 memory      */
+#define RK3576_PMU_MEM1_NPU1   (1 << 8) /* PD_NPU1 memory      */
 
 #endif /* __VENDOR_ROCKCHIP_RK3576_HARDWARE_RK3576_PD_H */

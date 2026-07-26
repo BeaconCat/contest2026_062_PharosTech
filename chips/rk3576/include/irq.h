@@ -407,11 +407,11 @@
  * declare two lines each.
  */
 
-#define RK3576_IRQ_VOP_VP1                  (412)
-#define RK3576_IRQ_VOP_VP2                  (413)
-#define RK3576_IRQ_CSIHOST3_1               (415)
-#define RK3576_IRQ_CSIHOST3_2               (416)
-#define RK3576_IRQ_CSIHOST4_1               (417)
-#define RK3576_IRQ_CSIHOST4_2               (418)
+#define RK3576_IRQ_VOP_VP1    (412)
+#define RK3576_IRQ_VOP_VP2    (413)
+#define RK3576_IRQ_CSIHOST3_1 (415)
+#define RK3576_IRQ_CSIHOST3_2 (416)
+#define RK3576_IRQ_CSIHOST4_1 (417)
+#define RK3576_IRQ_CSIHOST4_2 (418)
 
 #endif /* __ARCH_ARM64_INCLUDE_RK3576_IRQ_H */

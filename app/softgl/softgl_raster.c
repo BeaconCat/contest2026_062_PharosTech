@@ -57,7 +57,7 @@
 #include "softgl.h"
 
 #ifdef __ARM_NEON
-#  include <arm_neon.h>
+#include <arm_neon.h>
 #endif
 
 /****************************************************************************
@@ -66,25 +66,25 @@
 
 /* A triangle whose absolute screen area is below this is degenerate. */
 
-#define SOFTGL_AREA_EPSILON       1e-6f
+#define SOFTGL_AREA_EPSILON 1e-6f
 
 /* Sub-pixel bias applied to edges that are neither top nor left, so that a
  * pixel centre lying exactly on a shared edge belongs to one triangle only.
  */
 
-#define SOFTGL_EDGE_BIAS          (-1.0f / 256.0f)
+#define SOFTGL_EDGE_BIAS (-1.0f / 256.0f)
 
 /* Clip-space guard: vertices closer than this to the eye are clipped. */
 
-#define SOFTGL_NEAR_EPSILON       1e-5f
+#define SOFTGL_NEAR_EPSILON 1e-5f
 
 /* Sutherland-Hodgman against one plane turns 3 vertices into at most 4. */
 
-#define SOFTGL_CLIP_MAX           4
+#define SOFTGL_CLIP_MAX 4
 
 /* Largest Blinn-Phong exponent we evaluate by repeated squaring. */
 
-#define SOFTGL_SHININESS_MAX      256
+#define SOFTGL_SHININESS_MAX 256
 
 /****************************************************************************
  * Private Function Prototypes
@@ -93,23 +93,21 @@
 static inline float softgl_clampf(float v, float lo, float hi);
 static inline float softgl_fast_pow(float base, int exponent);
 static inline uint16_t softgl_pack565(float r, float g, float b);
-static inline void softgl_unpack565(uint16_t c, float *r, float *g,
-                                    float *b);
+static inline void softgl_unpack565(uint16_t c, float *r, float *g, float *b);
 static void softgl_tex_sample(const struct softgl_texture_s *tex,
                               enum softgl_filter_e filter, float u, float v,
                               float *r, float *g, float *b);
-static struct softgl_vsout_s softgl_vs_lerp(
-                              const struct softgl_vsout_s *a,
-                              const struct softgl_vsout_s *b, float t);
+static struct softgl_vsout_s softgl_vs_lerp(const struct softgl_vsout_s *a,
+                                            const struct softgl_vsout_s *b,
+                                            float t);
 static int softgl_clip_near(const struct softgl_vsout_s *in,
                             struct softgl_vsout_s *out);
 static int softgl_bin_triangle(struct softgl_context_s *ctx,
                                const struct softgl_vsout_s *v,
                                const struct softgl_mesh_s *mesh);
-static void softgl_band_range(struct softgl_context_s *ctx, int band,
-                              int *y0, int *y1);
-static int softgl_reserve_vsbuf(struct softgl_context_s *ctx,
-                                uint32_t count);
+static void softgl_band_range(struct softgl_context_s *ctx, int band, int *y0,
+                              int *y1);
+static int softgl_reserve_vsbuf(struct softgl_context_s *ctx, uint32_t count);
 static int softgl_reserve_tribin(struct softgl_context_s *ctx);
 
 /****************************************************************************
@@ -180,8 +178,8 @@ static inline uint16_t softgl_pack565(float r, float g, float b)
 static inline void softgl_unpack565(uint16_t c, float *r, float *g, float *b)
 {
   *r = (float)((c >> 11) & 0x1f) * (1.0f / 31.0f);
-  *g = (float)((c >> 5)  & 0x3f) * (1.0f / 63.0f);
-  *b = (float)(c & 0x1f)         * (1.0f / 31.0f);
+  *g = (float)((c >> 5) & 0x3f) * (1.0f / 63.0f);
+  *b = (float)(c & 0x1f) * (1.0f / 31.0f);
 }
 
 /****************************************************************************
@@ -226,51 +224,51 @@ static void softgl_tex_sample(const struct softgl_texture_s *tex,
 
   /* Bilinear: sample at texel centres and blend the 2x2 neighbourhood. */
 
-    {
-      float fx = u * (float)w - 0.5f;
-      float fy = v * (float)h - 0.5f;
-      int x0 = (int)floorf(fx);
-      int y0 = (int)floorf(fy);
-      float tx = fx - (float)x0;
-      float ty = fy - (float)y0;
-      int x1;
-      int y1;
-      float r00;
-      float g00;
-      float b00;
-      float r10;
-      float g10;
-      float b10;
-      float r01;
-      float g01;
-      float b01;
-      float r11;
-      float g11;
-      float b11;
-      float w00;
-      float w10;
-      float w01;
-      float w11;
+  {
+    float fx = u * (float)w - 0.5f;
+    float fy = v * (float)h - 0.5f;
+    int x0 = (int)floorf(fx);
+    int y0 = (int)floorf(fy);
+    float tx = fx - (float)x0;
+    float ty = fy - (float)y0;
+    int x1;
+    int y1;
+    float r00;
+    float g00;
+    float b00;
+    float r10;
+    float g10;
+    float b10;
+    float r01;
+    float g01;
+    float b01;
+    float r11;
+    float g11;
+    float b11;
+    float w00;
+    float w10;
+    float w01;
+    float w11;
 
-      x0 = ((x0 % w) + w) % w;
-      y0 = ((y0 % h) + h) % h;
-      x1 = (x0 + 1) % w;
-      y1 = (y0 + 1) % h;
+    x0 = ((x0 % w) + w) % w;
+    y0 = ((y0 % h) + h) % h;
+    x1 = (x0 + 1) % w;
+    y1 = (y0 + 1) % h;
 
-      softgl_unpack565(tex->pixels[(size_t)y0 * w + x0], &r00, &g00, &b00);
-      softgl_unpack565(tex->pixels[(size_t)y0 * w + x1], &r10, &g10, &b10);
-      softgl_unpack565(tex->pixels[(size_t)y1 * w + x0], &r01, &g01, &b01);
-      softgl_unpack565(tex->pixels[(size_t)y1 * w + x1], &r11, &g11, &b11);
+    softgl_unpack565(tex->pixels[(size_t)y0 * w + x0], &r00, &g00, &b00);
+    softgl_unpack565(tex->pixels[(size_t)y0 * w + x1], &r10, &g10, &b10);
+    softgl_unpack565(tex->pixels[(size_t)y1 * w + x0], &r01, &g01, &b01);
+    softgl_unpack565(tex->pixels[(size_t)y1 * w + x1], &r11, &g11, &b11);
 
-      w00 = (1.0f - tx) * (1.0f - ty);
-      w10 = tx * (1.0f - ty);
-      w01 = (1.0f - tx) * ty;
-      w11 = tx * ty;
+    w00 = (1.0f - tx) * (1.0f - ty);
+    w10 = tx * (1.0f - ty);
+    w01 = (1.0f - tx) * ty;
+    w11 = tx * ty;
 
-      *r = r00 * w00 + r10 * w10 + r01 * w01 + r11 * w11;
-      *g = g00 * w00 + g10 * w10 + g01 * w01 + g11 * w11;
-      *b = b00 * w00 + b10 * w10 + b01 * w01 + b11 * w11;
-    }
+    *r = r00 * w00 + r10 * w10 + r01 * w01 + r11 * w11;
+    *g = g00 * w00 + g10 * w10 + g01 * w01 + g11 * w11;
+    *b = b00 * w00 + b10 * w10 + b01 * w01 + b11 * w11;
+  }
 }
 
 /****************************************************************************
@@ -380,8 +378,7 @@ static int softgl_clip_near(const struct softgl_vsout_s *in,
  * Name: softgl_reserve_vsbuf
  ****************************************************************************/
 
-static int softgl_reserve_vsbuf(struct softgl_context_s *ctx,
-                                uint32_t count)
+static int softgl_reserve_vsbuf(struct softgl_context_s *ctx, uint32_t count)
 {
   struct softgl_vsout_s *p;
 
@@ -390,8 +387,7 @@ static int softgl_reserve_vsbuf(struct softgl_context_s *ctx,
       return OK;
     }
 
-  p = (struct softgl_vsout_s *)realloc(ctx->vsbuf,
-                                       (size_t)count * sizeof(*p));
+  p = (struct softgl_vsout_s *)realloc(ctx->vsbuf, (size_t)count * sizeof(*p));
   if (p == NULL)
     {
       return -ENOMEM;
@@ -417,14 +413,13 @@ static int softgl_reserve_tribin(struct softgl_context_s *ctx)
     }
 
   newcap = ctx->tricap != 0 ? ctx->tricap * 2 : 1024;
-  p = (struct softgl_rtri_s *)realloc(ctx->tris,
-                                      (size_t)newcap * sizeof(*p));
+  p = (struct softgl_rtri_s *)realloc(ctx->tris, (size_t)newcap * sizeof(*p));
   if (p == NULL)
     {
       return -ENOMEM;
     }
 
-  ctx->tris   = p;
+  ctx->tris = p;
   ctx->tricap = newcap;
   return OK;
 }
@@ -487,8 +482,7 @@ static int softgl_bin_triangle(struct softgl_context_s *ctx,
    * facing (counter-clockwise in NDC) triangle comes out negative.
    */
 
-  area = (sx[1] - sx[0]) * (sy[2] - sy[0]) -
-         (sy[1] - sy[0]) * (sx[2] - sx[0]);
+  area = (sx[1] - sx[0]) * (sy[2] - sy[0]) - (sy[1] - sy[0]) * (sx[2] - sx[0]);
 
   if (area > -SOFTGL_AREA_EPSILON && area < SOFTGL_AREA_EPSILON)
     {
@@ -591,9 +585,9 @@ static int softgl_bin_triangle(struct softgl_context_s *ctx,
       const struct softgl_vsout_s *s = src[i];
       float q = iw[i];
 
-      t->x[i]  = sx[i];
-      t->y[i]  = sy[i];
-      t->z[i]  = sz[i];
+      t->x[i] = sx[i];
+      t->y[i] = sy[i];
+      t->z[i] = sz[i];
       t->iw[i] = q;
 
       /* Pre-divide every varying by w so that screen-space linear
@@ -601,8 +595,8 @@ static int softgl_bin_triangle(struct softgl_context_s *ctx,
        * correct attribute as (attr/w) / (1/w).
        */
 
-      t->var[i][SOFTGL_VARY_U]  = s->u * q;
-      t->var[i][SOFTGL_VARY_V]  = s->v * q;
+      t->var[i][SOFTGL_VARY_U] = s->u * q;
+      t->var[i][SOFTGL_VARY_V] = s->v * q;
       t->var[i][SOFTGL_VARY_NX] = s->wnrm.x * q;
       t->var[i][SOFTGL_VARY_NY] = s->wnrm.y * q;
       t->var[i][SOFTGL_VARY_NZ] = s->wnrm.z * q;
@@ -620,14 +614,14 @@ static int softgl_bin_triangle(struct softgl_context_s *ctx,
     {
       int a = (i + 1) % 3;
       int b = (i + 2) % 3;
-      bool topleft = (t->y[a] == t->y[b] && t->x[b] > t->x[a]) ||
-                     (t->y[b] < t->y[a]);
+      bool topleft =
+          (t->y[a] == t->y[b] && t->x[b] > t->x[a]) || (t->y[b] < t->y[a]);
 
       t->bias[i] = topleft ? 0.0f : SOFTGL_EDGE_BIAS;
     }
 
   t->inv_area = 1.0f / area;
-  t->tex      = mesh->texture != NULL ? mesh->texture : ctx->texture;
+  t->tex = mesh->texture != NULL ? mesh->texture : ctx->texture;
 
   t->base[0] = mesh->basecolor[0];
   t->base[1] = mesh->basecolor[1];
@@ -645,8 +639,8 @@ static int softgl_bin_triangle(struct softgl_context_s *ctx,
  *
  ****************************************************************************/
 
-static void softgl_band_range(struct softgl_context_s *ctx, int band,
-                              int *y0, int *y1)
+static void softgl_band_range(struct softgl_context_s *ctx, int band, int *y0,
+                              int *y1)
 {
   int nbands = ctx->nbands > 0 ? ctx->nbands : 1;
   int rows_per;
@@ -685,12 +679,12 @@ void softgl_raster_band(struct softgl_context_s *ctx, int band)
 {
   struct softgl_vec3_s lightdir = ctx->light.direction;
   struct softgl_vec3_s lightcol = ctx->light.color;
-  struct softgl_vec3_s ambient  = ctx->light.ambient;
-  enum softgl_shade_e shade     = ctx->shade;
-  enum softgl_filter_e filter   = ctx->filter;
-  float spec_strength           = ctx->light.specular;
-  int   shininess               = (int)ctx->light.shininess;
-  uint32_t pixels               = 0;
+  struct softgl_vec3_s ambient = ctx->light.ambient;
+  enum softgl_shade_e shade = ctx->shade;
+  enum softgl_filter_e filter = ctx->filter;
+  float spec_strength = ctx->light.specular;
+  int shininess = (int)ctx->light.shininess;
+  uint32_t pixels = 0;
   int band_y0;
   int band_y1;
   uint32_t ti;
@@ -814,10 +808,12 @@ void softgl_raster_band(struct softgl_context_s *ctx, int band)
                 {
                   float u = (b0 * t->var[0][SOFTGL_VARY_U] +
                              b1 * t->var[1][SOFTGL_VARY_U] +
-                             b2 * t->var[2][SOFTGL_VARY_U]) * w;
+                             b2 * t->var[2][SOFTGL_VARY_U]) *
+                            w;
                   float v = (b0 * t->var[0][SOFTGL_VARY_V] +
                              b1 * t->var[1][SOFTGL_VARY_V] +
-                             b2 * t->var[2][SOFTGL_VARY_V]) * w;
+                             b2 * t->var[2][SOFTGL_VARY_V]) *
+                            w;
                   float tr;
                   float tg;
                   float tb;
@@ -837,17 +833,20 @@ void softgl_raster_band(struct softgl_context_s *ctx, int band)
 
                   n.x = (b0 * t->var[0][SOFTGL_VARY_NX] +
                          b1 * t->var[1][SOFTGL_VARY_NX] +
-                         b2 * t->var[2][SOFTGL_VARY_NX]) * w;
+                         b2 * t->var[2][SOFTGL_VARY_NX]) *
+                        w;
                   n.y = (b0 * t->var[0][SOFTGL_VARY_NY] +
                          b1 * t->var[1][SOFTGL_VARY_NY] +
-                         b2 * t->var[2][SOFTGL_VARY_NY]) * w;
+                         b2 * t->var[2][SOFTGL_VARY_NY]) *
+                        w;
                   n.z = (b0 * t->var[0][SOFTGL_VARY_NZ] +
                          b1 * t->var[1][SOFTGL_VARY_NZ] +
-                         b2 * t->var[2][SOFTGL_VARY_NZ]) * w;
+                         b2 * t->var[2][SOFTGL_VARY_NZ]) *
+                        w;
                   n = softgl_vec3_normalize(n);
 
                   ndotl = softgl_vec3_dot(n, lightdir);
-                  diff  = ndotl > 0.0f ? ndotl : 0.0f;
+                  diff = ndotl > 0.0f ? ndotl : 0.0f;
 
                   if (shade == SOFTGL_SHADE_PHONG && diff > 0.0f &&
                       spec_strength > 0.0f)
@@ -859,18 +858,21 @@ void softgl_raster_band(struct softgl_context_s *ctx, int band)
 
                       wpos.x = (b0 * t->var[0][SOFTGL_VARY_WX] +
                                 b1 * t->var[1][SOFTGL_VARY_WX] +
-                                b2 * t->var[2][SOFTGL_VARY_WX]) * w;
+                                b2 * t->var[2][SOFTGL_VARY_WX]) *
+                               w;
                       wpos.y = (b0 * t->var[0][SOFTGL_VARY_WY] +
                                 b1 * t->var[1][SOFTGL_VARY_WY] +
-                                b2 * t->var[2][SOFTGL_VARY_WY]) * w;
+                                b2 * t->var[2][SOFTGL_VARY_WY]) *
+                               w;
                       wpos.z = (b0 * t->var[0][SOFTGL_VARY_WZ] +
                                 b1 * t->var[1][SOFTGL_VARY_WZ] +
-                                b2 * t->var[2][SOFTGL_VARY_WZ]) * w;
+                                b2 * t->var[2][SOFTGL_VARY_WZ]) *
+                               w;
 
                       view = softgl_vec3_normalize(
-                               softgl_vec3_sub(ctx->eye, wpos));
+                          softgl_vec3_sub(ctx->eye, wpos));
                       half = softgl_vec3_normalize(
-                               softgl_vec3_add(view, lightdir));
+                          softgl_vec3_add(view, lightdir));
 
                       ndoth = softgl_vec3_dot(n, half);
                       if (ndoth > 0.0f)
@@ -884,12 +886,9 @@ void softgl_raster_band(struct softgl_context_s *ctx, int band)
                    * specular highlight is added on top untinted.
                    */
 
-                  r = r * (ambient.x + lightcol.x * diff) +
-                      lightcol.x * spec;
-                  g = g * (ambient.y + lightcol.y * diff) +
-                      lightcol.y * spec;
-                  b = b * (ambient.z + lightcol.z * diff) +
-                      lightcol.z * spec;
+                  r = r * (ambient.x + lightcol.x * diff) + lightcol.x * spec;
+                  g = g * (ambient.y + lightcol.y * diff) + lightcol.y * spec;
+                  b = b * (ambient.z + lightcol.z * diff) + lightcol.z * spec;
                 }
 
               crow[x] = softgl_pack565(r, g, b);
@@ -950,18 +949,17 @@ int softgl_draw_mesh(struct softgl_context_s *ctx,
     {
       const struct softgl_vertex_s *src = &mesh->vertices[i];
       struct softgl_vsout_s *dst = &ctx->vsbuf[i];
-      struct softgl_vec3_s pos = softgl_vec3(src->pos[0], src->pos[1],
-                                             src->pos[2]);
-      struct softgl_vec3_s nrm = softgl_vec3(src->nrm[0], src->nrm[1],
-                                             src->nrm[2]);
+      struct softgl_vec3_s pos =
+          softgl_vec3(src->pos[0], src->pos[1], src->pos[2]);
+      struct softgl_vec3_s nrm =
+          softgl_vec3(src->nrm[0], src->nrm[1], src->nrm[2]);
 
       dst->clip = softgl_mat4_mul_vec4(&ctx->mvp,
-                                       softgl_vec4(pos.x, pos.y, pos.z,
-                                                   1.0f));
+                                       softgl_vec4(pos.x, pos.y, pos.z, 1.0f));
       dst->wpos = softgl_mat4_mul_point(&ctx->model, pos);
       dst->wnrm = softgl_mat4_mul_dir(&ctx->normalmat, nrm);
-      dst->u    = src->uv[0];
-      dst->v    = src->uv[1];
+      dst->u = src->uv[0];
+      dst->v = src->uv[1];
     }
 
   /* ---- Clip, project and bin ------------------------------------------ */

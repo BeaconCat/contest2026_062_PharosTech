@@ -90,13 +90,10 @@
 #define RK3576_PIN_FUNC_SHIFT 8
 #define RK3576_PIN_FUNC_MASK  (0xfu << RK3576_PIN_FUNC_SHIFT)
 
-#define RK3576_PINMUX(bank, pin, func)                            \
-  ((((uint32_t)(bank) << RK3576_PIN_BANK_SHIFT) &                 \
-    RK3576_PIN_BANK_MASK) |                                       \
-   (((uint32_t)(pin) << RK3576_PIN_NUM_SHIFT) &                   \
-    RK3576_PIN_NUM_MASK) |                                        \
-   (((uint32_t)(func) << RK3576_PIN_FUNC_SHIFT) &                 \
-    RK3576_PIN_FUNC_MASK))
+#define RK3576_PINMUX(bank, pin, func)                                    \
+  ((((uint32_t)(bank) << RK3576_PIN_BANK_SHIFT) & RK3576_PIN_BANK_MASK) | \
+   (((uint32_t)(pin) << RK3576_PIN_NUM_SHIFT) & RK3576_PIN_NUM_MASK) |    \
+   (((uint32_t)(func) << RK3576_PIN_FUNC_SHIFT) & RK3576_PIN_FUNC_MASK))
 
 /* Same, but with the pin named by its group letter and index, which is how
  * schematics and the TRM spell it (GPIO4_C3 -> RK3576_PINMUX_G(4, 2, 3, f)).
@@ -107,22 +104,21 @@
 #define RK3576_PIN_GROUP_C 2
 #define RK3576_PIN_GROUP_D 3
 
-#define RK3576_PIN_A(idx) (RK3576_PIN_GROUP_A * 8 + (idx))
-#define RK3576_PIN_B(idx) (RK3576_PIN_GROUP_B * 8 + (idx))
-#define RK3576_PIN_C(idx) (RK3576_PIN_GROUP_C * 8 + (idx))
-#define RK3576_PIN_D(idx) (RK3576_PIN_GROUP_D * 8 + (idx))
+#define RK3576_PIN_A(idx)  (RK3576_PIN_GROUP_A * 8 + (idx))
+#define RK3576_PIN_B(idx)  (RK3576_PIN_GROUP_B * 8 + (idx))
+#define RK3576_PIN_C(idx)  (RK3576_PIN_GROUP_C * 8 + (idx))
+#define RK3576_PIN_D(idx)  (RK3576_PIN_GROUP_D * 8 + (idx))
 
 #define RK3576_PINMUX_G(bank, group, idx, func) \
-  RK3576_PINMUX((bank), (group) * 8 + (idx), (func))
+  RK3576_PINMUX((bank), (group)*8 + (idx), (func))
 
 /* Accessors */
 
 #define RK3576_PIN_BANK(id) \
-  (((id) & RK3576_PIN_BANK_MASK) >> RK3576_PIN_BANK_SHIFT)
-#define RK3576_PIN_NUM(id) \
-  (((id) & RK3576_PIN_NUM_MASK) >> RK3576_PIN_NUM_SHIFT)
+  (((id)&RK3576_PIN_BANK_MASK) >> RK3576_PIN_BANK_SHIFT)
+#define RK3576_PIN_NUM(id) (((id)&RK3576_PIN_NUM_MASK) >> RK3576_PIN_NUM_SHIFT)
 #define RK3576_PIN_FUNC(id) \
-  (((id) & RK3576_PIN_FUNC_MASK) >> RK3576_PIN_FUNC_SHIFT)
+  (((id)&RK3576_PIN_FUNC_MASK) >> RK3576_PIN_FUNC_SHIFT)
 
 /* Pad configuration flags *************************************************/
 
@@ -143,26 +139,26 @@
  * pad (GPIO0_A, GPIO0_B[0:3], GPIO4_D[0:1]) returns -EINVAL.
  */
 
-#define RK3576_PIN_DRV_SHIFT     3
-#define RK3576_PIN_DRV_MASK      (0xfu << RK3576_PIN_DRV_SHIFT)
-#define RK3576_PIN_DRV_KEEP      (0x0u << RK3576_PIN_DRV_SHIFT)
-#define RK3576_PIN_DRV_LEVEL(n)  ((((uint32_t)(n) + 1u) << RK3576_PIN_DRV_SHIFT) \
-                                  & RK3576_PIN_DRV_MASK)
+#define RK3576_PIN_DRV_SHIFT 3
+#define RK3576_PIN_DRV_MASK  (0xfu << RK3576_PIN_DRV_SHIFT)
+#define RK3576_PIN_DRV_KEEP  (0x0u << RK3576_PIN_DRV_SHIFT)
+#define RK3576_PIN_DRV_LEVEL(n) \
+  ((((uint32_t)(n) + 1u) << RK3576_PIN_DRV_SHIFT) & RK3576_PIN_DRV_MASK)
 
-#define RK3576_PIN_DRV_100OHM    RK3576_PIN_DRV_LEVEL(0)
-#define RK3576_PIN_DRV_66OHM     RK3576_PIN_DRV_LEVEL(1)
-#define RK3576_PIN_DRV_50OHM     RK3576_PIN_DRV_LEVEL(2)
-#define RK3576_PIN_DRV_40OHM     RK3576_PIN_DRV_LEVEL(3)
-#define RK3576_PIN_DRV_33OHM     RK3576_PIN_DRV_LEVEL(4)
-#define RK3576_PIN_DRV_25OHM     RK3576_PIN_DRV_LEVEL(5)
+#define RK3576_PIN_DRV_100OHM RK3576_PIN_DRV_LEVEL(0)
+#define RK3576_PIN_DRV_66OHM  RK3576_PIN_DRV_LEVEL(1)
+#define RK3576_PIN_DRV_50OHM  RK3576_PIN_DRV_LEVEL(2)
+#define RK3576_PIN_DRV_40OHM  RK3576_PIN_DRV_LEVEL(3)
+#define RK3576_PIN_DRV_33OHM  RK3576_PIN_DRV_LEVEL(4)
+#define RK3576_PIN_DRV_25OHM  RK3576_PIN_DRV_LEVEL(5)
 
 /* Schmitt trigger input. */
 
-#define RK3576_PIN_SMT_SHIFT     7
-#define RK3576_PIN_SMT_MASK      (0x3u << RK3576_PIN_SMT_SHIFT)
-#define RK3576_PIN_SMT_KEEP      (0x0u << RK3576_PIN_SMT_SHIFT)
-#define RK3576_PIN_SMT_DISABLE   (0x1u << RK3576_PIN_SMT_SHIFT)
-#define RK3576_PIN_SMT_ENABLE    (0x2u << RK3576_PIN_SMT_SHIFT)
+#define RK3576_PIN_SMT_SHIFT   7
+#define RK3576_PIN_SMT_MASK    (0x3u << RK3576_PIN_SMT_SHIFT)
+#define RK3576_PIN_SMT_KEEP    (0x0u << RK3576_PIN_SMT_SHIFT)
+#define RK3576_PIN_SMT_DISABLE (0x1u << RK3576_PIN_SMT_SHIFT)
+#define RK3576_PIN_SMT_ENABLE  (0x2u << RK3576_PIN_SMT_SHIFT)
 
 /* Slew rate.
  *
@@ -173,11 +169,11 @@
  * than KEEP with -ENOTSUP until the offsets are confirmed against silicon.
  */
 
-#define RK3576_PIN_SLEW_SHIFT    9
-#define RK3576_PIN_SLEW_MASK     (0x3u << RK3576_PIN_SLEW_SHIFT)
-#define RK3576_PIN_SLEW_KEEP     (0x0u << RK3576_PIN_SLEW_SHIFT)
-#define RK3576_PIN_SLEW_SLOW     (0x1u << RK3576_PIN_SLEW_SHIFT)
-#define RK3576_PIN_SLEW_FAST     (0x2u << RK3576_PIN_SLEW_SHIFT)
+#define RK3576_PIN_SLEW_SHIFT 9
+#define RK3576_PIN_SLEW_MASK  (0x3u << RK3576_PIN_SLEW_SHIFT)
+#define RK3576_PIN_SLEW_KEEP  (0x0u << RK3576_PIN_SLEW_SHIFT)
+#define RK3576_PIN_SLEW_SLOW  (0x1u << RK3576_PIN_SLEW_SHIFT)
+#define RK3576_PIN_SLEW_FAST  (0x2u << RK3576_PIN_SLEW_SHIFT)
 
 /****************************************************************************
  * Public Types
@@ -196,8 +192,7 @@ struct rk3576_pin_cfg_s
  ****************************************************************************/
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /****************************************************************************
@@ -325,8 +320,7 @@ int rk3576_pinctrl_config(const struct rk3576_pin_cfg_s *cfg);
  *
  ****************************************************************************/
 
-int rk3576_pinctrl_config_group(const struct rk3576_pin_cfg_s *cfgs,
-                                size_t n);
+int rk3576_pinctrl_config_group(const struct rk3576_pin_cfg_s *cfgs, size_t n);
 
 #ifdef __cplusplus
 }

@@ -42,48 +42,48 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define RK3576_I3C_NUM              2  /* I3C0, I3C1 */
+#define RK3576_I3C_NUM 2 /* I3C0, I3C1 */
 
 /* Maximum number of devices tracked in the device address table (DAT).
  * The real depth is read from DEV_ADDR_TABLE_PTR at init and clamped to
  * this value.
  */
 
-#define RK3576_I3C_MAX_DEVS         8
+#define RK3576_I3C_MAX_DEVS 8
 
 /* Slot 0 of the DAT is reserved for legacy I2C traffic issued through the
  * i2c_master_s interface; I3C devices discovered by ENTDAA start at slot 1.
  */
 
-#define RK3576_I3C_I2C_DAT_SLOT     0
-#define RK3576_I3C_FIRST_I3C_SLOT   1
+#define RK3576_I3C_I2C_DAT_SLOT   0
+#define RK3576_I3C_FIRST_I3C_SLOT 1
 
 /* MIPI I3C common command codes used by this driver. */
 
-#define RK3576_I3C_CCC_ENEC_B       0x00 /* Broadcast enable events */
-#define RK3576_I3C_CCC_DISEC_B      0x01 /* Broadcast disable events */
-#define RK3576_I3C_CCC_RSTDAA_B     0x06 /* Broadcast reset dynamic addr */
-#define RK3576_I3C_CCC_ENTDAA       0x07 /* Enter dynamic addr assignment */
-#define RK3576_I3C_CCC_SETMWL_B     0x09 /* Broadcast set max write length */
-#define RK3576_I3C_CCC_SETMRL_B     0x0a /* Broadcast set max read length */
-#define RK3576_I3C_CCC_ENEC_D       0x80 /* Direct enable events */
-#define RK3576_I3C_CCC_DISEC_D      0x81 /* Direct disable events */
-#define RK3576_I3C_CCC_SETDASA      0x87 /* Set dynamic addr from static */
-#define RK3576_I3C_CCC_SETNEWDA     0x88 /* Set new dynamic address */
-#define RK3576_I3C_CCC_GETPID       0x8d /* Get provisional ID */
-#define RK3576_I3C_CCC_GETBCR       0x8e /* Get bus characteristics */
-#define RK3576_I3C_CCC_GETDCR       0x8f /* Get device characteristics */
-#define RK3576_I3C_CCC_GETSTATUS    0x90 /* Get device status */
+#define RK3576_I3C_CCC_ENEC_B    0x00 /* Broadcast enable events */
+#define RK3576_I3C_CCC_DISEC_B   0x01 /* Broadcast disable events */
+#define RK3576_I3C_CCC_RSTDAA_B  0x06 /* Broadcast reset dynamic addr */
+#define RK3576_I3C_CCC_ENTDAA    0x07 /* Enter dynamic addr assignment */
+#define RK3576_I3C_CCC_SETMWL_B  0x09 /* Broadcast set max write length */
+#define RK3576_I3C_CCC_SETMRL_B  0x0a /* Broadcast set max read length */
+#define RK3576_I3C_CCC_ENEC_D    0x80 /* Direct enable events */
+#define RK3576_I3C_CCC_DISEC_D   0x81 /* Direct disable events */
+#define RK3576_I3C_CCC_SETDASA   0x87 /* Set dynamic addr from static */
+#define RK3576_I3C_CCC_SETNEWDA  0x88 /* Set new dynamic address */
+#define RK3576_I3C_CCC_GETPID    0x8d /* Get provisional ID */
+#define RK3576_I3C_CCC_GETBCR    0x8e /* Get bus characteristics */
+#define RK3576_I3C_CCC_GETDCR    0x8f /* Get device characteristics */
+#define RK3576_I3C_CCC_GETSTATUS 0x90 /* Get device status */
 
 /* Event bits for ENEC/DISEC payloads. */
 
-#define RK3576_I3C_EVENT_SIR        (1 << 0) /* Slave interrupt request */
-#define RK3576_I3C_EVENT_MR         (1 << 1) /* Master request */
-#define RK3576_I3C_EVENT_HJ         (1 << 3) /* Hot join */
+#define RK3576_I3C_EVENT_SIR (1 << 0) /* Slave interrupt request */
+#define RK3576_I3C_EVENT_MR  (1 << 1) /* Master request */
+#define RK3576_I3C_EVENT_HJ  (1 << 3) /* Hot join */
 
 /* Largest IBI payload the driver buffers per event. */
 
-#define RK3576_I3C_IBI_PAYLOAD_MAX  8
+#define RK3576_I3C_IBI_PAYLOAD_MAX 8
 
 /****************************************************************************
  * Public Types
@@ -296,8 +296,8 @@ int rk3576_i3c_ibi_disable(struct i2c_master_s *dev, uint8_t slot);
  *
  ****************************************************************************/
 
-int rk3576_i3c_priv_transfer(struct i2c_master_s *dev, uint8_t slot,
-                             bool read, uint8_t *buffer, uint16_t length);
+int rk3576_i3c_priv_transfer(struct i2c_master_s *dev, uint8_t slot, bool read,
+                             uint8_t *buffer, uint16_t length);
 
 #ifdef __cplusplus
 }

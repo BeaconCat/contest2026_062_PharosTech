@@ -88,42 +88,41 @@
  */
 
 const struct rk3576_pinctrl_route_s
-  g_rk3576_pinctrl_routes[RK3576_PINCTRL_NROUTES] =
-{
-  /* bank  first  last   pull        drive       schmitt */
+    g_rk3576_pinctrl_routes[RK3576_PINCTRL_NROUTES] = {
+      /* bank  first  last   pull        drive       schmitt */
 
-  /* GPIO0_A + GPIO0_B[0:3] - PMU1_IOC */
+      /* GPIO0_A + GPIO0_B[0:3] - PMU1_IOC */
 
-  {  0,     0,    11,    0x00000020, 0x00000010, 0x00000030 },
+      { 0, 0, 11, 0x00000020, 0x00000010, 0x00000030 },
 
-  /* GPIO0_B[4:7] + GPIO0_C + GPIO0_D - PMU2_IOC */
+      /* GPIO0_B[4:7] + GPIO0_C + GPIO0_D - PMU2_IOC */
 
-  {  0,    12,    31,    0x00002024, 0x00002008, 0x0000203c },
+      { 0, 12, 31, 0x00002024, 0x00002008, 0x0000203c },
 
-  /* GPIO1 - TOP_IOC */
+      /* GPIO1 - TOP_IOC */
 
-  {  1,     0,    31,    0x00006110, 0x00006020, 0x00006210 },
+      { 1, 0, 31, 0x00006110, 0x00006020, 0x00006210 },
 
-  /* GPIO2 - TOP_IOC */
+      /* GPIO2 - TOP_IOC */
 
-  {  2,     0,    31,    0x00006120, 0x00006040, 0x00006220 },
+      { 2, 0, 31, 0x00006120, 0x00006040, 0x00006220 },
 
-  /* GPIO3 - TOP_IOC */
+      /* GPIO3 - TOP_IOC */
 
-  {  3,     0,    31,    0x00006130, 0x00006060, 0x00006230 },
+      { 3, 0, 31, 0x00006130, 0x00006060, 0x00006230 },
 
-  /* GPIO4_A + GPIO4_B - TOP_IOC */
+      /* GPIO4_A + GPIO4_B - TOP_IOC */
 
-  {  4,     0,    15,    0x00006140, 0x00006080, 0x00006240 },
+      { 4, 0, 15, 0x00006140, 0x00006080, 0x00006240 },
 
-  /* GPIO4_C - VCCIO6_IOC */
+      /* GPIO4_C - VCCIO6_IOC */
 
-  {  4,    16,    23,    0x0000a140, 0x0000a080, 0x0000a240 },
+      { 4, 16, 23, 0x0000a140, 0x0000a080, 0x0000a240 },
 
-  /* GPIO4_D - VCCIO7_IOC */
+      /* GPIO4_D - VCCIO7_IOC */
 
-  {  4,    24,    31,    0x0000b140, 0x0000b080, 0x0000b240 },
-};
+      { 4, 24, 31, 0x0000b140, 0x0000b080, 0x0000b240 },
+    };
 
 /****************************************************************************
  * Private Data
@@ -142,7 +141,7 @@ static spinlock_t g_rk3576_pinctrl_lock = SP_UNLOCKED;
  ****************************************************************************/
 
 static const struct rk3576_pinctrl_route_s *
-  rk3576_pinctrl_route(unsigned int bank, unsigned int pin);
+rk3576_pinctrl_route(unsigned int bank, unsigned int pin);
 static int rk3576_pinctrl_decode(uint32_t pinmux, unsigned int *bank,
                                  unsigned int *pin);
 static uint32_t rk3576_pinctrl_mux_reg(unsigned int bank, unsigned int pin,
@@ -151,15 +150,15 @@ static int rk3576_pinctrl_drv_to_hw(unsigned int bank, unsigned int pin,
                                     unsigned int level, uint32_t *hw_val);
 static void rk3576_pinctrl_set_mux_raw(unsigned int bank, unsigned int pin,
                                        unsigned int func);
-static void rk3576_pinctrl_set_pull_raw(
-  const struct rk3576_pinctrl_route_s *route, unsigned int pin,
-  uint32_t hw_pull);
-static void rk3576_pinctrl_set_drive_raw(
-  const struct rk3576_pinctrl_route_s *route, unsigned int pin,
-  uint32_t hw_val);
-static void rk3576_pinctrl_set_schmitt_raw(
-  const struct rk3576_pinctrl_route_s *route, unsigned int pin,
-  bool enable);
+static void
+rk3576_pinctrl_set_pull_raw(const struct rk3576_pinctrl_route_s *route,
+                            unsigned int pin, uint32_t hw_pull);
+static void
+rk3576_pinctrl_set_drive_raw(const struct rk3576_pinctrl_route_s *route,
+                             unsigned int pin, uint32_t hw_val);
+static void
+rk3576_pinctrl_set_schmitt_raw(const struct rk3576_pinctrl_route_s *route,
+                               unsigned int pin, bool enable);
 static int rk3576_pinctrl_config_locked(const struct rk3576_pin_cfg_s *cfg);
 
 /****************************************************************************
@@ -178,14 +177,13 @@ static int rk3576_pinctrl_config_locked(const struct rk3576_pin_cfg_s *cfg);
  ****************************************************************************/
 
 static const struct rk3576_pinctrl_route_s *
-  rk3576_pinctrl_route(unsigned int bank, unsigned int pin)
+rk3576_pinctrl_route(unsigned int bank, unsigned int pin)
 {
   unsigned int i;
 
   for (i = 0; i < RK3576_PINCTRL_NROUTES; i++)
     {
-      const struct rk3576_pinctrl_route_s *route =
-        &g_rk3576_pinctrl_routes[i];
+      const struct rk3576_pinctrl_route_s *route = &g_rk3576_pinctrl_routes[i];
 
       if (route->bank == bank && pin >= route->first_pin &&
           pin <= route->last_pin)
@@ -212,7 +210,7 @@ static int rk3576_pinctrl_decode(uint32_t pinmux, unsigned int *bank,
                                  unsigned int *pin)
 {
   *bank = RK3576_PIN_BANK(pinmux);
-  *pin  = RK3576_PIN_NUM(pinmux);
+  *pin = RK3576_PIN_NUM(pinmux);
 
   if (*bank >= RK3576_GPIO_NPORTS)
     {
@@ -258,9 +256,9 @@ static int rk3576_pinctrl_decode(uint32_t pinmux, unsigned int *bank,
 static uint32_t rk3576_pinctrl_mux_reg(unsigned int bank, unsigned int pin,
                                        unsigned int *shift)
 {
-  unsigned int group     = pin / 8;
+  unsigned int group = pin / 8;
   unsigned int group_pin = pin % 8;
-  uint32_t     reg;
+  uint32_t reg;
 
   reg = RK3576_IOC_ADDR + g_iomux_groups[bank][group].offset;
 
@@ -272,7 +270,7 @@ static uint32_t rk3576_pinctrl_mux_reg(unsigned int bank, unsigned int pin,
 
   if (group_pin >= RK3576_MUX_PINS_PER_REG)
     {
-      reg       += 4;
+      reg += 4;
       group_pin -= RK3576_MUX_PINS_PER_REG;
     }
 
@@ -344,7 +342,7 @@ static int rk3576_pinctrl_drv_to_hw(unsigned int bank, unsigned int pin,
     }
 
   gpioerr("ERROR: drive level %u unsupported on 4-level pad GPIO%u_%u\n",
-         level, bank, pin);
+          level, bank, pin);
   return -EINVAL;
 }
 
@@ -361,12 +359,11 @@ static void rk3576_pinctrl_set_mux_raw(unsigned int bank, unsigned int pin,
                                        unsigned int func)
 {
   unsigned int shift;
-  uint32_t     reg;
+  uint32_t reg;
 
   reg = rk3576_pinctrl_mux_reg(bank, pin, &shift);
 
-  putreg32(RK3576_WRITE_MASK(shift + RK3576_MUX_BITS_PER_PIN - 1, shift,
-                             func),
+  putreg32(RK3576_WRITE_MASK(shift + RK3576_MUX_BITS_PER_PIN - 1, shift, func),
            reg);
 }
 
@@ -379,20 +376,20 @@ static void rk3576_pinctrl_set_mux_raw(unsigned int bank, unsigned int pin,
  *
  ****************************************************************************/
 
-static void rk3576_pinctrl_set_pull_raw(
-  const struct rk3576_pinctrl_route_s *route, unsigned int pin,
-  uint32_t hw_pull)
+static void
+rk3576_pinctrl_set_pull_raw(const struct rk3576_pinctrl_route_s *route,
+                            unsigned int pin, uint32_t hw_pull)
 {
-  uint32_t     reg;
+  uint32_t reg;
   unsigned int shift;
 
   reg = RK3576_IOC_ADDR + route->pull_base +
         (pin / RK3576_PULL_PINS_PER_REG) * 4;
   shift = (pin % RK3576_PULL_PINS_PER_REG) * RK3576_PULL_BITS_PER_PIN;
 
-  putreg32(RK3576_WRITE_MASK(shift + RK3576_PULL_BITS_PER_PIN - 1, shift,
-                             hw_pull),
-           reg);
+  putreg32(
+      RK3576_WRITE_MASK(shift + RK3576_PULL_BITS_PER_PIN - 1, shift, hw_pull),
+      reg);
 }
 
 /****************************************************************************
@@ -404,20 +401,20 @@ static void rk3576_pinctrl_set_pull_raw(
  *
  ****************************************************************************/
 
-static void rk3576_pinctrl_set_drive_raw(
-  const struct rk3576_pinctrl_route_s *route, unsigned int pin,
-  uint32_t hw_val)
+static void
+rk3576_pinctrl_set_drive_raw(const struct rk3576_pinctrl_route_s *route,
+                             unsigned int pin, uint32_t hw_val)
 {
-  uint32_t     reg;
+  uint32_t reg;
   unsigned int shift;
 
-  reg = RK3576_IOC_ADDR + route->drv_base +
-        (pin / RK3576_DRV_PINS_PER_REG) * 4;
+  reg =
+      RK3576_IOC_ADDR + route->drv_base + (pin / RK3576_DRV_PINS_PER_REG) * 4;
   shift = (pin % RK3576_DRV_PINS_PER_REG) * RK3576_DRV_BITS_PER_PIN;
 
-  putreg32(RK3576_WRITE_MASK(shift + RK3576_DRV_BITS_PER_PIN - 1, shift,
-                             hw_val),
-           reg);
+  putreg32(
+      RK3576_WRITE_MASK(shift + RK3576_DRV_BITS_PER_PIN - 1, shift, hw_val),
+      reg);
 }
 
 /****************************************************************************
@@ -428,15 +425,15 @@ static void rk3576_pinctrl_set_drive_raw(
  *
  ****************************************************************************/
 
-static void rk3576_pinctrl_set_schmitt_raw(
-  const struct rk3576_pinctrl_route_s *route, unsigned int pin,
-  bool enable)
+static void
+rk3576_pinctrl_set_schmitt_raw(const struct rk3576_pinctrl_route_s *route,
+                               unsigned int pin, bool enable)
 {
-  uint32_t     reg;
+  uint32_t reg;
   unsigned int shift;
 
-  reg = RK3576_IOC_ADDR + route->smt_base +
-        (pin / RK3576_SMT_PINS_PER_REG) * 4;
+  reg =
+      RK3576_IOC_ADDR + route->smt_base + (pin / RK3576_SMT_PINS_PER_REG) * 4;
   shift = (pin % RK3576_SMT_PINS_PER_REG) * RK3576_SMT_BITS_PER_PIN;
 
   putreg32(RK3576_WRITE_BIT(shift, enable ? 1u : 0u), reg);
@@ -457,8 +454,8 @@ static int rk3576_pinctrl_config_locked(const struct rk3576_pin_cfg_s *cfg)
   unsigned int bank;
   unsigned int pin;
   unsigned int func;
-  uint32_t     field;
-  int          ret;
+  uint32_t field;
+  int ret;
 
   ret = rk3576_pinctrl_decode(cfg->pinmux, &bank, &pin);
   if (ret < 0)
@@ -479,8 +476,8 @@ static int rk3576_pinctrl_config_locked(const struct rk3576_pin_cfg_s *cfg)
 
   if ((cfg->flags & RK3576_PIN_SLEW_MASK) != RK3576_PIN_SLEW_KEEP)
     {
-      gpioerr("ERROR: slew rate control not supported (GPIO%u_%u)\n",
-             bank, pin);
+      gpioerr("ERROR: slew rate control not supported (GPIO%u_%u)\n", bank,
+              pin);
       return -ENOTSUP;
     }
 
@@ -520,7 +517,7 @@ static int rk3576_pinctrl_config_locked(const struct rk3576_pin_cfg_s *cfg)
   if (field != RK3576_PIN_DRV_KEEP)
     {
       unsigned int level = (field >> RK3576_PIN_DRV_SHIFT) - 1u;
-      uint32_t     hw_val;
+      uint32_t hw_val;
 
       ret = rk3576_pinctrl_drv_to_hw(bank, pin, level, &hw_val);
       if (ret < 0)
@@ -570,8 +567,8 @@ int rk3576_pinctrl_set_mux(uint32_t pinmux)
   unsigned int bank;
   unsigned int pin;
   unsigned int func;
-  irqstate_t   flags;
-  int          ret;
+  irqstate_t flags;
+  int ret;
 
   ret = rk3576_pinctrl_decode(pinmux, &bank, &pin);
   if (ret < 0)
@@ -610,8 +607,8 @@ int rk3576_pinctrl_get_mux(uint32_t pinmux, unsigned int *func)
   unsigned int bank;
   unsigned int pin;
   unsigned int shift;
-  uint32_t     reg;
-  int          ret;
+  uint32_t reg;
+  int ret;
 
   if (func == NULL)
     {
@@ -646,9 +643,9 @@ int rk3576_pinctrl_set_pull(uint32_t pinmux, uint32_t pull)
   const struct rk3576_pinctrl_route_s *route;
   unsigned int bank;
   unsigned int pin;
-  uint32_t     hw_pull;
-  irqstate_t   flags;
-  int          ret;
+  uint32_t hw_pull;
+  irqstate_t flags;
+  int ret;
 
   ret = rk3576_pinctrl_decode(pinmux, &bank, &pin);
   if (ret < 0)
@@ -705,9 +702,9 @@ int rk3576_pinctrl_set_drive(uint32_t pinmux, unsigned int level)
   const struct rk3576_pinctrl_route_s *route;
   unsigned int bank;
   unsigned int pin;
-  uint32_t     hw_val;
-  irqstate_t   flags;
-  int          ret;
+  uint32_t hw_val;
+  irqstate_t flags;
+  int ret;
 
   ret = rk3576_pinctrl_decode(pinmux, &bank, &pin);
   if (ret < 0)
@@ -747,8 +744,8 @@ int rk3576_pinctrl_set_schmitt(uint32_t pinmux, bool enable)
   const struct rk3576_pinctrl_route_s *route;
   unsigned int bank;
   unsigned int pin;
-  irqstate_t   flags;
-  int          ret;
+  irqstate_t flags;
+  int ret;
 
   ret = rk3576_pinctrl_decode(pinmux, &bank, &pin);
   if (ret < 0)
@@ -790,12 +787,11 @@ int rk3576_pinctrl_config(const struct rk3576_pin_cfg_s *cfg)
  *
  ****************************************************************************/
 
-int rk3576_pinctrl_config_group(const struct rk3576_pin_cfg_s *cfgs,
-                                size_t n)
+int rk3576_pinctrl_config_group(const struct rk3576_pin_cfg_s *cfgs, size_t n)
 {
   irqstate_t flags;
-  size_t     i;
-  int        ret = OK;
+  size_t i;
+  int ret = OK;
 
   if (cfgs == NULL)
     {

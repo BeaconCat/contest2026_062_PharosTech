@@ -87,23 +87,23 @@
  * added later without hunting for magic numbers.
  */
 
-#define RK3576_VOP_FB_VP       0                     /* Video port 0      */
-#define RK3576_VOP_FB_ESMART   0                     /* Esmart0 window    */
-#define RK3576_VOP_FB_WINID    VOP_OVL_WIN_ESMART0   /* Its overlay ID    */
-#define RK3576_VOP_FB_LAYER    0                     /* Bottom Z layer    */
+#define RK3576_VOP_FB_VP     0                   /* Video port 0      */
+#define RK3576_VOP_FB_ESMART 0                   /* Esmart0 window    */
+#define RK3576_VOP_FB_WINID  VOP_OVL_WIN_ESMART0 /* Its overlay ID    */
+#define RK3576_VOP_FB_LAYER  0                   /* Bottom Z layer    */
 
 /* Framebuffer colour depth.  32bpp (ARGB8888) by default; 24bpp packs
  * three bytes per pixel and needs a stride rounded up to a whole word.
  */
 
 #ifdef CONFIG_RK3576_VOP_FB_RGB888
-#  define RK3576_VOP_FB_BPP    24
-#  define RK3576_VOP_FB_FMT    FB_FMT_RGB24
-#  define RK3576_VOP_WIN_FMT   VOP_WIN_FMT_RGB888
+#define RK3576_VOP_FB_BPP  24
+#define RK3576_VOP_FB_FMT  FB_FMT_RGB24
+#define RK3576_VOP_WIN_FMT VOP_WIN_FMT_RGB888
 #else
-#  define RK3576_VOP_FB_BPP    32
-#  define RK3576_VOP_FB_FMT    FB_FMT_RGB32
-#  define RK3576_VOP_WIN_FMT   VOP_WIN_FMT_ARGB8888
+#define RK3576_VOP_FB_BPP  32
+#define RK3576_VOP_FB_FMT  FB_FMT_RGB32
+#define RK3576_VOP_WIN_FMT VOP_WIN_FMT_ARGB8888
 #endif
 
 /* Opaque global alpha for the single visible window. */
@@ -112,7 +112,7 @@
 
 /* Display background colour (black) programmed into VP DSP_BG. */
 
-#define RK3576_VOP_BG_BLACK     0x00000000u
+#define RK3576_VOP_BG_BLACK 0x00000000u
 
 /* Maximum time to wait for the shadow registers to be taken, and for the
  * standby bit to actually stop the scan-out, expressed in polling loops of
@@ -123,7 +123,7 @@
 
 /* Round x up to the next multiple of a (a must be a power of two). */
 
-#define RK3576_VOP_ALIGN_UP(x, a) (((x) + ((a) - 1)) & ~((a) - 1))
+#define RK3576_VOP_ALIGN_UP(x, a) (((x) + ((a)-1)) & ~((a)-1))
 
 /****************************************************************************
  * Private Types
@@ -135,21 +135,21 @@
 
 struct rk3576_vop_s
 {
-  struct fb_vtable_s vtable;             /* FB operations (must be first) */
+  struct fb_vtable_s vtable; /* FB operations (must be first) */
 
   bool initialized;                      /* up_fbinitialize() has run     */
-  int  iface;                            /* RK3576_VOP_IF_* destination   */
+  int iface;                             /* RK3576_VOP_IF_* destination   */
   struct rk3576_display_timing_s timing; /* Active display mode           */
 
-  uint8_t *fbmem;                        /* Framebuffer virtual address   */
-  size_t   fblen;                        /* Framebuffer size in bytes     */
-  uint32_t stride;                       /* Framebuffer stride in bytes   */
+  uint8_t *fbmem;  /* Framebuffer virtual address   */
+  size_t fblen;    /* Framebuffer size in bytes     */
+  uint32_t stride; /* Framebuffer stride in bytes   */
 
-  uint32_t aclk_hz;                      /* Measured aclk_vop rate        */
-  uint32_t dclk_hz;                      /* Measured dclk_vp0 rate        */
+  uint32_t aclk_hz; /* Measured aclk_vop rate        */
+  uint32_t dclk_hz; /* Measured dclk_vp0 rate        */
 
 #ifdef CONFIG_FB_SYNC
-  sem_t    vsync;                        /* Posted from the VP0 ISR       */
+  sem_t vsync; /* Posted from the VP0 ISR       */
 #endif
 };
 
@@ -163,16 +163,16 @@ static void rk3576_vop_modifyreg(uint32_t offset, uint32_t clrbits,
                                  uint32_t setbits);
 static void rk3576_vop_cfg_done(void);
 
-static int  rk3576_vop_clk_init(struct rk3576_vop_s *priv);
+static int rk3576_vop_clk_init(struct rk3576_vop_s *priv);
 static void rk3576_vop_iommu_bypass(void);
-static int  rk3576_vop_check_timing(
-              const struct rk3576_display_timing_s *timing);
+static int
+rk3576_vop_check_timing(const struct rk3576_display_timing_s *timing);
 static void rk3576_vop_set_standby(bool standby);
 static void rk3576_vop_config_timing(struct rk3576_vop_s *priv);
 static void rk3576_vop_config_overlay(void);
 static void rk3576_vop_config_window(struct rk3576_vop_s *priv);
 static void rk3576_vop_config_output(struct rk3576_vop_s *priv);
-static int  rk3576_vop_interrupt(int irq, void *context, void *arg);
+static int rk3576_vop_interrupt(int irq, void *context, void *arg);
 
 static int rk3576_vop_getvideoinfo(struct fb_vtable_s *vtable,
                                    struct fb_videoinfo_s *vinfo);
@@ -188,38 +188,36 @@ static int rk3576_vop_waitforvsync(struct fb_vtable_s *vtable);
 
 /* CEA-861 1920x1080p60: 148.5 MHz, hsync/vsync both active high. */
 
-static const struct rk3576_display_timing_s g_rk3576_vop_1080p60 =
-{
-  .pixclk            = 148500000,
-  .hact              = 1920,
-  .hfp               = 88,
-  .hsync             = 44,
-  .hbp               = 148,
-  .htotal            = 2200,
-  .vact              = 1080,
-  .vfp               = 4,
-  .vsync             = 5,
-  .vbp               = 36,
-  .vtotal            = 1125,
+static const struct rk3576_display_timing_s g_rk3576_vop_1080p60 = {
+  .pixclk = 148500000,
+  .hact = 1920,
+  .hfp = 88,
+  .hsync = 44,
+  .hbp = 148,
+  .htotal = 2200,
+  .vact = 1080,
+  .vfp = 4,
+  .vsync = 5,
+  .vbp = 36,
+  .vtotal = 1125,
   .hsync_active_high = true,
   .vsync_active_high = true,
 };
 
 /* CEA-861 1280x720p60: 74.25 MHz, hsync/vsync both active high. */
 
-static const struct rk3576_display_timing_s g_rk3576_vop_720p60 =
-{
-  .pixclk            = 74250000,
-  .hact              = 1280,
-  .hfp               = 110,
-  .hsync             = 40,
-  .hbp               = 220,
-  .htotal            = 1650,
-  .vact              = 720,
-  .vfp               = 5,
-  .vsync             = 5,
-  .vbp               = 20,
-  .vtotal            = 750,
+static const struct rk3576_display_timing_s g_rk3576_vop_720p60 = {
+  .pixclk = 74250000,
+  .hact = 1280,
+  .hfp = 110,
+  .hsync = 40,
+  .hbp = 220,
+  .htotal = 1650,
+  .vact = 720,
+  .vfp = 5,
+  .vsync = 5,
+  .vbp = 20,
+  .vtotal = 750,
   .hsync_active_high = true,
   .vsync_active_high = true,
 };
@@ -287,7 +285,7 @@ static void rk3576_vop_cfg_done(void)
 {
   rk3576_vop_putreg(RK3576_VOP_REG_CFG_DONE,
                     VOP_REG_CFG_DONE_EN |
-                    VOP_REG_CFG_DONE_VP(RK3576_VOP_FB_VP));
+                        VOP_REG_CFG_DONE_VP(RK3576_VOP_FB_VP));
 }
 
 /****************************************************************************
@@ -361,7 +359,8 @@ static int rk3576_vop_clk_init(struct rk3576_vop_s *priv)
   if (ret < 0)
     {
       lcdwarn("WARNING: dclk_vp0_en cannot be set to %" PRIu32 " Hz (%d); "
-              "relying on the encoder PLL\n", priv->timing.pixclk, ret);
+              "relying on the encoder PLL\n",
+              priv->timing.pixclk, ret);
     }
 
   ret = clk_enable(dclk);
@@ -428,28 +427,27 @@ static void rk3576_vop_iommu_bypass(void)
  *
  ****************************************************************************/
 
-static int rk3576_vop_check_timing(
-              const struct rk3576_display_timing_s *timing)
+static int
+rk3576_vop_check_timing(const struct rk3576_display_timing_s *timing)
 {
   if (timing->hact == 0 || timing->vact == 0)
     {
       return -EINVAL;
     }
 
-  if (timing->hact > RK3576_VOP_MAX_HACT ||
-      timing->vact > RK3576_VOP_MAX_VACT)
+  if (timing->hact > RK3576_VOP_MAX_HACT || timing->vact > RK3576_VOP_MAX_VACT)
     {
       return -EINVAL;
     }
 
-  if (timing->htotal != (uint16_t)(timing->hact + timing->hfp +
-                                   timing->hsync + timing->hbp))
+  if (timing->htotal !=
+      (uint16_t)(timing->hact + timing->hfp + timing->hsync + timing->hbp))
     {
       return -EINVAL;
     }
 
-  if (timing->vtotal != (uint16_t)(timing->vact + timing->vfp +
-                                   timing->vsync + timing->vbp))
+  if (timing->vtotal !=
+      (uint16_t)(timing->vact + timing->vfp + timing->vsync + timing->vbp))
     {
       return -EINVAL;
     }
@@ -539,9 +537,9 @@ static void rk3576_vop_config_timing(struct rk3576_vop_s *priv)
   uint16_t vact_st;
   uint16_t vact_end;
 
-  hact_st  = t->hsync + t->hbp;
+  hact_st = t->hsync + t->hbp;
   hact_end = hact_st + t->hact;
-  vact_st  = t->vsync + t->vbp;
+  vact_st = t->vsync + t->vbp;
   vact_end = vact_st + t->vact;
 
   rk3576_vop_putreg(vp + RK3576_VOP_VP_DSP_HTOTAL_HS_END,
@@ -570,15 +568,13 @@ static void rk3576_vop_config_timing(struct rk3576_vop_s *priv)
 
   /* Progressive 24-bit RGB output, no dithering, no gamma LUT. */
 
-  rk3576_vop_modifyreg(vp + RK3576_VOP_VP_DSP_CTRL,
-                       VOP_VP_DSP_CTRL_OUT_MODE_MASK |
-                       VOP_VP_DSP_CTRL_INTERLACE |
-                       VOP_VP_DSP_CTRL_P2I_EN |
-                       VOP_VP_DSP_CTRL_DSP_BLANK |
-                       VOP_VP_DSP_CTRL_DSP_LUT_EN |
-                       VOP_VP_DSP_CTRL_PRE_DITHER_DOWN_EN |
-                       VOP_VP_DSP_CTRL_DITHER_DOWN_EN,
-                       VOP_VP_DSP_CTRL_OUT_MODE(VOP_VP_OUT_MODE_P888));
+  rk3576_vop_modifyreg(
+      vp + RK3576_VOP_VP_DSP_CTRL,
+      VOP_VP_DSP_CTRL_OUT_MODE_MASK | VOP_VP_DSP_CTRL_INTERLACE |
+          VOP_VP_DSP_CTRL_P2I_EN | VOP_VP_DSP_CTRL_DSP_BLANK |
+          VOP_VP_DSP_CTRL_DSP_LUT_EN | VOP_VP_DSP_CTRL_PRE_DITHER_DOWN_EN |
+          VOP_VP_DSP_CTRL_DITHER_DOWN_EN,
+      VOP_VP_DSP_CTRL_OUT_MODE(VOP_VP_OUT_MODE_P888));
 }
 
 /****************************************************************************
@@ -599,10 +595,9 @@ static void rk3576_vop_config_overlay(void)
 
   /* Layer 0 <- Esmart0 */
 
-  rk3576_vop_modifyreg(RK3576_VOP_OVL_LAYER_SEL,
-                       VOP_OVL_LAYER_SEL_MASK(RK3576_VOP_FB_LAYER),
-                       VOP_OVL_LAYER_SEL(RK3576_VOP_FB_LAYER,
-                                         RK3576_VOP_FB_WINID));
+  rk3576_vop_modifyreg(
+      RK3576_VOP_OVL_LAYER_SEL, VOP_OVL_LAYER_SEL_MASK(RK3576_VOP_FB_LAYER),
+      VOP_OVL_LAYER_SEL(RK3576_VOP_FB_LAYER, RK3576_VOP_FB_WINID));
 
   /* One layer on the framebuffer video port, none on the others, and
    * layer 0 routed to it.
@@ -613,8 +608,7 @@ static void rk3576_vop_config_overlay(void)
   for (vp = 0; vp < RK3576_VOP_NVP; vp++)
     {
       portsel &= ~VOP_OVL_PORT_SEL_NLAYER_MASK(vp);
-      portsel |= VOP_OVL_PORT_SEL_NLAYER(vp,
-                   vp == RK3576_VOP_FB_VP ? 1 : 0);
+      portsel |= VOP_OVL_PORT_SEL_NLAYER(vp, vp == RK3576_VOP_FB_VP ? 1 : 0);
     }
 
   portsel &= ~VOP_OVL_PORT_SEL_LAYER_MASK(RK3576_VOP_FB_LAYER);
@@ -680,11 +674,11 @@ static void rk3576_vop_config_window(struct rk3576_vop_s *priv)
 
   /* Enable the region with the framebuffer pixel format, fully opaque. */
 
-  rk3576_vop_putreg(win + RK3576_VOP_ESMART_REGION0_CTRL,
-                    VOP_ESMART_REGION_CTRL_WIN_EN |
-                    VOP_ESMART_REGION_CTRL_FMT(RK3576_VOP_WIN_FMT) |
-                    VOP_ESMART_REGION_CTRL_GLOBAL_ALPHA(
-                      RK3576_VOP_ALPHA_OPAQUE));
+  rk3576_vop_putreg(
+      win + RK3576_VOP_ESMART_REGION0_CTRL,
+      VOP_ESMART_REGION_CTRL_WIN_EN |
+          VOP_ESMART_REGION_CTRL_FMT(RK3576_VOP_WIN_FMT) |
+          VOP_ESMART_REGION_CTRL_GLOBAL_ALPHA(RK3576_VOP_ALPHA_OPAQUE));
 }
 
 /****************************************************************************
@@ -719,10 +713,9 @@ static void rk3576_vop_config_output(struct rk3576_vop_s *priv)
    * path is programmed here.
    */
 
-  rk3576_vop_modifyreg(RK3576_VOP_SYS_DSP_IF_POL,
-                       VOP_DSP_IF_POL_HDMI0_MASK,
+  rk3576_vop_modifyreg(RK3576_VOP_SYS_DSP_IF_POL, VOP_DSP_IF_POL_HDMI0_MASK,
                        (pol << VOP_DSP_IF_POL_HDMI0_SHIFT) &
-                       VOP_DSP_IF_POL_HDMI0_MASK);
+                           VOP_DSP_IF_POL_HDMI0_MASK);
 
   /* One pixel per dclk on the HDMI interface. */
 
@@ -731,10 +724,9 @@ static void rk3576_vop_config_output(struct rk3576_vop_s *priv)
 
   /* Enable HDMI TX0 and select the framebuffer video port as its source */
 
-  rk3576_vop_modifyreg(RK3576_VOP_SYS_DSP_IF_EN,
-                       VOP_DSP_IF_EN_HDMI0_MUX_MASK,
+  rk3576_vop_modifyreg(RK3576_VOP_SYS_DSP_IF_EN, VOP_DSP_IF_EN_HDMI0_MUX_MASK,
                        VOP_DSP_IF_EN_HDMI0 |
-                       VOP_DSP_IF_EN_HDMI0_MUX(RK3576_VOP_FB_VP));
+                           VOP_DSP_IF_EN_HDMI0_MUX(RK3576_VOP_FB_VP));
 }
 
 /****************************************************************************
@@ -805,9 +797,9 @@ static int rk3576_vop_getvideoinfo(struct fb_vtable_s *vtable,
 
   memset(vinfo, 0, sizeof(*vinfo));
 
-  vinfo->fmt     = RK3576_VOP_FB_FMT;
-  vinfo->xres    = priv->timing.hact;
-  vinfo->yres    = priv->timing.vact;
+  vinfo->fmt = RK3576_VOP_FB_FMT;
+  vinfo->xres = priv->timing.hact;
+  vinfo->yres = priv->timing.vact;
   vinfo->nplanes = 1;
 
   return OK;
@@ -834,11 +826,11 @@ static int rk3576_vop_getplaneinfo(struct fb_vtable_s *vtable, int planeno,
 
   memset(pinfo, 0, sizeof(*pinfo));
 
-  pinfo->fbmem   = priv->fbmem;
-  pinfo->fblen   = priv->fblen;
-  pinfo->stride  = priv->stride;
+  pinfo->fbmem = priv->fbmem;
+  pinfo->fblen = priv->fblen;
+  pinfo->stride = priv->stride;
   pinfo->display = 0;
-  pinfo->bpp     = RK3576_VOP_FB_BPP;
+  pinfo->bpp = RK3576_VOP_FB_BPP;
 
   return OK;
 }
@@ -908,8 +900,7 @@ int rk3576_vop_set_timing(const struct rk3576_display_timing_s *timing)
   ret = rk3576_vop_check_timing(timing);
   if (ret < 0)
     {
-      lcderr("ERROR: rejected %ux%u timing\n",
-             timing->hact, timing->vact);
+      lcderr("ERROR: rejected %ux%u timing\n", timing->hact, timing->vact);
       return ret;
     }
 
@@ -1033,9 +1024,8 @@ int up_fbinitialize(int display)
     }
 
   version = rk3576_vop_getreg(RK3576_VOP_VERSION_INFO);
-  lcdinfo("VOP version 0x%08" PRIx32 ", mode %ux%u@%" PRIu32 "Hz\n",
-          version, priv->timing.hact, priv->timing.vact,
-          priv->timing.pixclk);
+  lcdinfo("VOP version 0x%08" PRIx32 ", mode %ux%u@%" PRIu32 "Hz\n", version,
+          priv->timing.hact, priv->timing.vact, priv->timing.pixclk);
   UNUSED(version);
 
   /* Allocate the framebuffer.  The stride is padded to a whole 32-bit
@@ -1043,8 +1033,8 @@ int up_fbinitialize(int display)
    */
 
   priv->stride = RK3576_VOP_ALIGN_UP(
-                   (uint32_t)priv->timing.hact * RK3576_VOP_FB_BPP / 8, 4);
-  priv->fblen  = (size_t)priv->stride * priv->timing.vact;
+      (uint32_t)priv->timing.hact * RK3576_VOP_FB_BPP / 8, 4);
+  priv->fblen = (size_t)priv->stride * priv->timing.vact;
 
   priv->fbmem = rk3576_dma_alloc(priv->fblen);
   if (priv->fbmem == NULL)
@@ -1085,8 +1075,7 @@ int up_fbinitialize(int display)
 
   /* Interrupts: frame start only, cleared before being unmasked. */
 
-  rk3576_vop_putreg(vp + RK3576_VOP_VP_INT_CLR,
-                    VOP_INT_HIWORD_CLR(0xffff));
+  rk3576_vop_putreg(vp + RK3576_VOP_VP_INT_CLR, VOP_INT_HIWORD_CLR(0xffff));
 
   ret = irq_attach(RK3576_IRQ_VOP_VP0, rk3576_vop_interrupt, priv);
   if (ret < 0)
@@ -1095,8 +1084,7 @@ int up_fbinitialize(int display)
       goto err_free;
     }
 
-  rk3576_vop_putreg(vp + RK3576_VOP_VP_INT_EN,
-                    VOP_INT_HIWORD(VOP_VP_INT_FS));
+  rk3576_vop_putreg(vp + RK3576_VOP_VP_INT_EN, VOP_INT_HIWORD(VOP_VP_INT_FS));
   up_enable_irq(RK3576_IRQ_VOP_VP0);
 
   /* Commit everything and start scanning out. */
@@ -1183,9 +1171,9 @@ void up_fbuninitialize(int display)
 #endif
 
   rk3576_dma_free(priv->fbmem, priv->fblen);
-  priv->fbmem       = NULL;
-  priv->fblen       = 0;
-  priv->stride      = 0;
+  priv->fbmem = NULL;
+  priv->fblen = 0;
+  priv->stride = 0;
   priv->initialized = false;
 }
 

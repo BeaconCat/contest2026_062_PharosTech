@@ -68,7 +68,6 @@
 #include <nuttx/clk/clk.h>
 #include <nuttx/clock.h>
 #include <nuttx/irq.h>
-#include <nuttx/spinlock.h>
 #include <nuttx/net/arp.h>
 #include <nuttx/net/ethernet.h>
 #include <nuttx/net/ioctl.h>
@@ -76,11 +75,12 @@
 #include <nuttx/net/net.h>
 #include <nuttx/net/netdev.h>
 #include <nuttx/signal.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/wdog.h>
 #include <nuttx/wqueue.h>
 
 #ifdef CONFIG_NET_PKT
-#  include <nuttx/net/pkt.h>
+#include <nuttx/net/pkt.h>
 #endif
 
 #include "arm64_internal.h"
@@ -92,7 +92,7 @@
 #include "rk3576_gmac.h"
 
 #ifdef CONFIG_RK3576_OTP
-#  include "rk3576_otp.h"
+#include "rk3576_otp.h"
 #endif
 
 #ifdef CONFIG_RK3576_GMAC
@@ -102,29 +102,30 @@
  ****************************************************************************/
 
 #if !defined(CONFIG_SCHED_WORKQUEUE)
-#  error Work queue support is required (CONFIG_SCHED_WORKQUEUE)
+#error Work queue support is required (CONFIG_SCHED_WORKQUEUE)
 #endif
 
 #if !defined(CONFIG_RK3576_DMA_ALLOC)
-#  error CONFIG_RK3576_DMA_ALLOC is required by the GMAC driver
+#error CONFIG_RK3576_DMA_ALLOC is required by the GMAC driver
 #endif
 
 /* Use the dedicated Ethernet work queue when it exists. */
 
-#if defined(CONFIG_NET_ETHERNET_WORKQUEUE) || defined(CONFIG_NETDEV_WORK_THREAD)
-#  define RK3576_GMAC_WORK ETHWORK
+#if defined(CONFIG_NET_ETHERNET_WORKQUEUE) || \
+    defined(CONFIG_NETDEV_WORK_THREAD)
+#define RK3576_GMAC_WORK ETHWORK
 #else
-#  define RK3576_GMAC_WORK LPWORK
+#define RK3576_GMAC_WORK LPWORK
 #endif
 
 /* Ring sizes.  Both must be powers of two so the wrap can use a mask. */
 
 #ifndef CONFIG_RK3576_GMAC_NTXDESC
-#  define CONFIG_RK3576_GMAC_NTXDESC 8
+#define CONFIG_RK3576_GMAC_NTXDESC 8
 #endif
 
 #ifndef CONFIG_RK3576_GMAC_NRXDESC
-#  define CONFIG_RK3576_GMAC_NRXDESC 8
+#define CONFIG_RK3576_GMAC_NRXDESC 8
 #endif
 
 #define RK3576_GMAC_NTXDESC CONFIG_RK3576_GMAC_NTXDESC
@@ -133,15 +134,15 @@
 /* MDIO address of the PHY.  Both ports use address 0 on the KICKPI-K7. */
 
 #ifndef CONFIG_RK3576_GMAC_PHYADDR
-#  define CONFIG_RK3576_GMAC_PHYADDR 0
+#define CONFIG_RK3576_GMAC_PHYADDR 0
 #endif
 
 #if (RK3576_GMAC_NTXDESC & (RK3576_GMAC_NTXDESC - 1)) != 0
-#  error CONFIG_RK3576_GMAC_NTXDESC must be a power of two
+#error CONFIG_RK3576_GMAC_NTXDESC must be a power of two
 #endif
 
 #if (RK3576_GMAC_NRXDESC & (RK3576_GMAC_NRXDESC - 1)) != 0
-#  error CONFIG_RK3576_GMAC_NRXDESC must be a power of two
+#error CONFIG_RK3576_GMAC_NRXDESC must be a power of two
 #endif
 
 #define RK3576_GMAC_TXMASK (RK3576_GMAC_NTXDESC - 1)
@@ -149,9 +150,9 @@
 
 /* Packet buffer size, rounded up to a D-cache line. */
 
-#define RK3576_GMAC_ALIGN      64
-#define RK3576_GMAC_ROUNDUP(n) (((n) + RK3576_GMAC_ALIGN - 1) & \
-                                ~(RK3576_GMAC_ALIGN - 1))
+#define RK3576_GMAC_ALIGN 64
+#define RK3576_GMAC_ROUNDUP(n) \
+  (((n) + RK3576_GMAC_ALIGN - 1) & ~(RK3576_GMAC_ALIGN - 1))
 #define RK3576_GMAC_BUFSIZE \
   RK3576_GMAC_ROUNDUP(CONFIG_NET_ETH_PKTSIZE + CONFIG_NET_GUARDSIZE)
 
@@ -165,7 +166,7 @@
 
 #define RK3576_GMAC_AXI_BUS_BYTES 8
 #define RK3576_GMAC_DESC_STRIDE   64
-#define RK3576_GMAC_DESC_DSL                                        \
+#define RK3576_GMAC_DESC_DSL                                            \
   ((RK3576_GMAC_DESC_STRIDE - (int)sizeof(struct rk3576_gmac_desc_s)) / \
    RK3576_GMAC_AXI_BUS_BYTES)
 
@@ -177,7 +178,7 @@
 #define RK3576_GMAC_PHY_SETTLE_MS 100    /* Post-release settle time       */
 #define RK3576_GMAC_ANEG_TRIES    200    /* 200 * 10 ms = 2 s              */
 #define RK3576_GMAC_ANEG_DELAY_MS 10
-#define RK3576_GMAC_LINK_POLL_MS  1000   /* Link watchdog period           */
+#define RK3576_GMAC_LINK_POLL_MS  1000 /* Link watchdog period           */
 
 /* RGMII line rates fed to the PHY for each link speed */
 
@@ -219,45 +220,45 @@
 struct rk3576_gmac_ring_s
 {
   struct rk3576_gmac_desc_s desc;
-  uint32_t pad[(RK3576_GMAC_DESC_STRIDE -
-                sizeof(struct rk3576_gmac_desc_s)) / sizeof(uint32_t)];
+  uint32_t pad[(RK3576_GMAC_DESC_STRIDE - sizeof(struct rk3576_gmac_desc_s)) /
+               sizeof(uint32_t)];
 };
 
 struct rk3576_gmac_s
 {
-  struct net_driver_s dev;   /* Interface understood by the network stack.
-                              * Must be the first member.               */
+  struct net_driver_s dev; /* Interface understood by the network stack.
+                            * Must be the first member.               */
 
-  uintptr_t base;            /* Controller register base                */
-  uint8_t intf;              /* Controller index, 0 or 1                */
-  uint8_t phyaddr;           /* PHY address on the MDIO bus             */
-  int irq;                   /* SBD interrupt number                    */
+  uintptr_t base;  /* Controller register base                */
+  uint8_t intf;    /* Controller index, 0 or 1                */
+  uint8_t phyaddr; /* PHY address on the MDIO bus             */
+  int irq;         /* SBD interrupt number                    */
 
-  bool ifup;                 /* Interface has been brought up           */
-  bool linkup;               /* PHY reports a usable link               */
-  bool fullduplex;           /* Negotiated duplex                       */
-  uint16_t speed;            /* Negotiated speed in Mbps                */
+  bool ifup;       /* Interface has been brought up           */
+  bool linkup;     /* PHY reports a usable link               */
+  bool fullduplex; /* Negotiated duplex                       */
+  uint16_t speed;  /* Negotiated speed in Mbps                */
 
-  uint32_t csrclk;           /* aclk_mac rate, drives the MDC divider   */
+  uint32_t csrclk; /* aclk_mac rate, drives the MDC divider   */
 
-  struct clk_s *aclk;        /* AXI clock gate                          */
-  struct clk_s *pclk;        /* APB clock gate                          */
-  struct clk_s *mclk;        /* MAC functional clock (rate switched)    */
+  struct clk_s *aclk; /* AXI clock gate                          */
+  struct clk_s *pclk; /* APB clock gate                          */
+  struct clk_s *mclk; /* MAC functional clock (rate switched)    */
 
-  struct wdog_s linkwd;      /* Link poll watchdog                      */
-  struct work_s irqwork;     /* Deferred interrupt processing           */
-  struct work_s pollwork;    /* Deferred link polling                   */
+  struct wdog_s linkwd;   /* Link poll watchdog                      */
+  struct work_s irqwork;  /* Deferred interrupt processing           */
+  struct work_s pollwork; /* Deferred link polling                   */
 
   struct rk3576_gmac_ring_s *txring; /* Transmit descriptor ring        */
   struct rk3576_gmac_ring_s *rxring; /* Receive descriptor ring         */
-  uint8_t *txbuf;            /* NTXDESC packet buffers                  */
-  uint8_t *rxbuf;            /* NRXDESC packet buffers                  */
-  uint8_t *stage;            /* Staging buffer handed to the stack      */
+  uint8_t *txbuf; /* NTXDESC packet buffers                  */
+  uint8_t *rxbuf; /* NRXDESC packet buffers                  */
+  uint8_t *stage; /* Staging buffer handed to the stack      */
 
-  uint16_t txhead;           /* Next transmit descriptor to fill        */
-  uint16_t txtail;           /* Next transmit descriptor to reclaim     */
-  uint16_t txinflight;       /* Descriptors currently owned by the DMA  */
-  uint16_t rxhead;           /* Next receive descriptor to inspect      */
+  uint16_t txhead;     /* Next transmit descriptor to fill        */
+  uint16_t txtail;     /* Next transmit descriptor to reclaim     */
+  uint16_t txinflight; /* Descriptors currently owned by the DMA  */
+  uint16_t rxhead;     /* Next receive descriptor to inspect      */
 };
 
 /****************************************************************************
@@ -493,14 +494,14 @@ static int rk3576_gmac_clk_init(struct rk3576_gmac_s *priv)
 
 static void rk3576_gmac_grf_init(struct rk3576_gmac_s *priv)
 {
-  uintptr_t grf = RK3576_SDGMAC_GRF_ADDR +
-                  RK3576_GMAC_GRF_CON_OFFSET(priv->intf);
+  uintptr_t grf =
+      RK3576_SDGMAC_GRF_ADDR + RK3576_GMAC_GRF_CON_OFFSET(priv->intf);
   uintptr_t ioc = RK3576_IOC_ADDR + RK3576_GMAC_IOC_CON_OFFSET(priv->intf);
 
   putreg32(RK3576_GMAC_GRF_RGMII_MODE, grf);
 
   putreg32(RK3576_GMAC_IOC_RXDLY_DIS | RK3576_GMAC_IOC_TXDLY_EN |
-           RK3576_GMAC_IOC_TXDLY_CFG(g_rk3576_gmac_txdelay[priv->intf]),
+               RK3576_GMAC_IOC_TXDLY_CFG(g_rk3576_gmac_txdelay[priv->intf]),
            ioc);
 }
 
@@ -517,8 +518,7 @@ static void rk3576_gmac_grf_init(struct rk3576_gmac_s *priv)
 
 static void rk3576_gmac_set_speed_clk(struct rk3576_gmac_s *priv)
 {
-  uintptr_t clkcon = RK3576_SDGMAC_GRF_ADDR +
-                     RK3576_GMAC_GRF_CLK_CON_OFFSET;
+  uintptr_t clkcon = RK3576_SDGMAC_GRF_ADDR + RK3576_GMAC_GRF_CLK_CON_OFFSET;
   unsigned int shift = priv->intf * RK3576_GMAC_GRF_CLK_SHIFT;
   uint32_t rate;
   uint32_t sel;
@@ -527,27 +527,27 @@ static void rk3576_gmac_set_speed_clk(struct rk3576_gmac_s *priv)
   switch (priv->speed)
     {
       case RK3576_GMAC_SPEED_1000:
-        sel  = RK3576_GMAC_GRF_DIV_RGMII_1;
+        sel = RK3576_GMAC_GRF_DIV_RGMII_1;
         rate = RK3576_GMAC_RATE_1000M;
         break;
 
       case RK3576_GMAC_SPEED_100:
-        sel  = RK3576_GMAC_GRF_DIV_RGMII_5;
+        sel = RK3576_GMAC_GRF_DIV_RGMII_5;
         rate = RK3576_GMAC_RATE_100M;
         break;
 
       default:
-        sel  = RK3576_GMAC_GRF_DIV_RGMII_50;
+        sel = RK3576_GMAC_GRF_DIV_RGMII_50;
         rate = RK3576_GMAC_RATE_10M;
         break;
     }
 
   /* Drive the divider selector and keep the clock sourced internally. */
 
-  regval = RK3576_GMAC_HIWORD_FIELD(sel, 3,
-                                    RK3576_GMAC_GRF_CLK_DIV_LO + shift) |
-           RK3576_GMAC_HIWORD_CLRBIT(RK3576_GMAC_GRF_CLK_SEL_IO + shift) |
-           RK3576_GMAC_HIWORD_CLRBIT(RK3576_GMAC_GRF_CLK_RMII_GATE + shift);
+  regval =
+      RK3576_GMAC_HIWORD_FIELD(sel, 3, RK3576_GMAC_GRF_CLK_DIV_LO + shift) |
+      RK3576_GMAC_HIWORD_CLRBIT(RK3576_GMAC_GRF_CLK_SEL_IO + shift) |
+      RK3576_GMAC_HIWORD_CLRBIT(RK3576_GMAC_GRF_CLK_RMII_GATE + shift);
 
   putreg32(regval, clkcon);
 
@@ -654,8 +654,8 @@ static int rk3576_gmac_phyread(struct rk3576_gmac_s *priv, uint8_t phyad,
            RK3576_GMAC_MDIO_PA_MASK;
   regval |= ((uint32_t)regad << RK3576_GMAC_MDIO_RDA_SHIFT) &
             RK3576_GMAC_MDIO_RDA_MASK;
-  regval |= (rk3576_gmac_csrdiv(priv->csrclk) <<
-             RK3576_GMAC_MDIO_CR_SHIFT) & RK3576_GMAC_MDIO_CR_MASK;
+  regval |= (rk3576_gmac_csrdiv(priv->csrclk) << RK3576_GMAC_MDIO_CR_SHIFT) &
+            RK3576_GMAC_MDIO_CR_MASK;
   regval |= RK3576_GMAC_MDIO_GOC_RD | RK3576_GMAC_MDIO_GB;
 
   rk3576_gmac_putreg(priv, RK3576_GMAC_MAC_MDIO_ADDR, regval);
@@ -693,8 +693,8 @@ static int rk3576_gmac_phywrite(struct rk3576_gmac_s *priv, uint8_t phyad,
            RK3576_GMAC_MDIO_PA_MASK;
   regval |= ((uint32_t)regad << RK3576_GMAC_MDIO_RDA_SHIFT) &
             RK3576_GMAC_MDIO_RDA_MASK;
-  regval |= (rk3576_gmac_csrdiv(priv->csrclk) <<
-             RK3576_GMAC_MDIO_CR_SHIFT) & RK3576_GMAC_MDIO_CR_MASK;
+  regval |= (rk3576_gmac_csrdiv(priv->csrclk) << RK3576_GMAC_MDIO_CR_SHIFT) &
+            RK3576_GMAC_MDIO_CR_MASK;
   regval |= RK3576_GMAC_MDIO_GOC_WR | RK3576_GMAC_MDIO_GB;
 
   rk3576_gmac_putreg(priv, RK3576_GMAC_MAC_MDIO_ADDR, regval);
@@ -718,8 +718,7 @@ static int rk3576_gmac_phyfind(struct rk3576_gmac_s *priv)
   uint8_t addr;
   int ret;
 
-  ret = rk3576_gmac_phyread(priv, priv->phyaddr, RK3576_GMAC_MII_PHYID1,
-                            &id1);
+  ret = rk3576_gmac_phyread(priv, priv->phyaddr, RK3576_GMAC_MII_PHYID1, &id1);
   if (ret == OK && id1 != 0x0000 && id1 != 0xffff)
     {
       return OK;
@@ -730,8 +729,8 @@ static int rk3576_gmac_phyfind(struct rk3576_gmac_s *priv)
       ret = rk3576_gmac_phyread(priv, addr, RK3576_GMAC_MII_PHYID1, &id1);
       if (ret == OK && id1 != 0x0000 && id1 != 0xffff)
         {
-          ninfo("GMAC%u: PHY found at address %u (id1 0x%04x)\n",
-                priv->intf, addr, id1);
+          ninfo("GMAC%u: PHY found at address %u (id1 0x%04x)\n", priv->intf,
+                addr, id1);
           priv->phyaddr = addr;
           return OK;
         }
@@ -799,13 +798,11 @@ static int rk3576_gmac_phyinit(struct rk3576_gmac_s *priv)
 
   /* Advertise 10/100 both duplexes plus symmetric pause ... */
 
-  ret = rk3576_gmac_phywrite(priv, priv->phyaddr, RK3576_GMAC_MII_ADVERTISE,
-                             RK3576_GMAC_ADV_SELECT_802_3 |
-                             RK3576_GMAC_ADV_10HALF |
-                             RK3576_GMAC_ADV_10FULL |
-                             RK3576_GMAC_ADV_100HALF |
-                             RK3576_GMAC_ADV_100FULL |
-                             RK3576_GMAC_ADV_PAUSE);
+  ret = rk3576_gmac_phywrite(
+      priv, priv->phyaddr, RK3576_GMAC_MII_ADVERTISE,
+      RK3576_GMAC_ADV_SELECT_802_3 | RK3576_GMAC_ADV_10HALF |
+          RK3576_GMAC_ADV_10FULL | RK3576_GMAC_ADV_100HALF |
+          RK3576_GMAC_ADV_100FULL | RK3576_GMAC_ADV_PAUSE);
   if (ret < 0)
     {
       return ret;
@@ -822,7 +819,7 @@ static int rk3576_gmac_phyinit(struct rk3576_gmac_s *priv)
 
   return rk3576_gmac_phywrite(priv, priv->phyaddr, RK3576_GMAC_MII_BMCR,
                               RK3576_GMAC_BMCR_ANENABLE |
-                              RK3576_GMAC_BMCR_ANRESTART);
+                                  RK3576_GMAC_BMCR_ANRESTART);
 }
 
 /****************************************************************************
@@ -844,15 +841,13 @@ static int rk3576_gmac_phyread_link(struct rk3576_gmac_s *priv, bool *up,
   uint16_t ctrl1000;
   int ret;
 
-  ret = rk3576_gmac_phyread(priv, priv->phyaddr, RK3576_GMAC_MII_BMSR,
-                            &bmsr);
+  ret = rk3576_gmac_phyread(priv, priv->phyaddr, RK3576_GMAC_MII_BMSR, &bmsr);
   if (ret < 0)
     {
       return ret;
     }
 
-  ret = rk3576_gmac_phyread(priv, priv->phyaddr, RK3576_GMAC_MII_BMSR,
-                            &bmsr);
+  ret = rk3576_gmac_phyread(priv, priv->phyaddr, RK3576_GMAC_MII_BMSR, &bmsr);
   if (ret < 0)
     {
       return ret;
@@ -965,8 +960,8 @@ static void rk3576_gmac_linkwork(void *arg)
   if (up != priv->linkup || speed != priv->speed ||
       fullduplex != priv->fullduplex)
     {
-      priv->linkup     = up;
-      priv->speed      = speed;
+      priv->linkup = up;
+      priv->speed = speed;
       priv->fullduplex = fullduplex;
 
       if (up)
@@ -974,8 +969,8 @@ static void rk3576_gmac_linkwork(void *arg)
           rk3576_gmac_set_speed_clk(priv);
 
           regval = rk3576_gmac_getreg(priv, RK3576_GMAC_MAC_CONFIG);
-          regval &= ~(RK3576_GMAC_CFG_PS | RK3576_GMAC_CFG_FES |
-                      RK3576_GMAC_CFG_DM);
+          regval &=
+              ~(RK3576_GMAC_CFG_PS | RK3576_GMAC_CFG_FES | RK3576_GMAC_CFG_DM);
 
           if (speed != RK3576_GMAC_SPEED_1000)
             {
@@ -1019,8 +1014,7 @@ static void rk3576_gmac_linkexpiry(wdparm_t arg)
 {
   struct rk3576_gmac_s *priv = (struct rk3576_gmac_s *)arg;
 
-  work_queue(RK3576_GMAC_WORK, &priv->pollwork, rk3576_gmac_linkwork, priv,
-             0);
+  work_queue(RK3576_GMAC_WORK, &priv->pollwork, rk3576_gmac_linkwork, priv, 0);
 }
 
 /****************************************************************************
@@ -1038,11 +1032,9 @@ static int rk3576_gmac_ring_alloc(struct rk3576_gmac_s *priv)
                                   sizeof(struct rk3576_gmac_ring_s));
   priv->rxring = rk3576_dma_alloc(RK3576_GMAC_NRXDESC *
                                   sizeof(struct rk3576_gmac_ring_s));
-  priv->txbuf  = rk3576_dma_alloc(RK3576_GMAC_NTXDESC *
-                                  RK3576_GMAC_BUFSIZE);
-  priv->rxbuf  = rk3576_dma_alloc(RK3576_GMAC_NRXDESC *
-                                  RK3576_GMAC_BUFSIZE);
-  priv->stage  = rk3576_dma_alloc(RK3576_GMAC_BUFSIZE);
+  priv->txbuf = rk3576_dma_alloc(RK3576_GMAC_NTXDESC * RK3576_GMAC_BUFSIZE);
+  priv->rxbuf = rk3576_dma_alloc(RK3576_GMAC_NRXDESC * RK3576_GMAC_BUFSIZE);
+  priv->stage = rk3576_dma_alloc(RK3576_GMAC_BUFSIZE);
 
   if (priv->txring == NULL || priv->rxring == NULL || priv->txbuf == NULL ||
       priv->rxbuf == NULL || priv->stage == NULL)
@@ -1064,30 +1056,26 @@ static void rk3576_gmac_ring_free(struct rk3576_gmac_s *priv)
   if (priv->txring != NULL)
     {
       rk3576_dma_free(priv->txring,
-                      RK3576_GMAC_NTXDESC *
-                      sizeof(struct rk3576_gmac_ring_s));
+                      RK3576_GMAC_NTXDESC * sizeof(struct rk3576_gmac_ring_s));
       priv->txring = NULL;
     }
 
   if (priv->rxring != NULL)
     {
       rk3576_dma_free(priv->rxring,
-                      RK3576_GMAC_NRXDESC *
-                      sizeof(struct rk3576_gmac_ring_s));
+                      RK3576_GMAC_NRXDESC * sizeof(struct rk3576_gmac_ring_s));
       priv->rxring = NULL;
     }
 
   if (priv->txbuf != NULL)
     {
-      rk3576_dma_free(priv->txbuf,
-                      RK3576_GMAC_NTXDESC * RK3576_GMAC_BUFSIZE);
+      rk3576_dma_free(priv->txbuf, RK3576_GMAC_NTXDESC * RK3576_GMAC_BUFSIZE);
       priv->txbuf = NULL;
     }
 
   if (priv->rxbuf != NULL)
     {
-      rk3576_dma_free(priv->rxbuf,
-                      RK3576_GMAC_NRXDESC * RK3576_GMAC_BUFSIZE);
+      rk3576_dma_free(priv->rxbuf, RK3576_GMAC_NRXDESC * RK3576_GMAC_BUFSIZE);
       priv->rxbuf = NULL;
     }
 
@@ -1128,17 +1116,17 @@ static void rk3576_gmac_ring_reset(struct rk3576_gmac_s *priv)
                    RK3576_GMAC_RDES3_IOC;
     }
 
-  priv->txhead     = 0;
-  priv->txtail     = 0;
+  priv->txhead = 0;
+  priv->txtail = 0;
   priv->txinflight = 0;
-  priv->rxhead     = 0;
+  priv->rxhead = 0;
 
   up_clean_dcache((uintptr_t)priv->txring,
                   (uintptr_t)priv->txring +
-                  RK3576_GMAC_NTXDESC * sizeof(struct rk3576_gmac_ring_s));
+                      RK3576_GMAC_NTXDESC * sizeof(struct rk3576_gmac_ring_s));
   up_clean_dcache((uintptr_t)priv->rxring,
                   (uintptr_t)priv->rxring +
-                  RK3576_GMAC_NRXDESC * sizeof(struct rk3576_gmac_ring_s));
+                      RK3576_GMAC_NRXDESC * sizeof(struct rk3576_gmac_ring_s));
 }
 
 /****************************************************************************
@@ -1183,11 +1171,11 @@ static void rk3576_gmac_setmacaddr(struct rk3576_gmac_s *priv)
   const uint8_t *mac = priv->dev.d_mac.ether.ether_addr_octet;
 
   rk3576_gmac_putreg(priv, RK3576_GMAC_MAC_ADDR_HIGH(0),
-                     RK3576_GMAC_ADDRHI_AE |
-                     ((uint32_t)mac[5] << 8) | (uint32_t)mac[4]);
+                     RK3576_GMAC_ADDRHI_AE | ((uint32_t)mac[5] << 8) |
+                         (uint32_t)mac[4]);
   rk3576_gmac_putreg(priv, RK3576_GMAC_MAC_ADDR_LOW(0),
                      ((uint32_t)mac[3] << 24) | ((uint32_t)mac[2] << 16) |
-                     ((uint32_t)mac[1] << 8) | (uint32_t)mac[0]);
+                         ((uint32_t)mac[1] << 8) | (uint32_t)mac[0]);
 }
 
 /****************************************************************************
@@ -1213,19 +1201,17 @@ static void rk3576_gmac_hwinit(struct rk3576_gmac_s *priv)
   regval = RK3576_GMAC_SYSBUS_MB | RK3576_GMAC_SYSBUS_AAL |
            RK3576_GMAC_SYSBUS_BLEN16 | RK3576_GMAC_SYSBUS_BLEN8 |
            RK3576_GMAC_SYSBUS_BLEN4 |
-           (((RK3576_GMAC_RD_OSR_LMT - 1) <<
-             RK3576_GMAC_SYSBUS_RD_OSR_SHIFT) &
+           (((RK3576_GMAC_RD_OSR_LMT - 1) << RK3576_GMAC_SYSBUS_RD_OSR_SHIFT) &
             RK3576_GMAC_SYSBUS_RD_OSR_MASK) |
-           (((RK3576_GMAC_WR_OSR_LMT - 1) <<
-             RK3576_GMAC_SYSBUS_WR_OSR_SHIFT) &
+           (((RK3576_GMAC_WR_OSR_LMT - 1) << RK3576_GMAC_SYSBUS_WR_OSR_SHIFT) &
             RK3576_GMAC_SYSBUS_WR_OSR_MASK);
   rk3576_gmac_putreg(priv, RK3576_GMAC_DMA_SYSBUS_MODE, regval);
 
   /* Channel 0: 8x burst multiplier and the descriptor padding stride. */
 
   regval = RK3576_GMAC_CHCTRL_PBLX8 |
-           (((uint32_t)RK3576_GMAC_DESC_DSL <<
-             RK3576_GMAC_CHCTRL_DSL_SHIFT) & RK3576_GMAC_CHCTRL_DSL_MASK);
+           (((uint32_t)RK3576_GMAC_DESC_DSL << RK3576_GMAC_CHCTRL_DSL_SHIFT) &
+            RK3576_GMAC_CHCTRL_DSL_MASK);
   rk3576_gmac_putreg(priv, RK3576_GMAC_DMA_CH0_CONTROL, regval);
 
   /* Descriptor rings.  The upper halves stay zero: the DMA heap never hands
@@ -1247,20 +1233,20 @@ static void rk3576_gmac_hwinit(struct rk3576_gmac_s *priv)
                      RK3576_GMAC_NRXDESC - 1);
   rk3576_gmac_putreg(priv, RK3576_GMAC_DMA_CH0_RXTAIL,
                      rk3576_gmac_pa(priv->rxring) +
-                     RK3576_GMAC_NRXDESC *
-                     sizeof(struct rk3576_gmac_ring_s));
+                         RK3576_GMAC_NRXDESC *
+                             sizeof(struct rk3576_gmac_ring_s));
 
   /* Transmit and receive burst lengths and the receive buffer size. */
 
   regval = RK3576_GMAC_TXCTRL_OSF |
-           (((uint32_t)RK3576_GMAC_DMA_PBL <<
-             RK3576_GMAC_TXCTRL_PBL_SHIFT) & RK3576_GMAC_TXCTRL_PBL_MASK);
+           (((uint32_t)RK3576_GMAC_DMA_PBL << RK3576_GMAC_TXCTRL_PBL_SHIFT) &
+            RK3576_GMAC_TXCTRL_PBL_MASK);
   rk3576_gmac_putreg(priv, RK3576_GMAC_DMA_CH0_TX_CONTROL, regval);
 
-  regval = (((uint32_t)RK3576_GMAC_BUFSIZE <<
-             RK3576_GMAC_RXCTRL_RBSZ_SHIFT) & RK3576_GMAC_RXCTRL_RBSZ_MASK) |
-           (((uint32_t)RK3576_GMAC_DMA_PBL <<
-             RK3576_GMAC_RXCTRL_PBL_SHIFT) & RK3576_GMAC_RXCTRL_PBL_MASK);
+  regval = (((uint32_t)RK3576_GMAC_BUFSIZE << RK3576_GMAC_RXCTRL_RBSZ_SHIFT) &
+            RK3576_GMAC_RXCTRL_RBSZ_MASK) |
+           (((uint32_t)RK3576_GMAC_DMA_PBL << RK3576_GMAC_RXCTRL_PBL_SHIFT) &
+            RK3576_GMAC_RXCTRL_PBL_MASK);
   rk3576_gmac_putreg(priv, RK3576_GMAC_DMA_CH0_RX_CONTROL, regval);
 
   /* MTL: store and forward in both directions, with the whole FIFO given to
@@ -1293,8 +1279,7 @@ static void rk3576_gmac_hwinit(struct rk3576_gmac_s *priv)
    * transmit checksums and verify the received ones.
    */
 
-  rk3576_gmac_putreg(priv, RK3576_GMAC_MAC_RXQ_CTRL0,
-                     RK3576_GMAC_RXQ_EN_DCB);
+  rk3576_gmac_putreg(priv, RK3576_GMAC_MAC_RXQ_CTRL0, RK3576_GMAC_RXQ_EN_DCB);
 
   regval = RK3576_GMAC_CFG_JD | RK3576_GMAC_CFG_DCRS | RK3576_GMAC_CFG_ACS |
            RK3576_GMAC_CFG_CST | RK3576_GMAC_CFG_IPC | RK3576_GMAC_CFG_DM;
@@ -1306,8 +1291,7 @@ static void rk3576_gmac_hwinit(struct rk3576_gmac_s *priv)
   /* Mask the MAC level interrupts; the driver only uses the DMA ones. */
 
   rk3576_gmac_putreg(priv, RK3576_GMAC_MAC_INT_ENABLE, 0);
-  rk3576_gmac_putreg(priv, RK3576_GMAC_DMA_CH0_STATUS,
-                     RK3576_GMAC_DMAINT_ALL);
+  rk3576_gmac_putreg(priv, RK3576_GMAC_DMA_CH0_STATUS, RK3576_GMAC_DMAINT_ALL);
 }
 
 /****************************************************************************
@@ -1332,8 +1316,8 @@ static void rk3576_gmac_enable(struct rk3576_gmac_s *priv, bool enable)
 
       rk3576_gmac_putreg(priv, RK3576_GMAC_DMA_CH0_INT_ENABLE,
                          RK3576_GMAC_DMAINT_NIS | RK3576_GMAC_DMAINT_AIS |
-                         RK3576_GMAC_DMAINT_TI | RK3576_GMAC_DMAINT_RI |
-                         RK3576_GMAC_DMAINT_RBU | RK3576_GMAC_DMAINT_FBE);
+                             RK3576_GMAC_DMAINT_TI | RK3576_GMAC_DMAINT_RI |
+                             RK3576_GMAC_DMAINT_RBU | RK3576_GMAC_DMAINT_FBE);
     }
   else
     {
@@ -1385,8 +1369,8 @@ static int rk3576_gmac_transmit(struct rk3576_gmac_s *priv)
   desc = &priv->txring[priv->txhead].desc;
   desc->des0 = rk3576_gmac_pa(buf);
   desc->des1 = 0;
-  desc->des2 = ((uint32_t)len & RK3576_GMAC_TDES2_B1L_MASK) |
-               RK3576_GMAC_TDES2_IOC;
+  desc->des2 =
+      ((uint32_t)len & RK3576_GMAC_TDES2_B1L_MASK) | RK3576_GMAC_TDES2_IOC;
 
   /* The ownership bit must be published last. */
 
@@ -1461,7 +1445,7 @@ static void rk3576_gmac_txdone(struct rk3576_gmac_s *priv)
 
       up_invalidate_dcache((uintptr_t)desc,
                            (uintptr_t)desc +
-                           sizeof(struct rk3576_gmac_ring_s));
+                               sizeof(struct rk3576_gmac_ring_s));
 
       if ((desc->des3 & RK3576_GMAC_TDES3_OWN) != 0)
         {
@@ -1507,12 +1491,12 @@ static void rk3576_gmac_receive(struct rk3576_gmac_s *priv)
   uint32_t des3;
   unsigned int len;
 
-  for (; ; )
+  for (;;)
     {
       desc = &priv->rxring[priv->rxhead].desc;
       up_invalidate_dcache((uintptr_t)desc,
                            (uintptr_t)desc +
-                           sizeof(struct rk3576_gmac_ring_s));
+                               sizeof(struct rk3576_gmac_ring_s));
 
       des3 = desc->des3;
       if ((des3 & RK3576_GMAC_RDES3_OWN) != 0)
@@ -1527,7 +1511,7 @@ static void rk3576_gmac_receive(struct rk3576_gmac_s *priv)
 
       if ((des3 & RK3576_GMAC_RDES3_ES) != 0 ||
           (des3 & (RK3576_GMAC_RDES3_FD | RK3576_GMAC_RDES3_LD)) !=
-          (RK3576_GMAC_RDES3_FD | RK3576_GMAC_RDES3_LD) ||
+              (RK3576_GMAC_RDES3_FD | RK3576_GMAC_RDES3_LD) ||
           len == 0 || len > RK3576_GMAC_BUFSIZE)
         {
           nwarn("WARNING: GMAC%u: dropping frame, RDES3 0x%08" PRIx32 "\n",
@@ -1704,16 +1688,15 @@ static int rk3576_gmac_ifup(struct net_driver_s *dev)
 
   /* Start at gigabit until auto-negotiation says otherwise. */
 
-  priv->speed      = RK3576_GMAC_SPEED_1000;
+  priv->speed = RK3576_GMAC_SPEED_1000;
   priv->fullduplex = true;
-  priv->linkup     = false;
+  priv->linkup = false;
   rk3576_gmac_set_speed_clk(priv);
 
   ret = rk3576_gmac_phyinit(priv);
   if (ret < 0)
     {
-      nerr("ERROR: GMAC%u: PHY initialisation failed: %d\n", priv->intf,
-           ret);
+      nerr("ERROR: GMAC%u: PHY initialisation failed: %d\n", priv->intf, ret);
       return ret;
     }
 
@@ -1754,7 +1737,7 @@ static int rk3576_gmac_ifdown(struct net_driver_s *dev)
   rk3576_gmac_enable(priv, false);
   rk3576_gmac_dma_reset(priv);
 
-  priv->ifup   = false;
+  priv->ifup = false;
   priv->linkup = false;
 
   leave_critical_section(flags);
@@ -1773,8 +1756,8 @@ static int rk3576_gmac_txavail(struct net_driver_s *dev)
 
   if (work_available(&priv->pollwork))
     {
-      work_queue(RK3576_GMAC_WORK, &priv->pollwork,
-                 rk3576_gmac_txavail_work, priv, 0);
+      work_queue(RK3576_GMAC_WORK, &priv->pollwork, rk3576_gmac_txavail_work,
+                 priv, 0);
     }
 
   return OK;
@@ -1836,7 +1819,7 @@ static int rk3576_gmac_ioctl(struct net_driver_s *dev, int cmd,
       case SIOCGMIIPHY:
         {
           struct mii_ioctl_data_s *req =
-            (struct mii_ioctl_data_s *)(uintptr_t)arg;
+              (struct mii_ioctl_data_s *)(uintptr_t)arg;
 
           req->phy_id = priv->phyaddr;
           return OK;
@@ -1845,7 +1828,7 @@ static int rk3576_gmac_ioctl(struct net_driver_s *dev, int cmd,
       case SIOCGMIIREG:
         {
           struct mii_ioctl_data_s *req =
-            (struct mii_ioctl_data_s *)(uintptr_t)arg;
+              (struct mii_ioctl_data_s *)(uintptr_t)arg;
 
           return rk3576_gmac_phyread(priv, req->phy_id, req->reg_num,
                                      &req->val_out);
@@ -1854,7 +1837,7 @@ static int rk3576_gmac_ioctl(struct net_driver_s *dev, int cmd,
       case SIOCSMIIREG:
         {
           struct mii_ioctl_data_s *req =
-            (struct mii_ioctl_data_s *)(uintptr_t)arg;
+              (struct mii_ioctl_data_s *)(uintptr_t)arg;
 
           return rk3576_gmac_phywrite(priv, req->phy_id, req->reg_num,
                                       req->val_in);
@@ -1885,10 +1868,7 @@ static int rk3576_gmac_ioctl(struct net_driver_s *dev, int cmd,
  *
  ****************************************************************************/
 
-void weak_function rk3576_gmac_board_phy_reset(int intf)
-{
-  UNUSED(intf);
-}
+void weak_function rk3576_gmac_board_phy_reset(int intf) { UNUSED(intf); }
 
 /****************************************************************************
  * Name: rk3576_gmac_get_macaddr
@@ -1947,8 +1927,7 @@ int rk3576_gmac_mdio_read(int intf, uint8_t phyad, uint8_t regad,
 int rk3576_gmac_mdio_write(int intf, uint8_t phyad, uint8_t regad,
                            uint16_t value)
 {
-  if (intf < 0 || intf >= RK3576_GMAC_NIFACES ||
-      !g_rk3576_gmac_inited[intf])
+  if (intf < 0 || intf >= RK3576_GMAC_NIFACES || !g_rk3576_gmac_inited[intf])
     {
       return -EINVAL;
     }
@@ -1979,9 +1958,9 @@ int rk3576_gmac_initialize(int intf)
   priv = &g_rk3576_gmac[intf];
   memset(priv, 0, sizeof(*priv));
 
-  priv->intf    = (uint8_t)intf;
-  priv->base    = g_rk3576_gmac_base[intf];
-  priv->irq     = g_rk3576_gmac_irq[intf];
+  priv->intf = (uint8_t)intf;
+  priv->base = g_rk3576_gmac_base[intf];
+  priv->irq = g_rk3576_gmac_irq[intf];
   priv->phyaddr = CONFIG_RK3576_GMAC_PHYADDR;
 
   ret = rk3576_gmac_clk_init(priv);
@@ -1996,21 +1975,20 @@ int rk3576_gmac_initialize(int intf)
       return ret;
     }
 
-  priv->dev.d_ifup    = rk3576_gmac_ifup;
-  priv->dev.d_ifdown  = rk3576_gmac_ifdown;
+  priv->dev.d_ifup = rk3576_gmac_ifup;
+  priv->dev.d_ifdown = rk3576_gmac_ifdown;
   priv->dev.d_txavail = rk3576_gmac_txavail;
 #ifdef CONFIG_NET_MCASTGROUP
-  priv->dev.d_addmac  = rk3576_gmac_addmac;
-  priv->dev.d_rmmac   = rk3576_gmac_rmmac;
+  priv->dev.d_addmac = rk3576_gmac_addmac;
+  priv->dev.d_rmmac = rk3576_gmac_rmmac;
 #endif
 #ifdef CONFIG_NETDEV_IOCTL
-  priv->dev.d_ioctl   = rk3576_gmac_ioctl;
+  priv->dev.d_ioctl = rk3576_gmac_ioctl;
 #endif
   priv->dev.d_private = priv;
-  priv->dev.d_buf     = priv->stage;
+  priv->dev.d_buf = priv->stage;
 
-  ret = rk3576_gmac_get_macaddr(intf,
-                                priv->dev.d_mac.ether.ether_addr_octet);
+  ret = rk3576_gmac_get_macaddr(intf, priv->dev.d_mac.ether.ether_addr_octet);
   if (ret < 0)
     {
       nerr("ERROR: GMAC%d: no station address: %d\n", intf, ret);
@@ -2031,8 +2009,7 @@ int rk3576_gmac_initialize(int intf)
   ret = irq_attach(priv->irq, rk3576_gmac_interrupt, priv);
   if (ret < 0)
     {
-      nerr("ERROR: GMAC%d: cannot attach IRQ %d: %d\n", intf, priv->irq,
-           ret);
+      nerr("ERROR: GMAC%d: cannot attach IRQ %d: %d\n", intf, priv->irq, ret);
       rk3576_gmac_ring_free(priv);
       return ret;
     }

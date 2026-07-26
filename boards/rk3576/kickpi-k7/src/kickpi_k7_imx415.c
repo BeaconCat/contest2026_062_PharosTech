@@ -74,72 +74,72 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define IMX415_MAX_DEVICES        3       /* imx415_0, imx415_1, imx415_3   */
-#define IMX415_I2C_FREQUENCY      400000  /* Fast mode, module supports 1M  */
-#define IMX415_REGADDR_BYTES      2       /* 16-bit register address        */
-#define IMX415_WRBUF_BYTES        3       /* addr_hi, addr_lo, data         */
+#define IMX415_MAX_DEVICES   3      /* imx415_0, imx415_1, imx415_3   */
+#define IMX415_I2C_FREQUENCY 400000 /* Fast mode, module supports 1M  */
+#define IMX415_REGADDR_BYTES 2      /* 16-bit register address        */
+#define IMX415_WRBUF_BYTES   3      /* addr_hi, addr_lo, data         */
 
 /* Power-up timing (Sony IMX415 datasheet, power sequence).  Generous
  * margins: these are millisecond-scale one-off delays at probe time.
  */
 
-#define IMX415_T_POWER_TO_CLK_MS  1  /* supplies stable -> XVCLK enabled    */
-#define IMX415_T_CLK_TO_XCLR_MS   1  /* XVCLK running -> XCLR released      */
-#define IMX415_T_XCLR_TO_I2C_MS   20 /* XCLR high -> first I2C access       */
-#define IMX415_T_STANDBY_EXIT_MS  30 /* 0x3000 = 0 -> XMSTA release         */
+#define IMX415_T_POWER_TO_CLK_MS 1  /* supplies stable -> XVCLK enabled    */
+#define IMX415_T_CLK_TO_XCLR_MS  1  /* XVCLK running -> XCLR released      */
+#define IMX415_T_XCLR_TO_I2C_MS  20 /* XCLR high -> first I2C access       */
+#define IMX415_T_STANDBY_EXIT_MS 30 /* 0x3000 = 0 -> XMSTA release         */
 
 /* Register map subset used here (Sony IMX415 register reference). */
 
-#define IMX415_REG_MODE           0x3000 /* 1 = standby, 0 = operating     */
-#define IMX415_REG_REGHOLD        0x3001 /* 1 = hold, 0 = release          */
-#define IMX415_REG_XMSTA          0x3002 /* 0 = master mode start          */
-#define IMX415_REG_BCWAIT_TIME    0x3008
-#define IMX415_REG_CPWAIT_TIME    0x300a
-#define IMX415_REG_WINMODE        0x301c
-#define IMX415_REG_ADDMODE        0x3020
-#define IMX415_REG_HADD           0x3021
-#define IMX415_REG_VADD           0x3022
-#define IMX415_REG_VMAX           0x3024 /* 20-bit, 0x3024..0x3026         */
-#define IMX415_REG_HMAX           0x3028 /* 16-bit, 0x3028..0x3029         */
-#define IMX415_REG_ADBIT          0x3031
-#define IMX415_REG_MDBIT          0x3032
-#define IMX415_REG_SYS_MODE       0x3033
-#define IMX415_REG_PIX_HST        0x3040 /* 16-bit crop window origin, X   */
-#define IMX415_REG_PIX_HWIDTH     0x3042 /* 16-bit crop window width       */
-#define IMX415_REG_PIX_VST        0x3044 /* 16-bit crop window origin, Y   */
-#define IMX415_REG_PIX_VWIDTH     0x3046 /* 16-bit crop window height      */
-#define IMX415_REG_SHR0           0x3050 /* 20-bit shutter, 0x3050..0x3052 */
-#define IMX415_REG_GAIN_PCG_0     0x3090 /* 11-bit, 0x3090..0x3091         */
-#define IMX415_REG_INCKSEL1       0x3115
-#define IMX415_REG_INCKSEL2       0x3116
-#define IMX415_REG_INCKSEL3       0x3118 /* 16-bit, 0x3118..0x3119         */
-#define IMX415_REG_INCKSEL4       0x311a /* 16-bit, 0x311a..0x311b         */
-#define IMX415_REG_INCKSEL5       0x311e
-#define IMX415_REG_TXCLKESC_FREQ  0x4004 /* 16-bit, 0x4004..0x4005         */
+#define IMX415_REG_MODE          0x3000 /* 1 = standby, 0 = operating     */
+#define IMX415_REG_REGHOLD       0x3001 /* 1 = hold, 0 = release          */
+#define IMX415_REG_XMSTA         0x3002 /* 0 = master mode start          */
+#define IMX415_REG_BCWAIT_TIME   0x3008
+#define IMX415_REG_CPWAIT_TIME   0x300a
+#define IMX415_REG_WINMODE       0x301c
+#define IMX415_REG_ADDMODE       0x3020
+#define IMX415_REG_HADD          0x3021
+#define IMX415_REG_VADD          0x3022
+#define IMX415_REG_VMAX          0x3024 /* 20-bit, 0x3024..0x3026         */
+#define IMX415_REG_HMAX          0x3028 /* 16-bit, 0x3028..0x3029         */
+#define IMX415_REG_ADBIT         0x3031
+#define IMX415_REG_MDBIT         0x3032
+#define IMX415_REG_SYS_MODE      0x3033
+#define IMX415_REG_PIX_HST       0x3040 /* 16-bit crop window origin, X   */
+#define IMX415_REG_PIX_HWIDTH    0x3042 /* 16-bit crop window width       */
+#define IMX415_REG_PIX_VST       0x3044 /* 16-bit crop window origin, Y   */
+#define IMX415_REG_PIX_VWIDTH    0x3046 /* 16-bit crop window height      */
+#define IMX415_REG_SHR0          0x3050 /* 20-bit shutter, 0x3050..0x3052 */
+#define IMX415_REG_GAIN_PCG_0    0x3090 /* 11-bit, 0x3090..0x3091         */
+#define IMX415_REG_INCKSEL1      0x3115
+#define IMX415_REG_INCKSEL2      0x3116
+#define IMX415_REG_INCKSEL3      0x3118 /* 16-bit, 0x3118..0x3119         */
+#define IMX415_REG_INCKSEL4      0x311a /* 16-bit, 0x311a..0x311b         */
+#define IMX415_REG_INCKSEL5      0x311e
+#define IMX415_REG_TXCLKESC_FREQ 0x4004 /* 16-bit, 0x4004..0x4005         */
 
-#define IMX415_MODE_STANDBY       0x01
-#define IMX415_MODE_OPERATING     0x00
-#define IMX415_XMSTA_STOP         0x01
-#define IMX415_XMSTA_START        0x00
-#define IMX415_REGHOLD_HOLD       0x01
-#define IMX415_REGHOLD_RELEASE    0x00
+#define IMX415_MODE_STANDBY      0x01
+#define IMX415_MODE_OPERATING    0x00
+#define IMX415_XMSTA_STOP        0x01
+#define IMX415_XMSTA_START       0x00
+#define IMX415_REGHOLD_HOLD      0x01
+#define IMX415_REGHOLD_RELEASE   0x00
 
 /* Field widths of the multi-byte registers. */
 
-#define IMX415_SHR0_MASK          0x000fffffu
-#define IMX415_VMAX_MASK          0x000fffffu
-#define IMX415_GAIN_MASK          0x07ffu
+#define IMX415_SHR0_MASK 0x000fffffu
+#define IMX415_VMAX_MASK 0x000fffffu
+#define IMX415_GAIN_MASK 0x07ffu
 
 /* SHR0 must stay at least this many lines below VMAX (Sony constraint on
  * the minimum shutter sweep).
  */
 
-#define IMX415_SHR0_MIN           8u
-#define IMX415_SHR0_MARGIN        4u
+#define IMX415_SHR0_MIN    8u
+#define IMX415_SHR0_MARGIN 4u
 
 /* Tolerance accepted on the measured XVCLK rate: +/- 1 %. */
 
-#define IMX415_XVCLK_TOL_PCT      1u
+#define IMX415_XVCLK_TOL_PCT 1u
 
 /****************************************************************************
  * Private Types
@@ -150,18 +150,18 @@
 struct imx415_regval_s
 {
   uint16_t addr;
-  uint8_t  val;
+  uint8_t val;
 };
 
 struct imx415_dev_s
 {
-  struct i2c_master_s *i2c;         /* I2C master this sensor hangs on    */
+  struct i2c_master_s *i2c;          /* I2C master this sensor hangs on    */
   const struct imx415_config_s *cfg; /* Board wiring                      */
-  uint8_t  addr;                    /* 7-bit slave address                */
-  bool     streaming;               /* true between stream_on/stream_off  */
-  bool     mode_valid;              /* true once a mode table was loaded  */
-  enum imx415_mode_e mode;          /* Current mode                       */
-  uint32_t vmax;                    /* VMAX of the current mode           */
+  uint8_t addr;                      /* 7-bit slave address                */
+  bool streaming;                    /* true between stream_on/stream_off  */
+  bool mode_valid;                   /* true once a mode table was loaded  */
+  enum imx415_mode_e mode;           /* Current mode                       */
+  uint32_t vmax;                     /* VMAX of the current mode           */
 };
 
 /****************************************************************************
@@ -198,33 +198,32 @@ static uint32_t g_imx415_xvclk_hz;
  *       the module vendor's register set before relying on image quality.
  */
 
-static const struct imx415_regval_s g_imx415_common_regs[] =
-{
+static const struct imx415_regval_s g_imx415_common_regs[] = {
   /* Stay in standby while the table is loaded */
 
-  { IMX415_REG_MODE,          IMX415_MODE_STANDBY },
-  { IMX415_REG_XMSTA,         IMX415_XMSTA_STOP   },
+  { IMX415_REG_MODE, IMX415_MODE_STANDBY },
+  { IMX415_REG_XMSTA, IMX415_XMSTA_STOP },
 
   /* Bias / current-source settling times for INCK = 37.125 MHz */
 
-  { IMX415_REG_BCWAIT_TIME,   0x7f },
-  { IMX415_REG_CPWAIT_TIME,   0x5b },
+  { IMX415_REG_BCWAIT_TIME, 0x7f },
+  { IMX415_REG_CPWAIT_TIME, 0x5b },
 
   /* 10-bit AD, 10-bit MIPI output */
 
-  { IMX415_REG_ADBIT,         0x00 },
-  { IMX415_REG_MDBIT,         0x00 },
-  { IMX415_REG_SYS_MODE,      0x08 },
+  { IMX415_REG_ADBIT, 0x00 },
+  { IMX415_REG_MDBIT, 0x00 },
+  { IMX415_REG_SYS_MODE, 0x08 },
 
   /* INCK selection block for 37.125 MHz / 891 Mbps per lane */
 
-  { IMX415_REG_INCKSEL1,      0x00 },
-  { IMX415_REG_INCKSEL2,      0x24 },
-  { IMX415_REG_INCKSEL3,      0xc0 },
-  { IMX415_REG_INCKSEL3 + 1,  0x00 },
-  { IMX415_REG_INCKSEL4,      0xe7 },
-  { IMX415_REG_INCKSEL4 + 1,  0x00 },
-  { IMX415_REG_INCKSEL5,      0x24 },
+  { IMX415_REG_INCKSEL1, 0x00 },
+  { IMX415_REG_INCKSEL2, 0x24 },
+  { IMX415_REG_INCKSEL3, 0xc0 },
+  { IMX415_REG_INCKSEL3 + 1, 0x00 },
+  { IMX415_REG_INCKSEL4, 0xe7 },
+  { IMX415_REG_INCKSEL4 + 1, 0x00 },
+  { IMX415_REG_INCKSEL5, 0x24 },
 
   /* LP escape clock divider for a 891 Mbps link
    * TODO: confirm the 0x0948 divider against the datasheet TXCLKESC table.
@@ -235,49 +234,119 @@ static const struct imx415_regval_s g_imx415_common_regs[] =
 
   /* Sony recommended settings (undocumented) */
 
-  { 0x32d4, 0x21 }, { 0x32ec, 0xa1 }, { 0x344c, 0x2b },
-  { 0x344d, 0x01 }, { 0x344e, 0xed }, { 0x344f, 0x01 },
-  { 0x3450, 0xf6 }, { 0x3451, 0x02 }, { 0x3452, 0x7f },
-  { 0x3453, 0x03 }, { 0x358a, 0x04 }, { 0x35a1, 0x02 },
-  { 0x35ec, 0x27 }, { 0x35ee, 0x8d }, { 0x35f0, 0x8d },
-  { 0x35f2, 0x29 }, { 0x36bc, 0x0c }, { 0x36cc, 0x53 },
-  { 0x36cd, 0x00 }, { 0x36ce, 0x3c }, { 0x36d0, 0x8c },
-  { 0x36d1, 0x00 }, { 0x36d2, 0x71 }, { 0x36d4, 0x3c },
-  { 0x36d6, 0x53 }, { 0x36d7, 0x00 }, { 0x36d8, 0x71 },
-  { 0x36da, 0x8c }, { 0x36db, 0x00 }, { 0x3701, 0x00 },
-  { 0x3720, 0x00 }, { 0x3724, 0x02 }, { 0x3726, 0x02 },
-  { 0x3732, 0x02 }, { 0x3734, 0x03 }, { 0x3736, 0x03 },
-  { 0x3742, 0x03 }, { 0x3862, 0xe0 }, { 0x38cc, 0x30 },
-  { 0x38cd, 0x2f }, { 0x395c, 0x0c }, { 0x3a42, 0xd1 },
-  { 0x3a4c, 0x77 }, { 0x3ae0, 0x02 }, { 0x3aec, 0x0c },
-  { 0x3b00, 0x2e }, { 0x3b06, 0x29 }, { 0x3b98, 0x25 },
-  { 0x3b99, 0x21 }, { 0x3b9b, 0x13 }, { 0x3b9c, 0x13 },
-  { 0x3b9d, 0x13 }, { 0x3b9e, 0x13 }, { 0x3ba1, 0x00 },
-  { 0x3ba2, 0x06 }, { 0x3ba3, 0x0b }, { 0x3ba4, 0x10 },
-  { 0x3ba5, 0x14 }, { 0x3ba6, 0x18 }, { 0x3ba7, 0x1a },
-  { 0x3ba8, 0x1a }, { 0x3ba9, 0x1a }, { 0x3bac, 0xed },
-  { 0x3bad, 0x01 }, { 0x3bae, 0xf6 }, { 0x3baf, 0x02 },
-  { 0x3bb0, 0xa2 }, { 0x3bb1, 0x03 }, { 0x3bb2, 0xe0 },
-  { 0x3bb3, 0x03 }, { 0x3bb4, 0xe0 }, { 0x3bb5, 0x03 },
-  { 0x3bb6, 0xe0 }, { 0x3bb7, 0x03 }, { 0x3bb8, 0xe0 },
-  { 0x3bba, 0xe0 }, { 0x3bbc, 0xda }, { 0x3bbd, 0x00 },
-  { 0x3bbe, 0x88 }, { 0x3bbf, 0x00 }, { 0x3bc0, 0x44 },
-  { 0x3bc1, 0x00 }, { 0x3bc2, 0x7b }, { 0x3bc3, 0x00 },
-  { 0x3bc4, 0xa2 }, { 0x3bc5, 0x00 }, { 0x3bc6, 0xcf },
-  { 0x3bc7, 0x00 }, { 0x3bc8, 0x00 }, { 0x3bc9, 0x00 },
-  { 0x3bca, 0xff }, { 0x3bcb, 0x03 },
+  { 0x32d4, 0x21 },
+  { 0x32ec, 0xa1 },
+  { 0x344c, 0x2b },
+  { 0x344d, 0x01 },
+  { 0x344e, 0xed },
+  { 0x344f, 0x01 },
+  { 0x3450, 0xf6 },
+  { 0x3451, 0x02 },
+  { 0x3452, 0x7f },
+  { 0x3453, 0x03 },
+  { 0x358a, 0x04 },
+  { 0x35a1, 0x02 },
+  { 0x35ec, 0x27 },
+  { 0x35ee, 0x8d },
+  { 0x35f0, 0x8d },
+  { 0x35f2, 0x29 },
+  { 0x36bc, 0x0c },
+  { 0x36cc, 0x53 },
+  { 0x36cd, 0x00 },
+  { 0x36ce, 0x3c },
+  { 0x36d0, 0x8c },
+  { 0x36d1, 0x00 },
+  { 0x36d2, 0x71 },
+  { 0x36d4, 0x3c },
+  { 0x36d6, 0x53 },
+  { 0x36d7, 0x00 },
+  { 0x36d8, 0x71 },
+  { 0x36da, 0x8c },
+  { 0x36db, 0x00 },
+  { 0x3701, 0x00 },
+  { 0x3720, 0x00 },
+  { 0x3724, 0x02 },
+  { 0x3726, 0x02 },
+  { 0x3732, 0x02 },
+  { 0x3734, 0x03 },
+  { 0x3736, 0x03 },
+  { 0x3742, 0x03 },
+  { 0x3862, 0xe0 },
+  { 0x38cc, 0x30 },
+  { 0x38cd, 0x2f },
+  { 0x395c, 0x0c },
+  { 0x3a42, 0xd1 },
+  { 0x3a4c, 0x77 },
+  { 0x3ae0, 0x02 },
+  { 0x3aec, 0x0c },
+  { 0x3b00, 0x2e },
+  { 0x3b06, 0x29 },
+  { 0x3b98, 0x25 },
+  { 0x3b99, 0x21 },
+  { 0x3b9b, 0x13 },
+  { 0x3b9c, 0x13 },
+  { 0x3b9d, 0x13 },
+  { 0x3b9e, 0x13 },
+  { 0x3ba1, 0x00 },
+  { 0x3ba2, 0x06 },
+  { 0x3ba3, 0x0b },
+  { 0x3ba4, 0x10 },
+  { 0x3ba5, 0x14 },
+  { 0x3ba6, 0x18 },
+  { 0x3ba7, 0x1a },
+  { 0x3ba8, 0x1a },
+  { 0x3ba9, 0x1a },
+  { 0x3bac, 0xed },
+  { 0x3bad, 0x01 },
+  { 0x3bae, 0xf6 },
+  { 0x3baf, 0x02 },
+  { 0x3bb0, 0xa2 },
+  { 0x3bb1, 0x03 },
+  { 0x3bb2, 0xe0 },
+  { 0x3bb3, 0x03 },
+  { 0x3bb4, 0xe0 },
+  { 0x3bb5, 0x03 },
+  { 0x3bb6, 0xe0 },
+  { 0x3bb7, 0x03 },
+  { 0x3bb8, 0xe0 },
+  { 0x3bba, 0xe0 },
+  { 0x3bbc, 0xda },
+  { 0x3bbd, 0x00 },
+  { 0x3bbe, 0x88 },
+  { 0x3bbf, 0x00 },
+  { 0x3bc0, 0x44 },
+  { 0x3bc1, 0x00 },
+  { 0x3bc2, 0x7b },
+  { 0x3bc3, 0x00 },
+  { 0x3bc4, 0xa2 },
+  { 0x3bc5, 0x00 },
+  { 0x3bc6, 0xcf },
+  { 0x3bc7, 0x00 },
+  { 0x3bc8, 0x00 },
+  { 0x3bc9, 0x00 },
+  { 0x3bca, 0xff },
+  { 0x3bcb, 0x03 },
 
   /* MIPI global timing for 891 Mbps per lane (TCLKPOST .. TLPX) */
 
-  { 0x3a18, 0x8f }, { 0x3a19, 0x00 },
-  { 0x3a1a, 0x4f }, { 0x3a1b, 0x00 },
-  { 0x3a1c, 0x47 }, { 0x3a1d, 0x00 },
-  { 0x3a1e, 0x37 }, { 0x3a1f, 0x00 },
-  { 0x3a20, 0x4f }, { 0x3a21, 0x00 },
-  { 0x3a22, 0x87 }, { 0x3a23, 0x00 },
-  { 0x3a24, 0x4f }, { 0x3a25, 0x00 },
-  { 0x3a26, 0x7f }, { 0x3a27, 0x00 },
-  { 0x3a28, 0x3f }, { 0x3a29, 0x00 },
+  { 0x3a18, 0x8f },
+  { 0x3a19, 0x00 },
+  { 0x3a1a, 0x4f },
+  { 0x3a1b, 0x00 },
+  { 0x3a1c, 0x47 },
+  { 0x3a1d, 0x00 },
+  { 0x3a1e, 0x37 },
+  { 0x3a1f, 0x00 },
+  { 0x3a20, 0x4f },
+  { 0x3a21, 0x00 },
+  { 0x3a22, 0x87 },
+  { 0x3a23, 0x00 },
+  { 0x3a24, 0x4f },
+  { 0x3a25, 0x00 },
+  { 0x3a26, 0x7f },
+  { 0x3a27, 0x00 },
+  { 0x3a28, 0x3f },
+  { 0x3a29, 0x00 },
 };
 
 /* 3840x2160 @ 30 fps, all-pixel scan with a small crop, RAW10, 4 lanes.
@@ -287,27 +356,26 @@ static const struct imx415_regval_s g_imx415_common_regs[] =
  *       once a scope/frame counter is available on the board.
  */
 
-static const struct imx415_regval_s g_imx415_mode_3840x2160_regs[] =
-{
-  { IMX415_REG_WINMODE,        0x04 }, /* window cropping mode            */
-  { IMX415_REG_ADDMODE,        0x00 }, /* no binning                      */
-  { IMX415_REG_HADD,           0x00 },
-  { IMX415_REG_VADD,           0x00 },
+static const struct imx415_regval_s g_imx415_mode_3840x2160_regs[] = {
+  { IMX415_REG_WINMODE, 0x04 }, /* window cropping mode            */
+  { IMX415_REG_ADDMODE, 0x00 }, /* no binning                      */
+  { IMX415_REG_HADD, 0x00 },
+  { IMX415_REG_VADD, 0x00 },
 
-  { IMX415_REG_VMAX,           0xca }, /* VMAX = 0x008ca = 2250 lines     */
-  { IMX415_REG_VMAX + 1,       0x08 },
-  { IMX415_REG_VMAX + 2,       0x00 },
+  { IMX415_REG_VMAX, 0xca }, /* VMAX = 0x008ca = 2250 lines     */
+  { IMX415_REG_VMAX + 1, 0x08 },
+  { IMX415_REG_VMAX + 2, 0x00 },
 
-  { IMX415_REG_HMAX,           0x4c }, /* HMAX = 0x044c = 1100            */
-  { IMX415_REG_HMAX + 1,       0x04 },
+  { IMX415_REG_HMAX, 0x4c }, /* HMAX = 0x044c = 1100            */
+  { IMX415_REG_HMAX + 1, 0x04 },
 
-  { IMX415_REG_PIX_HST,        0x0c }, /* X origin = 12                   */
-  { IMX415_REG_PIX_HST + 1,    0x00 },
-  { IMX415_REG_PIX_HWIDTH,     0x00 }, /* width  = 0x0f00 = 3840          */
+  { IMX415_REG_PIX_HST, 0x0c }, /* X origin = 12                   */
+  { IMX415_REG_PIX_HST + 1, 0x00 },
+  { IMX415_REG_PIX_HWIDTH, 0x00 }, /* width  = 0x0f00 = 3840          */
   { IMX415_REG_PIX_HWIDTH + 1, 0x0f },
-  { IMX415_REG_PIX_VST,        0x10 }, /* Y origin = 16                   */
-  { IMX415_REG_PIX_VST + 1,    0x00 },
-  { IMX415_REG_PIX_VWIDTH,     0x70 }, /* height = 0x0870 = 2160          */
+  { IMX415_REG_PIX_VST, 0x10 }, /* Y origin = 16                   */
+  { IMX415_REG_PIX_VST + 1, 0x00 },
+  { IMX415_REG_PIX_VWIDTH, 0x70 }, /* height = 0x0870 = 2160          */
   { IMX415_REG_PIX_VWIDTH + 1, 0x08 },
 };
 
@@ -318,27 +386,26 @@ static const struct imx415_regval_s g_imx415_mode_3840x2160_regs[] =
  *       origin may need a one-pixel adjustment to keep the Bayer phase.
  */
 
-static const struct imx415_regval_s g_imx415_mode_1920x1080_regs[] =
-{
-  { IMX415_REG_WINMODE,        0x04 }, /* window cropping mode            */
-  { IMX415_REG_ADDMODE,        0x01 }, /* 2x2 binning                     */
-  { IMX415_REG_HADD,           0x01 },
-  { IMX415_REG_VADD,           0x01 },
+static const struct imx415_regval_s g_imx415_mode_1920x1080_regs[] = {
+  { IMX415_REG_WINMODE, 0x04 }, /* window cropping mode            */
+  { IMX415_REG_ADDMODE, 0x01 }, /* 2x2 binning                     */
+  { IMX415_REG_HADD, 0x01 },
+  { IMX415_REG_VADD, 0x01 },
 
-  { IMX415_REG_VMAX,           0x65 }, /* VMAX = 0x00465 = 1125 lines     */
-  { IMX415_REG_VMAX + 1,       0x04 },
-  { IMX415_REG_VMAX + 2,       0x00 },
+  { IMX415_REG_VMAX, 0x65 }, /* VMAX = 0x00465 = 1125 lines     */
+  { IMX415_REG_VMAX + 1, 0x04 },
+  { IMX415_REG_VMAX + 2, 0x00 },
 
-  { IMX415_REG_HMAX,           0x98 }, /* HMAX = 0x0898 = 2200            */
-  { IMX415_REG_HMAX + 1,       0x08 },
+  { IMX415_REG_HMAX, 0x98 }, /* HMAX = 0x0898 = 2200            */
+  { IMX415_REG_HMAX + 1, 0x08 },
 
-  { IMX415_REG_PIX_HST,        0x06 }, /* X origin = 6 (binned pixels)    */
-  { IMX415_REG_PIX_HST + 1,    0x00 },
-  { IMX415_REG_PIX_HWIDTH,     0x80 }, /* width  = 0x0780 = 1920          */
+  { IMX415_REG_PIX_HST, 0x06 }, /* X origin = 6 (binned pixels)    */
+  { IMX415_REG_PIX_HST + 1, 0x00 },
+  { IMX415_REG_PIX_HWIDTH, 0x80 }, /* width  = 0x0780 = 1920          */
   { IMX415_REG_PIX_HWIDTH + 1, 0x07 },
-  { IMX415_REG_PIX_VST,        0x08 }, /* Y origin = 8 (binned lines)     */
-  { IMX415_REG_PIX_VST + 1,    0x00 },
-  { IMX415_REG_PIX_VWIDTH,     0x38 }, /* height = 0x0438 = 1080          */
+  { IMX415_REG_PIX_VST, 0x08 }, /* Y origin = 8 (binned lines)     */
+  { IMX415_REG_PIX_VST + 1, 0x00 },
+  { IMX415_REG_PIX_VWIDTH, 0x38 }, /* height = 0x0438 = 1080          */
   { IMX415_REG_PIX_VWIDTH + 1, 0x04 },
 };
 
@@ -368,15 +435,13 @@ static const struct imx415_modeinfo_s g_imx415_modeinfo[IMX415_MODE_COUNT] =
 
 /* Mode register tables, indexed by enum imx415_mode_e. */
 
-static const struct imx415_regval_s * const
-g_imx415_mode_table[IMX415_MODE_COUNT] =
-{
-  [IMX415_MODE_1920X1080P30] = g_imx415_mode_1920x1080_regs,
-  [IMX415_MODE_3840X2160P30] = g_imx415_mode_3840x2160_regs,
-};
+static const struct imx415_regval_s
+    *const g_imx415_mode_table[IMX415_MODE_COUNT] = {
+      [IMX415_MODE_1920X1080P30] = g_imx415_mode_1920x1080_regs,
+      [IMX415_MODE_3840X2160P30] = g_imx415_mode_3840x2160_regs,
+    };
 
-static const size_t g_imx415_mode_table_len[IMX415_MODE_COUNT] =
-{
+static const size_t g_imx415_mode_table_len[IMX415_MODE_COUNT] = {
   [IMX415_MODE_1920X1080P30] = nitems(g_imx415_mode_1920x1080_regs),
   [IMX415_MODE_3840X2160P30] = nitems(g_imx415_mode_3840x2160_regs),
 };
@@ -428,9 +493,9 @@ static int rk3576_imx415_clk_init(void)
    * a silently mistimed link.
    */
 
-  delta = g_imx415_xvclk_hz > IMX415_XVCLK_FREQ ?
-          g_imx415_xvclk_hz - IMX415_XVCLK_FREQ :
-          IMX415_XVCLK_FREQ - g_imx415_xvclk_hz;
+  delta = g_imx415_xvclk_hz > IMX415_XVCLK_FREQ
+              ? g_imx415_xvclk_hz - IMX415_XVCLK_FREQ
+              : IMX415_XVCLK_FREQ - g_imx415_xvclk_hz;
 
   if (delta > IMX415_XVCLK_FREQ / 100 * IMX415_XVCLK_TOL_PCT)
     {
@@ -463,10 +528,10 @@ static int rk3576_imx415_write(struct imx415_dev_s *dev, uint16_t addr,
   buf[2] = val;
 
   msg.frequency = IMX415_I2C_FREQUENCY;
-  msg.addr      = dev->addr;
-  msg.flags     = 0;
-  msg.buffer    = buf;
-  msg.length    = IMX415_WRBUF_BYTES;
+  msg.addr = dev->addr;
+  msg.flags = 0;
+  msg.buffer = buf;
+  msg.length = IMX415_WRBUF_BYTES;
 
   return I2C_TRANSFER(dev->i2c, &msg, 1);
 }
@@ -491,16 +556,16 @@ static int rk3576_imx415_read(struct imx415_dev_s *dev, uint16_t addr,
   abuf[1] = (uint8_t)(addr & 0xff);
 
   msg[0].frequency = IMX415_I2C_FREQUENCY;
-  msg[0].addr      = dev->addr;
-  msg[0].flags     = 0;
-  msg[0].buffer    = abuf;
-  msg[0].length    = IMX415_REGADDR_BYTES;
+  msg[0].addr = dev->addr;
+  msg[0].flags = 0;
+  msg[0].buffer = abuf;
+  msg[0].length = IMX415_REGADDR_BYTES;
 
   msg[1].frequency = IMX415_I2C_FREQUENCY;
-  msg[1].addr      = dev->addr;
-  msg[1].flags     = I2C_M_READ;
-  msg[1].buffer    = val;
-  msg[1].length    = 1;
+  msg[1].addr = dev->addr;
+  msg[1].flags = I2C_M_READ;
+  msg[1].buffer = val;
+  msg[1].length = 1;
 
   ret = I2C_TRANSFER(dev->i2c, msg, 2);
   if (ret < 0)
@@ -558,8 +623,8 @@ static int rk3576_imx415_write_table(struct imx415_dev_s *dev,
       ret = rk3576_imx415_write(dev, table[i].addr, table[i].val);
       if (ret < 0)
         {
-          verr("ERROR: write 0x%04x = 0x%02x failed: %d\n",
-               table[i].addr, table[i].val, ret);
+          verr("ERROR: write 0x%04x = 0x%02x failed: %d\n", table[i].addr,
+               table[i].val, ret);
           return ret;
         }
     }
@@ -646,8 +711,9 @@ static int rk3576_imx415_power_up(const struct imx415_config_s *cfg)
  * Name: rk3576_imx415_initialize
  ****************************************************************************/
 
-struct imx415_dev_s *rk3576_imx415_initialize(
-    int i2c_port, uint8_t i2c_addr, const struct imx415_config_s *cfg)
+struct imx415_dev_s *
+rk3576_imx415_initialize(int i2c_port, uint8_t i2c_addr,
+                         const struct imx415_config_s *cfg)
 {
   struct imx415_dev_s *dev;
   uint8_t regval;
@@ -669,7 +735,7 @@ struct imx415_dev_s *rk3576_imx415_initialize(
   dev = &g_imx415_dev[g_imx415_ndevs];
   memset(dev, 0, sizeof(*dev));
 
-  dev->cfg  = cfg;
+  dev->cfg = cfg;
   dev->addr = i2c_addr;
 
   ret = rk3576_imx415_power_up(cfg);
@@ -695,15 +761,15 @@ struct imx415_dev_s *rk3576_imx415_initialize(
   ret = rk3576_imx415_read(dev, IMX415_REG_MODE, &regval);
   if (ret < 0)
     {
-      verr("ERROR: IMX415 at i2c%d/0x%02x does not answer: %d\n",
-           i2c_port, i2c_addr, ret);
+      verr("ERROR: IMX415 at i2c%d/0x%02x does not answer: %d\n", i2c_port,
+           i2c_addr, ret);
       return NULL;
     }
 
   if (regval != IMX415_MODE_STANDBY)
     {
-      vwarn("WARNING: IMX415 MODE reads 0x%02x, expected 0x%02x\n",
-            regval, IMX415_MODE_STANDBY);
+      vwarn("WARNING: IMX415 MODE reads 0x%02x, expected 0x%02x\n", regval,
+            IMX415_MODE_STANDBY);
     }
 
   /* Load the settings shared by all modes while still in standby */
@@ -719,8 +785,8 @@ struct imx415_dev_s *rk3576_imx415_initialize(
 
   vinfo("IMX415 ready on i2c%d addr 0x%02x, XVCLK %" PRIu32 " Hz, "
         "%d lanes -> csi%d/dphy%d\n",
-        i2c_port, i2c_addr, g_imx415_xvclk_hz, cfg->num_lanes,
-        cfg->csi_id, cfg->dphy_id);
+        i2c_port, i2c_addr, g_imx415_xvclk_hz, cfg->num_lanes, cfg->csi_id,
+        cfg->dphy_id);
 
   return dev;
 }
@@ -729,8 +795,8 @@ struct imx415_dev_s *rk3576_imx415_initialize(
  * Name: rk3576_imx415_get_modeinfo
  ****************************************************************************/
 
-const struct imx415_modeinfo_s *rk3576_imx415_get_modeinfo(
-    enum imx415_mode_e mode)
+const struct imx415_modeinfo_s *
+rk3576_imx415_get_modeinfo(enum imx415_mode_e mode)
 {
   if ((unsigned int)mode >= IMX415_MODE_COUNT)
     {
@@ -766,8 +832,8 @@ int rk3576_imx415_set_mode(struct imx415_dev_s *dev, enum imx415_mode_e mode)
       return ret;
     }
 
-  dev->mode       = mode;
-  dev->vmax       = g_imx415_modeinfo[mode].vmax;
+  dev->mode = mode;
+  dev->vmax = g_imx415_modeinfo[mode].vmax;
   dev->mode_valid = true;
 
   vinfo("IMX415 mode %ux%u@%u, %" PRIu32 " Mbps/lane\n",
@@ -797,12 +863,11 @@ int rk3576_imx415_set_exposure(struct imx415_dev_s *dev, uint32_t lines)
       return -EPERM;
     }
 
-  if (lines < IMX415_EXPOSURE_MIN ||
-      lines > dev->vmax - IMX415_SHR0_MIN)
+  if (lines < IMX415_EXPOSURE_MIN || lines > dev->vmax - IMX415_SHR0_MIN)
     {
       verr("ERROR: exposure %" PRIu32 " lines out of range (%u..%" PRIu32
-           ")\n", lines, IMX415_EXPOSURE_MIN,
-           dev->vmax - IMX415_SHR0_MIN);
+           ")\n",
+           lines, IMX415_EXPOSURE_MIN, dev->vmax - IMX415_SHR0_MIN);
       return -ERANGE;
     }
 

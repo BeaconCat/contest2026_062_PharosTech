@@ -29,8 +29,8 @@
 
 #include <nuttx/config.h>
 
-#include <stddef.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef CONFIG_RK3576_SKW_BT
@@ -48,33 +48,33 @@
  * is AP6256 template leftover and is not connected to this part.
  */
 
-#define RK3576_SKW_CH_ATC              0   /* AT command console          */
-#define RK3576_SKW_CH_LOOPCHECK        1   /* CP liveness / boot banners  */
-#define RK3576_SKW_CH_BT_CMD           2   /* HCI command + HCI event     */
-#define RK3576_SKW_CH_BT_AUDIO         3   /* HCI SCO (voice)             */
-#define RK3576_SKW_CH_BT_ISOC          4   /* HCI ISO (LE audio)          */
-#define RK3576_SKW_CH_BT_DATA          5   /* HCI ACL                     */
-#define RK3576_SKW_CH_WIFI_CMD         6
-#define RK3576_SKW_CH_WIFI_DATA        7
-#define RK3576_SKW_CH_WIFI_DATA1       8
-#define RK3576_SKW_CH_BSP_LOG          9
-#define RK3576_SKW_CH_BT_LOG           10  /* CP-side Bluetooth firmware log */
-#define RK3576_SKW_CH_BSP_UPDATE       11
-#define RK3576_SKW_CH_MAX              12  /* SDIO2_MAX_CH_NUM on V20 parts */
+#define RK3576_SKW_CH_ATC        0 /* AT command console          */
+#define RK3576_SKW_CH_LOOPCHECK  1 /* CP liveness / boot banners  */
+#define RK3576_SKW_CH_BT_CMD     2 /* HCI command + HCI event     */
+#define RK3576_SKW_CH_BT_AUDIO   3 /* HCI SCO (voice)             */
+#define RK3576_SKW_CH_BT_ISOC    4 /* HCI ISO (LE audio)          */
+#define RK3576_SKW_CH_BT_DATA    5 /* HCI ACL                     */
+#define RK3576_SKW_CH_WIFI_CMD   6
+#define RK3576_SKW_CH_WIFI_DATA  7
+#define RK3576_SKW_CH_WIFI_DATA1 8
+#define RK3576_SKW_CH_BSP_LOG    9
+#define RK3576_SKW_CH_BT_LOG     10 /* CP-side Bluetooth firmware log */
+#define RK3576_SKW_CH_BSP_UPDATE 11
+#define RK3576_SKW_CH_MAX        12 /* SDIO2_MAX_CH_NUM on V20 parts */
 
 /* Function-0 mailbox registers used by the Bluetooth bring-up.  The full
  * set is owned by the Wi-Fi core driver; only the AP->CP doorbell is
  * needed here.
  */
 
-#define RK3576_SKW_REG_AP2CP_DOORBELL  0x1b0
+#define RK3576_SKW_REG_AP2CP_DOORBELL 0x1b0
 
 /* Doorbell command written to RK3576_SKW_REG_AP2CP_DOORBELL to ask the CP
  * to bring the Bluetooth stack up.  The CP answers with a "BTREADY" banner
  * on the loopcheck channel.
  */
 
-#define RK3576_SKW_DOORBELL_BT_START   0x04
+#define RK3576_SKW_DOORBELL_BT_START 0x04
 
 /* Every virtual channel carries a 12-byte inner link header in front of the
  * real payload (the Wi-Fi command channel finds its struct skw_msg at +12,
@@ -82,17 +82,17 @@
  * channels follow the same rule, so an H4 frame starts at +12 as well.
  */
 
-#define RK3576_SKW_LINK_HDR_LEN        12
+#define RK3576_SKW_LINK_HDR_LEN 12
 
 /* H4 packet indicators (Bluetooth Core spec, UART transport), reused as the
  * first byte of the SDIO channel payload.
  */
 
-#define RK3576_SKW_BT_H4_CMD           0x01
-#define RK3576_SKW_BT_H4_ACL           0x02
-#define RK3576_SKW_BT_H4_SCO           0x03
-#define RK3576_SKW_BT_H4_EVT           0x04
-#define RK3576_SKW_BT_H4_ISO           0x05
+#define RK3576_SKW_BT_H4_CMD 0x01
+#define RK3576_SKW_BT_H4_ACL 0x02
+#define RK3576_SKW_BT_H4_SCO 0x03
+#define RK3576_SKW_BT_H4_EVT 0x04
+#define RK3576_SKW_BT_H4_ISO 0x05
 
 /* Number of bytes this driver needs in front of the caller payload:
  * inner link header plus the H4 packet indicator.  Exported through
@@ -100,8 +100,7 @@
  * for it and no bounce buffer is required on the transmit path.
  */
 
-#define RK3576_SKW_BT_HEAD_RESERVE \
-  (RK3576_SKW_LINK_HDR_LEN + 1)
+#define RK3576_SKW_BT_HEAD_RESERVE (RK3576_SKW_LINK_HDR_LEN + 1)
 
 /****************************************************************************
  * Public Types
@@ -118,10 +117,8 @@
  *   arg     - Opaque value handed to skw_sdio_register_channel_handler().
  */
 
-typedef void (*skw_sdio_channel_handler_t)(uint8_t channel,
-                                           const void *data,
-                                           size_t len,
-                                           void *arg);
+typedef void (*skw_sdio_channel_handler_t)(uint8_t channel, const void *data,
+                                           size_t len, void *arg);
 
 /****************************************************************************
  * Public Function Prototypes
@@ -130,8 +127,7 @@ typedef void (*skw_sdio_channel_handler_t)(uint8_t channel,
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C"
-{
+extern "C" {
 #else
 #define EXTERN extern
 #endif

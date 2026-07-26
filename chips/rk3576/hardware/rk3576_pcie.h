@@ -65,8 +65,8 @@
 
 #define RK3576_PCIE_HIWORD(mask, val) \
   ((((uint32_t)(mask)&0xffffu) << 16) | ((uint32_t)(val)&0xffffu))
-#define RK3576_PCIE_HIWORD_SET(bits)  RK3576_PCIE_HIWORD(bits, bits)
-#define RK3576_PCIE_HIWORD_CLR(bits)  RK3576_PCIE_HIWORD(bits, 0)
+#define RK3576_PCIE_HIWORD_SET(bits) RK3576_PCIE_HIWORD(bits, bits)
+#define RK3576_PCIE_HIWORD_CLR(bits) RK3576_PCIE_HIWORD(bits, 0)
 
 /* Client APB register offsets (relative to the "pcie-apb" base) ***********/
 
@@ -81,11 +81,10 @@
 
 /* RK3576_PCIE_CLIENT_GENERAL_CON bit fields (hiword-masked) */
 
-#define RK3576_PCIE_CLIENT_MODE_MASK 0x00f0 /* device_type[3:0] */
-#define RK3576_PCIE_CLIENT_RC_MODE   0x0040 /* root complex */
-#define RK3576_PCIE_CLIENT_EP_MODE   0x0000 /* endpoint */
-#define RK3576_PCIE_CLIENT_LTSSM_MASK                                       \
-  0x000c                                     /* app_ltssm_enable[1:0] */
+#define RK3576_PCIE_CLIENT_MODE_MASK     0x00f0 /* device_type[3:0] */
+#define RK3576_PCIE_CLIENT_RC_MODE       0x0040 /* root complex */
+#define RK3576_PCIE_CLIENT_EP_MODE       0x0000 /* endpoint */
+#define RK3576_PCIE_CLIENT_LTSSM_MASK    0x000c /* app_ltssm_enable[1:0] */
 #define RK3576_PCIE_CLIENT_LTSSM_ENABLE  0x000c
 #define RK3576_PCIE_CLIENT_LTSSM_DISABLE 0x0008
 
@@ -99,8 +98,7 @@
 #define RK3576_PCIE_LTSSM_STATE_L0   0x00000011 /* L0: link operational */
 #define RK3576_PCIE_SMLH_LINKUP      (1 << 16)  /* physical layer up */
 #define RK3576_PCIE_RDLH_LINKUP      (1 << 17)  /* data link layer up */
-#define RK3576_PCIE_LINKUP \
-  (RK3576_PCIE_SMLH_LINKUP | RK3576_PCIE_RDLH_LINKUP)
+#define RK3576_PCIE_LINKUP           (RK3576_PCIE_SMLH_LINKUP | RK3576_PCIE_RDLH_LINKUP)
 
 /* RK3576_PCIE_CLIENT_INTR_STATUS_MISC / _MASK_MISC bits used here */
 
@@ -113,14 +111,14 @@
 
 /* DesignWare DBI: standard type-1 header offsets we touch *****************/
 
-#define RK3576_PCIE_DBI_VENDOR_ID    0x0000 /* 16-bit */
-#define RK3576_PCIE_DBI_DEVICE_ID    0x0002 /* 16-bit */
-#define RK3576_PCIE_DBI_COMMAND      0x0004 /* 16-bit */
-#define RK3576_PCIE_DBI_CLASS_REV    0x0008 /* 32-bit, class in [31:8] */
-#define RK3576_PCIE_DBI_HEADER_TYPE  0x000e /* 8-bit */
-#define RK3576_PCIE_DBI_BAR0         0x0010
-#define RK3576_PCIE_DBI_BAR1         0x0014
-#define RK3576_PCIE_DBI_PRIMARY_BUS  0x0018 /* prim/sec/sub/latency */
+#define RK3576_PCIE_DBI_VENDOR_ID   0x0000 /* 16-bit */
+#define RK3576_PCIE_DBI_DEVICE_ID   0x0002 /* 16-bit */
+#define RK3576_PCIE_DBI_COMMAND     0x0004 /* 16-bit */
+#define RK3576_PCIE_DBI_CLASS_REV   0x0008 /* 32-bit, class in [31:8] */
+#define RK3576_PCIE_DBI_HEADER_TYPE 0x000e /* 8-bit */
+#define RK3576_PCIE_DBI_BAR0        0x0010
+#define RK3576_PCIE_DBI_BAR1        0x0014
+#define RK3576_PCIE_DBI_PRIMARY_BUS 0x0018 /* prim/sec/sub/latency */
 
 /* Class code written into the RC's own header: PCI-to-PCI bridge
  * (base class 0x06, sub class 0x04, prog-if 0x00).
@@ -133,26 +131,26 @@
  * default of 0x70 is used by all Rockchip DW PCIe ports to date.
  */
 
-#define RK3576_PCIE_CAP_BASE       0x0070
-#define RK3576_PCIE_CAP_LINK_CAP   (RK3576_PCIE_CAP_BASE + 0x0c)
-#define RK3576_PCIE_CAP_LINK_CTRL2 (RK3576_PCIE_CAP_BASE + 0x30)
+#define RK3576_PCIE_CAP_BASE        0x0070
+#define RK3576_PCIE_CAP_LINK_CAP    (RK3576_PCIE_CAP_BASE + 0x0c)
+#define RK3576_PCIE_CAP_LINK_CTRL2  (RK3576_PCIE_CAP_BASE + 0x30)
 #define RK3576_PCIE_LINK_SPEED_MASK 0x0000000f
 
 /* DesignWare "port logic" registers (DBI space) */
 
-#define RK3576_PCIE_PL_PORT_LINK_CTRL 0x0710
-#define RK3576_PCIE_PL_LINK_MODE_MASK 0x003f0000 /* LINK_CAPABLE[21:16] */
+#define RK3576_PCIE_PL_PORT_LINK_CTRL    0x0710
+#define RK3576_PCIE_PL_LINK_MODE_MASK    0x003f0000 /* LINK_CAPABLE[21:16] */
 #define RK3576_PCIE_PL_LINK_MODE_1_LANE  (0x01 << 16)
 #define RK3576_PCIE_PL_LINK_MODE_2_LANES (0x03 << 16)
 #define RK3576_PCIE_PL_LINK_MODE_4_LANES (0x07 << 16)
 
-#define RK3576_PCIE_PL_GEN2_CTRL       0x080c
-#define RK3576_PCIE_PL_LINK_WIDTH_MASK 0x00001f00 /* [12:8] */
-#define RK3576_PCIE_PL_LINK_WIDTH(n)   (((n)&0x1f) << 8)
-#define RK3576_PCIE_PL_SPEED_CHANGE    (1 << 17)  /* DIRECTED_SPEED_CHANGE */
+#define RK3576_PCIE_PL_GEN2_CTRL         0x080c
+#define RK3576_PCIE_PL_LINK_WIDTH_MASK   0x00001f00 /* [12:8] */
+#define RK3576_PCIE_PL_LINK_WIDTH(n)     (((n)&0x1f) << 8)
+#define RK3576_PCIE_PL_SPEED_CHANGE      (1 << 17) /* DIRECTED_SPEED_CHANGE */
 
-#define RK3576_PCIE_MISC_CONTROL_1 0x08bc
-#define RK3576_PCIE_DBI_RO_WR_EN   (1 << 0)
+#define RK3576_PCIE_MISC_CONTROL_1       0x08bc
+#define RK3576_PCIE_DBI_RO_WR_EN         (1 << 0)
 
 /* Unrolled iATU register file *********************************************/
 
@@ -162,13 +160,13 @@
 
 /* Per-region stride is 0x200; inbound regions are selected by bit 8. */
 
-#define RK3576_PCIE_ATU_REGION_STRIDE 0x200
+#define RK3576_PCIE_ATU_REGION_STRIDE       0x200
 #define RK3576_PCIE_ATU_REGION_INBOUND_FLAG 0x100
 
 #define RK3576_PCIE_ATU_OB_OFFSET(r) \
   (RK3576_PCIE_ATU_UNROLL_BASE + ((r)*RK3576_PCIE_ATU_REGION_STRIDE))
-#define RK3576_PCIE_ATU_IB_OFFSET(r)                                        \
-  (RK3576_PCIE_ATU_UNROLL_BASE + ((r)*RK3576_PCIE_ATU_REGION_STRIDE) +      \
+#define RK3576_PCIE_ATU_IB_OFFSET(r)                                   \
+  (RK3576_PCIE_ATU_UNROLL_BASE + ((r)*RK3576_PCIE_ATU_REGION_STRIDE) + \
    RK3576_PCIE_ATU_REGION_INBOUND_FLAG)
 
 /* Register offsets within one iATU region */
@@ -184,10 +182,10 @@
 
 /* CTRL1: TLP type in [4:0] */
 
-#define RK3576_PCIE_ATU_TYPE_MEM  0x0
-#define RK3576_PCIE_ATU_TYPE_IO   0x2
-#define RK3576_PCIE_ATU_TYPE_CFG0 0x4
-#define RK3576_PCIE_ATU_TYPE_CFG1 0x5
+#define RK3576_PCIE_ATU_TYPE_MEM             0x0
+#define RK3576_PCIE_ATU_TYPE_IO              0x2
+#define RK3576_PCIE_ATU_TYPE_CFG0            0x4
+#define RK3576_PCIE_ATU_TYPE_CFG1            0x5
 #define RK3576_PCIE_ATU_INCREASE_REGION_SIZE (1 << 13)
 
 /* CTRL2 */
@@ -199,11 +197,11 @@
  * Every field is written with the hiword-mask scheme.
  */
 
-#define RK3576_PIPE_PHY_GRF_CON0 0x0000
-#define RK3576_PIPE_PHY_GRF_CON1 0x0004
-#define RK3576_PIPE_PHY_GRF_CON2 0x0008
-#define RK3576_PIPE_PHY_GRF_CON3 0x000c
-#define RK3576_PIPE_PHY_GRF_STATUS0 0x0034
+#define RK3576_PIPE_PHY_GRF_CON0          0x0000
+#define RK3576_PIPE_PHY_GRF_CON1          0x0004
+#define RK3576_PIPE_PHY_GRF_CON2          0x0008
+#define RK3576_PIPE_PHY_GRF_CON3          0x000c
+#define RK3576_PIPE_PHY_GRF_STATUS0       0x0034
 
 #define RK3576_PIPE_PHY_STATUS0_PHY_READY (1 << 6)
 

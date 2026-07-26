@@ -82,19 +82,21 @@
  * is the reset default used as a fallback.
  */
 
-#define RK3576_I3C_DEV_ADDR_TABLE_LOC    0x0280
+#define RK3576_I3C_DEV_ADDR_TABLE_LOC 0x0280
 #define RK3576_I3C_DEV_ADDR_TABLE_ENTRY(n) \
-  (RK3576_I3C_DEV_ADDR_TABLE_LOC + ((n) * 4))
+  (RK3576_I3C_DEV_ADDR_TABLE_LOC + ((n)*4))
 
 /* DEVICE_CTRL bits ********************************************************/
 
-#define RK3576_I3C_DEVCTRL_IBA_INCLUDE   (1 << 0)  /* Include I3C bcast addr */
-#define RK3576_I3C_DEVCTRL_HOT_JOIN_NACK (1 << 8)  /* NACK hot-join requests */
+#define RK3576_I3C_DEVCTRL_IBA_INCLUDE (1 << 0) /* Include I3C bcast addr */
+#define RK3576_I3C_DEVCTRL_HOT_JOIN_NACK \
+  (1 << 8) /* NACK hot-join requests     \
+            */
 #define RK3576_I3C_DEVCTRL_I2C_SLAVE_PRESENT (1 << 7)
-#define RK3576_I3C_DEVCTRL_DMA_ENABLE    (1 << 28) /* Use DMA instead of PIO */
-#define RK3576_I3C_DEVCTRL_ABORT         (1 << 29) /* Abort current transfer */
-#define RK3576_I3C_DEVCTRL_RESUME        (1 << 30) /* Resume after error */
-#define RK3576_I3C_DEVCTRL_ENABLE        (1u << 31) /* Controller enable */
+#define RK3576_I3C_DEVCTRL_DMA_ENABLE        (1 << 28) /* Use DMA instead of PIO */
+#define RK3576_I3C_DEVCTRL_ABORT             (1 << 29) /* Abort current transfer */
+#define RK3576_I3C_DEVCTRL_RESUME            (1 << 30) /* Resume after error */
+#define RK3576_I3C_DEVCTRL_ENABLE            (1u << 31) /* Controller enable */
 
 /* DEVICE_ADDR bits ********************************************************/
 
@@ -198,19 +200,19 @@
 
 /* Command queue: common attribute field ***********************************/
 
-#define RK3576_I3C_CMD_ATTR_SHIFT       0
-#define RK3576_I3C_CMD_ATTR_XFER_CMD    0x0 /* Transfer command */
-#define RK3576_I3C_CMD_ATTR_XFER_ARG    0x1 /* Transfer argument */
-#define RK3576_I3C_CMD_ATTR_SHORT_ARG   0x2 /* Short data argument */
-#define RK3576_I3C_CMD_ATTR_ADDR_ASSGN  0x3 /* Address assignment (ENTDAA) */
+#define RK3576_I3C_CMD_ATTR_SHIFT      0
+#define RK3576_I3C_CMD_ATTR_XFER_CMD   0x0 /* Transfer command */
+#define RK3576_I3C_CMD_ATTR_XFER_ARG   0x1 /* Transfer argument */
+#define RK3576_I3C_CMD_ATTR_SHORT_ARG  0x2 /* Short data argument */
+#define RK3576_I3C_CMD_ATTR_ADDR_ASSGN 0x3 /* Address assignment (ENTDAA) */
 
 /* Transfer command (CMD_ATTR == 0) ****************************************/
 
 #define RK3576_I3C_XFER_TID_SHIFT       3
 #define RK3576_I3C_XFER_TID_MASK        (0xf << 3)
-#define RK3576_I3C_XFER_CMD_SHIFT       7  /* CCC code when CP == 1 */
+#define RK3576_I3C_XFER_CMD_SHIFT       7         /* CCC code when CP == 1 */
 #define RK3576_I3C_XFER_CP              (1 << 15) /* Command present */
-#define RK3576_I3C_XFER_DEV_INDEX_SHIFT 16 /* DAT index */
+#define RK3576_I3C_XFER_DEV_INDEX_SHIFT 16        /* DAT index */
 #define RK3576_I3C_XFER_SPEED_SHIFT     21
 #define RK3576_I3C_XFER_SPEED_I3C_SDR0  (0x0 << 21)
 #define RK3576_I3C_XFER_SPEED_I3C_SDR1  (0x1 << 21)
@@ -225,8 +227,8 @@
 
 /* Transfer argument (CMD_ATTR == 1) ***************************************/
 
-#define RK3576_I3C_XFER_ARG_DB_SHIFT    8  /* Defining byte */
-#define RK3576_I3C_XFER_ARG_DL_SHIFT    16 /* Data length in bytes */
+#define RK3576_I3C_XFER_ARG_DB_SHIFT 8  /* Defining byte */
+#define RK3576_I3C_XFER_ARG_DL_SHIFT 16 /* Data length in bytes */
 
 /* Address assignment command (CMD_ATTR == 3) ******************************/
 
@@ -239,13 +241,13 @@
 
 /* Response queue entry ****************************************************/
 
-#define RK3576_I3C_RESP_DL_SHIFT     0  /* Remaining/received data length */
-#define RK3576_I3C_RESP_DL_MASK      (0xffff << 0)
-#define RK3576_I3C_RESP_CCCT_SHIFT   16
-#define RK3576_I3C_RESP_TID_SHIFT    24
-#define RK3576_I3C_RESP_TID_MASK     (0xf << 24)
-#define RK3576_I3C_RESP_ERR_SHIFT    28
-#define RK3576_I3C_RESP_ERR_MASK     (0xfu << 28)
+#define RK3576_I3C_RESP_DL_SHIFT       0 /* Remaining/received data length */
+#define RK3576_I3C_RESP_DL_MASK        (0xffff << 0)
+#define RK3576_I3C_RESP_CCCT_SHIFT     16
+#define RK3576_I3C_RESP_TID_SHIFT      24
+#define RK3576_I3C_RESP_TID_MASK       (0xf << 24)
+#define RK3576_I3C_RESP_ERR_SHIFT      28
+#define RK3576_I3C_RESP_ERR_MASK       (0xfu << 28)
 
 #define RK3576_I3C_RESP_ERR_NONE       0x0
 #define RK3576_I3C_RESP_ERR_CRC        0x1
@@ -259,20 +261,20 @@
 
 /* IBI queue status entry **************************************************/
 
-#define RK3576_I3C_IBI_STS_DL_SHIFT   0 /* Payload length in bytes */
-#define RK3576_I3C_IBI_STS_DL_MASK    (0xff << 0)
-#define RK3576_I3C_IBI_STS_ID_SHIFT   8 /* (addr << 1) | RnW */
-#define RK3576_I3C_IBI_STS_ID_MASK    (0xff << 8)
-#define RK3576_I3C_IBI_STS_ERROR      (1u << 30)
-#define RK3576_I3C_IBI_STS_ACKED      (1u << 31)
+#define RK3576_I3C_IBI_STS_DL_SHIFT 0 /* Payload length in bytes */
+#define RK3576_I3C_IBI_STS_DL_MASK  (0xff << 0)
+#define RK3576_I3C_IBI_STS_ID_SHIFT 8 /* (addr << 1) | RnW */
+#define RK3576_I3C_IBI_STS_ID_MASK  (0xff << 8)
+#define RK3576_I3C_IBI_STS_ERROR    (1u << 30)
+#define RK3576_I3C_IBI_STS_ACKED    (1u << 31)
 
 /* Timing register field layout: (high count << 16) | low count */
 
 #define RK3576_I3C_SCL_TIMING(hcnt, lcnt) \
-  ((((hcnt) & 0xffff) << 16) | ((lcnt) & 0xffff))
+  ((((hcnt)&0xffff) << 16) | ((lcnt)&0xffff))
 
-#define RK3576_I3C_EXT_LCNT(l1, l2, l3, l4)                      \
-  (((l1) & 0xff) | (((l2) & 0xff) << 8) | (((l3) & 0xff) << 16) | \
-   (((l4) & 0xff) << 24))
+#define RK3576_I3C_EXT_LCNT(l1, l2, l3, l4)                 \
+  (((l1)&0xff) | (((l2)&0xff) << 8) | (((l3)&0xff) << 16) | \
+   (((l4)&0xff) << 24))
 
 #endif /* __ARCH_ARM64_SRC_RK3576_HARDWARE_RK3576_I3C_H */

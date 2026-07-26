@@ -58,7 +58,7 @@
  */
 
 #ifndef RK3576_WDT_NS_ADDR
-#  define RK3576_WDT_NS_ADDR 0x2ACE0000 /* WDT_NS, 0x100 register window */
+#define RK3576_WDT_NS_ADDR 0x2ACE0000 /* WDT_NS, 0x100 register window */
 #endif
 
 /* SYS_GRF, holds the per-watchdog "may reset the system" enables.
@@ -66,7 +66,6 @@
  * TODO: move to hardware/rk3576_memorymap.h together with the other GRF
  * bases when a GRF driver is introduced.
  */
-
 
 /* GIC interrupt number.
  *
@@ -101,47 +100,47 @@
 
 /* WDT_CR (0x00) ************************************************************/
 
-#define WDT_CR_EN                 (1 << 0) /* Watchdog enable (sticky)     */
-#define WDT_CR_RMOD               (1 << 1) /* 0: reset, 1: IRQ then reset  */
-#define WDT_CR_RMOD_RESET         (0 << 1)
-#define WDT_CR_RMOD_IRQ           (1 << 1)
-#define WDT_CR_RPL_SHIFT          2        /* Bits 4:2 reset pulse length  */
-#define WDT_CR_RPL_MASK           (7 << WDT_CR_RPL_SHIFT)
-#define WDT_CR_RPL_2PCLK          (0 << WDT_CR_RPL_SHIFT)
-#define WDT_CR_RPL_4PCLK          (1 << WDT_CR_RPL_SHIFT)
-#define WDT_CR_RPL_8PCLK          (2 << WDT_CR_RPL_SHIFT)
-#define WDT_CR_RPL_16PCLK         (3 << WDT_CR_RPL_SHIFT)
-#define WDT_CR_RPL_32PCLK         (4 << WDT_CR_RPL_SHIFT)
-#define WDT_CR_RPL_64PCLK         (5 << WDT_CR_RPL_SHIFT)
-#define WDT_CR_RPL_128PCLK        (6 << WDT_CR_RPL_SHIFT)
-#define WDT_CR_RPL_256PCLK        (7 << WDT_CR_RPL_SHIFT)
+#define WDT_CR_EN          (1 << 0) /* Watchdog enable (sticky)     */
+#define WDT_CR_RMOD        (1 << 1) /* 0: reset, 1: IRQ then reset  */
+#define WDT_CR_RMOD_RESET  (0 << 1)
+#define WDT_CR_RMOD_IRQ    (1 << 1)
+#define WDT_CR_RPL_SHIFT   2 /* Bits 4:2 reset pulse length  */
+#define WDT_CR_RPL_MASK    (7 << WDT_CR_RPL_SHIFT)
+#define WDT_CR_RPL_2PCLK   (0 << WDT_CR_RPL_SHIFT)
+#define WDT_CR_RPL_4PCLK   (1 << WDT_CR_RPL_SHIFT)
+#define WDT_CR_RPL_8PCLK   (2 << WDT_CR_RPL_SHIFT)
+#define WDT_CR_RPL_16PCLK  (3 << WDT_CR_RPL_SHIFT)
+#define WDT_CR_RPL_32PCLK  (4 << WDT_CR_RPL_SHIFT)
+#define WDT_CR_RPL_64PCLK  (5 << WDT_CR_RPL_SHIFT)
+#define WDT_CR_RPL_128PCLK (6 << WDT_CR_RPL_SHIFT)
+#define WDT_CR_RPL_256PCLK (7 << WDT_CR_RPL_SHIFT)
 
 /* WDT_TORR (0x04) **********************************************************/
 
-#define WDT_TORR_PERIOD_SHIFT     0        /* Bits 3:0 timeout period      */
-#define WDT_TORR_PERIOD_MASK      (0xf << WDT_TORR_PERIOD_SHIFT)
-#define WDT_TORR_PERIOD_NR        16       /* Number of selectable ranges  */
+#define WDT_TORR_PERIOD_SHIFT 0 /* Bits 3:0 timeout period      */
+#define WDT_TORR_PERIOD_MASK  (0xf << WDT_TORR_PERIOD_SHIFT)
+#define WDT_TORR_PERIOD_NR    16 /* Number of selectable ranges  */
 
 /* Counter reload value for timeout index i (0..15): 2^(16 + i) - 1. */
 
-#define WDT_TORR_TICKS(i)         ((uint32_t)(((uint64_t)1 << (16 + (i))) - 1))
+#define WDT_TORR_TICKS(i) ((uint32_t)(((uint64_t)1 << (16 + (i))) - 1))
 
 /* WDT_CRR (0x0c) ***********************************************************/
 
-#define WDT_CRR_KICK              0x76     /* Magic value that kicks the dog */
+#define WDT_CRR_KICK 0x76 /* Magic value that kicks the dog */
 
 /* WDT_STAT (0x10) **********************************************************/
 
-#define WDT_STAT_IRQ              (1 << 0) /* Interrupt pending            */
+#define WDT_STAT_IRQ (1 << 0) /* Interrupt pending            */
 
 /* SYS_GRF_SOC_CON4 (SYS_GRF + 0x0010), hiword-masked *********************/
 
-#define RK3576_SYS_GRF_SOC_CON4         0x0010
+#define RK3576_SYS_GRF_SOC_CON4        0x0010
 
-#define SYS_GRF_SOC_CON4_BUSWDT_PAUSE   (1 << 5)  /* BUS_WDT pause enable  */
-#define SYS_GRF_SOC_CON4_WDTNS_PAUSE    (1 << 6)  /* WDT_NS pause enable   */
-#define SYS_GRF_SOC_CON4_PMUWDT_GLBRST  (1 << 7)  /* PMU_WDT resets system */
-#define SYS_GRF_SOC_CON4_WDTNS_GLBRST   (1 << 8)  /* WDT_NS resets system  */
+#define SYS_GRF_SOC_CON4_BUSWDT_PAUSE  (1 << 5) /* BUS_WDT pause enable  */
+#define SYS_GRF_SOC_CON4_WDTNS_PAUSE   (1 << 6) /* WDT_NS pause enable   */
+#define SYS_GRF_SOC_CON4_PMUWDT_GLBRST (1 << 7) /* PMU_WDT resets system */
+#define SYS_GRF_SOC_CON4_WDTNS_GLBRST  (1 << 8) /* WDT_NS resets system  */
 
 /* Hiword-mask write helper: the upper 16 bits are a per-bit write enable
  * for the lower 16 bits.  WDT_HIWORD() sets the given bits, WDT_HIWORD_CLR()

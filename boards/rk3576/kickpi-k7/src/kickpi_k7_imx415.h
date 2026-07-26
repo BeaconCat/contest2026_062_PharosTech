@@ -25,13 +25,13 @@
  * KICKPI-K7 board (three modules: imx415_0 on I2C4, imx415_1 on I2C5 and
  * imx415_3 on I2C8, all at slave address 0x37).
  *
- * NuttX has no generic camera-sensor framework: include/nuttx/video/imgsensor.h
- * describes struct imgsensor_ops_s, but that interface is owned by the
- * capture/ISP driver (drivers/video/video.c binds one imgsensor to one
- * imgdata).  Until the RK3576 VICAP/ISP capture driver exists there is no
- * upper half to register against, so this sensor exposes plain in-kernel
- * functions.  They are shaped so that a thin imgsensor_ops_s shim can be
- * layered on later (set_mode/set_exposure/set_gain/stream on-off map 1:1 to
+ * NuttX has no generic camera-sensor framework:
+ *include/nuttx/video/imgsensor.h describes struct imgsensor_ops_s, but that
+ *interface is owned by the capture/ISP driver (drivers/video/video.c binds one
+ *imgsensor to one imgdata).  Until the RK3576 VICAP/ISP capture driver exists
+ *there is no upper half to register against, so this sensor exposes plain
+ *in-kernel functions.  They are shaped so that a thin imgsensor_ops_s shim can
+ *be layered on later (set_mode/set_exposure/set_gain/stream on-off map 1:1 to
  * validate_frame_setting/set_frame_interval/set_imgsensor_value/start_capture).
  *
  * Bring-up order for one camera path:
@@ -66,20 +66,20 @@
  * all three modules sit on private buses so the address may repeat).
  */
 
-#define IMX415_I2C_ADDR         0x37
+#define IMX415_I2C_ADDR 0x37
 
 /* External master clock feeding XVCLK, DTS node
  * "external-camera-37m-clock" (fixed-clock, 0x2367b88 Hz).
  */
 
-#define IMX415_XVCLK_FREQ       37125000u
-#define IMX415_XVCLK_NAME       "ext_cam_37m_clk"
+#define IMX415_XVCLK_FREQ 37125000u
+#define IMX415_XVCLK_NAME "ext_cam_37m_clk"
 
 /* Sensor limits used to range-check exposure and gain requests. */
 
-#define IMX415_GAIN_MIN         0u    /* 0 dB                              */
-#define IMX415_GAIN_MAX         2047u /* 11-bit GAIN_PCG_0, 0.3 dB / step  */
-#define IMX415_EXPOSURE_MIN     8u    /* lines, SHR0 lower bound           */
+#define IMX415_GAIN_MIN     0u    /* 0 dB                              */
+#define IMX415_GAIN_MAX     2047u /* 11-bit GAIN_PCG_0, 0.3 dB / step  */
+#define IMX415_EXPOSURE_MIN 8u    /* lines, SHR0 lower bound           */
 
 /****************************************************************************
  * Public Types
@@ -104,7 +104,7 @@ struct imx415_modeinfo_s
   uint16_t hmax;           /* HMAX in INCK units (0x3028/0x3029)         */
   uint32_t vmax;           /* VMAX in lines  (0x3024..0x3026)            */
   uint32_t lane_rate_mbps; /* Per-lane HS bit rate, feeds the D-PHY      */
-  uint8_t  csi_dt;         /* CSI-2 data type of the payload             */
+  uint8_t csi_dt;          /* CSI-2 data type of the payload             */
 };
 
 /* Board wiring of one IMX415 instance.  The KICKPI-K7 vendor DTS carries no
@@ -115,9 +115,9 @@ struct imx415_modeinfo_s
 
 struct imx415_config_s
 {
-  int  csi_id;             /* RK3576_CSI0..4 receiving this sensor       */
-  int  dphy_id;            /* RK3576_DPHY0/1 in front of that CSI host   */
-  int  num_lanes;          /* Active MIPI data lanes, 1..4               */
+  int csi_id;              /* RK3576_CSI0..4 receiving this sensor       */
+  int dphy_id;             /* RK3576_DPHY0/1 in front of that CSI host   */
+  int num_lanes;           /* Active MIPI data lanes, 1..4               */
   bool has_reset;          /* true when reset_pin is wired               */
   bool has_pwdn;           /* true when pwdn_pin is wired                */
   gpio_pinset_t reset_pin; /* Active-low XCLR, valid if has_reset        */
@@ -133,8 +133,7 @@ struct imx415_dev_s;
  ****************************************************************************/
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /****************************************************************************
@@ -158,8 +157,9 @@ extern "C"
  *
  ****************************************************************************/
 
-struct imx415_dev_s *rk3576_imx415_initialize(
-    int i2c_port, uint8_t i2c_addr, const struct imx415_config_s *cfg);
+struct imx415_dev_s *
+rk3576_imx415_initialize(int i2c_port, uint8_t i2c_addr,
+                         const struct imx415_config_s *cfg);
 
 /****************************************************************************
  * Name: rk3576_imx415_set_mode
@@ -194,8 +194,8 @@ int rk3576_imx415_set_mode(struct imx415_dev_s *dev, enum imx415_mode_e mode);
  *
  ****************************************************************************/
 
-const struct imx415_modeinfo_s *rk3576_imx415_get_modeinfo(
-    enum imx415_mode_e mode);
+const struct imx415_modeinfo_s *
+rk3576_imx415_get_modeinfo(enum imx415_mode_e mode);
 
 /****************************************************************************
  * Name: rk3576_imx415_set_exposure

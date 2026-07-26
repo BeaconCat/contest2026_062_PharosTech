@@ -48,9 +48,9 @@
 
 /* AES block size and the digest size of SHA-256, in bytes. */
 
-#define RK3576_CRYPTO_AES_BLOCKLEN 16
+#define RK3576_CRYPTO_AES_BLOCKLEN     16
 #define RK3576_CRYPTO_SHA256_DIGESTLEN 32
-#define RK3576_CRYPTO_SHA256_BLOCKLEN 64
+#define RK3576_CRYPTO_SHA256_BLOCKLEN  64
 
 /* Cipher chaining modes supported by rk3576_crypto_aes(). */
 
@@ -74,10 +74,10 @@
 
 struct rk3576_crypto_sha256_s
 {
-  uint8_t  block[RK3576_CRYPTO_SHA256_BLOCKLEN]; /* Partial input block   */
-  size_t   nblock;   /* Valid bytes in block[]                            */
-  bool     started;  /* At least one descriptor has been submitted        */
-  bool     locked;   /* This context currently owns the hardware          */
+  uint8_t block[RK3576_CRYPTO_SHA256_BLOCKLEN]; /* Partial input block   */
+  size_t nblock; /* Valid bytes in block[]                            */
+  bool started;  /* At least one descriptor has been submitted        */
+  bool locked;   /* This context currently owns the hardware          */
 };
 
 /****************************************************************************
@@ -85,8 +85,7 @@ struct rk3576_crypto_sha256_s
  ****************************************************************************/
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /****************************************************************************
@@ -135,9 +134,9 @@ int rk3576_crypto_initialize(void);
  *
  ****************************************************************************/
 
-int rk3576_crypto_aes(const uint8_t *key, size_t keylen, uint8_t *iv,
-                      int mode, bool encrypt, const uint8_t *in,
-                      uint8_t *out, size_t len);
+int rk3576_crypto_aes(const uint8_t *key, size_t keylen, uint8_t *iv, int mode,
+                      bool encrypt, const uint8_t *in, uint8_t *out,
+                      size_t len);
 
 /****************************************************************************
  * Name: rk3576_crypto_sha256_init

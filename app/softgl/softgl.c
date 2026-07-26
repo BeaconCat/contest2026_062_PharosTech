@@ -48,7 +48,7 @@
 #include "softgl.h"
 
 #ifdef __ARM_NEON
-#  include <arm_neon.h>
+#include <arm_neon.h>
 #endif
 
 /****************************************************************************
@@ -57,20 +57,20 @@
 
 /* Initial capacity of the screen-space triangle bin.  It grows on demand. */
 
-#define SOFTGL_TRIBIN_INITIAL     2048
+#define SOFTGL_TRIBIN_INITIAL 2048
 
 /* Growth headroom for the OBJ parser's dynamic arrays. */
 
-#define SOFTGL_OBJ_INITIAL        256
+#define SOFTGL_OBJ_INITIAL 256
 
 /* Longest OBJ line we accept. */
 
-#define SOFTGL_OBJ_LINE_MAX       256
+#define SOFTGL_OBJ_LINE_MAX 256
 
 /* Hard cap so that a corrupt file cannot make us allocate wildly. */
 
-#define SOFTGL_MESH_MAX_VERTS     65535u
-#define SOFTGL_MESH_MAX_INDICES   (3u * 262144u)
+#define SOFTGL_MESH_MAX_VERTS   65535u
+#define SOFTGL_MESH_MAX_INDICES (3u * 262144u)
 
 /****************************************************************************
  * Private Types
@@ -92,11 +92,11 @@ struct softgl_objkey_s
  ****************************************************************************/
 
 static void *softgl_worker_entry(void *arg);
-static int   softgl_pool_start(struct softgl_context_s *ctx, int nworkers);
-static void  softgl_pool_stop(struct softgl_context_s *ctx);
-static void  softgl_update_derived(struct softgl_context_s *ctx);
-static int   softgl_obj_reserve(void **buf, uint32_t *cap, uint32_t need,
-                                size_t elemsize);
+static int softgl_pool_start(struct softgl_context_s *ctx, int nworkers);
+static void softgl_pool_stop(struct softgl_context_s *ctx);
+static void softgl_update_derived(struct softgl_context_s *ctx);
+static int softgl_obj_reserve(void **buf, uint32_t *cap, uint32_t need,
+                              size_t elemsize);
 
 /****************************************************************************
  * Private Functions
@@ -115,12 +115,12 @@ static int   softgl_obj_reserve(void **buf, uint32_t *cap, uint32_t need,
 
 static void *softgl_worker_entry(void *arg)
 {
-  struct softgl_worker_s  *worker = (struct softgl_worker_s *)arg;
-  struct softgl_context_s *ctx    = worker->ctx;
+  struct softgl_worker_s *worker = (struct softgl_worker_s *)arg;
+  struct softgl_context_s *ctx = worker->ctx;
 
   pthread_mutex_lock(&ctx->lock);
 
-  for (; ; )
+  for (;;)
     {
       while (!ctx->shutdown && worker->seq == ctx->job_seq)
         {
@@ -158,14 +158,14 @@ static int softgl_pool_start(struct softgl_context_s *ctx, int nworkers)
   int ret;
 
   ctx->shutdown = false;
-  ctx->job_seq  = 0;
-  ctx->pending  = 0;
+  ctx->job_seq = 0;
+  ctx->pending = 0;
 
   for (i = 0; i < nworkers; i++)
     {
-      ctx->workers[i].ctx     = ctx;
-      ctx->workers[i].band    = i + 1;
-      ctx->workers[i].seq     = 0;
+      ctx->workers[i].ctx = ctx;
+      ctx->workers[i].band = i + 1;
+      ctx->workers[i].seq = 0;
       ctx->workers[i].started = false;
 
       ret = pthread_create(&ctx->workers[i].tid, NULL, softgl_worker_entry,
@@ -181,7 +181,7 @@ static int softgl_pool_start(struct softgl_context_s *ctx, int nworkers)
     }
 
   ctx->nworkers = i;
-  ctx->nbands   = i + 1;
+  ctx->nbands = i + 1;
   return OK;
 }
 
@@ -208,7 +208,7 @@ static void softgl_pool_stop(struct softgl_context_s *ctx)
     }
 
   ctx->nworkers = 0;
-  ctx->nbands   = 1;
+  ctx->nbands = 1;
 }
 
 /****************************************************************************
@@ -310,18 +310,18 @@ void softgl_fill16(uint16_t *dst, uint16_t value, size_t count)
 
   while (count >= 32)
     {
-      vst1q_u16(dst +  0, v8);
-      vst1q_u16(dst +  8, v8);
+      vst1q_u16(dst + 0, v8);
+      vst1q_u16(dst + 8, v8);
       vst1q_u16(dst + 16, v8);
       vst1q_u16(dst + 24, v8);
-      dst   += 32;
+      dst += 32;
       count -= 32;
     }
 
   while (count >= 8)
     {
       vst1q_u16(dst, v8);
-      dst   += 8;
+      dst += 8;
       count -= 8;
     }
 #endif
@@ -364,20 +364,20 @@ struct softgl_context_s *softgl_create_context(int width, int height,
       return NULL;
     }
 
-  ctx->width  = width;
+  ctx->width = width;
   ctx->height = height;
   ctx->stride = width;
-  ctx->fbfd   = -1;
+  ctx->fbfd = -1;
 
   if (framebuffer != NULL)
     {
-      ctx->color     = framebuffer;
+      ctx->color = framebuffer;
       ctx->own_color = false;
     }
   else
     {
-      ctx->color = (uint16_t *)malloc((size_t)width * height *
-                                      sizeof(uint16_t));
+      ctx->color =
+          (uint16_t *)malloc((size_t)width * height * sizeof(uint16_t));
       if (ctx->color == NULL)
         {
           free(ctx);
@@ -387,8 +387,7 @@ struct softgl_context_s *softgl_create_context(int width, int height,
       ctx->own_color = true;
     }
 
-  ctx->depth = (uint16_t *)malloc((size_t)width * height *
-                                  sizeof(uint16_t));
+  ctx->depth = (uint16_t *)malloc((size_t)width * height * sizeof(uint16_t));
   if (ctx->depth == NULL)
     {
       if (ctx->own_color)
@@ -402,8 +401,8 @@ struct softgl_context_s *softgl_create_context(int width, int height,
 
   ctx->own_depth = true;
 
-  ctx->tris = (struct softgl_rtri_s *)
-              malloc(SOFTGL_TRIBIN_INITIAL * sizeof(struct softgl_rtri_s));
+  ctx->tris = (struct softgl_rtri_s *)malloc(SOFTGL_TRIBIN_INITIAL *
+                                             sizeof(struct softgl_rtri_s));
   if (ctx->tris == NULL)
     {
       free(ctx->depth);
@@ -424,25 +423,25 @@ struct softgl_context_s *softgl_create_context(int width, int height,
   softgl_mat4_identity(&ctx->view);
   softgl_mat4_identity(&ctx->proj);
 
-  ctx->cull        = SOFTGL_CULL_BACK;
-  ctx->filter      = SOFTGL_FILTER_BILINEAR;
-  ctx->shade       = SOFTGL_SHADE_PHONG;
-  ctx->depth_test  = true;
+  ctx->cull = SOFTGL_CULL_BACK;
+  ctx->filter = SOFTGL_FILTER_BILINEAR;
+  ctx->shade = SOFTGL_SHADE_PHONG;
+  ctx->depth_test = true;
   ctx->depth_write = true;
-  ctx->dirty       = true;
+  ctx->dirty = true;
 
-  ctx->light.direction = softgl_vec3_normalize(
-                           softgl_vec3(-0.4f, 0.8f, 0.45f));
-  ctx->light.color     = softgl_vec3(1.0f, 0.97f, 0.92f);
-  ctx->light.ambient   = softgl_vec3(0.18f, 0.19f, 0.24f);
-  ctx->light.specular  = 0.35f;
+  ctx->light.direction =
+      softgl_vec3_normalize(softgl_vec3(-0.4f, 0.8f, 0.45f));
+  ctx->light.color = softgl_vec3(1.0f, 0.97f, 0.92f);
+  ctx->light.ambient = softgl_vec3(0.18f, 0.19f, 0.24f);
+  ctx->light.specular = 0.35f;
   ctx->light.shininess = 24.0f;
 
   pthread_mutex_init(&ctx->lock, NULL);
   pthread_cond_init(&ctx->start_cv, NULL);
   pthread_cond_init(&ctx->done_cv, NULL);
 
-  ctx->nbands   = 1;
+  ctx->nbands = 1;
   ctx->nworkers = 0;
 
   /* Spread the rasteriser over every core the board reports (RK3576 has
@@ -561,9 +560,9 @@ void softgl_clear(struct softgl_context_s *ctx, uint16_t color, bool depth)
       softgl_fill16(ctx->depth, (uint16_t)SOFTGL_DEPTH_MAX, npix);
     }
 
-  ctx->stat_tris_in    = 0;
+  ctx->stat_tris_in = 0;
   ctx->stat_tris_drawn = 0;
-  ctx->stat_pixels     = 0;
+  ctx->stat_pixels = 0;
 }
 
 /****************************************************************************
@@ -612,7 +611,7 @@ void softgl_bind_texture(struct softgl_context_s *ctx,
 void softgl_set_light(struct softgl_context_s *ctx,
                       const struct softgl_light_s *light)
 {
-  ctx->light           = *light;
+  ctx->light = *light;
   ctx->light.direction = softgl_vec3_normalize(ctx->light.direction);
 }
 
@@ -746,9 +745,9 @@ int softgl_bind_fbdev(struct softgl_context_s *ctx, const char *devpath)
       return -ENOTSUP;
     }
 
-  ctx->fbfd     = fd;
-  ctx->fbmem    = (uint16_t *)pinfo.fbmem;
-  ctx->fblen    = pinfo.fblen;
+  ctx->fbfd = fd;
+  ctx->fbmem = (uint16_t *)pinfo.fbmem;
+  ctx->fblen = pinfo.fblen;
   ctx->fbstride = (int)(pinfo.stride / sizeof(uint16_t));
 
   if (ctx->fbstride <= 0)
@@ -850,7 +849,7 @@ int softgl_write_ppm(struct softgl_context_s *ctx, const char *path)
            */
 
           rgb[0] = (uint8_t)(((c >> 11) & 0x1f) * 255 / 31);
-          rgb[1] = (uint8_t)(((c >> 5)  & 0x3f) * 255 / 63);
+          rgb[1] = (uint8_t)(((c >> 5) & 0x3f) * 255 / 63);
           rgb[2] = (uint8_t)((c & 0x1f) * 255 / 31);
 
           if (fwrite(rgb, 1, sizeof(rgb), fp) != sizeof(rgb))
@@ -895,8 +894,7 @@ int softgl_mesh_load_memory(struct softgl_mesh_s *mesh, const void *data,
 
   hdr = (const struct softgl_mesh_header_s *)base;
 
-  if (hdr->magic != SOFTGL_MESH_MAGIC ||
-      hdr->version != SOFTGL_MESH_VERSION)
+  if (hdr->magic != SOFTGL_MESH_MAGIC || hdr->version != SOFTGL_MESH_VERSION)
     {
       return -EINVAL;
     }
@@ -933,11 +931,11 @@ int softgl_mesh_load_memory(struct softgl_mesh_s *mesh, const void *data,
   memcpy(indices, base + sizeof(*hdr) + vbytes, ibytes);
 
   memset(mesh, 0, sizeof(*mesh));
-  mesh->vertices     = verts;
-  mesh->indices      = indices;
-  mesh->nvertices    = hdr->nvertices;
-  mesh->nindices     = hdr->nindices;
-  mesh->owned        = true;
+  mesh->vertices = verts;
+  mesh->indices = indices;
+  mesh->nvertices = hdr->nvertices;
+  mesh->nindices = hdr->nindices;
+  mesh->owned = true;
   mesh->basecolor[0] = 1.0f;
   mesh->basecolor[1] = 1.0f;
   mesh->basecolor[2] = 1.0f;
@@ -1030,16 +1028,16 @@ int softgl_mesh_load_obj(struct softgl_mesh_s *mesh, const char *path)
   char line[SOFTGL_OBJ_LINE_MAX];
   float *pos = NULL;
   float *nrm = NULL;
-  float *uv  = NULL;
+  float *uv = NULL;
   uint32_t poscap = 0;
   uint32_t nrmcap = 0;
-  uint32_t uvcap  = 0;
+  uint32_t uvcap = 0;
   uint32_t npos = 0;
   uint32_t nnrm = 0;
-  uint32_t nuv  = 0;
+  uint32_t nuv = 0;
   struct softgl_vertex_s *verts = NULL;
   uint16_t *indices = NULL;
-  struct softgl_objkey_s *keys = NULL;   /* v/vt/vn triple per vertex */
+  struct softgl_objkey_s *keys = NULL; /* v/vt/vn triple per vertex */
   uint32_t vcap = 0;
   uint32_t icap = 0;
   uint32_t kcap = 0;
@@ -1183,8 +1181,7 @@ int softgl_mesh_load_obj(struct softgl_mesh_s *mesh, const char *path)
               emitted = 0xffff;
               for (k = 0; k < nverts; k++)
                 {
-                  if (keys[k].v == vi && keys[k].t == ti &&
-                      keys[k].n == ni)
+                  if (keys[k].v == vi && keys[k].t == ti && keys[k].n == ni)
                     {
                       emitted = (uint16_t)k;
                       break;
@@ -1201,16 +1198,14 @@ int softgl_mesh_load_obj(struct softgl_mesh_s *mesh, const char *path)
                       goto errout;
                     }
 
-                  ret = softgl_obj_reserve((void **)&verts, &vcap,
-                                           nverts + 1,
+                  ret = softgl_obj_reserve((void **)&verts, &vcap, nverts + 1,
                                            sizeof(struct softgl_vertex_s));
                   if (ret < 0)
                     {
                       goto errout;
                     }
 
-                  ret = softgl_obj_reserve((void **)&keys, &kcap,
-                                           nverts + 1,
+                  ret = softgl_obj_reserve((void **)&keys, &kcap, nverts + 1,
                                            sizeof(struct softgl_objkey_s));
                   if (ret < 0)
                     {
@@ -1294,12 +1289,12 @@ int softgl_mesh_load_obj(struct softgl_mesh_s *mesh, const char *path)
           struct softgl_vertex_s *a = &verts[indices[i + 0]];
           struct softgl_vertex_s *b = &verts[indices[i + 1]];
           struct softgl_vertex_s *c = &verts[indices[i + 2]];
-          struct softgl_vec3_s ab = softgl_vec3(b->pos[0] - a->pos[0],
-                                                b->pos[1] - a->pos[1],
-                                                b->pos[2] - a->pos[2]);
-          struct softgl_vec3_s ac = softgl_vec3(c->pos[0] - a->pos[0],
-                                                c->pos[1] - a->pos[1],
-                                                c->pos[2] - a->pos[2]);
+          struct softgl_vec3_s ab =
+              softgl_vec3(b->pos[0] - a->pos[0], b->pos[1] - a->pos[1],
+                          b->pos[2] - a->pos[2]);
+          struct softgl_vec3_s ac =
+              softgl_vec3(c->pos[0] - a->pos[0], c->pos[1] - a->pos[1],
+                          c->pos[2] - a->pos[2]);
 
           /* Un-normalised cross product is area weighted, which is what we
            * want when accumulating.
@@ -1307,15 +1302,21 @@ int softgl_mesh_load_obj(struct softgl_mesh_s *mesh, const char *path)
 
           struct softgl_vec3_s n = softgl_vec3_cross(ab, ac);
 
-          a->nrm[0] += n.x; a->nrm[1] += n.y; a->nrm[2] += n.z;
-          b->nrm[0] += n.x; b->nrm[1] += n.y; b->nrm[2] += n.z;
-          c->nrm[0] += n.x; c->nrm[1] += n.y; c->nrm[2] += n.z;
+          a->nrm[0] += n.x;
+          a->nrm[1] += n.y;
+          a->nrm[2] += n.z;
+          b->nrm[0] += n.x;
+          b->nrm[1] += n.y;
+          b->nrm[2] += n.z;
+          c->nrm[0] += n.x;
+          c->nrm[1] += n.y;
+          c->nrm[2] += n.z;
         }
 
       for (i = 0; i < nverts; i++)
         {
           struct softgl_vec3_s n = softgl_vec3_normalize(
-            softgl_vec3(verts[i].nrm[0], verts[i].nrm[1], verts[i].nrm[2]));
+              softgl_vec3(verts[i].nrm[0], verts[i].nrm[1], verts[i].nrm[2]));
 
           verts[i].nrm[0] = n.x;
           verts[i].nrm[1] = n.y;
@@ -1329,11 +1330,11 @@ int softgl_mesh_load_obj(struct softgl_mesh_s *mesh, const char *path)
   free(keys);
 
   memset(mesh, 0, sizeof(*mesh));
-  mesh->vertices     = verts;
-  mesh->indices      = indices;
-  mesh->nvertices    = nverts;
-  mesh->nindices     = nidx;
-  mesh->owned        = true;
+  mesh->vertices = verts;
+  mesh->indices = indices;
+  mesh->nvertices = nverts;
+  mesh->nindices = nidx;
+  mesh->owned = true;
   mesh->basecolor[0] = 1.0f;
   mesh->basecolor[1] = 1.0f;
   mesh->basecolor[2] = 1.0f;

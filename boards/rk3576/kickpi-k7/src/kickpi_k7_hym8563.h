@@ -39,19 +39,18 @@
 
 /* I2C slave address of the HYM8563 on the KICKPI-K7 (i2c2, hym8563@51) */
 
-#define KICKPI_K7_HYM8563_I2C_ADDR  0x51
+#define KICKPI_K7_HYM8563_I2C_ADDR 0x51
 
 /* I2C bus the RTC is wired to (i2c@2AC50000) */
 
-#define KICKPI_K7_HYM8563_I2C_BUS   2
+#define KICKPI_K7_HYM8563_I2C_BUS 2
 
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /****************************************************************************

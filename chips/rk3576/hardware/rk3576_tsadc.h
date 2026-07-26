@@ -65,7 +65,6 @@
  * lands; kept local so this driver builds standalone.
  */
 
-
 #define RK3576_TSADC_SIZE 0x400
 
 /* Number of conversion channels (TRM Table 19-1). */
@@ -74,12 +73,12 @@
 
 /* Channel index -> monitored block (device-tree thermal-zones order). */
 
-#define RK3576_TSADC_CH_SOC      0 /* Near chip center */
-#define RK3576_TSADC_CH_BIGCORE  1 /* Cortex-A72 cluster */
-#define RK3576_TSADC_CH_LITCORE  2 /* Cortex-A53 cluster */
-#define RK3576_TSADC_CH_DDR      3 /* DDR controller */
-#define RK3576_TSADC_CH_NPU      4 /* NPU */
-#define RK3576_TSADC_CH_GPU      5 /* Mali GPU */
+#define RK3576_TSADC_CH_SOC     0 /* Near chip center */
+#define RK3576_TSADC_CH_BIGCORE 1 /* Cortex-A72 cluster */
+#define RK3576_TSADC_CH_LITCORE 2 /* Cortex-A53 cluster */
+#define RK3576_TSADC_CH_DDR     3 /* DDR controller */
+#define RK3576_TSADC_CH_NPU     4 /* NPU */
+#define RK3576_TSADC_CH_GPU     5 /* Mali GPU */
 
 /* clk_tsadc frequency.  CRU_CLKSEL_CON59[7:0] (clk_tsadc_div) resets to
  * 0x0b, i.e. the 24 MHz oscillator divided by 12.  The vendor device tree
@@ -93,28 +92,28 @@
 
 /* Register offsets *********************************************************/
 
-#define RK3576_TSADC_USER_CON       0x0000 /* User control (WE)            */
-#define RK3576_TSADC_AUTO_CON       0x0004 /* Auto control (WE)            */
-#define RK3576_TSADC_AUTO_STATUS    0x0008 /* Auto-mode status             */
-#define RK3576_TSADC_AUTO_SRC       0x000c /* Channel enable mask (WE)     */
-#define RK3576_TSADC_LT_EN          0x0010 /* Low-temp check enable (WE)   */
-#define RK3576_TSADC_HT_INT_EN      0x0014 /* High-temp int enable (WE)    */
-#define RK3576_TSADC_GPIO_EN        0x0018 /* Shut-to-GPIO enable (WE)     */
-#define RK3576_TSADC_CRU_EN         0x001c /* Shut-to-CRU enable (WE)      */
-#define RK3576_TSADC_LT_INT_EN      0x0020 /* Low-temp int enable (WE)     */
-#define RK3576_TSADC_HLT_INT_PD     0x0024 /* High/low int status (W1C)    */
-#define RK3576_TSADC_EOC_HSHUT_PD   0x0028 /* EOC / shut status (W1C)      */
+#define RK3576_TSADC_USER_CON            0x0000 /* User control (WE)            */
+#define RK3576_TSADC_AUTO_CON            0x0004 /* Auto control (WE)            */
+#define RK3576_TSADC_AUTO_STATUS         0x0008 /* Auto-mode status             */
+#define RK3576_TSADC_AUTO_SRC            0x000c /* Channel enable mask (WE)     */
+#define RK3576_TSADC_LT_EN               0x0010 /* Low-temp check enable (WE)   */
+#define RK3576_TSADC_HT_INT_EN           0x0014 /* High-temp int enable (WE)    */
+#define RK3576_TSADC_GPIO_EN             0x0018 /* Shut-to-GPIO enable (WE)     */
+#define RK3576_TSADC_CRU_EN              0x001c /* Shut-to-CRU enable (WE)      */
+#define RK3576_TSADC_LT_INT_EN           0x0020 /* Low-temp int enable (WE)     */
+#define RK3576_TSADC_HLT_INT_PD          0x0024 /* High/low int status (W1C)    */
+#define RK3576_TSADC_EOC_HSHUT_PD        0x0028 /* EOC / shut status (W1C)      */
 
-#define RK3576_TSADC_DATA(n)        (0x002c + ((n) * 4)) /* Channel data   */
-#define RK3576_TSADC_COMP_INT(n)    (0x006c + ((n) * 4)) /* HT int thresh  */
-#define RK3576_TSADC_COMP_SHUT(n)   (0x010c + ((n) * 4)) /* Shut threshold */
+#define RK3576_TSADC_DATA(n)             (0x002c + ((n)*4)) /* Channel data   */
+#define RK3576_TSADC_COMP_INT(n)         (0x006c + ((n)*4)) /* HT int thresh  */
+#define RK3576_TSADC_COMP_SHUT(n)        (0x010c + ((n)*4)) /* Shut threshold */
 
 #define RK3576_TSADC_HIGH_INT_DEBOUNCE   0x014c /* HT interrupt debounce  */
 #define RK3576_TSADC_HIGH_TSHUT_DEBOUNCE 0x0150 /* Shutdown debounce      */
 #define RK3576_TSADC_AUTO_PERIOD         0x0154 /* Conversion interleave  */
 #define RK3576_TSADC_AUTO_PERIOD_HT      0x0158 /* Interleave when hot    */
 
-#define RK3576_TSADC_COMP_LOW_INT(n) (0x015c + ((n) * 4)) /* LT threshold */
+#define RK3576_TSADC_COMP_LOW_INT(n)     (0x015c + ((n)*4)) /* LT threshold */
 
 /* TSADC_USER_CON (0x0000) — write-enable protected ************************/
 
@@ -128,10 +127,11 @@
 
 /* TSADC_AUTO_CON (0x0004) — write-enable protected ************************/
 
-#define TSADC_AUTO_CON_AUTO_EN       (1 << 0) /* 1=auto (loop) mode       */
-#define TSADC_AUTO_CON_Q_SEL         (1 << 1) /* 1=(q_max - q), negative
-                                               * temperature coefficient  */
-#define TSADC_AUTO_CON_ROUND_INT_EN  (1 << 2) /* Int after a full round   */
+#define TSADC_AUTO_CON_AUTO_EN (1 << 0) /* 1=auto (loop) mode       */
+#define TSADC_AUTO_CON_Q_SEL                                              \
+  (1 << 1)                                     /* 1=(q_max - q), negative \
+                                                * temperature coefficient  */
+#define TSADC_AUTO_CON_ROUND_INT_EN   (1 << 2) /* Int after a full round   */
 #define TSADC_AUTO_CON_TSHUT_POL_HIGH (1 << 8) /* 0=low active pad output */
 
 /* TSADC_AUTO_STATUS (0x0008) — plain register ****************************/
@@ -145,19 +145,19 @@
  * CRU_EN / LT_INT_EN (all write-enable protected, one bit per channel).
  */
 
-#define TSADC_CHAN_BIT(n)  (1 << (n))
-#define TSADC_CHAN_MASK    ((1 << RK3576_TSADC_NCHAN) - 1)
+#define TSADC_CHAN_BIT(n) (1 << (n))
+#define TSADC_CHAN_MASK   ((1 << RK3576_TSADC_NCHAN) - 1)
 
 /* TSADC_HLT_INT_PD (0x0024) — write 1 to clear ***************************/
 
-#define TSADC_HLT_INT_PD_HT(n) (1 << (n))        /* [15:0]  high-temp int */
-#define TSADC_HLT_INT_PD_LT(n) (1 << (16 + (n))) /* [31:16] low-temp int  */
+#define TSADC_HLT_INT_PD_HT(n)  (1 << (n))        /* [15:0]  high-temp int */
+#define TSADC_HLT_INT_PD_LT(n)  (1 << (16 + (n))) /* [31:16] low-temp int  */
 #define TSADC_HLT_INT_PD_HT_ALL TSADC_CHAN_MASK
 #define TSADC_HLT_INT_PD_LT_ALL (TSADC_CHAN_MASK << 16)
 
 /* TSADC_EOC_HSHUT_PD (0x0028) — write 1 to clear *************************/
 
-#define TSADC_EOC_HSHUT_PD_SHUT(n) (1 << (n)) /* [15:0] shut threshold hit */
+#define TSADC_EOC_HSHUT_PD_SHUT(n)  (1 << (n)) /* [15:0] shut threshold hit */
 #define TSADC_EOC_HSHUT_PD_SHUT_ALL TSADC_CHAN_MASK
 #define TSADC_EOC_HSHUT_PD_USR_EOC  (1 << 16) /* User-mode conversion done */
 #define TSADC_EOC_HSHUT_PD_ROUND    (1 << 17) /* Auto-mode round complete  */
@@ -186,8 +186,7 @@
  * RK3576_TSADC_WE_CLR() — RK3576_TSADC_WE() alone can never clear a bit.
  */
 
-#define RK3576_TSADC_WE(bits) \
-  (((uint32_t)(bits) << 16) | (uint32_t)(bits))
+#define RK3576_TSADC_WE(bits)     (((uint32_t)(bits) << 16) | (uint32_t)(bits))
 #define RK3576_TSADC_WE_CLR(bits) ((uint32_t)(bits) << 16)
 #define RK3576_TSADC_WE_VAL(v, m) \
   (((uint32_t)(m) << 16) | ((uint32_t)(v) & (uint32_t)(m)))

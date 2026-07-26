@@ -76,14 +76,12 @@
 
 static uint32_t llm_rd32(const uint8_t *p);
 static uint64_t llm_merge_hash(uint64_t key);
-static void     llm_merge_insert(struct llm_tokenizer_s *tok, uint32_t a,
-                                 uint32_t b, uint32_t ab, uint32_t rank);
-static bool     llm_merge_find(const struct llm_tokenizer_s *tok,
-                               uint32_t a, uint32_t b, uint32_t *rank,
-                               uint32_t *result);
-static int      llm_encode_bytes(struct llm_tokenizer_s *tok,
-                                 const uint8_t *bytes, size_t len,
-                                 int *out, int max_out, int n);
+static void llm_merge_insert(struct llm_tokenizer_s *tok, uint32_t a,
+                             uint32_t b, uint32_t ab, uint32_t rank);
+static bool llm_merge_find(const struct llm_tokenizer_s *tok, uint32_t a,
+                           uint32_t b, uint32_t *rank, uint32_t *result);
+static int llm_encode_bytes(struct llm_tokenizer_s *tok, const uint8_t *bytes,
+                            size_t len, int *out, int max_out, int n);
 
 /****************************************************************************
  * Private Functions
@@ -193,9 +191,8 @@ static bool llm_merge_find(const struct llm_tokenizer_s *tok, uint32_t a,
  *
  ****************************************************************************/
 
-static int llm_encode_bytes(struct llm_tokenizer_s *tok,
-                            const uint8_t *bytes, size_t len, int *out,
-                            int max_out, int n)
+static int llm_encode_bytes(struct llm_tokenizer_s *tok, const uint8_t *bytes,
+                            size_t len, int *out, int max_out, int n)
 {
   int start = n;
   size_t i;
@@ -225,7 +222,7 @@ static int llm_encode_bytes(struct llm_tokenizer_s *tok,
 
   /* Step 2: greedily apply the lowest-ranked adjacent merge. */
 
-  for (; ; )
+  for (;;)
     {
       uint32_t best_rank = UINT32_MAX;
       uint32_t best_result = 0;
@@ -238,7 +235,8 @@ static int llm_encode_bytes(struct llm_tokenizer_s *tok,
           uint32_t result;
 
           if (llm_merge_find(tok, (uint32_t)out[j], (uint32_t)out[j + 1],
-                             &rank, &result) && rank < best_rank)
+                             &rank, &result) &&
+              rank < best_rank)
             {
               best_rank = rank;
               best_result = result;
@@ -279,8 +277,7 @@ int llm_tokenizer_init(struct llm_tokenizer_s *tok, const uint8_t *blob,
 
   memset(tok, 0, sizeof(*tok));
 
-  if (blob_bytes < LLM_TOK_HEADER_BYTES ||
-      llm_rd32(p) != LLM_TOKENIZER_MAGIC)
+  if (blob_bytes < LLM_TOK_HEADER_BYTES || llm_rd32(p) != LLM_TOKENIZER_MAGIC)
     {
       fprintf(stderr, "llm: tokenizer blob has a bad magic\n");
       return -EINVAL;
@@ -300,8 +297,8 @@ int llm_tokenizer_init(struct llm_tokenizer_s *tok, const uint8_t *blob,
       return -EINVAL;
     }
 
-  tok->vocab = (struct llm_bpe_entry_s *)
-               calloc(tok->vocab_size, sizeof(struct llm_bpe_entry_s));
+  tok->vocab = (struct llm_bpe_entry_s *)calloc(
+      tok->vocab_size, sizeof(struct llm_bpe_entry_s));
   if (tok->vocab == NULL)
     {
       return -ENOMEM;
@@ -348,8 +345,8 @@ int llm_tokenizer_init(struct llm_tokenizer_s *tok, const uint8_t *blob,
       table_size <<= 1;
     }
 
-  tok->table = (struct llm_merge_slot_s *)
-               calloc(table_size, sizeof(struct llm_merge_slot_s));
+  tok->table = (struct llm_merge_slot_s *)calloc(
+      table_size, sizeof(struct llm_merge_slot_s));
   if (tok->table == NULL)
     {
       free(tok->vocab);
@@ -378,8 +375,10 @@ int llm_tokenizer_init(struct llm_tokenizer_s *tok, const uint8_t *blob,
       if (a >= tok->vocab_size || b >= tok->vocab_size ||
           ab >= tok->vocab_size)
         {
-          fprintf(stderr, "llm: merge %" PRIu32 " references a token "
-                  "outside the vocabulary\n", i);
+          fprintf(stderr,
+                  "llm: merge %" PRIu32 " references a token "
+                  "outside the vocabulary\n",
+                  i);
           llm_tokenizer_free(tok);
           return -EINVAL;
         }
@@ -423,8 +422,7 @@ void llm_tokenizer_free(struct llm_tokenizer_s *tok)
  *
  ****************************************************************************/
 
-int llm_tokenizer_lookup(struct llm_tokenizer_s *tok, const char *s,
-                         int len)
+int llm_tokenizer_lookup(struct llm_tokenizer_s *tok, const char *s, int len)
 {
   uint32_t i;
 
@@ -520,11 +518,10 @@ int llm_tokenizer_encode(struct llm_tokenizer_s *tok, const char *text,
           continue;
         }
 
-      run_len = marker != NULL ? (size_t)(marker - cursor)
-                               : strlen(cursor);
+      run_len = marker != NULL ? (size_t)(marker - cursor) : strlen(cursor);
 
-      n = llm_encode_bytes(tok, (const uint8_t *)cursor, run_len, out,
-                           max_out, n);
+      n = llm_encode_bytes(tok, (const uint8_t *)cursor, run_len, out, max_out,
+                           n);
       if (n < 0)
         {
           return n;
@@ -543,8 +540,7 @@ int llm_tokenizer_encode(struct llm_tokenizer_s *tok, const char *text,
 const uint8_t *llm_tokenizer_decode(struct llm_tokenizer_s *tok, int token,
                                     int *len)
 {
-  if (tok->vocab == NULL || token < 0 ||
-      (uint32_t)token >= tok->vocab_size)
+  if (tok->vocab == NULL || token < 0 || (uint32_t)token >= tok->vocab_size)
     {
       *len = 0;
       return NULL;

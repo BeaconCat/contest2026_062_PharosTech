@@ -89,29 +89,29 @@
 
 /* NuttX IRQ numbers: GIC SPI 322 (memory interface) and 323 (ISP core). */
 
-#define RK3576_ISP_MI_IRQ  RK3576_IRQ_ISP_MI
+#define RK3576_ISP_MI_IRQ   RK3576_IRQ_ISP_MI
 #define RK3576_ISP_CORE_IRQ RK3576_IRQ_ISP
 
 /* The memory interface works on 16-byte groups, so the luma stride is
  * rounded up; NV12 additionally needs an even line count.
  */
 
-#define RK3576_ISP_STRIDE_ALIGN 16
-#define RK3576_ISP_ALIGN_UP(v, a) (((v) + ((a) - 1)) & ~((a) - 1))
+#define RK3576_ISP_STRIDE_ALIGN   16
+#define RK3576_ISP_ALIGN_UP(v, a) (((v) + ((a)-1)) & ~((a)-1))
 
 /* Default static white balance: a mild daylight preset (unity green, a
  * little extra red and blue) so that a first frame is not visibly green.
  */
 
-#define RK3576_ISP_WB_DEFAULT_R  0x160
-#define RK3576_ISP_WB_DEFAULT_G  RK3576_ISP_WB_UNITY
-#define RK3576_ISP_WB_DEFAULT_B  0x148
+#define RK3576_ISP_WB_DEFAULT_R 0x160
+#define RK3576_ISP_WB_DEFAULT_G RK3576_ISP_WB_UNITY
+#define RK3576_ISP_WB_DEFAULT_B 0x148
 
 /* Default black level in raw counts (typical 12-bit sensor pedestal).
  * TODO: replace with a per-sensor value once a sensor driver exists.
  */
 
-#define RK3576_ISP_BLS_DEFAULT   64
+#define RK3576_ISP_BLS_DEFAULT 64
 
 /* Demosaic edge threshold: mid-range, favours detail over false colour. */
 
@@ -127,23 +127,23 @@
 
 struct rk3576_isp_dev_s
 {
-  uintptr_t base;                     /* Register block base               */
-  mutex_t lock;                       /* Serialises the control path       */
-  bool initialized;                   /* rk3576_isp_initialize() done      */
-  bool configured;                    /* A valid format is programmed      */
-  volatile bool streaming;            /* Pipeline is running               */
+  uintptr_t base;          /* Register block base               */
+  mutex_t lock;            /* Serialises the control path       */
+  bool initialized;        /* rk3576_isp_initialize() done      */
+  bool configured;         /* A valid format is programmed      */
+  volatile bool streaming; /* Pipeline is running               */
 
-  struct rk3576_isp_format_s fmt;     /* Active format                     */
-  uint32_t stride;                    /* Luma stride, in pixels            */
-  size_t ysize;                       /* Luma plane size, bytes            */
-  size_t framesize;                   /* NV12 frame size, bytes            */
+  struct rk3576_isp_format_s fmt; /* Active format                     */
+  uint32_t stride;                /* Luma stride, in pixels            */
+  size_t ysize;                   /* Luma plane size, bytes            */
+  size_t framesize;               /* NV12 frame size, bytes            */
 
-  void *buf[RK3576_ISP_NBUFFERS];     /* Output ping-pong buffers          */
-  volatile uint8_t active;            /* Buffer the hardware is filling    */
-  volatile uint32_t seq;              /* Completed frame counter           */
+  void *buf[RK3576_ISP_NBUFFERS]; /* Output ping-pong buffers          */
+  volatile uint8_t active;        /* Buffer the hardware is filling    */
+  volatile uint32_t seq;          /* Completed frame counter           */
 
-  rk3576_isp_frame_cb_t callback;     /* Frame-complete callback           */
-  void *cbarg;                        /* Callback context                  */
+  rk3576_isp_frame_cb_t callback; /* Frame-complete callback           */
+  void *cbarg;                    /* Callback context                  */
 };
 
 /****************************************************************************
@@ -153,8 +153,7 @@ struct rk3576_isp_dev_s
 static inline uint32_t rk3576_isp_getreg(unsigned int offset);
 static inline void rk3576_isp_putreg(unsigned int offset, uint32_t value);
 static inline void rk3576_isp_modifyreg(unsigned int offset,
-                                        uint32_t clearbits,
-                                        uint32_t setbits);
+                                        uint32_t clearbits, uint32_t setbits);
 static int rk3576_isp_clk_init(void);
 static void rk3576_isp_cfg_update(void);
 static void rk3576_isp_mi_update(void);
@@ -172,8 +171,7 @@ static int rk3576_isp_core_interrupt(int irq, void *context, void *arg);
  * Private Data
  ****************************************************************************/
 
-static struct rk3576_isp_dev_s g_rk3576_isp =
-{
+static struct rk3576_isp_dev_s g_rk3576_isp = {
   .base = RK3576_ISP_ADDR,
   .lock = NXMUTEX_INITIALIZER,
 };
@@ -182,10 +180,9 @@ static struct rk3576_isp_dev_s g_rk3576_isp =
  * approximate the sRGB transfer function (gamma 2.2 with a linear toe).
  */
 
-static const uint16_t g_rk3576_isp_gamma_srgb[RK3576_ISP_GAMMA_POINTS] =
-{
-    0,  67, 132, 190, 240, 283, 322, 358,
-  392, 424, 454, 483, 511, 537, 563, 588, 1023
+static const uint16_t g_rk3576_isp_gamma_srgb[RK3576_ISP_GAMMA_POINTS] = {
+  0,   67,  132, 190, 240, 283, 322, 358, 392,
+  424, 454, 483, 511, 537, 563, 588, 1023
 };
 
 /****************************************************************************
@@ -203,8 +200,7 @@ static inline void rk3576_isp_putreg(unsigned int offset, uint32_t value)
 }
 
 static inline void rk3576_isp_modifyreg(unsigned int offset,
-                                        uint32_t clearbits,
-                                        uint32_t setbits)
+                                        uint32_t clearbits, uint32_t setbits)
 {
   uint32_t regval;
 
@@ -235,10 +231,10 @@ static inline void rk3576_isp_modifyreg(unsigned int offset,
 
 static int rk3576_isp_clk_init(void)
 {
-  static const char *g_gates[] =
-  {
-    "aclk_isp_en", "hclk_isp_en", "clk_isp_core_en",
-    "clk_isp_core_marvin_en", "clk_isp_core_vicap_en",
+  static const char *g_gates[] = {
+    "aclk_isp_en",           "hclk_isp_en",
+    "clk_isp_core_en",       "clk_isp_core_marvin_en",
+    "clk_isp_core_vicap_en",
   };
 
   struct clk_s *clk;
@@ -284,8 +280,7 @@ static void rk3576_isp_cfg_update(void)
 {
   unsigned int i;
 
-  rk3576_isp_modifyreg(RK3576_ISP_CTRL_OFFSET, 0,
-                       RK3576_ISP_CTRL_CFG_UPD);
+  rk3576_isp_modifyreg(RK3576_ISP_CTRL_OFFSET, 0, RK3576_ISP_CTRL_CFG_UPD);
 
   /* The bit is self-clearing once the hardware has taken the new
    * configuration.  Bail out rather than spin forever if it does not.
@@ -316,8 +311,8 @@ static void rk3576_isp_mi_update(void)
 {
   rk3576_isp_putreg(RK3576_ISP_MI_INIT_OFFSET,
                     RK3576_ISP_MI_CTRL_INIT_BASE_EN |
-                    RK3576_ISP_MI_CTRL_INIT_OFFS_EN |
-                    RK3576_ISP_MI_INIT_SOFT_UPD);
+                        RK3576_ISP_MI_CTRL_INIT_OFFS_EN |
+                        RK3576_ISP_MI_INIT_SOFT_UPD);
 }
 
 /****************************************************************************
@@ -335,11 +330,9 @@ static void rk3576_isp_mi_update(void)
 static int rk3576_isp_calc_geometry(struct rk3576_isp_dev_s *priv,
                                     const struct rk3576_isp_format_s *fmt)
 {
-  if (fmt->width < RK3576_ISP_MIN_WIDTH ||
-      fmt->width > RK3576_ISP_MAX_WIDTH ||
+  if (fmt->width < RK3576_ISP_MIN_WIDTH || fmt->width > RK3576_ISP_MAX_WIDTH ||
       fmt->height < RK3576_ISP_MIN_HEIGHT ||
-      fmt->height > RK3576_ISP_MAX_HEIGHT ||
-      (fmt->height & 1) != 0)
+      fmt->height > RK3576_ISP_MAX_HEIGHT || (fmt->height & 1) != 0)
     {
       verr("ERROR: unsupported geometry %ux%u\n", fmt->width, fmt->height);
       return -EINVAL;
@@ -431,8 +424,7 @@ static int rk3576_isp_alloc_buffers(struct rk3576_isp_dev_s *priv)
  *
  ****************************************************************************/
 
-static void rk3576_isp_program_mi(struct rk3576_isp_dev_s *priv,
-                                  uint8_t index)
+static void rk3576_isp_program_mi(struct rk3576_isp_dev_s *priv, uint8_t index)
 {
   uintptr_t phys;
 
@@ -467,10 +459,11 @@ static void rk3576_isp_program_mi(struct rk3576_isp_dev_s *priv,
 
 static void rk3576_isp_setup_pipeline(struct rk3576_isp_dev_s *priv)
 {
-  static const uint32_t g_bayer[] =
-  {
-    RK3576_ISP_ACQ_BAYER_RGGB, RK3576_ISP_ACQ_BAYER_GRBG,
-    RK3576_ISP_ACQ_BAYER_GBRG, RK3576_ISP_ACQ_BAYER_BGGR,
+  static const uint32_t g_bayer[] = {
+    RK3576_ISP_ACQ_BAYER_RGGB,
+    RK3576_ISP_ACQ_BAYER_GRBG,
+    RK3576_ISP_ACQ_BAYER_GBRG,
+    RK3576_ISP_ACQ_BAYER_BGGR,
   };
 
   struct rk3576_isp_wbgain_s wb;
@@ -501,21 +494,20 @@ static void rk3576_isp_setup_pipeline(struct rk3576_isp_dev_s *priv)
   /* Black level: fixed pedestal on all four Bayer positions. */
 
   rk3576_isp_set_black_level(RK3576_ISP_BLS_DEFAULT, RK3576_ISP_BLS_DEFAULT,
-                             RK3576_ISP_BLS_DEFAULT,
-                             RK3576_ISP_BLS_DEFAULT);
+                             RK3576_ISP_BLS_DEFAULT, RK3576_ISP_BLS_DEFAULT);
 
   /* Demosaic on, mid-range edge threshold. */
 
   rk3576_isp_putreg(RK3576_ISP_DEMOSAIC_OFFSET,
                     RK3576_ISP_DEMOSAIC_TH_DEFAULT &
-                    RK3576_ISP_DEMOSAIC_TH_MASK);
+                        RK3576_ISP_DEMOSAIC_TH_MASK);
 
   /* Static white balance preset — no AWB loop yet. */
 
-  wb.r  = RK3576_ISP_WB_DEFAULT_R;
+  wb.r = RK3576_ISP_WB_DEFAULT_R;
   wb.gr = RK3576_ISP_WB_DEFAULT_G;
   wb.gb = RK3576_ISP_WB_DEFAULT_G;
-  wb.b  = RK3576_ISP_WB_DEFAULT_B;
+  wb.b = RK3576_ISP_WB_DEFAULT_B;
   rk3576_isp_set_wbgain(&wb);
 
   /* Default output gamma. */
@@ -524,11 +516,10 @@ static void rk3576_isp_setup_pipeline(struct rk3576_isp_dev_s *priv)
 
   /* Memory interface: main path writing semi-planar YUV (NV12). */
 
-  rk3576_isp_putreg(RK3576_ISP_MI_CTRL_OFFSET,
-                    RK3576_ISP_MI_CTRL_MP_ENABLE |
-                    RK3576_ISP_MI_CTRL_MP_WRITE_YUV |
-                    RK3576_ISP_MI_CTRL_MP_FMT_SEMI |
-                    RK3576_ISP_MI_CTRL_BURST_LEN_16);
+  rk3576_isp_putreg(
+      RK3576_ISP_MI_CTRL_OFFSET,
+      RK3576_ISP_MI_CTRL_MP_ENABLE | RK3576_ISP_MI_CTRL_MP_WRITE_YUV |
+          RK3576_ISP_MI_CTRL_MP_FMT_SEMI | RK3576_ISP_MI_CTRL_BURST_LEN_16);
 }
 
 /****************************************************************************
@@ -580,8 +571,7 @@ static int rk3576_isp_mi_interrupt(int irq, void *context, void *arg)
 
   if (priv->callback != NULL)
     {
-      priv->callback(priv->cbarg, priv->buf[done], priv->framesize,
-                     priv->seq);
+      priv->callback(priv->cbarg, priv->buf[done], priv->framesize, priv->seq);
     }
 
   priv->seq++;
@@ -617,8 +607,7 @@ static int rk3576_isp_core_interrupt(int irq, void *context, void *arg)
 
   rk3576_isp_putreg(RK3576_ISP_ICR_OFFSET, status);
 
-  if ((status & (RK3576_ISP_INT_DATA_LOSS |
-                 RK3576_ISP_INT_PIC_SIZE_ERR)) != 0)
+  if ((status & (RK3576_ISP_INT_DATA_LOSS | RK3576_ISP_INT_PIC_SIZE_ERR)) != 0)
     {
       verr("ERROR: ISP pipeline error, MIS 0x%08" PRIx32 "\n", status);
     }
@@ -689,8 +678,7 @@ int rk3576_isp_initialize(void)
   ret = irq_attach(RK3576_ISP_CORE_IRQ, rk3576_isp_core_interrupt, priv);
   if (ret < 0)
     {
-      verr("ERROR: failed to attach IRQ %d: %d\n", RK3576_ISP_CORE_IRQ,
-           ret);
+      verr("ERROR: failed to attach IRQ %d: %d\n", RK3576_ISP_CORE_IRQ, ret);
       irq_detach(RK3576_ISP_MI_IRQ);
       goto errout;
     }
@@ -808,8 +796,7 @@ size_t rk3576_isp_get_framesize(void)
  *
  ****************************************************************************/
 
-int rk3576_isp_set_black_level(uint16_t a, uint16_t b, uint16_t c,
-                               uint16_t d)
+int rk3576_isp_set_black_level(uint16_t a, uint16_t b, uint16_t c, uint16_t d)
 {
   rk3576_isp_putreg(RK3576_ISP_BLS_A_FIXED_OFFSET, a);
   rk3576_isp_putreg(RK3576_ISP_BLS_B_FIXED_OFFSET, b);
@@ -817,8 +804,7 @@ int rk3576_isp_set_black_level(uint16_t a, uint16_t b, uint16_t c,
   rk3576_isp_putreg(RK3576_ISP_BLS_D_FIXED_OFFSET, d);
 
   rk3576_isp_putreg(RK3576_ISP_BLS_CTRL_OFFSET,
-                    RK3576_ISP_BLS_CTRL_ENABLE |
-                    RK3576_ISP_BLS_CTRL_MODE_FIX);
+                    RK3576_ISP_BLS_CTRL_ENABLE | RK3576_ISP_BLS_CTRL_MODE_FIX);
   return OK;
 }
 
@@ -832,9 +818,9 @@ int rk3576_isp_set_black_level(uint16_t a, uint16_t b, uint16_t c,
 
 int rk3576_isp_set_wbgain(const struct rk3576_isp_wbgain_s *gain)
 {
-  if (gain == NULL ||
-      gain->r > RK3576_ISP_WB_MAX || gain->gr > RK3576_ISP_WB_MAX ||
-      gain->gb > RK3576_ISP_WB_MAX || gain->b > RK3576_ISP_WB_MAX)
+  if (gain == NULL || gain->r > RK3576_ISP_WB_MAX ||
+      gain->gr > RK3576_ISP_WB_MAX || gain->gb > RK3576_ISP_WB_MAX ||
+      gain->b > RK3576_ISP_WB_MAX)
     {
       return -EINVAL;
     }
@@ -931,17 +917,16 @@ int rk3576_isp_start_streaming(rk3576_isp_frame_cb_t callback, void *arg)
   rk3576_isp_putreg(RK3576_ISP_ICR_OFFSET, RK3576_ISP_INT_ALL);
   rk3576_isp_putreg(RK3576_ISP_MI_ICR_OFFSET, RK3576_ISP_MI_INT_ALL);
   rk3576_isp_putreg(RK3576_ISP_MI_IMSC_OFFSET, RK3576_ISP_MI_INT_MP_FRAME);
-  rk3576_isp_putreg(RK3576_ISP_IMSC_OFFSET,
-                    RK3576_ISP_INT_FRAME | RK3576_ISP_INT_DATA_LOSS |
-                    RK3576_ISP_INT_PIC_SIZE_ERR);
+  rk3576_isp_putreg(RK3576_ISP_IMSC_OFFSET, RK3576_ISP_INT_FRAME |
+                                                RK3576_ISP_INT_DATA_LOSS |
+                                                RK3576_ISP_INT_PIC_SIZE_ERR);
 
   priv->streaming = true;
 
-  rk3576_isp_modifyreg(RK3576_ISP_CTRL_OFFSET,
-                       RK3576_ISP_CTRL_MODE_MASK,
+  rk3576_isp_modifyreg(RK3576_ISP_CTRL_OFFSET, RK3576_ISP_CTRL_MODE_MASK,
                        RK3576_ISP_CTRL_MODE_BAYER |
-                       RK3576_ISP_CTRL_INFORM_ENABLE |
-                       RK3576_ISP_CTRL_ENABLE);
+                           RK3576_ISP_CTRL_INFORM_ENABLE |
+                           RK3576_ISP_CTRL_ENABLE);
   rk3576_isp_cfg_update();
 
   nxmutex_unlock(&priv->lock);
@@ -978,9 +963,9 @@ int rk3576_isp_stop_streaming(void)
       rk3576_isp_putreg(RK3576_ISP_MI_IMSC_OFFSET, 0);
       rk3576_isp_putreg(RK3576_ISP_IMSC_OFFSET, 0);
 
-      rk3576_isp_modifyreg(RK3576_ISP_CTRL_OFFSET,
-                           RK3576_ISP_CTRL_ENABLE |
-                           RK3576_ISP_CTRL_INFORM_ENABLE, 0);
+      rk3576_isp_modifyreg(
+          RK3576_ISP_CTRL_OFFSET,
+          RK3576_ISP_CTRL_ENABLE | RK3576_ISP_CTRL_INFORM_ENABLE, 0);
       rk3576_isp_cfg_update();
 
       rk3576_isp_putreg(RK3576_ISP_MI_ICR_OFFSET, RK3576_ISP_MI_INT_ALL);

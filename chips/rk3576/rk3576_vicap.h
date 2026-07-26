@@ -44,28 +44,28 @@
  * unchanged.
  */
 
-#define RK3576_VICAP_FOURCC(a, b, c, d) \
+#define RK3576_VICAP_FOURCC(a, b, c, d)                           \
   ((uint32_t)(a) | ((uint32_t)(b) << 8) | ((uint32_t)(c) << 16) | \
    ((uint32_t)(d) << 24))
 
-#define RK3576_VICAP_FMT_NV12  RK3576_VICAP_FOURCC('N', 'V', '1', '2')
-#define RK3576_VICAP_FMT_NV16  RK3576_VICAP_FOURCC('N', 'V', '1', '6')
-#define RK3576_VICAP_FMT_UYVY  RK3576_VICAP_FOURCC('U', 'Y', 'V', 'Y')
-#define RK3576_VICAP_FMT_YUYV  RK3576_VICAP_FOURCC('Y', 'U', 'Y', 'V')
+#define RK3576_VICAP_FMT_NV12    RK3576_VICAP_FOURCC('N', 'V', '1', '2')
+#define RK3576_VICAP_FMT_NV16    RK3576_VICAP_FOURCC('N', 'V', '1', '6')
+#define RK3576_VICAP_FMT_UYVY    RK3576_VICAP_FOURCC('U', 'Y', 'V', 'Y')
+#define RK3576_VICAP_FMT_YUYV    RK3576_VICAP_FOURCC('Y', 'U', 'Y', 'V')
 #define RK3576_VICAP_FMT_SRGGB8  RK3576_VICAP_FOURCC('R', 'G', 'G', 'B')
 #define RK3576_VICAP_FMT_SRGGB10 RK3576_VICAP_FOURCC('R', 'G', '1', '0')
 #define RK3576_VICAP_FMT_SRGGB12 RK3576_VICAP_FOURCC('R', 'G', '1', '2')
 
 /* Frame geometry limits enforced by rk3576_vicap_set_format() */
 
-#define RK3576_VICAP_MIN_WIDTH   64
-#define RK3576_VICAP_MIN_HEIGHT  64
-#define RK3576_VICAP_MAX_WIDTH   4672
-#define RK3576_VICAP_MAX_HEIGHT  3504
+#define RK3576_VICAP_MIN_WIDTH  64
+#define RK3576_VICAP_MIN_HEIGHT 64
+#define RK3576_VICAP_MAX_WIDTH  4672
+#define RK3576_VICAP_MAX_HEIGHT 3504
 
 /* Number of ping-pong DMA buffers owned by the driver (FRM0 / FRM1) */
 
-#define RK3576_VICAP_NBUFFERS    2
+#define RK3576_VICAP_NBUFFERS 2
 
 /****************************************************************************
  * Public Types
@@ -83,14 +83,14 @@ enum rk3576_vicap_input_e
 
 struct rk3576_vicap_format_s
 {
-  uint16_t width;             /* Active pixels per line                 */
-  uint16_t height;            /* Active lines per frame                 */
-  uint32_t pixelformat;       /* One of RK3576_VICAP_FMT_*              */
-  uint8_t input;              /* enum rk3576_vicap_input_e              */
-  uint8_t vc;                 /* CSI-2 virtual channel (0..3)           */
-  uint8_t datatype;           /* CSI-2 data type, 0 to disable the filter */
-  bool vsync_active_high;     /* DVP VSYNC polarity                     */
-  bool hsync_active_low;      /* DVP HSYNC polarity                     */
+  uint16_t width;         /* Active pixels per line                 */
+  uint16_t height;        /* Active lines per frame                 */
+  uint32_t pixelformat;   /* One of RK3576_VICAP_FMT_*              */
+  uint8_t input;          /* enum rk3576_vicap_input_e              */
+  uint8_t vc;             /* CSI-2 virtual channel (0..3)           */
+  uint8_t datatype;       /* CSI-2 data type, 0 to disable the filter */
+  bool vsync_active_high; /* DVP VSYNC polarity                     */
+  bool hsync_active_low;  /* DVP HSYNC polarity                     */
 };
 
 /* Frame-complete callback.  Invoked from the VICAP interrupt handler, so
@@ -174,8 +174,7 @@ size_t rk3576_vicap_get_framesize(void);
  *
  ****************************************************************************/
 
-int rk3576_vicap_start_streaming(rk3576_vicap_frame_cb_t callback,
-                                 void *arg);
+int rk3576_vicap_start_streaming(rk3576_vicap_frame_cb_t callback, void *arg);
 
 /****************************************************************************
  * Name: rk3576_vicap_stop_streaming

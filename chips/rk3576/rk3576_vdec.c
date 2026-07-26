@@ -99,12 +99,12 @@
 
 /* Macroblock geometry. */
 
-#define RK3576_VDEC_MB_SIZE     16
-#define RK3576_VDEC_MAX_MBS     512  /* 9-bit width/height fields */
+#define RK3576_VDEC_MB_SIZE 16
+#define RK3576_VDEC_MAX_MBS 512 /* 9-bit width/height fields */
 
 /* Hardware addresses are 32-bit. */
 
-#define RK3576_VDEC_ADDR_LIMIT  0x100000000ull
+#define RK3576_VDEC_ADDR_LIMIT 0x100000000ull
 
 /****************************************************************************
  * Private Types
@@ -112,13 +112,13 @@
 
 struct rk3576_vdec_dev_s
 {
-  mutex_t lock;            /* Serialises task submission             */
-  sem_t done;              /* Posted by the completion interrupt     */
-  uint32_t status;         /* RKVDEC_REG_INTERRUPT snapshot from ISR */
-  uint32_t aclk_hz;        /* Real AXI clock rate, for diagnostics   */
-  uint32_t core_hz;        /* Real decoder core clock rate           */
-  void *cabac_tab;         /* Fallback CABAC table buffer, or NULL   */
-  bool initialized;        /* /dev/vdec0 registered                  */
+  mutex_t lock;     /* Serialises task submission             */
+  sem_t done;       /* Posted by the completion interrupt     */
+  uint32_t status;  /* RKVDEC_REG_INTERRUPT snapshot from ISR */
+  uint32_t aclk_hz; /* Real AXI clock rate, for diagnostics   */
+  uint32_t core_hz; /* Real decoder core clock rate           */
+  void *cabac_tab;  /* Fallback CABAC table buffer, or NULL   */
+  bool initialized; /* /dev/vdec0 registered                  */
 };
 
 /****************************************************************************
@@ -135,8 +135,7 @@ static int rk3576_vdec_check_task(const struct rk3576_vdec_task_s *task);
 static void rk3576_vdec_write_task(const struct rk3576_vdec_task_s *task);
 static void rk3576_vdec_sync_task(const struct rk3576_vdec_task_s *task);
 
-static int rk3576_vdec_ioctl(struct file *filep, int cmd,
-                             unsigned long arg);
+static int rk3576_vdec_ioctl(struct file *filep, int cmd, unsigned long arg);
 
 /* Provided by the (not yet merged) RK3576 power-domain driver.  Until it
  * lands the VPU domain is left in whatever state the boot loader chose,
@@ -149,15 +148,13 @@ int rk3576_pd_on(int domain) weak_function;
  * Private Data
  ****************************************************************************/
 
-static struct rk3576_vdec_dev_s g_rk3576_vdec =
-{
-  .lock        = NXMUTEX_INITIALIZER,
-  .done        = SEM_INITIALIZER(0),
+static struct rk3576_vdec_dev_s g_rk3576_vdec = {
+  .lock = NXMUTEX_INITIALIZER,
+  .done = SEM_INITIALIZER(0),
   .initialized = false,
 };
 
-static const struct file_operations g_rk3576_vdec_fops =
-{
+static const struct file_operations g_rk3576_vdec_fops = {
   .ioctl = rk3576_vdec_ioctl,
 };
 
@@ -209,13 +206,9 @@ static void rk3576_vdec_putreg(unsigned int offset, uint32_t value)
 
 static int rk3576_vdec_clk_init(void)
 {
-  static const char *g_vdec_clocks[] =
-  {
-    "aclk_vdec_en",
-    "hclk_vdec_en",
-    "clk_vdec_core_en",
-    "clk_vdec_cabac_en",
-    "clk_vdec_hevc_cabac_en",
+  static const char *g_vdec_clocks[] = {
+    "aclk_vdec_en",      "hclk_vdec_en",           "clk_vdec_core_en",
+    "clk_vdec_cabac_en", "clk_vdec_hevc_cabac_en",
   };
 
   struct clk_s *clk;
@@ -250,8 +243,8 @@ static int rk3576_vdec_clk_init(void)
         }
     }
 
-  vinfo("aclk %" PRIu32 " Hz, core %" PRIu32 " Hz\n",
-        g_rk3576_vdec.aclk_hz, g_rk3576_vdec.core_hz);
+  vinfo("aclk %" PRIu32 " Hz, core %" PRIu32 " Hz\n", g_rk3576_vdec.aclk_hz,
+        g_rk3576_vdec.core_hz);
   return OK;
 }
 
@@ -486,21 +479,20 @@ static void rk3576_vdec_write_task(const struct rk3576_vdec_task_s *task)
 
   /* System control: little-endian, plain bitstream mode, H.264. */
 
-  sysctrl = ((uint32_t)RKVDEC_SYSCTRL_MODE_H264 <<
-             RKVDEC_SYSCTRL_MODE_SHIFT) & RKVDEC_SYSCTRL_MODE_MASK;
+  sysctrl = ((uint32_t)RKVDEC_SYSCTRL_MODE_H264 << RKVDEC_SYSCTRL_MODE_SHIFT) &
+            RKVDEC_SYSCTRL_MODE_MASK;
 
-  sysctrl |= ((uint32_t)task->strm_start_bit <<
-              RKVDEC_SYSCTRL_STRM_START_BIT_SHIFT) &
-             RKVDEC_SYSCTRL_STRM_START_BIT_MASK;
+  sysctrl |=
+      ((uint32_t)task->strm_start_bit << RKVDEC_SYSCTRL_STRM_START_BIT_SHIFT) &
+      RKVDEC_SYSCTRL_STRM_START_BIT_MASK;
 
-  sysctrl |= ((uint32_t)task->yuv_format <<
-              RKVDEC_SYSCTRL_YUV_MODE_SHIFT) &
+  sysctrl |= ((uint32_t)task->yuv_format << RKVDEC_SYSCTRL_YUV_MODE_SHIFT) &
              RKVDEC_SYSCTRL_YUV_MODE_MASK;
 
   if (task->bitdepth > 8)
     {
-      sysctrl |= (1u << RKVDEC_SYSCTRL_BITDEPTH_SHIFT) &
-                 RKVDEC_SYSCTRL_BITDEPTH_MASK;
+      sysctrl |=
+          (1u << RKVDEC_SYSCTRL_BITDEPTH_SHIFT) & RKVDEC_SYSCTRL_BITDEPTH_MASK;
     }
 
   rk3576_vdec_putreg(RKVDEC_REG_SYSCTRL, sysctrl);
@@ -510,10 +502,9 @@ static void rk3576_vdec_write_task(const struct rk3576_vdec_task_s *task)
   mbw = (task->width + RK3576_VDEC_MB_SIZE - 1) / RK3576_VDEC_MB_SIZE;
   mbh = (task->height + RK3576_VDEC_MB_SIZE - 1) / RK3576_VDEC_MB_SIZE;
 
-  picpar = ((mbw - 1) << RKVDEC_PICPAR_WIDTH_SHIFT) &
-           RKVDEC_PICPAR_WIDTH_MASK;
-  picpar |= ((mbh - 1) << RKVDEC_PICPAR_HEIGHT_SHIFT) &
-            RKVDEC_PICPAR_HEIGHT_MASK;
+  picpar = ((mbw - 1) << RKVDEC_PICPAR_WIDTH_SHIFT) & RKVDEC_PICPAR_WIDTH_MASK;
+  picpar |=
+      ((mbh - 1) << RKVDEC_PICPAR_HEIGHT_SHIFT) & RKVDEC_PICPAR_HEIGHT_MASK;
 
   if (task->field)
     {
@@ -537,9 +528,9 @@ static void rk3576_vdec_write_task(const struct rk3576_vdec_task_s *task)
    */
 
   rk3576_vdec_putreg(RKVDEC_REG_CABACTBL_PROB_BASE,
-                     task->cabac_table != 0 ?
-                     (uint32_t)task->cabac_table :
-                     (uint32_t)(uintptr_t)g_rk3576_vdec.cabac_tab);
+                     task->cabac_table != 0
+                         ? (uint32_t)task->cabac_table
+                         : (uint32_t)(uintptr_t)g_rk3576_vdec.cabac_tab);
 
   /* Output frame and its strides (programmed in 16-byte units). */
 
@@ -610,7 +601,7 @@ static int rk3576_vdec_ioctl(struct file *filep, int cmd, unsigned long arg)
       case RK3576_VDEC_IOC_DECODE:
         {
           const struct rk3576_vdec_task_s *task =
-            (const struct rk3576_vdec_task_s *)((uintptr_t)arg);
+              (const struct rk3576_vdec_task_s *)((uintptr_t)arg);
 
           ret = rk3576_vdec_decode_frame(task);
         }
@@ -731,9 +722,9 @@ int rk3576_vdec_decode_frame(const struct rk3576_vdec_task_s *task)
   rk3576_vdec_putreg(RKVDEC_REG_INTERRUPT, RKVDEC_INT_STA_MASK);
   rk3576_vdec_write_task(task);
 
-  rk3576_vdec_putreg(RKVDEC_REG_INTERRUPT,
-                     RKVDEC_INT_DEC_E | RKVDEC_INT_DEC_TIMEOUT_E |
-                     RKVDEC_INT_BUF_EMPTY_E);
+  rk3576_vdec_putreg(RKVDEC_REG_INTERRUPT, RKVDEC_INT_DEC_E |
+                                               RKVDEC_INT_DEC_TIMEOUT_E |
+                                               RKVDEC_INT_BUF_EMPTY_E);
 
   ret = nxsem_tickwait_uninterruptible(&priv->done,
                                        MSEC2TICK(RK3576_VDEC_TIMEOUT_MS));
@@ -840,8 +831,7 @@ int rk3576_vdec_initialize(void)
 
   up_enable_irq(RK3576_IRQ_RKVDEC);
 
-  ret = register_driver(RK3576_VDEC_DEVPATH, &g_rk3576_vdec_fops, 0666,
-                        priv);
+  ret = register_driver(RK3576_VDEC_DEVPATH, &g_rk3576_vdec_fops, 0666, priv);
   if (ret < 0)
     {
       verr("ERROR: failed to register %s: %d\n", RK3576_VDEC_DEVPATH, ret);

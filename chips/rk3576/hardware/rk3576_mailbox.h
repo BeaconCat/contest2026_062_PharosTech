@@ -63,7 +63,7 @@
  */
 
 #ifndef RK3576_MAILBOX0_ADDR
-#  define RK3576_MAILBOX0_ADDR 0x2ae50000
+#define RK3576_MAILBOX0_ADDR 0x2ae50000
 #endif
 
 #define RK3576_MAILBOX_STRIDE     0x1000 /* Distance between instances    */
@@ -73,21 +73,21 @@
 /* Register block base of instance n (n = 0 .. 13). */
 
 #define RK3576_MAILBOX_BASE(n) \
-  (RK3576_MAILBOX0_ADDR + ((n) * RK3576_MAILBOX_STRIDE))
+  (RK3576_MAILBOX0_ADDR + ((n)*RK3576_MAILBOX_STRIDE))
 
 /* Register offsets *********************************************************/
 
-#define RK3576_MAILBOX_A2B_INTEN  0x0000 /* A2B interrupt enable          */
-#define RK3576_MAILBOX_A2B_STATUS 0x0004 /* A2B interrupt status (W1C)    */
-#define RK3576_MAILBOX_A2B_CMD(i) (0x0008 + ((i) * 8)) /* A2B command  */
-#define RK3576_MAILBOX_A2B_DAT(i) (0x000c + ((i) * 8)) /* A2B data     */
+#define RK3576_MAILBOX_A2B_INTEN      0x0000 /* A2B interrupt enable          */
+#define RK3576_MAILBOX_A2B_STATUS     0x0004 /* A2B interrupt status (W1C)    */
+#define RK3576_MAILBOX_A2B_CMD(i)     (0x0008 + ((i)*8)) /* A2B command  */
+#define RK3576_MAILBOX_A2B_DAT(i)     (0x000c + ((i)*8)) /* A2B data     */
 
-#define RK3576_MAILBOX_B2A_INTEN  0x0028 /* B2A interrupt enable          */
-#define RK3576_MAILBOX_B2A_STATUS 0x002c /* B2A interrupt status (W1C)    */
-#define RK3576_MAILBOX_B2A_CMD(i) (0x0030 + ((i) * 8)) /* B2A command  */
-#define RK3576_MAILBOX_B2A_DAT(i) (0x0034 + ((i) * 8)) /* B2A data     */
+#define RK3576_MAILBOX_B2A_INTEN      0x0028 /* B2A interrupt enable          */
+#define RK3576_MAILBOX_B2A_STATUS     0x002c /* B2A interrupt status (W1C)    */
+#define RK3576_MAILBOX_B2A_CMD(i)     (0x0030 + ((i)*8)) /* B2A command  */
+#define RK3576_MAILBOX_B2A_DAT(i)     (0x0034 + ((i)*8)) /* B2A data     */
 
-#define RK3576_MAILBOX_ATOMIC_LOCK(i) (0x0100 + ((i) * 4))
+#define RK3576_MAILBOX_ATOMIC_LOCK(i) (0x0100 + ((i)*4))
 
 /* Bit definitions **********************************************************/
 

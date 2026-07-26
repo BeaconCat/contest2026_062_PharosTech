@@ -53,9 +53,9 @@
  ****************************************************************************/
 
 static uint32_t llm_rand_u32(struct llm_sampler_s *sampler);
-static float    llm_rand_f32(struct llm_sampler_s *sampler);
-static int      llm_argmax(const float *v, int n);
-static int      llm_prob_compare(const void *a, const void *b);
+static float llm_rand_f32(struct llm_sampler_s *sampler);
+static int llm_argmax(const float *v, int n);
+static int llm_prob_compare(const void *a, const void *b);
 
 /****************************************************************************
  * Private Functions
@@ -164,8 +164,7 @@ static int llm_prob_compare(const void *a, const void *b)
  ****************************************************************************/
 
 int llm_sampler_init(struct llm_sampler_s *sampler, int vocab_size,
-                     float temperature, int topk, float topp,
-                     uint64_t seed)
+                     float temperature, int topk, float topp, uint64_t seed)
 {
   memset(sampler, 0, sizeof(*sampler));
 
@@ -198,8 +197,8 @@ int llm_sampler_init(struct llm_sampler_s *sampler, int vocab_size,
 
   sampler->rng = seed != 0 ? seed : 0x853c49e6748fea9bull;
 
-  sampler->cand = (struct llm_prob_s *)
-                  malloc((size_t)vocab_size * sizeof(struct llm_prob_s));
+  sampler->cand = (struct llm_prob_s *)malloc((size_t)vocab_size *
+                                              sizeof(struct llm_prob_s));
   if (sampler->cand == NULL)
     {
       return -ENOMEM;

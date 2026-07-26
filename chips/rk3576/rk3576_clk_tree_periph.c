@@ -93,7 +93,7 @@
  * RK3576_CRU_GATE_CON() / RK3576_PMU1CRU_GATE_CON().
  */
 
-#define RK3576_SECURECRU_GATE_CON(n) (0x0800 + ((n) * 4))
+#define RK3576_SECURECRU_GATE_CON(n) (0x0800 + ((n)*4))
 
 /* Off-SoC camera master clock (XVCLK).  Board oscillator described by the
  * "external-camera-37m-clock" fixed-clock node of the vendor device tree.
@@ -128,8 +128,8 @@ struct rk3576_periph_fracpll_s
  * Private Function Prototypes
  ****************************************************************************/
 
-static uint32_t
-rk3576_periph_fracpll_recalc_rate(struct clk_s *clk, uint32_t parent_rate);
+static uint32_t rk3576_periph_fracpll_recalc_rate(struct clk_s *clk,
+                                                  uint32_t parent_rate);
 
 static void rk3576_clk_register_periph_plls(void);
 
@@ -235,8 +235,8 @@ static const char *g_periph_pll_parents[] = {
  *
  ****************************************************************************/
 
-static uint32_t
-rk3576_periph_fracpll_recalc_rate(struct clk_s *clk, uint32_t parent_rate)
+static uint32_t rk3576_periph_fracpll_recalc_rate(struct clk_s *clk,
+                                                  uint32_t parent_rate)
 {
   struct rk3576_periph_fracpll_s *pll = clk->private_data;
   uint32_t con0;
@@ -314,28 +314,27 @@ static void rk3576_clk_register_periph_plls(void)
 
   vpll_priv.con_base = RK3576_CRU_ADDR + RK3576_CRU_VPLL_CON(0);
 
-  vpll = clk_register("clk_vpll", g_periph_pll_parents,
-                      nitems(g_periph_pll_parents),
-                      CLK_NAME_IS_STATIC | CLK_PARENT_NAME_IS_STATIC,
-                      &g_rk3576_periph_fracpll_ops, &vpll_priv,
-                      sizeof(vpll_priv));
+  vpll = clk_register(
+      "clk_vpll", g_periph_pll_parents, nitems(g_periph_pll_parents),
+      CLK_NAME_IS_STATIC | CLK_PARENT_NAME_IS_STATIC,
+      &g_rk3576_periph_fracpll_ops, &vpll_priv, sizeof(vpll_priv));
   if (!vpll)
     {
       _err("CLK: failed to register clk_vpll\n");
       return;
     }
 
-  clk_register_fixed_factor("clk_vpll_div2", "clk_vpll", CLK_NAME_IS_STATIC,
-                            1, 2);
-  clk_register_fixed_factor("clk_vpll_div4", "clk_vpll", CLK_NAME_IS_STATIC,
-                            1, 4);
+  clk_register_fixed_factor("clk_vpll_div2", "clk_vpll", CLK_NAME_IS_STATIC, 1,
+                            2);
+  clk_register_fixed_factor("clk_vpll_div4", "clk_vpll", CLK_NAME_IS_STATIC, 1,
+                            4);
 
   /* Extra GPLL/CPLL post-dividers used by the media branches. */
 
-  clk_register_fixed_factor("clk_gpll_div5", "clk_gpll", CLK_NAME_IS_STATIC,
-                            1, 5);
-  clk_register_fixed_factor("clk_cpll_div5", "clk_cpll", CLK_NAME_IS_STATIC,
-                            1, 5);
+  clk_register_fixed_factor("clk_gpll_div5", "clk_gpll", CLK_NAME_IS_STATIC, 1,
+                            5);
+  clk_register_fixed_factor("clk_cpll_div5", "clk_cpll", CLK_NAME_IS_STATIC, 1,
+                            5);
 }
 
 /****************************************************************************
@@ -609,8 +608,8 @@ static void rk3576_clk_register_i3c(void)
 
 #ifdef CONFIG_RK3576_SARADC
 static const char *g_saradc_sel_parents[] = {
-  "clk_gpll",  /* 0b0 */
-  "xin_osc0",  /* 0b1 */
+  "clk_gpll", /* 0b0 */
+  "xin_osc0", /* 0b1 */
 };
 
 static void rk3576_clk_register_saradc(void)
@@ -618,11 +617,10 @@ static void rk3576_clk_register_saradc(void)
   const unsigned long cru = RK3576_CRU_ADDR;
   struct clk_s *mux;
 
-  mux = clk_register_mux("clk_saradc_sel", g_saradc_sel_parents,
-                         nitems(g_saradc_sel_parents),
-                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
-                         cru + RK3576_CRU_CLKSEL_CON(58), 12, 1,
-                         CLK_MUX_HIWORD_MASK);
+  mux = clk_register_mux(
+      "clk_saradc_sel", g_saradc_sel_parents, nitems(g_saradc_sel_parents),
+      CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
+      cru + RK3576_CRU_CLKSEL_CON(58), 12, 1, CLK_MUX_HIWORD_MASK);
   if (!mux)
     {
       _err("CLK: failed to register clk_saradc_sel\n");
@@ -669,10 +667,9 @@ static void rk3576_clk_register_tsadc(void)
 
   /* 8-bit divider off xin_osc0; resets to /12 -> 2 MHz.  TODO: verify. */
 
-  clk_register_divider("clk_tsadc_div", "xin_osc0",
-                       CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
-                       cru + RK3576_CRU_CLKSEL_CON(59), 0, 8,
-                       CLK_DIVIDER_HIWORD_MASK);
+  clk_register_divider(
+      "clk_tsadc_div", "xin_osc0", CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
+      cru + RK3576_CRU_CLKSEL_CON(59), 0, 8, CLK_DIVIDER_HIWORD_MASK);
 
   clk_register_gate("pclk_tsadc_en", NULL, CLK_NAME_IS_STATIC,
                     cru + RK3576_CRU_GATE_CON(20), 11,
@@ -718,8 +715,7 @@ static void rk3576_clk_register_crypto(void)
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
   clk_register_gate("clk_pka_crypto_ns_en", "aclk_crypto_ns_en",
-                    CLK_NAME_IS_STATIC,
-                    cru + RK3576_CRU_GATE_CON(26), 7,
+                    CLK_NAME_IS_STATIC, cru + RK3576_CRU_GATE_CON(26), 7,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 }
 #endif /* CONFIG_RK3576_CRYPTO */
@@ -828,11 +824,10 @@ static void rk3576_clk_register_vop(void)
 
   /* dclk_vp0: source mux -> divider -> gate.  TODO: verify. */
 
-  mux = clk_register_mux("clk_dclk_vp0_sel", g_vop_dclk_sel_parents,
-                         nitems(g_vop_dclk_sel_parents),
-                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
-                         cru + RK3576_CRU_CLKSEL_CON(147), 0, 2,
-                         CLK_MUX_HIWORD_MASK);
+  mux = clk_register_mux(
+      "clk_dclk_vp0_sel", g_vop_dclk_sel_parents,
+      nitems(g_vop_dclk_sel_parents), CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
+      cru + RK3576_CRU_CLKSEL_CON(147), 0, 2, CLK_MUX_HIWORD_MASK);
   if (!mux)
     {
       _err("CLK: failed to register clk_dclk_vp0_sel\n");
@@ -885,11 +880,10 @@ static void rk3576_clk_register_hdmi(void)
 
   /* Reference clock source select of the HDMI TX core.  TODO: verify. */
 
-  mux = clk_register_mux("clk_hdmitx0_ref_sel", g_hdmitx_ref_parents,
-                         nitems(g_hdmitx_ref_parents),
-                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
-                         cru + RK3576_CRU_CLKSEL_CON(148), 0, 2,
-                         CLK_MUX_HIWORD_MASK);
+  mux = clk_register_mux(
+      "clk_hdmitx0_ref_sel", g_hdmitx_ref_parents,
+      nitems(g_hdmitx_ref_parents), CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
+      cru + RK3576_CRU_CLKSEL_CON(148), 0, 2, CLK_MUX_HIWORD_MASK);
   if (!mux)
     {
       _err("CLK: failed to register clk_hdmitx0_ref_sel\n");
@@ -913,8 +907,7 @@ static void rk3576_clk_register_hdmi(void)
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
   clk_register_gate("clk_hdmitx0_ref_en", "clk_hdmitx0_ref_sel",
-                    CLK_NAME_IS_STATIC,
-                    cru + RK3576_CRU_GATE_CON(47), 7,
+                    CLK_NAME_IS_STATIC, cru + RK3576_CRU_GATE_CON(47), 7,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
   clk_register_gate("clk_hdmitx0_aud_en", "hclk_vo1_en", CLK_NAME_IS_STATIC,
@@ -927,8 +920,7 @@ static void rk3576_clk_register_hdmi(void)
                             CLK_NAME_IS_STATIC, 1, 2);
 
   clk_register_gate("clk_hdmitx0_hpd_en", "clk_hdmitx0_hpd_div",
-                    CLK_NAME_IS_STATIC,
-                    cru + RK3576_CRU_GATE_CON(54), 14,
+                    CLK_NAME_IS_STATIC, cru + RK3576_CRU_GATE_CON(54), 14,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
   /* HDPTX PHY.  TODO: verify. */
@@ -961,36 +953,35 @@ static void rk3576_clk_register_hdmi(void)
  *   clk_bit   - core clock GATE bit
  */
 
-#define RK3576_CLK_REGISTER_RGA2_ONE(core, aclk_reg, aclk_bit, hclk_reg,   \
-                                     hclk_bit, sel_reg, sel_shift,         \
-                                     clk_reg, clk_bit)                     \
-  do                                                                       \
-    {                                                                      \
-      struct clk_s *_mux;                                                  \
-                                                                           \
-      clk_register_gate("aclk_rga2_" #core "_en", NULL,                    \
-                        CLK_NAME_IS_STATIC, aclk_reg, aclk_bit,            \
-                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);   \
-                                                                           \
-      clk_register_gate("hclk_rga2_" #core "_en", NULL,                    \
-                        CLK_NAME_IS_STATIC, hclk_reg, hclk_bit,            \
-                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);   \
-                                                                           \
-      _mux = clk_register_mux("clk_rga2_" #core "_sel",                    \
-                              g_rga2_sel_parents,                          \
-                              nitems(g_rga2_sel_parents),                  \
-                              CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,    \
-                              sel_reg, sel_shift, 2, CLK_MUX_HIWORD_MASK); \
-      if (!_mux)                                                           \
-        {                                                                  \
-          _err("CLK: failed to register clk_rga2_" #core "_sel\n");        \
-          break;                                                           \
-        }                                                                  \
-                                                                           \
-      clk_register_gate("clk_rga2_" #core "_en", "clk_rga2_" #core "_sel", \
-                        CLK_NAME_IS_STATIC, clk_reg, clk_bit,              \
-                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);   \
-    }                                                                      \
+#define RK3576_CLK_REGISTER_RGA2_ONE(core, aclk_reg, aclk_bit, hclk_reg,    \
+                                     hclk_bit, sel_reg, sel_shift, clk_reg, \
+                                     clk_bit)                               \
+  do                                                                        \
+    {                                                                       \
+      struct clk_s *_mux;                                                   \
+                                                                            \
+      clk_register_gate("aclk_rga2_" #core "_en", NULL, CLK_NAME_IS_STATIC, \
+                        aclk_reg, aclk_bit,                                 \
+                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);    \
+                                                                            \
+      clk_register_gate("hclk_rga2_" #core "_en", NULL, CLK_NAME_IS_STATIC, \
+                        hclk_reg, hclk_bit,                                 \
+                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);    \
+                                                                            \
+      _mux = clk_register_mux("clk_rga2_" #core "_sel", g_rga2_sel_parents, \
+                              nitems(g_rga2_sel_parents),                   \
+                              CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,     \
+                              sel_reg, sel_shift, 2, CLK_MUX_HIWORD_MASK);  \
+      if (!_mux)                                                            \
+        {                                                                   \
+          _err("CLK: failed to register clk_rga2_" #core "_sel\n");         \
+          break;                                                            \
+        }                                                                   \
+                                                                            \
+      clk_register_gate("clk_rga2_" #core "_en", "clk_rga2_" #core "_sel",  \
+                        CLK_NAME_IS_STATIC, clk_reg, clk_bit,               \
+                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);    \
+    }                                                                       \
   while (0)
 
 /****************************************************************************
@@ -1026,17 +1017,15 @@ static void rk3576_clk_register_rga(void)
 
   /* RGA2 core0.  TODO: verify. */
 
-  RK3576_CLK_REGISTER_RGA2_ONE(0, cru + RK3576_CRU_GATE_CON(45), 6,
-                               cru + RK3576_CRU_GATE_CON(45), 5,
-                               cru + RK3576_CRU_CLKSEL_CON(72), 0,
-                               cru + RK3576_CRU_GATE_CON(45), 7);
+  RK3576_CLK_REGISTER_RGA2_ONE(
+      0, cru + RK3576_CRU_GATE_CON(45), 6, cru + RK3576_CRU_GATE_CON(45), 5,
+      cru + RK3576_CRU_CLKSEL_CON(72), 0, cru + RK3576_CRU_GATE_CON(45), 7);
 
   /* RGA2 core1.  TODO: verify. */
 
-  RK3576_CLK_REGISTER_RGA2_ONE(1, cru + RK3576_CRU_GATE_CON(46), 1,
-                               cru + RK3576_CRU_GATE_CON(46), 0,
-                               cru + RK3576_CRU_CLKSEL_CON(72), 2,
-                               cru + RK3576_CRU_GATE_CON(46), 2);
+  RK3576_CLK_REGISTER_RGA2_ONE(
+      1, cru + RK3576_CRU_GATE_CON(46), 1, cru + RK3576_CRU_GATE_CON(46), 0,
+      cru + RK3576_CRU_CLKSEL_CON(72), 2, cru + RK3576_CRU_GATE_CON(46), 2);
 }
 #endif /* CONFIG_RK3576_RGA */
 
@@ -1074,11 +1063,10 @@ static void rk3576_clk_register_vdec(void)
 
   /* Decoder core clock mux (clk_core, 600 MHz in the vendor DTS). */
 
-  mux = clk_register_mux("clk_vdec_core_sel", g_vdec_sel_parents,
-                         nitems(g_vdec_sel_parents),
-                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
-                         cru + RK3576_CRU_CLKSEL_CON(65), 0, 2,
-                         CLK_MUX_HIWORD_MASK);
+  mux = clk_register_mux(
+      "clk_vdec_core_sel", g_vdec_sel_parents, nitems(g_vdec_sel_parents),
+      CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
+      cru + RK3576_CRU_CLKSEL_CON(65), 0, 2, CLK_MUX_HIWORD_MASK);
   if (!mux)
     {
       _err("CLK: failed to register clk_vdec_core_sel\n");
@@ -1087,11 +1075,10 @@ static void rk3576_clk_register_vdec(void)
 
   /* CABAC clock mux (clk_cabac, 500 MHz). */
 
-  mux = clk_register_mux("clk_vdec_cabac_sel", g_vdec_sel_parents,
-                         nitems(g_vdec_sel_parents),
-                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
-                         cru + RK3576_CRU_CLKSEL_CON(65), 2, 2,
-                         CLK_MUX_HIWORD_MASK);
+  mux = clk_register_mux(
+      "clk_vdec_cabac_sel", g_vdec_sel_parents, nitems(g_vdec_sel_parents),
+      CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
+      cru + RK3576_CRU_CLKSEL_CON(65), 2, 2, CLK_MUX_HIWORD_MASK);
   if (!mux)
     {
       _err("CLK: failed to register clk_vdec_cabac_sel\n");
@@ -1100,11 +1087,10 @@ static void rk3576_clk_register_vdec(void)
 
   /* HEVC CABAC clock mux (clk_hevc_cabac, 1000 MHz). */
 
-  mux = clk_register_mux("clk_vdec_hevc_cabac_sel", g_vdec_sel_parents,
-                         nitems(g_vdec_sel_parents),
-                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
-                         cru + RK3576_CRU_CLKSEL_CON(65), 4, 2,
-                         CLK_MUX_HIWORD_MASK);
+  mux = clk_register_mux(
+      "clk_vdec_hevc_cabac_sel", g_vdec_sel_parents,
+      nitems(g_vdec_sel_parents), CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
+      cru + RK3576_CRU_CLKSEL_CON(65), 4, 2, CLK_MUX_HIWORD_MASK);
   if (!mux)
     {
       _err("CLK: failed to register clk_vdec_hevc_cabac_sel\n");
@@ -1124,18 +1110,15 @@ static void rk3576_clk_register_vdec(void)
   /* Functional gates.  TODO: verify. */
 
   clk_register_gate("clk_vdec_core_en", "clk_vdec_core_sel",
-                    CLK_NAME_IS_STATIC,
-                    cru + RK3576_CRU_GATE_CON(35), 3,
+                    CLK_NAME_IS_STATIC, cru + RK3576_CRU_GATE_CON(35), 3,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
   clk_register_gate("clk_vdec_cabac_en", "clk_vdec_cabac_sel",
-                    CLK_NAME_IS_STATIC,
-                    cru + RK3576_CRU_GATE_CON(35), 4,
+                    CLK_NAME_IS_STATIC, cru + RK3576_CRU_GATE_CON(35), 4,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
   clk_register_gate("clk_vdec_hevc_cabac_en", "clk_vdec_hevc_cabac_sel",
-                    CLK_NAME_IS_STATIC,
-                    cru + RK3576_CRU_GATE_CON(35), 5,
+                    CLK_NAME_IS_STATIC, cru + RK3576_CRU_GATE_CON(35), 5,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 }
 #endif /* CONFIG_RK3576_VDEC */
@@ -1151,13 +1134,13 @@ static void rk3576_clk_register_vdec(void)
  *   pclk_bit - pclk GATE bit
  */
 
-#define RK3576_CLK_REGISTER_CSI2HOST_ONE(n, pclk_reg, pclk_bit)          \
-  do                                                                     \
-    {                                                                    \
-      clk_register_gate("pclk_csi2host" #n "_en", NULL,                  \
-                        CLK_NAME_IS_STATIC, pclk_reg, pclk_bit,          \
-                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE); \
-    }                                                                    \
+#define RK3576_CLK_REGISTER_CSI2HOST_ONE(n, pclk_reg, pclk_bit)             \
+  do                                                                        \
+    {                                                                       \
+      clk_register_gate("pclk_csi2host" #n "_en", NULL, CLK_NAME_IS_STATIC, \
+                        pclk_reg, pclk_bit,                                 \
+                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);    \
+    }                                                                       \
   while (0)
 
 /****************************************************************************
@@ -1226,17 +1209,16 @@ static void rk3576_clk_register_csi(void)
  *   bit    - GATE bit
  */
 
-#define RK3576_CLK_REGISTER_VI_GATE(name, parent, reg, bit)      \
-  do                                                             \
-    {                                                            \
-      if (clk_register_gate((name), (parent), CLK_NAME_IS_STATIC,\
-                            (reg), (bit),                        \
-                            CLK_GATE_HIWORD_MASK |               \
-                            CLK_GATE_SET_TO_DISABLE) == NULL)    \
-        {                                                        \
-          _err("CLK: failed to register %s\n", (name));          \
-        }                                                        \
-    }                                                            \
+#define RK3576_CLK_REGISTER_VI_GATE(name, parent, reg, bit)            \
+  do                                                                   \
+    {                                                                  \
+      if (clk_register_gate(                                           \
+              (name), (parent), CLK_NAME_IS_STATIC, (reg), (bit),      \
+              CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE) == NULL) \
+        {                                                              \
+          _err("CLK: failed to register %s\n", (name));                \
+        }                                                              \
+    }                                                                  \
   while (0)
 
 /****************************************************************************
@@ -1391,11 +1373,10 @@ static void rk3576_clk_register_rknpu(void)
    * GATE_CON(31) bit 5.
    */
 
-  mux = clk_register_mux("clk_rknn_dsu0_sel", g_rknn_dsu_parents,
-                         nitems(g_rknn_dsu_parents),
-                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
-                         cru + RK3576_CRU_CLKSEL_CON(86), 7, 2,
-                         CLK_MUX_HIWORD_MASK);
+  mux = clk_register_mux(
+      "clk_rknn_dsu0_sel", g_rknn_dsu_parents, nitems(g_rknn_dsu_parents),
+      CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
+      cru + RK3576_CRU_CLKSEL_CON(86), 7, 2, CLK_MUX_HIWORD_MASK);
   if (!mux)
     {
       _err("CLK: failed to register clk_rknn_dsu0_sel\n");
@@ -1414,11 +1395,10 @@ static void rk3576_clk_register_rknpu(void)
 
   /* hclk_rknn_root — mux[1:0] in CLKSEL_CON(86), GATE_CON(31) bit 4. */
 
-  mux = clk_register_mux("hclk_rknn_root_sel", g_rknn_hclk_parents,
-                         nitems(g_rknn_hclk_parents),
-                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
-                         cru + RK3576_CRU_CLKSEL_CON(86), 0, 2,
-                         CLK_MUX_HIWORD_MASK);
+  mux = clk_register_mux(
+      "hclk_rknn_root_sel", g_rknn_hclk_parents, nitems(g_rknn_hclk_parents),
+      CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
+      cru + RK3576_CRU_CLKSEL_CON(86), 0, 2, CLK_MUX_HIWORD_MASK);
   if (!mux)
     {
       _err("CLK: failed to register hclk_rknn_root_sel\n");
@@ -1426,8 +1406,7 @@ static void rk3576_clk_register_rknpu(void)
     }
 
   clk_register_gate("hclk_rknn_root_en", "hclk_rknn_root_sel",
-                    CLK_NAME_IS_STATIC,
-                    cru + RK3576_CRU_GATE_CON(31), 4,
+                    CLK_NAME_IS_STATIC, cru + RK3576_CRU_GATE_CON(31), 4,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
   /* Per-core AXI gates, both fed by the DSU clock. */
@@ -1445,22 +1424,19 @@ static void rk3576_clk_register_rknpu(void)
    */
 
   clk_register_gate("aclk_rknn_cbuf_en", "clk_rknn_dsu0_en",
-                    CLK_NAME_IS_STATIC,
-                    cru + RK3576_CRU_GATE_CON(32), 0,
+                    CLK_NAME_IS_STATIC, cru + RK3576_CRU_GATE_CON(32), 0,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
   clk_register_gate("hclk_rknn_cbuf_en", "hclk_rknn_root_en",
-                    CLK_NAME_IS_STATIC,
-                    cru + RK3576_CRU_GATE_CON(32), 12,
+                    CLK_NAME_IS_STATIC, cru + RK3576_CRU_GATE_CON(32), 12,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
   /* NPU top APB — mux[1:0] in CLKSEL_CON(87), GATE_CON(31) bit 8. */
 
-  mux = clk_register_mux("pclk_nputop_root_sel", g_nputop_pclk_parents,
-                         nitems(g_nputop_pclk_parents),
-                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
-                         cru + RK3576_CRU_CLKSEL_CON(87), 0, 2,
-                         CLK_MUX_HIWORD_MASK);
+  mux = clk_register_mux(
+      "pclk_nputop_root_sel", g_nputop_pclk_parents,
+      nitems(g_nputop_pclk_parents), CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
+      cru + RK3576_CRU_CLKSEL_CON(87), 0, 2, CLK_MUX_HIWORD_MASK);
   if (!mux)
     {
       _err("CLK: failed to register pclk_nputop_root_sel\n");
@@ -1468,8 +1444,7 @@ static void rk3576_clk_register_rknpu(void)
     }
 
   clk_register_gate("pclk_nputop_root_en", "pclk_nputop_root_sel",
-                    CLK_NAME_IS_STATIC,
-                    cru + RK3576_CRU_GATE_CON(31), 8,
+                    CLK_NAME_IS_STATIC, cru + RK3576_CRU_GATE_CON(31), 8,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 }
 #endif /* CONFIG_RK3576_RKNPU */
@@ -1543,8 +1518,8 @@ static void rk3576_clk_register_mali(void)
 
   mux = clk_register_mux("clk_gpu_src_sel", g_gpu_src_parents,
                          nitems(g_gpu_src_parents),
-                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
-                         sel165, 5, 3, CLK_MUX_HIWORD_MASK);
+                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC, sel165, 5,
+                         3, CLK_MUX_HIWORD_MASK);
   if (!mux)
     {
       _err("CLK: failed to register clk_gpu_src_sel\n");
@@ -1559,14 +1534,13 @@ static void rk3576_clk_register_mali(void)
                     CLK_NAME_IS_STATIC, gate69, 1,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
-  clk_register_gate("clk_gpu_pvtpll_src_en", NULL, CLK_NAME_IS_STATIC,
-                    gate69, 4,
-                    CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
+  clk_register_gate("clk_gpu_pvtpll_src_en", NULL, CLK_NAME_IS_STATIC, gate69,
+                    4, CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
   mux = clk_register_mux("clk_gpu_inner_sel", g_gpu_inner_parents,
                          nitems(g_gpu_inner_parents),
-                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
-                         sel165, 8, 1, CLK_MUX_HIWORD_MASK);
+                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC, sel165, 8,
+                         1, CLK_MUX_HIWORD_MASK);
   if (!mux)
     {
       _err("CLK: failed to register clk_gpu_inner_sel\n");
@@ -1578,8 +1552,7 @@ static void rk3576_clk_register_mali(void)
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
   clk_register_gate("clk_gpu_en", "clk_gpu_inner_en", CLK_NAME_IS_STATIC,
-                    gate69, 3,
-                    CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
+                    gate69, 3, CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
   /* AXI ports of the GPU BIU.
    *
@@ -1588,20 +1561,18 @@ static void rk3576_clk_register_mali(void)
    * only the gates are registered here.
    */
 
-  clk_register_gate("aclk_s_gpu_biu_en", NULL, CLK_NAME_IS_STATIC,
-                    gate69, 6,
+  clk_register_gate("aclk_s_gpu_biu_en", NULL, CLK_NAME_IS_STATIC, gate69, 6,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
-  clk_register_gate("aclk_m0_gpu_biu_en", NULL, CLK_NAME_IS_STATIC,
-                    gate69, 7,
+  clk_register_gate("aclk_m0_gpu_biu_en", NULL, CLK_NAME_IS_STATIC, gate69, 7,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
   /* APB side: root mux plus the three gates. */
 
   mux = clk_register_mux("pclk_gpu_root_sel", g_gpu_pclk_root_parents,
                          nitems(g_gpu_pclk_root_parents),
-                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
-                         sel166, 10, 2, CLK_MUX_HIWORD_MASK);
+                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC, sel166, 10,
+                         2, CLK_MUX_HIWORD_MASK);
   if (!mux)
     {
       _err("CLK: failed to register pclk_gpu_root_sel\n");
@@ -1612,12 +1583,11 @@ static void rk3576_clk_register_mali(void)
                     CLK_NAME_IS_STATIC, gate69, 8,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
-  clk_register_gate("pclk_gpu_biu_en", "pclk_gpu_root_en",
-                    CLK_NAME_IS_STATIC, gate69, 9,
-                    CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
+  clk_register_gate("pclk_gpu_biu_en", "pclk_gpu_root_en", CLK_NAME_IS_STATIC,
+                    gate69, 9, CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 
-  clk_register_gate("pclk_gpu_grf_en", "pclk_gpu_root_en",
-                    CLK_NAME_IS_STATIC, gate69, 13,
+  clk_register_gate("pclk_gpu_grf_en", "pclk_gpu_root_en", CLK_NAME_IS_STATIC,
+                    gate69, 13,
                     CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
 }
 #endif /* CONFIG_RK3576_MALI */
@@ -1641,41 +1611,39 @@ static void rk3576_clk_register_mali(void)
  *   clk_bit   - functional clock GATE bit
  */
 
-#define RK3576_CLK_REGISTER_GMAC_ONE(n, sel_reg, sel_shift, div_shift,      \
-                                     gate_reg, aclk_bit, pclk_bit,          \
-                                     clk_bit)                               \
-  do                                                                        \
-    {                                                                       \
-      struct clk_s *_mux;                                                   \
-                                                                            \
-      _mux = clk_register_mux("clk_gmac" #n "_sel", g_gmac_sel_parents,     \
-                              nitems(g_gmac_sel_parents),                   \
-                              CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,     \
-                              sel_reg, sel_shift, 2, CLK_MUX_HIWORD_MASK);  \
-      if (!_mux)                                                            \
-        {                                                                   \
-          _err("CLK: failed to register clk_gmac" #n "_sel\n");             \
-          break;                                                            \
-        }                                                                   \
-                                                                            \
-      clk_register_divider("clk_gmac" #n "_div", "clk_gmac" #n "_sel",      \
-                           CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,        \
-                           sel_reg, div_shift, 5,                           \
-                           CLK_DIVIDER_HIWORD_MASK);                        \
-                                                                            \
-      clk_register_gate("aclk_gmac" #n "_en", NULL, CLK_NAME_IS_STATIC,     \
-                        gate_reg, aclk_bit,                                 \
-                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);    \
-                                                                            \
-      clk_register_gate("pclk_gmac" #n "_en", NULL, CLK_NAME_IS_STATIC,     \
-                        gate_reg, pclk_bit,                                 \
-                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);    \
-                                                                            \
-      clk_register_gate("clk_gmac" #n "_en", "clk_gmac" #n "_div",          \
-                        CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,           \
-                        gate_reg, clk_bit,                                  \
-                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);    \
-    }                                                                       \
+#define RK3576_CLK_REGISTER_GMAC_ONE(n, sel_reg, sel_shift, div_shift,        \
+                                     gate_reg, aclk_bit, pclk_bit, clk_bit)   \
+  do                                                                          \
+    {                                                                         \
+      struct clk_s *_mux;                                                     \
+                                                                              \
+      _mux = clk_register_mux("clk_gmac" #n "_sel", g_gmac_sel_parents,       \
+                              nitems(g_gmac_sel_parents),                     \
+                              CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,       \
+                              sel_reg, sel_shift, 2, CLK_MUX_HIWORD_MASK);    \
+      if (!_mux)                                                              \
+        {                                                                     \
+          _err("CLK: failed to register clk_gmac" #n "_sel\n");               \
+          break;                                                              \
+        }                                                                     \
+                                                                              \
+      clk_register_divider("clk_gmac" #n "_div", "clk_gmac" #n "_sel",        \
+                           CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC, sel_reg, \
+                           div_shift, 5, CLK_DIVIDER_HIWORD_MASK);            \
+                                                                              \
+      clk_register_gate("aclk_gmac" #n "_en", NULL, CLK_NAME_IS_STATIC,       \
+                        gate_reg, aclk_bit,                                   \
+                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);      \
+                                                                              \
+      clk_register_gate("pclk_gmac" #n "_en", NULL, CLK_NAME_IS_STATIC,       \
+                        gate_reg, pclk_bit,                                   \
+                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);      \
+                                                                              \
+      clk_register_gate("clk_gmac" #n "_en", "clk_gmac" #n "_div",            \
+                        CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC, gate_reg,   \
+                        clk_bit,                                              \
+                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);      \
+    }                                                                         \
   while (0)
 
 /****************************************************************************
@@ -1781,34 +1749,34 @@ static void rk3576_clk_register_gmac(void)
  *   pipe_bit  - pipe clock GATE bit
  */
 
-#define RK3576_CLK_REGISTER_COMBPHY_ONE(phy, sel_reg, sel_shift, gate_reg, \
-                                        ref_bit, apb_bit, pipe_bit)        \
-  do                                                                       \
-    {                                                                      \
-      struct clk_s *_mux;                                                  \
-                                                                           \
-      _mux = clk_register_mux("clk_combphy" #phy "_ref_sel",               \
-                              g_combphy_ref_parents,                       \
-                              nitems(g_combphy_ref_parents),               \
-                              CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,    \
-                              sel_reg, sel_shift, 1, CLK_MUX_HIWORD_MASK); \
-      if (!_mux)                                                           \
-        {                                                                  \
-          _err("CLK: failed to register clk_combphy" #phy "_ref_sel\n");   \
-          break;                                                           \
-        }                                                                  \
-                                                                           \
-      clk_register_gate("clk_combphy" #phy "_ref_en",                      \
-                        "clk_combphy" #phy "_ref_sel", CLK_NAME_IS_STATIC, \
-                        gate_reg, ref_bit,                                 \
-                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);   \
-      clk_register_gate("pclk_combphy" #phy "_en", NULL,                   \
-                        CLK_NAME_IS_STATIC, gate_reg, apb_bit,             \
-                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);   \
-      clk_register_gate("clk_combphy" #phy "_pipe_en", NULL,               \
-                        CLK_NAME_IS_STATIC, gate_reg, pipe_bit,            \
-                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);   \
-    }                                                                      \
+#define RK3576_CLK_REGISTER_COMBPHY_ONE(phy, sel_reg, sel_shift, gate_reg,   \
+                                        ref_bit, apb_bit, pipe_bit)          \
+  do                                                                         \
+    {                                                                        \
+      struct clk_s *_mux;                                                    \
+                                                                             \
+      _mux = clk_register_mux("clk_combphy" #phy "_ref_sel",                 \
+                              g_combphy_ref_parents,                         \
+                              nitems(g_combphy_ref_parents),                 \
+                              CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,      \
+                              sel_reg, sel_shift, 1, CLK_MUX_HIWORD_MASK);   \
+      if (!_mux)                                                             \
+        {                                                                    \
+          _err("CLK: failed to register clk_combphy" #phy "_ref_sel\n");     \
+          break;                                                             \
+        }                                                                    \
+                                                                             \
+      clk_register_gate("clk_combphy" #phy "_ref_en",                        \
+                        "clk_combphy" #phy "_ref_sel", CLK_NAME_IS_STATIC,   \
+                        gate_reg, ref_bit,                                   \
+                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);     \
+      clk_register_gate("pclk_combphy" #phy "_en", NULL, CLK_NAME_IS_STATIC, \
+                        gate_reg, apb_bit,                                   \
+                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);     \
+      clk_register_gate("clk_combphy" #phy "_pipe_en", NULL,                 \
+                        CLK_NAME_IS_STATIC, gate_reg, pipe_bit,              \
+                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);     \
+    }                                                                        \
   while (0)
 
 /****************************************************************************
@@ -1855,17 +1823,15 @@ static void rk3576_clk_register_pcie(void)
 
   /* TODO: placeholder gate bits, see the banner above. */
 
-  RK3576_CLK_REGISTER_PCIE_ONE(0, cru + RK3576_CRU_GATE_CON(30),
-                               8, 9, 10, 6, 7);
-  RK3576_CLK_REGISTER_PCIE_ONE(1, cru + RK3576_CRU_GATE_CON(31),
-                               5, 6, 7, 3, 4);
+  RK3576_CLK_REGISTER_PCIE_ONE(0, cru + RK3576_CRU_GATE_CON(30), 8, 9, 10, 6,
+                               7);
+  RK3576_CLK_REGISTER_PCIE_ONE(1, cru + RK3576_CRU_GATE_CON(31), 5, 6, 7, 3,
+                               4);
 
   RK3576_CLK_REGISTER_COMBPHY_ONE(0, cru + RK3576_CRU_CLKSEL_CON(153), 0,
-                                  cru + RK3576_CRU_GATE_CON(32),
-                                  0, 12, 6);
+                                  cru + RK3576_CRU_GATE_CON(32), 0, 12, 6);
   RK3576_CLK_REGISTER_COMBPHY_ONE(1, cru + RK3576_CRU_CLKSEL_CON(153), 1,
-                                  cru + RK3576_CRU_GATE_CON(32),
-                                  1, 13, 3);
+                                  cru + RK3576_CRU_GATE_CON(32), 1, 13, 3);
 }
 #endif /* CONFIG_RK3576_PCIE || CONFIG_RK3576_COMBPHY */
 
@@ -1890,37 +1856,36 @@ static void rk3576_clk_register_pcie(void)
  *   out_bit   - clk_out GATE bit
  */
 
-#define RK3576_CLK_REGISTER_PDM_ONE(ctrl, sel_reg, sel_shift, hclk_reg,    \
-                                    hclk_bit, clk_reg, clk_bit, out_reg,   \
-                                    out_bit)                               \
-  do                                                                       \
-    {                                                                      \
-      struct clk_s *_mux;                                                  \
-                                                                           \
-      clk_register_gate("hclk_pdm" #ctrl "_en", NULL, CLK_NAME_IS_STATIC,  \
-                        hclk_reg, hclk_bit,                                \
-                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);   \
-                                                                           \
-      clk_register_gate("clk_pdm" #ctrl "_en", NULL, CLK_NAME_IS_STATIC,   \
-                        clk_reg, clk_bit,                                  \
-                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);   \
-                                                                           \
-      _mux = clk_register_mux("clk_pdm" #ctrl "_out_sel",                  \
-                              g_pdm_sel_parents,                           \
-                              nitems(g_pdm_sel_parents),                   \
-                              CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,    \
-                              sel_reg, sel_shift, 2, CLK_MUX_HIWORD_MASK); \
-      if (!_mux)                                                           \
-        {                                                                  \
-          _err("CLK: failed to register clk_pdm" #ctrl "_out_sel\n");      \
-          break;                                                           \
-        }                                                                  \
-                                                                           \
-      clk_register_gate("clk_pdm" #ctrl "_out_en",                         \
-                        "clk_pdm" #ctrl "_out_sel", CLK_NAME_IS_STATIC,    \
-                        out_reg, out_bit,                                  \
-                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);   \
-    }                                                                      \
+#define RK3576_CLK_REGISTER_PDM_ONE(ctrl, sel_reg, sel_shift, hclk_reg,      \
+                                    hclk_bit, clk_reg, clk_bit, out_reg,     \
+                                    out_bit)                                 \
+  do                                                                         \
+    {                                                                        \
+      struct clk_s *_mux;                                                    \
+                                                                             \
+      clk_register_gate("hclk_pdm" #ctrl "_en", NULL, CLK_NAME_IS_STATIC,    \
+                        hclk_reg, hclk_bit,                                  \
+                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);     \
+                                                                             \
+      clk_register_gate("clk_pdm" #ctrl "_en", NULL, CLK_NAME_IS_STATIC,     \
+                        clk_reg, clk_bit,                                    \
+                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);     \
+                                                                             \
+      _mux = clk_register_mux("clk_pdm" #ctrl "_out_sel", g_pdm_sel_parents, \
+                              nitems(g_pdm_sel_parents),                     \
+                              CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,      \
+                              sel_reg, sel_shift, 2, CLK_MUX_HIWORD_MASK);   \
+      if (!_mux)                                                             \
+        {                                                                    \
+          _err("CLK: failed to register clk_pdm" #ctrl "_out_sel\n");        \
+          break;                                                             \
+        }                                                                    \
+                                                                             \
+      clk_register_gate("clk_pdm" #ctrl "_out_en",                           \
+                        "clk_pdm" #ctrl "_out_sel", CLK_NAME_IS_STATIC,      \
+                        out_reg, out_bit,                                    \
+                        CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);     \
+    }                                                                        \
   while (0)
 
 /****************************************************************************
@@ -1969,10 +1934,9 @@ static void rk3576_clk_register_pdm(void)
 
   /* PDM1 — main CRU domain (pdm@2a6e0000).  TODO: verify. */
 
-  RK3576_CLK_REGISTER_PDM_ONE(1, cru + RK3576_CRU_CLKSEL_CON(28), 0,
-                              cru + RK3576_CRU_GATE_CON(6), 11,
-                              cru + RK3576_CRU_GATE_CON(6), 12,
-                              cru + RK3576_CRU_GATE_CON(3), 9);
+  RK3576_CLK_REGISTER_PDM_ONE(
+      1, cru + RK3576_CRU_CLKSEL_CON(28), 0, cru + RK3576_CRU_GATE_CON(6), 11,
+      cru + RK3576_CRU_GATE_CON(6), 12, cru + RK3576_CRU_GATE_CON(3), 9);
 }
 #endif /* CONFIG_RK3576_PDM */
 
@@ -2009,11 +1973,10 @@ static void rk3576_clk_register_ir(void)
   const unsigned long pmu1 = RK3576_PMU1_CRU_ADDR;
   struct clk_s *mux;
 
-  mux = clk_register_mux("clk_pwm0_sel", g_ir_pwm0_sel_parents,
-                         nitems(g_ir_pwm0_sel_parents),
-                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
-                         pmu1 + RK3576_PMU1CRU_CLKSEL_CON(5), 2, 2,
-                         CLK_MUX_HIWORD_MASK);
+  mux = clk_register_mux(
+      "clk_pwm0_sel", g_ir_pwm0_sel_parents, nitems(g_ir_pwm0_sel_parents),
+      CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC,
+      pmu1 + RK3576_PMU1CRU_CLKSEL_CON(5), 2, 2, CLK_MUX_HIWORD_MASK);
   if (!mux)
     {
       _err("CLK: failed to register clk_pwm0_sel\n");

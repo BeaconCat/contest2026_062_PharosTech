@@ -42,9 +42,9 @@
  * /i2c@2ac40000/pmic@23, compatible "rockchip,rk806".
  */
 
-#define KICKPI_K7_RK806_I2C_BUS   1
-#define KICKPI_K7_RK806_I2C_ADDR  0x23
-#define KICKPI_K7_RK806_I2C_FREQ  400000
+#define KICKPI_K7_RK806_I2C_BUS  1
+#define KICKPI_K7_RK806_I2C_ADDR 0x23
+#define KICKPI_K7_RK806_I2C_FREQ 400000
 
 /* Regulator identifiers.  The ordering is the RK806 hardware ordering
  * (BUCK1..10, NLDO1..5, PLDO1..6) and is used as the regulator_desc_s "id".
@@ -52,27 +52,27 @@
 
 enum kickpi_k7_rk806_id_e
 {
-  RK806_ID_DCDC1 = 0,   /* vdd_cpu_big_s0                                 */
-  RK806_ID_DCDC2,       /* vdd_npu_s0                                     */
-  RK806_ID_DCDC3,       /* vdd_cpu_lit_s0                                 */
-  RK806_ID_DCDC4,       /* vcc_3v3_s3                                     */
-  RK806_ID_DCDC5,       /* vdd_gpu_s0                                     */
-  RK806_ID_DCDC6,       /* vddq_ddr_s0                                    */
-  RK806_ID_DCDC7,       /* vdd_logic_s0                                   */
-  RK806_ID_DCDC8,       /* vcc_1v8_s3                                     */
-  RK806_ID_DCDC9,       /* vdd2_ddr_s3                                    */
-  RK806_ID_DCDC10,      /* vdd_ddr_s0                                     */
-  RK806_ID_NLDO1,       /* vdd_0v75_s3                                    */
-  RK806_ID_NLDO2,       /* vdda_ddr_pll_s0                                */
-  RK806_ID_NLDO3,       /* vdda0v75_hdmi_s0                               */
-  RK806_ID_NLDO4,       /* vdda_0v85_s0                                   */
-  RK806_ID_NLDO5,       /* vdda_0v75_s0                                   */
-  RK806_ID_PLDO1,       /* vcca_1v8_s0                                    */
-  RK806_ID_PLDO2,       /* vcca1v8_pldo2_s0                               */
-  RK806_ID_PLDO3,       /* vdda_1v2_s0                                    */
-  RK806_ID_PLDO4,       /* vcca_3v3_s0                                    */
-  RK806_ID_PLDO5,       /* vccio_sd_s0 - SD/SDIO IO rail, 1.8 V / 3.3 V   */
-  RK806_ID_PLDO6,       /* vcca1v8_pldo6_s3                               */
+  RK806_ID_DCDC1 = 0, /* vdd_cpu_big_s0                                 */
+  RK806_ID_DCDC2,     /* vdd_npu_s0                                     */
+  RK806_ID_DCDC3,     /* vdd_cpu_lit_s0                                 */
+  RK806_ID_DCDC4,     /* vcc_3v3_s3                                     */
+  RK806_ID_DCDC5,     /* vdd_gpu_s0                                     */
+  RK806_ID_DCDC6,     /* vddq_ddr_s0                                    */
+  RK806_ID_DCDC7,     /* vdd_logic_s0                                   */
+  RK806_ID_DCDC8,     /* vcc_1v8_s3                                     */
+  RK806_ID_DCDC9,     /* vdd2_ddr_s3                                    */
+  RK806_ID_DCDC10,    /* vdd_ddr_s0                                     */
+  RK806_ID_NLDO1,     /* vdd_0v75_s3                                    */
+  RK806_ID_NLDO2,     /* vdda_ddr_pll_s0                                */
+  RK806_ID_NLDO3,     /* vdda0v75_hdmi_s0                               */
+  RK806_ID_NLDO4,     /* vdda_0v85_s0                                   */
+  RK806_ID_NLDO5,     /* vdda_0v75_s0                                   */
+  RK806_ID_PLDO1,     /* vcca_1v8_s0                                    */
+  RK806_ID_PLDO2,     /* vcca1v8_pldo2_s0                               */
+  RK806_ID_PLDO3,     /* vdda_1v2_s0                                    */
+  RK806_ID_PLDO4,     /* vcca_3v3_s0                                    */
+  RK806_ID_PLDO5,     /* vccio_sd_s0 - SD/SDIO IO rail, 1.8 V / 3.3 V   */
+  RK806_ID_PLDO6,     /* vcca1v8_pldo6_s3                               */
   RK806_ID_NREGULATORS
 };
 
@@ -80,16 +80,15 @@ enum kickpi_k7_rk806_id_e
  * SD spec signalling levels; used by the CMD11 voltage switch sequence.
  */
 
-#define KICKPI_K7_VCCIO_SD_3V3    3300000
-#define KICKPI_K7_VCCIO_SD_1V8    1800000
+#define KICKPI_K7_VCCIO_SD_3V3 3300000
+#define KICKPI_K7_VCCIO_SD_1V8 1800000
 
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /****************************************************************************

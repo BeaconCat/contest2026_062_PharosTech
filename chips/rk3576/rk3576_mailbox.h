@@ -100,8 +100,7 @@ int rk3576_mailbox_initialize(int instance);
  *
  ****************************************************************************/
 
-int rk3576_mailbox_send(int instance, int chan, uint32_t cmd,
-                        uint32_t data);
+int rk3576_mailbox_send(int instance, int chan, uint32_t cmd, uint32_t data);
 
 /****************************************************************************
  * Name: rk3576_mailbox_register_callback
@@ -122,8 +121,7 @@ int rk3576_mailbox_send(int instance, int chan, uint32_t cmd,
  ****************************************************************************/
 
 int rk3576_mailbox_register_callback(int instance, int chan,
-                                     rk3576_mailbox_callback_t cb,
-                                     void *arg);
+                                     rk3576_mailbox_callback_t cb, void *arg);
 
 /****************************************************************************
  * Name: rk3576_mailbox_trylock / rk3576_mailbox_unlock

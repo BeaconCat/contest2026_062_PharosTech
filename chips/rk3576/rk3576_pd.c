@@ -89,14 +89,14 @@
 
 /* Polling granularity of the handshake loops. */
 
-#define RK3576_PD_POLL_US    1
+#define RK3576_PD_POLL_US 1
 
 /* "This domain has no such resource" markers. */
 
-#define RK3576_PD_NO_MEM     0
-#define RK3576_PD_NO_IDLE    0
-#define RK3576_PD_NO_VOL     0
-#define RK3576_PD_NO_PARENT  (-1)
+#define RK3576_PD_NO_MEM    0
+#define RK3576_PD_NO_IDLE   0
+#define RK3576_PD_NO_VOL    0
+#define RK3576_PD_NO_PARENT (-1)
 
 /****************************************************************************
  * Private Types
@@ -113,15 +113,15 @@
 
 struct rk3576_pd_info_s
 {
-  const char *name;      /* Domain name, for logging                      */
-  uint32_t    pwr_mask;  /* PMU_PWR_GATE_SFTCON{0,1} bit                  */
-  uint32_t    mem_mask;  /* PMU_MEM_PWR_GATE_SFTCON{0,1} bit, 0 if none   */
-  uint32_t    idle0;     /* PMU_BIU_IDLE_SFTCON0 bits, 0 if none          */
-  uint32_t    idle1;     /* PMU_BIU_IDLE_SFTCON1 bits, 0 if none          */
-  uint32_t    vol_mask;  /* PMU_VOL_GATE_CON{0,1} bit, 0 if not a VD      */
-  int8_t      parent;    /* Parent domain, RK3576_PD_NO_PARENT if none    */
-  bool        reg1;      /* false: SFTCON0 group, true: SFTCON1 group     */
-  bool        vol_reg1;  /* false: VOL_GATE_CON0, true: VOL_GATE_CON1     */
+  const char *name;  /* Domain name, for logging                      */
+  uint32_t pwr_mask; /* PMU_PWR_GATE_SFTCON{0,1} bit                  */
+  uint32_t mem_mask; /* PMU_MEM_PWR_GATE_SFTCON{0,1} bit, 0 if none   */
+  uint32_t idle0;    /* PMU_BIU_IDLE_SFTCON0 bits, 0 if none          */
+  uint32_t idle1;    /* PMU_BIU_IDLE_SFTCON1 bits, 0 if none          */
+  uint32_t vol_mask; /* PMU_VOL_GATE_CON{0,1} bit, 0 if not a VD      */
+  int8_t parent;     /* Parent domain, RK3576_PD_NO_PARENT if none    */
+  bool reg1;         /* false: SFTCON0 group, true: SFTCON1 group     */
+  bool vol_reg1;     /* false: VOL_GATE_CON0, true: VOL_GATE_CON1     */
 };
 
 /****************************************************************************
@@ -130,17 +130,14 @@ struct rk3576_pd_info_s
 
 static void rk3576_pd_hiword(uint32_t offset, uint32_t mask, bool set);
 static bool rk3576_pd_pwr_down(const struct rk3576_pd_info_s *info);
-static int  rk3576_pd_wait_pwr(const struct rk3576_pd_info_s *info,
-                               bool down);
-static int  rk3576_pd_wait_idle(const struct rk3576_pd_info_s *info,
-                                bool idle);
-static void rk3576_pd_set_idle(const struct rk3576_pd_info_s *info,
-                               bool idle);
+static int rk3576_pd_wait_pwr(const struct rk3576_pd_info_s *info, bool down);
+static int rk3576_pd_wait_idle(const struct rk3576_pd_info_s *info, bool idle);
+static void rk3576_pd_set_idle(const struct rk3576_pd_info_s *info, bool idle);
 static void rk3576_pd_set_mem_down(const struct rk3576_pd_info_s *info,
                                    bool down);
 static void rk3576_pd_set_vol_off(const struct rk3576_pd_info_s *info,
                                   bool off);
-static int  rk3576_pd_do_on(int domain);
+static int rk3576_pd_do_on(int domain);
 
 /****************************************************************************
  * Private Data
@@ -485,9 +482,8 @@ static void rk3576_pd_hiword(uint32_t offset, uint32_t mask, bool set)
 
 static bool rk3576_pd_pwr_down(const struct rk3576_pd_info_s *info)
 {
-  uint32_t mask = info->reg1 ?
-                  info->pwr_mask << RK3576_PMU_PWR_STS_CON1_SHIFT :
-                  info->pwr_mask;
+  uint32_t mask = info->reg1 ? info->pwr_mask << RK3576_PMU_PWR_STS_CON1_SHIFT
+                             : info->pwr_mask;
 
   return (getreg32(RK3576_PMU_REG(RK3576_PMU_PWR_GATE_STS)) & mask) != 0;
 }
@@ -522,8 +518,8 @@ static int rk3576_pd_wait_pwr(const struct rk3576_pd_info_s *info, bool down)
       up_udelay(RK3576_PD_POLL_US);
     }
 
-  pwrerr("ERROR: pd %s power %s timeout, sts=0x%08" PRIx32 "\n",
-         info->name, down ? "down" : "up",
+  pwrerr("ERROR: pd %s power %s timeout, sts=0x%08" PRIx32 "\n", info->name,
+         down ? "down" : "up",
          getreg32(RK3576_PMU_REG(RK3576_PMU_PWR_GATE_STS)));
 
   return -ETIMEDOUT;
@@ -538,8 +534,7 @@ static int rk3576_pd_wait_pwr(const struct rk3576_pd_info_s *info, bool down)
  *
  ****************************************************************************/
 
-static void rk3576_pd_set_idle(const struct rk3576_pd_info_s *info,
-                               bool idle)
+static void rk3576_pd_set_idle(const struct rk3576_pd_info_s *info, bool idle)
 {
   rk3576_pd_hiword(RK3576_PMU_BIU_IDLE_SFTCON0, info->idle0, idle);
   rk3576_pd_hiword(RK3576_PMU_BIU_IDLE_SFTCON1, info->idle1, idle);
@@ -562,17 +557,15 @@ static void rk3576_pd_set_idle(const struct rk3576_pd_info_s *info,
  *
  ****************************************************************************/
 
-static int rk3576_pd_wait_idle(const struct rk3576_pd_info_s *info,
-                               bool idle)
+static int rk3576_pd_wait_idle(const struct rk3576_pd_info_s *info, bool idle)
 {
   uint32_t mask;
   uint32_t want;
   uint32_t ack;
   uint32_t sts;
-  int      elapsed;
+  int elapsed;
 
-  mask = info->idle0 |
-         (info->idle1 << RK3576_PMU_IDLE_STS_CON1_SHIFT);
+  mask = info->idle0 | (info->idle1 << RK3576_PMU_IDLE_STS_CON1_SHIFT);
   if (mask == 0)
     {
       return OK;
@@ -594,8 +587,8 @@ static int rk3576_pd_wait_idle(const struct rk3576_pd_info_s *info,
       up_udelay(RK3576_PD_POLL_US);
     }
 
-  pwrerr("ERROR: pd %s biu %s timeout, ack=0x%08" PRIx32
-         " sts=0x%08" PRIx32 " mask=0x%08" PRIx32 "\n",
+  pwrerr("ERROR: pd %s biu %s timeout, ack=0x%08" PRIx32 " sts=0x%08" PRIx32
+         " mask=0x%08" PRIx32 "\n",
          info->name, idle ? "idle" : "active", ack, sts, mask);
 
   return -ETIMEDOUT;
@@ -613,8 +606,8 @@ static int rk3576_pd_wait_idle(const struct rk3576_pd_info_s *info,
 static void rk3576_pd_set_mem_down(const struct rk3576_pd_info_s *info,
                                    bool down)
 {
-  uint32_t offset = info->reg1 ? RK3576_PMU_MEM_PWR_GATE_SFTCON1 :
-                                 RK3576_PMU_MEM_PWR_GATE_SFTCON0;
+  uint32_t offset = info->reg1 ? RK3576_PMU_MEM_PWR_GATE_SFTCON1
+                               : RK3576_PMU_MEM_PWR_GATE_SFTCON0;
 
   rk3576_pd_hiword(offset, info->mem_mask, down);
 }
@@ -633,8 +626,8 @@ static void rk3576_pd_set_mem_down(const struct rk3576_pd_info_s *info,
 static void rk3576_pd_set_vol_off(const struct rk3576_pd_info_s *info,
                                   bool off)
 {
-  uint32_t offset = info->vol_reg1 ? RK3576_PMU_VOL_GATE_CON1 :
-                                     RK3576_PMU_VOL_GATE_CON0;
+  uint32_t offset =
+      info->vol_reg1 ? RK3576_PMU_VOL_GATE_CON1 : RK3576_PMU_VOL_GATE_CON0;
 
   rk3576_pd_hiword(offset, info->vol_mask, off);
 }
@@ -679,8 +672,8 @@ static int rk3576_pd_do_on(int domain)
 
   /* 2. Open the power gate and wait for the power acknowledge. */
 
-  rk3576_pd_hiword(info->reg1 ? RK3576_PMU_PWR_GATE_SFTCON1 :
-                                RK3576_PMU_PWR_GATE_SFTCON0,
+  rk3576_pd_hiword(info->reg1 ? RK3576_PMU_PWR_GATE_SFTCON1
+                              : RK3576_PMU_PWR_GATE_SFTCON0,
                    info->pwr_mask, false);
 
   ret = rk3576_pd_wait_pwr(info, false);
@@ -715,7 +708,7 @@ static int rk3576_pd_do_on(int domain)
 int rk3576_pd_on(int domain)
 {
   irqstate_t flags;
-  int        ret;
+  int ret;
 
   if (domain < 0 || domain >= RK3576_PD_NDOMAINS ||
       g_rk3576_pd_info[domain].name == NULL)
@@ -742,7 +735,7 @@ int rk3576_pd_off(int domain)
 {
   const struct rk3576_pd_info_s *info;
   irqstate_t flags;
-  int        ret;
+  int ret;
 
   if (domain < 0 || domain >= RK3576_PD_NDOMAINS ||
       g_rk3576_pd_info[domain].name == NULL)
@@ -783,8 +776,8 @@ int rk3576_pd_off(int domain)
 
   /* 3. Close the power gate and wait for the status. */
 
-  rk3576_pd_hiword(info->reg1 ? RK3576_PMU_PWR_GATE_SFTCON1 :
-                                RK3576_PMU_PWR_GATE_SFTCON0,
+  rk3576_pd_hiword(info->reg1 ? RK3576_PMU_PWR_GATE_SFTCON1
+                              : RK3576_PMU_PWR_GATE_SFTCON0,
                    info->pwr_mask, true);
 
   ret = rk3576_pd_wait_pwr(info, true);

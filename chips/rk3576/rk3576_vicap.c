@@ -75,7 +75,7 @@
 #include <nuttx/mutex.h>
 
 #ifdef CONFIG_RK3576_VICAP_VIDEO
-#  include <nuttx/video/imgdata.h>
+#include <nuttx/video/imgdata.h>
 #endif
 
 #include "arm64_internal.h"
@@ -98,8 +98,8 @@
 
 /* The write DMA works on 8-pixel groups, so the line stride is rounded up. */
 
-#define RK3576_VICAP_STRIDE_ALIGN 8
-#define RK3576_VICAP_ALIGN_UP(v, a) (((v) + ((a) - 1)) & ~((a) - 1))
+#define RK3576_VICAP_STRIDE_ALIGN   8
+#define RK3576_VICAP_ALIGN_UP(v, a) (((v) + ((a)-1)) & ~((a)-1))
 
 /****************************************************************************
  * Private Types
@@ -107,31 +107,31 @@
 
 struct rk3576_vicap_dev_s
 {
-  uintptr_t base;                        /* Register block base            */
-  mutex_t lock;                          /* Serialises the control path    */
-  bool initialized;                      /* rk3576_vicap_initialize() done */
-  bool configured;                       /* A valid format is programmed   */
-  volatile bool streaming;               /* Capture DMA is running         */
+  uintptr_t base;          /* Register block base            */
+  mutex_t lock;            /* Serialises the control path    */
+  bool initialized;        /* rk3576_vicap_initialize() done */
+  bool configured;         /* A valid format is programmed   */
+  volatile bool streaming; /* Capture DMA is running         */
 
-  struct rk3576_vicap_format_s fmt;      /* Active format                  */
-  uint32_t stride;                       /* Line stride, in pixels         */
-  size_t ysize;                          /* Luma / RAW plane size, bytes   */
-  size_t framesize;                      /* Whole frame size, bytes        */
+  struct rk3576_vicap_format_s fmt; /* Active format                  */
+  uint32_t stride;                  /* Line stride, in pixels         */
+  size_t ysize;                     /* Luma / RAW plane size, bytes   */
+  size_t framesize;                 /* Whole frame size, bytes        */
 
-  void *buf[RK3576_VICAP_NBUFFERS];      /* Ping-pong DMA buffers          */
-  volatile uint8_t next;                 /* Buffer the hardware fills next */
-  volatile uint32_t seq;                 /* Completed frame counter        */
+  void *buf[RK3576_VICAP_NBUFFERS]; /* Ping-pong DMA buffers          */
+  volatile uint8_t next;            /* Buffer the hardware fills next */
+  volatile uint32_t seq;            /* Completed frame counter        */
 
-  rk3576_vicap_frame_cb_t callback;      /* Frame-complete callback        */
-  void *cbarg;                           /* Callback context               */
+  rk3576_vicap_frame_cb_t callback; /* Frame-complete callback        */
+  void *cbarg;                      /* Callback context               */
 
 #ifdef CONFIG_RK3576_VICAP_VIDEO
-  struct imgdata_s data;                 /* Video stack lower half         */
-  bool extbuf;                           /* Video stack owns the buffers   */
-  uintptr_t extaddr;                     /* Externally supplied frame VA   */
-  size_t extsize;                        /* Size of that buffer, bytes     */
-  imgdata_capture_t datacb;              /* Video stack frame callback     */
-  void *dataarg;                         /* Video stack callback context   */
+  struct imgdata_s data;    /* Video stack lower half         */
+  bool extbuf;              /* Video stack owns the buffers   */
+  uintptr_t extaddr;        /* Externally supplied frame VA   */
+  size_t extsize;           /* Size of that buffer, bytes     */
+  imgdata_capture_t datacb; /* Video stack frame callback     */
+  void *dataarg;            /* Video stack callback context   */
 #endif
 };
 
@@ -142,11 +142,10 @@ struct rk3576_vicap_dev_s
 static inline uint32_t rk3576_vicap_getreg(unsigned int offset);
 static inline void rk3576_vicap_putreg(unsigned int offset, uint32_t value);
 static int rk3576_vicap_clk_init(void);
-static int rk3576_vicap_calc_geometry(
-    struct rk3576_vicap_dev_s *priv,
-    const struct rk3576_vicap_format_s *fmt);
-static uint32_t rk3576_vicap_build_for(
-    const struct rk3576_vicap_format_s *fmt);
+static int rk3576_vicap_calc_geometry(struct rk3576_vicap_dev_s *priv,
+                                      const struct rk3576_vicap_format_s *fmt);
+static uint32_t
+rk3576_vicap_build_for(const struct rk3576_vicap_format_s *fmt);
 static void rk3576_vicap_free_buffers(struct rk3576_vicap_dev_s *priv);
 static int rk3576_vicap_alloc_buffers(struct rk3576_vicap_dev_s *priv);
 static void rk3576_vicap_program_buffers(struct rk3576_vicap_dev_s *priv);
@@ -156,8 +155,7 @@ static int rk3576_vicap_interrupt(int irq, void *context, void *arg);
  * Private Data
  ****************************************************************************/
 
-static struct rk3576_vicap_dev_s g_rk3576_vicap =
-{
+static struct rk3576_vicap_dev_s g_rk3576_vicap = {
   .base = RK3576_VICAP_ADDR,
   .lock = NXMUTEX_INITIALIZER,
 };
@@ -196,11 +194,9 @@ static inline void rk3576_vicap_putreg(unsigned int offset, uint32_t value)
 
 static int rk3576_vicap_clk_init(void)
 {
-  static const char *g_gates[] =
-  {
-    "aclk_cif_en", "hclk_cif_en", "dclk_cif_en",
-    "clk_cif_i0_en", "clk_cif_i1_en", "clk_cif_i2_en",
-    "clk_cif_i3_en", "clk_cif_i4_en",
+  static const char *g_gates[] = {
+    "aclk_cif_en",   "hclk_cif_en",   "dclk_cif_en",   "clk_cif_i0_en",
+    "clk_cif_i1_en", "clk_cif_i2_en", "clk_cif_i3_en", "clk_cif_i4_en",
   };
 
   struct clk_s *clk;
@@ -245,9 +241,8 @@ static int rk3576_vicap_clk_init(void)
  *
  ****************************************************************************/
 
-static int rk3576_vicap_calc_geometry(
-    struct rk3576_vicap_dev_s *priv,
-    const struct rk3576_vicap_format_s *fmt)
+static int rk3576_vicap_calc_geometry(struct rk3576_vicap_dev_s *priv,
+                                      const struct rk3576_vicap_format_s *fmt)
 {
   uint32_t stride;
   size_t bytes_per_pixel_num;
@@ -328,8 +323,7 @@ static int rk3576_vicap_calc_geometry(
  *
  ****************************************************************************/
 
-static uint32_t rk3576_vicap_build_for(
-    const struct rk3576_vicap_format_s *fmt)
+static uint32_t rk3576_vicap_build_for(const struct rk3576_vicap_format_s *fmt)
 {
   uint32_t regval = 0;
 
@@ -353,28 +347,25 @@ static uint32_t rk3576_vicap_build_for(
 
       case RK3576_VICAP_FMT_NV16:
       case RK3576_VICAP_FMT_UYVY:
-        regval |= RK3576_CIF_FOR_INPUT_MODE_YUV |
-                  RK3576_CIF_FOR_YUV_ORDER_UYVY;
+        regval |=
+            RK3576_CIF_FOR_INPUT_MODE_YUV | RK3576_CIF_FOR_YUV_ORDER_UYVY;
         break;
 
       case RK3576_VICAP_FMT_YUYV:
-        regval |= RK3576_CIF_FOR_INPUT_MODE_YUV |
-                  RK3576_CIF_FOR_YUV_ORDER_YUYV;
+        regval |=
+            RK3576_CIF_FOR_INPUT_MODE_YUV | RK3576_CIF_FOR_YUV_ORDER_YUYV;
         break;
 
       case RK3576_VICAP_FMT_SRGGB8:
-        regval |= RK3576_CIF_FOR_INPUT_MODE_RAW |
-                  RK3576_CIF_FOR_RAW_WIDTH_8;
+        regval |= RK3576_CIF_FOR_INPUT_MODE_RAW | RK3576_CIF_FOR_RAW_WIDTH_8;
         break;
 
       case RK3576_VICAP_FMT_SRGGB10:
-        regval |= RK3576_CIF_FOR_INPUT_MODE_RAW |
-                  RK3576_CIF_FOR_RAW_WIDTH_10;
+        regval |= RK3576_CIF_FOR_INPUT_MODE_RAW | RK3576_CIF_FOR_RAW_WIDTH_10;
         break;
 
       case RK3576_VICAP_FMT_SRGGB12:
-        regval |= RK3576_CIF_FOR_INPUT_MODE_RAW |
-                  RK3576_CIF_FOR_RAW_WIDTH_12;
+        regval |= RK3576_CIF_FOR_INPUT_MODE_RAW | RK3576_CIF_FOR_RAW_WIDTH_12;
         break;
 
       default:
@@ -549,8 +540,7 @@ static int rk3576_vicap_interrupt(int irq, void *context, void *arg)
 
   if (priv->callback != NULL)
     {
-      priv->callback(priv->cbarg, priv->buf[done], priv->framesize,
-                     priv->seq);
+      priv->callback(priv->cbarg, priv->buf[done], priv->framesize, priv->seq);
     }
 
   priv->seq++;
@@ -704,8 +694,7 @@ int rk3576_vicap_set_format(const struct rk3576_vicap_format_s *fmt)
 
   /* Input / output format and frame geometry */
 
-  rk3576_vicap_putreg(RK3576_CIF_FOR_OFFSET,
-                      rk3576_vicap_build_for(fmt));
+  rk3576_vicap_putreg(RK3576_CIF_FOR_OFFSET, rk3576_vicap_build_for(fmt));
   rk3576_vicap_putreg(RK3576_CIF_VIR_LINE_WIDTH_OFFSET, priv->stride);
   rk3576_vicap_putreg(RK3576_CIF_SET_SIZE_OFFSET,
                       RK3576_CIF_SET_SIZE(fmt->width, fmt->height));
@@ -719,10 +708,10 @@ int rk3576_vicap_set_format(const struct rk3576_vicap_format_s *fmt)
                RK3576_CIF_MULTI_ID_VC_MASK;
       if (fmt->datatype != 0)
         {
-          regval |= (((uint32_t)fmt->datatype <<
-                      RK3576_CIF_MULTI_ID_DT_SHIFT) &
-                     RK3576_CIF_MULTI_ID_DT_MASK) |
-                    RK3576_CIF_MULTI_ID_EN;
+          regval |=
+              (((uint32_t)fmt->datatype << RK3576_CIF_MULTI_ID_DT_SHIFT) &
+               RK3576_CIF_MULTI_ID_DT_MASK) |
+              RK3576_CIF_MULTI_ID_EN;
         }
     }
 
@@ -767,8 +756,7 @@ size_t rk3576_vicap_get_framesize(void)
  *
  ****************************************************************************/
 
-int rk3576_vicap_start_streaming(rk3576_vicap_frame_cb_t callback,
-                                 void *arg)
+int rk3576_vicap_start_streaming(rk3576_vicap_frame_cb_t callback, void *arg)
 {
   struct rk3576_vicap_dev_s *priv = &g_rk3576_vicap;
   uint32_t regval;
@@ -814,13 +802,11 @@ int rk3576_vicap_start_streaming(rk3576_vicap_frame_cb_t callback,
   rk3576_vicap_program_buffers(priv);
 
   rk3576_vicap_putreg(RK3576_CIF_INTSTAT_OFFSET, 0xffffffff);
-  rk3576_vicap_putreg(RK3576_CIF_INTEN_OFFSET,
-                      RK3576_CIF_INT_FRAME_END |
-                      RK3576_CIF_INT_LINE_ERR |
-                      RK3576_CIF_INT_BUS_ERR);
+  rk3576_vicap_putreg(RK3576_CIF_INTEN_OFFSET, RK3576_CIF_INT_FRAME_END |
+                                                   RK3576_CIF_INT_LINE_ERR |
+                                                   RK3576_CIF_INT_BUS_ERR);
 
-  regval = RK3576_CIF_CTRL_MODE_PINGPONG |
-           RK3576_CIF_CTRL_AXI_BURST_16 |
+  regval = RK3576_CIF_CTRL_MODE_PINGPONG | RK3576_CIF_CTRL_AXI_BURST_16 |
            RK3576_CIF_CTRL_ENABLE_CAPTURE;
 
   if (priv->fmt.input == RK3576_VICAP_INPUT_CSI2)
@@ -888,27 +874,25 @@ int rk3576_vicap_stop_streaming(void)
 
 static int rk3576_vicap_data_init(struct imgdata_s *data);
 static int rk3576_vicap_data_uninit(struct imgdata_s *data);
-static int rk3576_vicap_data_setbuf(struct imgdata_s *data,
-                                    uint8_t *addr, uint32_t size);
+static int rk3576_vicap_data_setbuf(struct imgdata_s *data, uint8_t *addr,
+                                    uint32_t size);
 static int rk3576_vicap_data_validate(struct imgdata_s *data,
                                       uint8_t nr_datafmt,
                                       imgdata_format_t *datafmt,
                                       imgdata_interval_t *interval);
-static int rk3576_vicap_data_start(struct imgdata_s *data,
-                                   uint8_t nr_datafmt,
+static int rk3576_vicap_data_start(struct imgdata_s *data, uint8_t nr_datafmt,
                                    imgdata_format_t *datafmt,
                                    imgdata_interval_t *interval,
                                    imgdata_capture_t callback, void *arg);
 static int rk3576_vicap_data_stop(struct imgdata_s *data);
 
-static const struct imgdata_ops_s g_rk3576_vicap_dataops =
-{
-  .init                   = rk3576_vicap_data_init,
-  .uninit                 = rk3576_vicap_data_uninit,
-  .set_buf                = rk3576_vicap_data_setbuf,
+static const struct imgdata_ops_s g_rk3576_vicap_dataops = {
+  .init = rk3576_vicap_data_init,
+  .uninit = rk3576_vicap_data_uninit,
+  .set_buf = rk3576_vicap_data_setbuf,
   .validate_frame_setting = rk3576_vicap_data_validate,
-  .start_capture          = rk3576_vicap_data_start,
-  .stop_capture           = rk3576_vicap_data_stop,
+  .start_capture = rk3576_vicap_data_start,
+  .stop_capture = rk3576_vicap_data_stop,
 };
 
 /****************************************************************************
@@ -926,10 +910,10 @@ static void rk3576_vicap_data_fmt(struct rk3576_vicap_format_s *out,
 {
   memset(out, 0, sizeof(*out));
 
-  out->width       = datafmt->width;
-  out->height      = datafmt->height;
+  out->width = datafmt->width;
+  out->height = datafmt->height;
   out->pixelformat = datafmt->pixelformat;
-  out->input       = CONFIG_RK3576_VICAP_VIDEO_INPUT;
+  out->input = CONFIG_RK3576_VICAP_VIDEO_INPUT;
   out->vsync_active_high = true;
 }
 
@@ -947,8 +931,8 @@ static int rk3576_vicap_data_uninit(struct imgdata_s *data)
   return rk3576_vicap_stop_streaming();
 }
 
-static int rk3576_vicap_data_setbuf(struct imgdata_s *data,
-                                    uint8_t *addr, uint32_t size)
+static int rk3576_vicap_data_setbuf(struct imgdata_s *data, uint8_t *addr,
+                                    uint32_t size)
 {
   struct rk3576_vicap_dev_s *priv = &g_rk3576_vicap;
   uintptr_t phys;
@@ -961,7 +945,7 @@ static int rk3576_vicap_data_setbuf(struct imgdata_s *data,
       return -EINVAL;
     }
 
-  priv->extbuf  = true;
+  priv->extbuf = true;
   priv->extaddr = (uintptr_t)addr;
   priv->extsize = size;
 
@@ -1003,8 +987,7 @@ static int rk3576_vicap_data_validate(struct imgdata_s *data,
   return rk3576_vicap_calc_geometry(&probe, &fmt);
 }
 
-static int rk3576_vicap_data_start(struct imgdata_s *data,
-                                   uint8_t nr_datafmt,
+static int rk3576_vicap_data_start(struct imgdata_s *data, uint8_t nr_datafmt,
                                    imgdata_format_t *datafmt,
                                    imgdata_interval_t *interval,
                                    imgdata_capture_t callback, void *arg)
@@ -1038,13 +1021,12 @@ static int rk3576_vicap_data_start(struct imgdata_s *data,
 
   if (priv->extaddr == 0 || priv->extsize < priv->framesize)
     {
-      verr("ERROR: no buffer queued for a %zu-byte frame\n",
-           priv->framesize);
+      verr("ERROR: no buffer queued for a %zu-byte frame\n", priv->framesize);
       return -EINVAL;
     }
 
-  priv->fmt     = fmt;
-  priv->datacb  = callback;
+  priv->fmt = fmt;
+  priv->datacb = callback;
   priv->dataarg = arg;
 
   /* Re-point the frame base registers now that the plane split is known. */
@@ -1059,13 +1041,11 @@ static int rk3576_vicap_data_start(struct imgdata_s *data,
   rk3576_vicap_putreg(RK3576_CIF_SET_SIZE_OFFSET,
                       RK3576_CIF_SET_SIZE(fmt.width, fmt.height));
   rk3576_vicap_putreg(RK3576_CIF_INTSTAT_OFFSET, 0xffffffff);
-  rk3576_vicap_putreg(RK3576_CIF_INTEN_OFFSET,
-                      RK3576_CIF_INT_FRAME_END |
-                      RK3576_CIF_INT_LINE_ERR |
-                      RK3576_CIF_INT_BUS_ERR);
+  rk3576_vicap_putreg(RK3576_CIF_INTEN_OFFSET, RK3576_CIF_INT_FRAME_END |
+                                                   RK3576_CIF_INT_LINE_ERR |
+                                                   RK3576_CIF_INT_BUS_ERR);
 
-  regval = RK3576_CIF_CTRL_MODE_ONEFRAME |
-           RK3576_CIF_CTRL_AXI_BURST_16 |
+  regval = RK3576_CIF_CTRL_MODE_ONEFRAME | RK3576_CIF_CTRL_AXI_BURST_16 |
            RK3576_CIF_CTRL_ENABLE_CAPTURE;
 
   if (fmt.input == RK3576_VICAP_INPUT_CSI2)
@@ -1090,7 +1070,7 @@ static int rk3576_vicap_data_stop(struct imgdata_s *data)
   rk3576_vicap_putreg(RK3576_CIF_CTRL_OFFSET, 0);
   rk3576_vicap_putreg(RK3576_CIF_INTSTAT_OFFSET, 0xffffffff);
 
-  priv->datacb  = NULL;
+  priv->datacb = NULL;
   priv->dataarg = NULL;
   return OK;
 }

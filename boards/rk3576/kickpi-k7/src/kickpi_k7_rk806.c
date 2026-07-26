@@ -69,57 +69,57 @@
 
 /* RK806 register map (I2C, 8-bit register address, 8-bit data). */
 
-#define RK806_POWER_EN0             0x00  /* BUCK1..BUCK4 enables         */
-#define RK806_POWER_EN1             0x01  /* BUCK5..BUCK8 enables         */
-#define RK806_POWER_EN2             0x02  /* BUCK9, BUCK10 enables        */
-#define RK806_POWER_EN3             0x03  /* NLDO1..NLDO4 enables         */
-#define RK806_POWER_EN4             0x04  /* PLDO6, PLDO1..PLDO3 enables  */
-#define RK806_POWER_EN5             0x05  /* PLDO4, PLDO5, NLDO5 enables  */
+#define RK806_POWER_EN0       0x00 /* BUCK1..BUCK4 enables         */
+#define RK806_POWER_EN1       0x01 /* BUCK5..BUCK8 enables         */
+#define RK806_POWER_EN2       0x02 /* BUCK9, BUCK10 enables        */
+#define RK806_POWER_EN3       0x03 /* NLDO1..NLDO4 enables         */
+#define RK806_POWER_EN4       0x04 /* PLDO6, PLDO1..PLDO3 enables  */
+#define RK806_POWER_EN5       0x05 /* PLDO4, PLDO5, NLDO5 enables  */
 
-#define RK806_BUCK_ON_VSEL(n)       (0x1a + (n))  /* n = 0..9  (BUCK1..10) */
-#define RK806_NLDO_ON_VSEL(n)       (0x43 + (n))  /* n = 0..4  (NLDO1..5)  */
-#define RK806_PLDO_ON_VSEL(n)       (0x4e + (n))  /* n = 0..5  (PLDO1..6)  */
+#define RK806_BUCK_ON_VSEL(n) (0x1a + (n)) /* n = 0..9  (BUCK1..10) */
+#define RK806_NLDO_ON_VSEL(n) (0x43 + (n)) /* n = 0..4  (NLDO1..5)  */
+#define RK806_PLDO_ON_VSEL(n) (0x4e + (n)) /* n = 0..5  (PLDO1..6)  */
 
-#define RK806_CHIP_NAME             0x5a
-#define RK806_CHIP_VER              0x5b
-#define RK806_SYS_CFG1              0x5d  /* Thermal thresholds           */
-#define RK806_SYS_CFG3              0x72  /* Reset function select        */
+#define RK806_CHIP_NAME       0x5a
+#define RK806_CHIP_VER        0x5b
+#define RK806_SYS_CFG1        0x5d /* Thermal thresholds           */
+#define RK806_SYS_CFG3        0x72 /* Reset function select        */
 
 /* The POWER_ENx registers are write-mask protected: the low nibble carries
  * the enable bits for four rails, the matching high nibble bit must be set
  * for the write to take effect.
  */
 
-#define RK806_EN_WRITE_MASK_SHIFT   4
+#define RK806_EN_WRITE_MASK_SHIFT 4
 
 /* Voltage selector fields are the full 8 bits of the ON_VSEL registers. */
 
-#define RK806_VSEL_MASK             0xff
+#define RK806_VSEL_MASK 0xff
 
 /* BUCK selector ranges (RK806 datasheet, two linear segments):
  *   sel   0..160 : 0.5000 V + sel * 6.25 mV  -> 0.500 V .. 1.500 V
  *   sel 161..237 : 1.5000 V + (sel-161) * 25 mV -> 1.500 V .. 3.400 V
  */
 
-#define RK806_BUCK_R0_MIN_UV        500000
-#define RK806_BUCK_R0_STEP_UV       6250
-#define RK806_BUCK_R0_MAX_SEL       160
-#define RK806_BUCK_R1_MIN_UV        1500000
-#define RK806_BUCK_R1_STEP_UV       25000
-#define RK806_BUCK_R1_MIN_SEL       161
-#define RK806_BUCK_R1_MAX_SEL       237
-#define RK806_BUCK_MAX_UV           3400000
-#define RK806_BUCK_NVOLTAGES        (RK806_BUCK_R1_MAX_SEL + 1)
+#define RK806_BUCK_R0_MIN_UV  500000
+#define RK806_BUCK_R0_STEP_UV 6250
+#define RK806_BUCK_R0_MAX_SEL 160
+#define RK806_BUCK_R1_MIN_UV  1500000
+#define RK806_BUCK_R1_STEP_UV 25000
+#define RK806_BUCK_R1_MIN_SEL 161
+#define RK806_BUCK_R1_MAX_SEL 237
+#define RK806_BUCK_MAX_UV     3400000
+#define RK806_BUCK_NVOLTAGES  (RK806_BUCK_R1_MAX_SEL + 1)
 
 /* LDO selector range (single linear segment):
  *   sel 0..232 : 0.5 V + sel * 12.5 mV -> 0.500 V .. 3.400 V
  */
 
-#define RK806_LDO_MIN_UV            500000
-#define RK806_LDO_STEP_UV           12500
-#define RK806_LDO_MAX_SEL           232
-#define RK806_LDO_MAX_UV            3400000
-#define RK806_LDO_NVOLTAGES         (RK806_LDO_MAX_SEL + 1)
+#define RK806_LDO_MIN_UV    500000
+#define RK806_LDO_STEP_UV   12500
+#define RK806_LDO_MAX_SEL   232
+#define RK806_LDO_MAX_UV    3400000
+#define RK806_LDO_NVOLTAGES (RK806_LDO_MAX_SEL + 1)
 
 /* SYS_CFG1: hot die warning and thermal shutdown thresholds.
  * TODO: bit positions taken from the Rockchip vendor PMIC driver, not from
@@ -127,33 +127,33 @@
  * kickpi_k7_rk806_sys_config().
  */
 
-#define RK806_SYS_CFG1_HOTDIE_SHIFT     6
-#define RK806_SYS_CFG1_HOTDIE_MASK      (3 << RK806_SYS_CFG1_HOTDIE_SHIFT)
-#define RK806_SYS_CFG1_HOTDIE_115C      0
-#define RK806_SYS_CFG1_TSD_SHIFT        4
-#define RK806_SYS_CFG1_TSD_MASK         (1 << RK806_SYS_CFG1_TSD_SHIFT)
-#define RK806_SYS_CFG1_TSD_160C         1
+#define RK806_SYS_CFG1_HOTDIE_SHIFT 6
+#define RK806_SYS_CFG1_HOTDIE_MASK  (3 << RK806_SYS_CFG1_HOTDIE_SHIFT)
+#define RK806_SYS_CFG1_HOTDIE_115C  0
+#define RK806_SYS_CFG1_TSD_SHIFT    4
+#define RK806_SYS_CFG1_TSD_MASK     (1 << RK806_SYS_CFG1_TSD_SHIFT)
+#define RK806_SYS_CFG1_TSD_160C     1
 
 /* SYS_CFG3: RST_FUN selects what the reset pin / watchdog does.
  * Value 1 matches the device tree property "pmic-reset-func = <1>":
  * restart the PMIC power sequence instead of shutting down.
  */
 
-#define RK806_SYS_CFG3_RSTFUN_SHIFT     6
-#define RK806_SYS_CFG3_RSTFUN_MASK      (3 << RK806_SYS_CFG3_RSTFUN_SHIFT)
-#define KICKPI_K7_RK806_RESET_FUNC      1
+#define RK806_SYS_CFG3_RSTFUN_SHIFT 6
+#define RK806_SYS_CFG3_RSTFUN_MASK  (3 << RK806_SYS_CFG3_RSTFUN_SHIFT)
+#define KICKPI_K7_RK806_RESET_FUNC  1
 
 /* Enable ramp delay of the DVS capable bucks, from the device tree
  * "regulator-enable-ramp-delay" property (microseconds).
  */
 
-#define RK806_DVS_ENABLE_TIME_US        400
+#define RK806_DVS_ENABLE_TIME_US 400
 
 /* Voltage slew rate of the DVS capable bucks, from the device tree
  * "regulator-ramp-delay" property (microvolts per microsecond).
  */
 
-#define RK806_DVS_RAMP_DELAY            12500
+#define RK806_DVS_RAMP_DELAY 12500
 
 /****************************************************************************
  * Private Types
@@ -163,10 +163,10 @@
 
 struct kickpi_k7_rk806_rail_s
 {
-  uint8_t vsel_reg;   /* ON_VSEL register of this rail                    */
-  uint8_t en_reg;     /* POWER_ENx register holding the enable bit        */
-  uint8_t en_bit;     /* Enable bit position inside the low nibble (0..3) */
-  bool    is_buck;    /* true: buck selector table, false: LDO table      */
+  uint8_t vsel_reg; /* ON_VSEL register of this rail                    */
+  uint8_t en_reg;   /* POWER_ENx register holding the enable bit        */
+  uint8_t en_bit;   /* Enable bit position inside the low nibble (0..3) */
+  bool is_buck;     /* true: buck selector table, false: LDO table      */
 };
 
 /****************************************************************************
@@ -179,11 +179,10 @@ static int rk806_update_bits(uint8_t reg, uint8_t mask, uint8_t val);
 
 static int rk806_sel_to_uv(const struct kickpi_k7_rk806_rail_s *rail,
                            uint8_t sel);
-static int rk806_uv_to_sel(const struct kickpi_k7_rk806_rail_s *rail,
-                           int uv);
+static int rk806_uv_to_sel(const struct kickpi_k7_rk806_rail_s *rail, int uv);
 
 static const struct kickpi_k7_rk806_rail_s *
-  rk806_rail_of(struct regulator_dev_s *rdev);
+rk806_rail_of(struct regulator_dev_s *rdev);
 
 static int rk806_do_enable(const struct kickpi_k7_rk806_rail_s *rail,
                            bool enable);
@@ -208,14 +207,13 @@ static int rk806_list_voltage(struct regulator_dev_s *rdev,
 
 static struct i2c_master_s *g_rk806_i2c;
 
-static const struct regulator_ops_s g_rk806_ops =
-{
+static const struct regulator_ops_s g_rk806_ops = {
   .list_voltage = rk806_list_voltage,
-  .set_voltage  = rk806_set_voltage,
-  .get_voltage  = rk806_get_voltage,
-  .enable       = rk806_enable,
-  .disable      = rk806_disable,
-  .is_enabled   = rk806_is_enabled,
+  .set_voltage = rk806_set_voltage,
+  .get_voltage = rk806_get_voltage,
+  .enable = rk806_enable,
+  .disable = rk806_disable,
+  .is_enabled = rk806_is_enabled,
 };
 
 /* Hardware description of the 21 RK806 outputs, indexed by
@@ -227,93 +225,29 @@ static const struct regulator_ops_s g_rk806_ops =
  */
 
 static const struct kickpi_k7_rk806_rail_s
-  g_rk806_rails[RK806_ID_NREGULATORS] =
-{
-  [RK806_ID_DCDC1]  =
-    {
-      RK806_BUCK_ON_VSEL(0), RK806_POWER_EN0, 0, true
-    },
-  [RK806_ID_DCDC2]  =
-    {
-      RK806_BUCK_ON_VSEL(1), RK806_POWER_EN0, 1, true
-    },
-  [RK806_ID_DCDC3]  =
-    {
-      RK806_BUCK_ON_VSEL(2), RK806_POWER_EN0, 2, true
-    },
-  [RK806_ID_DCDC4]  =
-    {
-      RK806_BUCK_ON_VSEL(3), RK806_POWER_EN0, 3, true
-    },
-  [RK806_ID_DCDC5]  =
-    {
-      RK806_BUCK_ON_VSEL(4), RK806_POWER_EN1, 0, true
-    },
-  [RK806_ID_DCDC6]  =
-    {
-      RK806_BUCK_ON_VSEL(5), RK806_POWER_EN1, 1, true
-    },
-  [RK806_ID_DCDC7]  =
-    {
-      RK806_BUCK_ON_VSEL(6), RK806_POWER_EN1, 2, true
-    },
-  [RK806_ID_DCDC8]  =
-    {
-      RK806_BUCK_ON_VSEL(7), RK806_POWER_EN1, 3, true
-    },
-  [RK806_ID_DCDC9]  =
-    {
-      RK806_BUCK_ON_VSEL(8), RK806_POWER_EN2, 0, true
-    },
-  [RK806_ID_DCDC10] =
-    {
-      RK806_BUCK_ON_VSEL(9), RK806_POWER_EN2, 1, true
-    },
-  [RK806_ID_NLDO1]  =
-    {
-      RK806_NLDO_ON_VSEL(0), RK806_POWER_EN3, 0, false
-    },
-  [RK806_ID_NLDO2]  =
-    {
-      RK806_NLDO_ON_VSEL(1), RK806_POWER_EN3, 1, false
-    },
-  [RK806_ID_NLDO3]  =
-    {
-      RK806_NLDO_ON_VSEL(2), RK806_POWER_EN3, 2, false
-    },
-  [RK806_ID_NLDO4]  =
-    {
-      RK806_NLDO_ON_VSEL(3), RK806_POWER_EN3, 3, false
-    },
-  [RK806_ID_NLDO5]  =
-    {
-      RK806_NLDO_ON_VSEL(4), RK806_POWER_EN5, 2, false
-    },
-  [RK806_ID_PLDO1]  =
-    {
-      RK806_PLDO_ON_VSEL(0), RK806_POWER_EN4, 1, false
-    },
-  [RK806_ID_PLDO2]  =
-    {
-      RK806_PLDO_ON_VSEL(1), RK806_POWER_EN4, 2, false
-    },
-  [RK806_ID_PLDO3]  =
-    {
-      RK806_PLDO_ON_VSEL(2), RK806_POWER_EN4, 3, false
-    },
-  [RK806_ID_PLDO4]  =
-    {
-      RK806_PLDO_ON_VSEL(3), RK806_POWER_EN5, 0, false
-    },
-  [RK806_ID_PLDO5]  =
-    {
-      RK806_PLDO_ON_VSEL(4), RK806_POWER_EN5, 1, false
-    },
-  [RK806_ID_PLDO6]  =
-    {
-      RK806_PLDO_ON_VSEL(5), RK806_POWER_EN4, 0, false
-    },
-};
+    g_rk806_rails[RK806_ID_NREGULATORS] = {
+      [RK806_ID_DCDC1] = { RK806_BUCK_ON_VSEL(0), RK806_POWER_EN0, 0, true },
+      [RK806_ID_DCDC2] = { RK806_BUCK_ON_VSEL(1), RK806_POWER_EN0, 1, true },
+      [RK806_ID_DCDC3] = { RK806_BUCK_ON_VSEL(2), RK806_POWER_EN0, 2, true },
+      [RK806_ID_DCDC4] = { RK806_BUCK_ON_VSEL(3), RK806_POWER_EN0, 3, true },
+      [RK806_ID_DCDC5] = { RK806_BUCK_ON_VSEL(4), RK806_POWER_EN1, 0, true },
+      [RK806_ID_DCDC6] = { RK806_BUCK_ON_VSEL(5), RK806_POWER_EN1, 1, true },
+      [RK806_ID_DCDC7] = { RK806_BUCK_ON_VSEL(6), RK806_POWER_EN1, 2, true },
+      [RK806_ID_DCDC8] = { RK806_BUCK_ON_VSEL(7), RK806_POWER_EN1, 3, true },
+      [RK806_ID_DCDC9] = { RK806_BUCK_ON_VSEL(8), RK806_POWER_EN2, 0, true },
+      [RK806_ID_DCDC10] = { RK806_BUCK_ON_VSEL(9), RK806_POWER_EN2, 1, true },
+      [RK806_ID_NLDO1] = { RK806_NLDO_ON_VSEL(0), RK806_POWER_EN3, 0, false },
+      [RK806_ID_NLDO2] = { RK806_NLDO_ON_VSEL(1), RK806_POWER_EN3, 1, false },
+      [RK806_ID_NLDO3] = { RK806_NLDO_ON_VSEL(2), RK806_POWER_EN3, 2, false },
+      [RK806_ID_NLDO4] = { RK806_NLDO_ON_VSEL(3), RK806_POWER_EN3, 3, false },
+      [RK806_ID_NLDO5] = { RK806_NLDO_ON_VSEL(4), RK806_POWER_EN5, 2, false },
+      [RK806_ID_PLDO1] = { RK806_PLDO_ON_VSEL(0), RK806_POWER_EN4, 1, false },
+      [RK806_ID_PLDO2] = { RK806_PLDO_ON_VSEL(1), RK806_POWER_EN4, 2, false },
+      [RK806_ID_PLDO3] = { RK806_PLDO_ON_VSEL(2), RK806_POWER_EN4, 3, false },
+      [RK806_ID_PLDO4] = { RK806_PLDO_ON_VSEL(3), RK806_POWER_EN5, 0, false },
+      [RK806_ID_PLDO5] = { RK806_PLDO_ON_VSEL(4), RK806_POWER_EN5, 1, false },
+      [RK806_ID_PLDO6] = { RK806_PLDO_ON_VSEL(5), RK806_POWER_EN4, 0, false },
+    };
 
 /* Board rail constraints.  Names, limits, always-on / boot-on state and
  * ramp delays are transcribed from the KICKPI-K7 vendor device tree node
@@ -590,16 +524,16 @@ static int rk806_read_reg(uint8_t reg, uint8_t *val)
     }
 
   msgs[0].frequency = KICKPI_K7_RK806_I2C_FREQ;
-  msgs[0].addr      = KICKPI_K7_RK806_I2C_ADDR;
-  msgs[0].flags     = I2C_M_NOSTOP;
-  msgs[0].buffer    = &reg;
-  msgs[0].length    = 1;
+  msgs[0].addr = KICKPI_K7_RK806_I2C_ADDR;
+  msgs[0].flags = I2C_M_NOSTOP;
+  msgs[0].buffer = &reg;
+  msgs[0].length = 1;
 
   msgs[1].frequency = KICKPI_K7_RK806_I2C_FREQ;
-  msgs[1].addr      = KICKPI_K7_RK806_I2C_ADDR;
-  msgs[1].flags     = I2C_M_READ;
-  msgs[1].buffer    = val;
-  msgs[1].length    = 1;
+  msgs[1].addr = KICKPI_K7_RK806_I2C_ADDR;
+  msgs[1].flags = I2C_M_READ;
+  msgs[1].buffer = val;
+  msgs[1].length = 1;
 
   return I2C_TRANSFER(g_rk806_i2c, msgs, 2);
 }
@@ -626,10 +560,10 @@ static int rk806_write_reg(uint8_t reg, uint8_t val)
   txbuf[1] = val;
 
   msg.frequency = KICKPI_K7_RK806_I2C_FREQ;
-  msg.addr      = KICKPI_K7_RK806_I2C_ADDR;
-  msg.flags     = 0;
-  msg.buffer    = txbuf;
-  msg.length    = sizeof(txbuf);
+  msg.addr = KICKPI_K7_RK806_I2C_ADDR;
+  msg.flags = 0;
+  msg.buffer = txbuf;
+  msg.length = sizeof(txbuf);
 
   return I2C_TRANSFER(g_rk806_i2c, &msg, 1);
 }
@@ -711,8 +645,7 @@ static int rk806_sel_to_uv(const struct kickpi_k7_rk806_rail_s *rail,
  *
  ****************************************************************************/
 
-static int rk806_uv_to_sel(const struct kickpi_k7_rk806_rail_s *rail,
-                           int uv)
+static int rk806_uv_to_sel(const struct kickpi_k7_rk806_rail_s *rail, int uv)
 {
   int sel;
 
@@ -728,8 +661,8 @@ static int rk806_uv_to_sel(const struct kickpi_k7_rk806_rail_s *rail,
           return 0;
         }
 
-      sel = (uv - RK806_LDO_MIN_UV + RK806_LDO_STEP_UV - 1) /
-            RK806_LDO_STEP_UV;
+      sel =
+          (uv - RK806_LDO_MIN_UV + RK806_LDO_STEP_UV - 1) / RK806_LDO_STEP_UV;
       return sel;
     }
 
@@ -751,7 +684,7 @@ static int rk806_uv_to_sel(const struct kickpi_k7_rk806_rail_s *rail,
 
   sel = RK806_BUCK_R1_MIN_SEL +
         (uv - RK806_BUCK_R1_MIN_UV + RK806_BUCK_R1_STEP_UV - 1) /
-        RK806_BUCK_R1_STEP_UV;
+            RK806_BUCK_R1_STEP_UV;
   return sel;
 }
 
@@ -764,7 +697,7 @@ static int rk806_uv_to_sel(const struct kickpi_k7_rk806_rail_s *rail,
  ****************************************************************************/
 
 static const struct kickpi_k7_rk806_rail_s *
-  rk806_rail_of(struct regulator_dev_s *rdev)
+rk806_rail_of(struct regulator_dev_s *rdev)
 {
   return (const struct kickpi_k7_rk806_rail_s *)rdev->priv;
 }
@@ -824,12 +757,11 @@ static int rk806_do_set_voltage(const struct kickpi_k7_rk806_rail_s *rail,
       return -EINVAL;
     }
 
-  ret = rk806_update_bits(rail->vsel_reg, RK806_VSEL_MASK,
-                          (uint8_t)selector);
+  ret = rk806_update_bits(rail->vsel_reg, RK806_VSEL_MASK, (uint8_t)selector);
   if (ret < 0)
     {
-      pwrerr("ERROR: RK806 vsel reg 0x%02x write failed: %d\n",
-             rail->vsel_reg, ret);
+      pwrerr("ERROR: RK806 vsel reg 0x%02x write failed: %d\n", rail->vsel_reg,
+             ret);
       return ret;
     }
 
@@ -907,8 +839,7 @@ static int rk806_is_enabled(struct regulator_dev_s *rdev)
 static int rk806_set_voltage(struct regulator_dev_s *rdev, int min_uv,
                              int max_uv, unsigned int *selector)
 {
-  return rk806_do_set_voltage(rk806_rail_of(rdev), min_uv, max_uv,
-                              selector);
+  return rk806_do_set_voltage(rk806_rail_of(rdev), min_uv, max_uv, selector);
 }
 
 /****************************************************************************
@@ -997,8 +928,8 @@ int kickpi_k7_rk806_initialize(struct i2c_master_s *i2c)
       return ret;
     }
 
-  pwrinfo("RK806 PMIC detected: chip name 0x%02x version 0x%02x\n",
-          chip_name, chip_ver);
+  pwrinfo("RK806 PMIC detected: chip name 0x%02x version 0x%02x\n", chip_name,
+          chip_ver);
 
   /* Register every rail with the regulator framework.  A single failing
    * rail must not abort the others: the SoC is already running off these
@@ -1019,8 +950,8 @@ int kickpi_k7_rk806_initialize(struct i2c_master_s *i2c)
       registered++;
     }
 
-  pwrinfo("RK806: %d/%d regulators registered\n",
-          registered, RK806_ID_NREGULATORS);
+  pwrinfo("RK806: %d/%d regulators registered\n", registered,
+          RK806_ID_NREGULATORS);
 
   return registered > 0 ? OK : -ENODEV;
 }
@@ -1041,8 +972,7 @@ int kickpi_k7_rk806_set_voltage_uv(int id, int uv)
       return -EINVAL;
     }
 
-  if (uv < (int)g_rk806_desc[id].min_uv ||
-      uv > (int)g_rk806_desc[id].max_uv)
+  if (uv < (int)g_rk806_desc[id].min_uv || uv > (int)g_rk806_desc[id].max_uv)
     {
       pwrerr("ERROR: %s: %d uV outside board limits [%u, %u]\n",
              g_rk806_desc[id].name, uv, g_rk806_desc[id].min_uv,
@@ -1122,8 +1052,8 @@ int kickpi_k7_rk806_sys_config(void)
   int ret;
 
   ret = rk806_update_bits(RK806_SYS_CFG3, RK806_SYS_CFG3_RSTFUN_MASK,
-                          KICKPI_K7_RK806_RESET_FUNC <<
-                          RK806_SYS_CFG3_RSTFUN_SHIFT);
+                          KICKPI_K7_RK806_RESET_FUNC
+                              << RK806_SYS_CFG3_RSTFUN_SHIFT);
   if (ret < 0)
     {
       pwrerr("ERROR: RK806 SYS_CFG3 write failed: %d\n", ret);
@@ -1135,13 +1065,10 @@ int kickpi_k7_rk806_sys_config(void)
    * shutdown_temperture_threshold = <160>.
    */
 
-  ret = rk806_update_bits(RK806_SYS_CFG1,
-                          RK806_SYS_CFG1_HOTDIE_MASK |
-                          RK806_SYS_CFG1_TSD_MASK,
-                          (RK806_SYS_CFG1_HOTDIE_115C <<
-                           RK806_SYS_CFG1_HOTDIE_SHIFT) |
-                          (RK806_SYS_CFG1_TSD_160C <<
-                           RK806_SYS_CFG1_TSD_SHIFT));
+  ret = rk806_update_bits(
+      RK806_SYS_CFG1, RK806_SYS_CFG1_HOTDIE_MASK | RK806_SYS_CFG1_TSD_MASK,
+      (RK806_SYS_CFG1_HOTDIE_115C << RK806_SYS_CFG1_HOTDIE_SHIFT) |
+          (RK806_SYS_CFG1_TSD_160C << RK806_SYS_CFG1_TSD_SHIFT));
   if (ret < 0)
     {
       pwrerr("ERROR: RK806 SYS_CFG1 write failed: %d\n", ret);

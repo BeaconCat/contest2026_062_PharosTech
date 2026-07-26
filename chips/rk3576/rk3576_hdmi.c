@@ -134,22 +134,22 @@
 
 /* AVI byte 1: RGB output, active format information valid, no bar data */
 
-#define RK3576_HDMI_AVI_Y_RGB      (0x0 << 5)
-#define RK3576_HDMI_AVI_A_ACTIVE   (0x1 << 4)
-#define RK3576_HDMI_AVI_S_NONE     (0x0 << 0)
+#define RK3576_HDMI_AVI_Y_RGB    (0x0 << 5)
+#define RK3576_HDMI_AVI_A_ACTIVE (0x1 << 4)
+#define RK3576_HDMI_AVI_S_NONE   (0x0 << 0)
 
 /* AVI byte 2: colorimetry + picture aspect ratio + active format */
 
-#define RK3576_HDMI_AVI_C_NODATA   (0x0 << 6)
-#define RK3576_HDMI_AVI_M_NODATA   (0x0 << 4)
-#define RK3576_HDMI_AVI_M_4_3      (0x1 << 4)
-#define RK3576_HDMI_AVI_M_16_9     (0x2 << 4)
-#define RK3576_HDMI_AVI_R_SAME     (0x8 << 0)
+#define RK3576_HDMI_AVI_C_NODATA (0x0 << 6)
+#define RK3576_HDMI_AVI_M_NODATA (0x0 << 4)
+#define RK3576_HDMI_AVI_M_4_3    (0x1 << 4)
+#define RK3576_HDMI_AVI_M_16_9   (0x2 << 4)
+#define RK3576_HDMI_AVI_R_SAME   (0x8 << 0)
 
 /* AVI byte 4: video identification code (VIC) of the transmitted mode */
 
-#define RK3576_HDMI_VIC_NONE   0
-#define RK3576_HDMI_VIC_720P60 4
+#define RK3576_HDMI_VIC_NONE    0
+#define RK3576_HDMI_VIC_720P60  4
 #define RK3576_HDMI_VIC_1080P60 16
 
 /* Audio clock regeneration: the "N" values recommended by the HDMI
@@ -179,21 +179,21 @@ struct rk3576_hdmi_ropll_s
 
 struct rk3576_hdmi_dev_s
 {
-  bool inited;                      /* rk3576_hdmi_initialize() done      */
-  bool enabled;                     /* TMDS output running                */
-  bool hpd;                         /* Latest hot-plug detect level       */
-  uint32_t pixclk;                  /* Pixel clock of the active mode     */
+  bool inited;                       /* rk3576_hdmi_initialize() done      */
+  bool enabled;                      /* TMDS output running                */
+  bool hpd;                          /* Latest hot-plug detect level       */
+  uint32_t pixclk;                   /* Pixel clock of the active mode     */
   struct rk3576_vop_timing_s timing; /* Active mode                       */
-  struct clk_s *pclk;               /* Controller APB clock               */
-  struct clk_s *hclk;               /* VO1 AHB clock                      */
-  struct clk_s *refclk;             /* hdmitx_ref                         */
-  struct clk_s *hpdclk;             /* Hot-plug detect clock              */
-  struct clk_s *earcclk;            /* eARC clock (kept on for the core)  */
-  struct clk_s *audclk;             /* Audio sampler clock                */
-  struct clk_s *phy_pclk;           /* HDPTX PHY APB clock                */
-  struct clk_s *phy_refclk;         /* HDPTX PHY reference clock          */
-  uint32_t pclk_hz;                 /* Measured APB rate, for the timers  */
-  mutex_t lock;                     /* Serialises DDC and mode changes    */
+  struct clk_s *pclk;                /* Controller APB clock               */
+  struct clk_s *hclk;                /* VO1 AHB clock                      */
+  struct clk_s *refclk;              /* hdmitx_ref                         */
+  struct clk_s *hpdclk;              /* Hot-plug detect clock              */
+  struct clk_s *earcclk;             /* eARC clock (kept on for the core)  */
+  struct clk_s *audclk;              /* Audio sampler clock                */
+  struct clk_s *phy_pclk;            /* HDPTX PHY APB clock                */
+  struct clk_s *phy_refclk;          /* HDPTX PHY reference clock          */
+  uint32_t pclk_hz;                  /* Measured APB rate, for the timers  */
+  mutex_t lock;                      /* Serialises DDC and mode changes    */
 };
 
 /****************************************************************************
@@ -230,8 +230,8 @@ static int rk3576_hdmi_scdc_write(uint8_t offset, uint8_t value);
 static int rk3576_hdmi_scdc_setup(uint32_t pixclk);
 
 static int rk3576_hdmi_i2cm_wait(void);
-static int rk3576_hdmi_ddc_read(uint8_t slave, uint8_t segment,
-                                uint8_t offset, uint8_t *buf, size_t len);
+static int rk3576_hdmi_ddc_read(uint8_t slave, uint8_t segment, uint8_t offset,
+                                uint8_t *buf, size_t len);
 
 static int rk3576_hdmi_interrupt(int irq, void *context, void *arg);
 
@@ -257,21 +257,14 @@ struct rk3576_hdmi_phy_init_s
   uint32_t val; /* Value to write                           */
 };
 
-static const struct rk3576_hdmi_phy_init_s g_rk3576_hdmi_phy_tmds_init[] =
-{
+static const struct rk3576_hdmi_phy_init_s g_rk3576_hdmi_phy_tmds_init[] = {
   /* Select the TMDS protocol and a 40-bit parallel data bus (10 bits per
    * lane per pixel clock, four pixel clocks per parallel word).
    */
 
-  {
-    RK3576_HDPTX_LNTOP_REG0200, RK3576_HDPTX_LNTOP_PROT_TMDS
-  },
-  {
-    RK3576_HDPTX_LNTOP_REG0206, RK3576_HDPTX_LNTOP_WIDTH_40BIT
-  },
-  {
-    RK3576_HDPTX_LNTOP_REG0207, RK3576_HDPTX_LNTOP_WIDTH_40BIT
-  },
+  { RK3576_HDPTX_LNTOP_REG0200, RK3576_HDPTX_LNTOP_PROT_TMDS },
+  { RK3576_HDPTX_LNTOP_REG0206, RK3576_HDPTX_LNTOP_WIDTH_40BIT },
+  { RK3576_HDPTX_LNTOP_REG0207, RK3576_HDPTX_LNTOP_WIDTH_40BIT },
 };
 
 /****************************************************************************
@@ -371,8 +364,7 @@ static inline uint32_t rk3576_hdmi_grf_getreg(uintptr_t base, uint32_t off)
 static int rk3576_hdmi_clk_init(void)
 {
   struct rk3576_hdmi_dev_s *priv = &g_rk3576_hdmi;
-  static const char *const names[] =
-  {
+  static const char *const names[] = {
     "pclk_hdmitx0_en",     /* controller APB                              */
     "hclk_vo1_en",         /* VO1 AHB, parent bus of the HDMI TX          */
     "clk_hdmitx0_ref_en",  /* hdmitx_ref, core reference                  */
@@ -383,10 +375,9 @@ static int rk3576_hdmi_clk_init(void)
     "clk_hdptx0_ref_en",   /* PHY reference (24 MHz crystal)              */
   };
 
-  struct clk_s **slots[] =
-  {
-    &priv->pclk,    &priv->hclk,     &priv->refclk,   &priv->hpdclk,
-    &priv->earcclk, &priv->audclk,   &priv->phy_pclk, &priv->phy_refclk,
+  struct clk_s **slots[] = {
+    &priv->pclk,    &priv->hclk,   &priv->refclk,   &priv->hpdclk,
+    &priv->earcclk, &priv->audclk, &priv->phy_pclk, &priv->phy_refclk,
   };
 
   unsigned int i;
@@ -565,12 +556,11 @@ static void rk3576_hdmi_phy_power_off(void)
 {
   rk3576_hdmi_phy_lane_enable(false);
 
-  rk3576_hdmi_phy_modreg(RK3576_HDPTX_CMN_REG0008,
-                         RK3576_HDPTX_CMN_ROPLL_EN, 0);
+  rk3576_hdmi_phy_modreg(RK3576_HDPTX_CMN_REG0008, RK3576_HDPTX_CMN_ROPLL_EN,
+                         0);
 
   rk3576_hdmi_grf_putreg(RK3576_HDPTXPHY_GRF_ADDR, RK3576_HDPTXPHY_GRF_CON0,
-                         RK3576_HDPTXPHY_I_PLL_EN |
-                             RK3576_HDPTXPHY_I_BIAS_EN |
+                         RK3576_HDPTXPHY_I_PLL_EN | RK3576_HDPTXPHY_I_BIAS_EN |
                              RK3576_HDPTXPHY_I_BGR_EN,
                          0);
 }
@@ -635,8 +625,8 @@ static int rk3576_hdmi_phy_power_on(uint32_t pixclk)
       return ret;
     }
 
-  ginfo("HDMI: PHY %" PRIu32 " Hz pixclk -> refdiv %" PRIu32
-        " mdiv %" PRIu32 " sdiv %" PRIu32 " num %" PRIu32 "\n",
+  ginfo("HDMI: PHY %" PRIu32 " Hz pixclk -> refdiv %" PRIu32 " mdiv %" PRIu32
+        " sdiv %" PRIu32 " num %" PRIu32 "\n",
         pixclk, cfg.refdiv, cfg.mdiv, cfg.sdiv, cfg.sdm_num);
 
   /* Start from a known-off state. */
@@ -645,9 +635,8 @@ static int rk3576_hdmi_phy_power_on(uint32_t pixclk)
 
   /* Protocol / bus width common setup. */
 
-  for (i = 0;
-       i < sizeof(g_rk3576_hdmi_phy_tmds_init) /
-               sizeof(g_rk3576_hdmi_phy_tmds_init[0]);
+  for (i = 0; i < sizeof(g_rk3576_hdmi_phy_tmds_init) /
+                      sizeof(g_rk3576_hdmi_phy_tmds_init[0]);
        i++)
     {
       rk3576_hdmi_phy_putreg(g_rk3576_hdmi_phy_tmds_init[i].off,
@@ -660,10 +649,10 @@ static int rk3576_hdmi_phy_power_on(uint32_t pixclk)
 
   rk3576_hdmi_phy_putreg(RK3576_HDPTX_CMN_ROPLL_PMS_MDIV, cfg.mdiv);
   rk3576_hdmi_phy_putreg(RK3576_HDPTX_CMN_ROPLL_PMS_MDIV_AFC, cfg.mdiv);
-  rk3576_hdmi_phy_putreg(RK3576_HDPTX_CMN_ROPLL_PMS_PDIV,
-                         (1u << RK3576_HDPTX_CMN_ROPLL_PDIV_SHIFT) |
-                             (cfg.refdiv &
-                              RK3576_HDPTX_CMN_ROPLL_REFDIV_MASK));
+  rk3576_hdmi_phy_putreg(
+      RK3576_HDPTX_CMN_ROPLL_PMS_PDIV,
+      (1u << RK3576_HDPTX_CMN_ROPLL_PDIV_SHIFT) |
+          (cfg.refdiv & RK3576_HDPTX_CMN_ROPLL_REFDIV_MASK));
 
   /* SDIV is encoded as the power-of-two exponent. */
 
@@ -706,14 +695,11 @@ static int rk3576_hdmi_phy_power_on(uint32_t pixclk)
   /* Bandgap, bias, then PLL, via the PHY GRF. */
 
   rk3576_hdmi_grf_putreg(RK3576_HDPTXPHY_GRF_ADDR, RK3576_HDPTXPHY_GRF_CON0,
-                         RK3576_HDPTXPHY_I_BGR_EN |
-                             RK3576_HDPTXPHY_I_BIAS_EN,
-                         RK3576_HDPTXPHY_I_BGR_EN |
-                             RK3576_HDPTXPHY_I_BIAS_EN);
+                         RK3576_HDPTXPHY_I_BGR_EN | RK3576_HDPTXPHY_I_BIAS_EN,
+                         RK3576_HDPTXPHY_I_BGR_EN | RK3576_HDPTXPHY_I_BIAS_EN);
   up_udelay(10);
   rk3576_hdmi_grf_putreg(RK3576_HDPTXPHY_GRF_ADDR, RK3576_HDPTXPHY_GRF_CON0,
-                         RK3576_HDPTXPHY_I_PLL_EN,
-                         RK3576_HDPTXPHY_I_PLL_EN);
+                         RK3576_HDPTXPHY_I_PLL_EN, RK3576_HDPTXPHY_I_PLL_EN);
 
   for (elapsed = 0; elapsed < RK3576_HDMI_PLL_LOCK_TIMEOUT_US;
        elapsed += RK3576_HDMI_POLL_STEP_US)
@@ -803,8 +789,7 @@ static void rk3576_hdmi_set_video_mode(const struct rk3576_vop_timing_s *t)
 
   rk3576_hdmi_putreg(RK3576_HDMI_VIDEO_INTERFACE_CONFIG1,
                      ((uint32_t)t->hact << RK3576_HDMI_VID_HACTIVE_SHIFT) |
-                         ((uint32_t)t->vact
-                          << RK3576_HDMI_VID_VACTIVE_SHIFT));
+                         ((uint32_t)t->vact << RK3576_HDMI_VID_VACTIVE_SHIFT));
 
   rk3576_hdmi_putreg(RK3576_HDMI_VIDEO_INTERFACE_CONFIG2,
                      (hblank << RK3576_HDMI_VID_HBLANK_SHIFT) |
@@ -812,8 +797,7 @@ static void rk3576_hdmi_set_video_mode(const struct rk3576_vop_timing_s *t)
 
   /* HDMI mode (not DVI): required for InfoFrames and audio. */
 
-  rk3576_hdmi_modreg(RK3576_HDMI_LINK_CONFIG0,
-                     RK3576_HDMI_LINK_OPMODE_DVI, 0);
+  rk3576_hdmi_modreg(RK3576_HDMI_LINK_CONFIG0, RK3576_HDMI_LINK_OPMODE_DVI, 0);
 }
 
 /****************************************************************************
@@ -964,10 +948,10 @@ static int rk3576_hdmi_scdc_write(uint8_t offset, uint8_t value)
   rk3576_hdmi_putreg(RK3576_HDMI_MAINUNIT_1_INT_CLEAR,
                      RK3576_HDMI_I2CM_IRQ_ALL);
 
-  rk3576_hdmi_putreg(RK3576_HDMI_I2CM_INTERFACE_CONTROL1,
-                     ((uint32_t)RK3576_HDMI_SCDC_ADDR
-                      << RK3576_HDMI_I2CM_SLVADDR_SHIFT) |
-                         ((uint32_t)offset << RK3576_HDMI_I2CM_ADDR_SHIFT));
+  rk3576_hdmi_putreg(
+      RK3576_HDMI_I2CM_INTERFACE_CONTROL1,
+      ((uint32_t)RK3576_HDMI_SCDC_ADDR << RK3576_HDMI_I2CM_SLVADDR_SHIFT) |
+          ((uint32_t)offset << RK3576_HDMI_I2CM_ADDR_SHIFT));
 
   rk3576_hdmi_putreg(RK3576_HDMI_I2CM_INTERFACE_WRDATA0, value);
 
@@ -1017,13 +1001,11 @@ static int rk3576_hdmi_scdc_setup(uint32_t pixclk)
 
   if (high_tmds)
     {
-      rk3576_hdmi_modreg(RK3576_HDMI_SCRAMB_CONFIG0, 0,
-                         RK3576_HDMI_SCRAMB_EN);
+      rk3576_hdmi_modreg(RK3576_HDMI_SCRAMB_CONFIG0, 0, RK3576_HDMI_SCRAMB_EN);
     }
   else
     {
-      rk3576_hdmi_modreg(RK3576_HDMI_SCRAMB_CONFIG0,
-                         RK3576_HDMI_SCRAMB_EN, 0);
+      rk3576_hdmi_modreg(RK3576_HDMI_SCRAMB_CONFIG0, RK3576_HDMI_SCRAMB_EN, 0);
     }
 
   return ret;
@@ -1096,8 +1078,8 @@ static int rk3576_hdmi_i2cm_wait(void)
  *
  ****************************************************************************/
 
-static int rk3576_hdmi_ddc_read(uint8_t slave, uint8_t segment,
-                                uint8_t offset, uint8_t *buf, size_t len)
+static int rk3576_hdmi_ddc_read(uint8_t slave, uint8_t segment, uint8_t offset,
+                                uint8_t *buf, size_t len)
 {
   size_t done = 0;
 
@@ -1127,11 +1109,11 @@ static int rk3576_hdmi_ddc_read(uint8_t slave, uint8_t segment,
 
       /* NBYTES is encoded as "bytes - 1". */
 
-      rk3576_hdmi_putreg(RK3576_HDMI_I2CM_INTERFACE_CONTROL0,
-                         (segment != 0 ? RK3576_HDMI_I2CM_WR_EXT_READ
-                                       : RK3576_HDMI_I2CM_WR_READ) |
-                             ((uint32_t)(chunk - 1)
-                              << RK3576_HDMI_I2CM_NBYTES_SHIFT));
+      rk3576_hdmi_putreg(
+          RK3576_HDMI_I2CM_INTERFACE_CONTROL0,
+          (segment != 0 ? RK3576_HDMI_I2CM_WR_EXT_READ
+                        : RK3576_HDMI_I2CM_WR_READ) |
+              ((uint32_t)(chunk - 1) << RK3576_HDMI_I2CM_NBYTES_SHIFT));
 
       rk3576_hdmi_putreg(RK3576_HDMI_I2CM_CONTROL0, RK3576_HDMI_I2CM_EXECUTE);
 
@@ -1171,8 +1153,8 @@ static int rk3576_hdmi_interrupt(int irq, void *context, void *arg)
   UNUSED(irq);
   UNUSED(context);
 
-  status = rk3576_hdmi_grf_getreg(RK3576_VO1_GRF_ADDR,
-                                  RK3576_VO1_GRF_SOC_STATUS0);
+  status =
+      rk3576_hdmi_grf_getreg(RK3576_VO1_GRF_ADDR, RK3576_VO1_GRF_SOC_STATUS0);
   priv->hpd = (status & RK3576_VO1_GRF_HDMI_HPD_LEVEL) != 0;
 
   rk3576_hdmi_putreg(RK3576_HDMI_MAINUNIT_0_INT_CLEAR, UINT32_MAX);
@@ -1235,8 +1217,7 @@ int rk3576_hdmi_initialize(void)
   rk3576_hdmi_putreg(RK3576_HDMI_I2CM_CONFIG0, 0);
   rk3576_hdmi_modreg(RK3576_HDMI_I2CM_INTERFACE_CONTROL0, 0,
                      RK3576_HDMI_I2CM_FM_EN);
-  rk3576_hdmi_modreg(RK3576_HDMI_SCDC_CONFIG0, 0,
-                     RK3576_HDMI_SCDC_I2C_FM_EN);
+  rk3576_hdmi_modreg(RK3576_HDMI_SCDC_CONFIG0, 0, RK3576_HDMI_SCDC_I2C_FM_EN);
 
   /* Sample the initial hot-plug state, then unmask the HPD interrupt. */
 
@@ -1328,8 +1309,7 @@ int rk3576_hdmi_set_mode(const struct rk3576_vop_timing_s *timing)
        * programmed by the next set_mode after hot plug.
        */
 
-      rk3576_hdmi_modreg(RK3576_HDMI_SCRAMB_CONFIG0, 0,
-                         RK3576_HDMI_SCRAMB_EN);
+      rk3576_hdmi_modreg(RK3576_HDMI_SCRAMB_CONFIG0, 0, RK3576_HDMI_SCRAMB_EN);
     }
 
   rk3576_hdmi_avi_infoframe(timing);
@@ -1537,11 +1517,11 @@ int rk3576_hdmi_audio_config(uint32_t samplerate, uint8_t channels,
 
   /* I2S input, standard format, from SAI6. */
 
-  rk3576_hdmi_putreg(RK3576_HDMI_AUDIO_INTERFACE_CONFIG0,
-                     RK3576_HDMI_AUD_IFACE_I2S | RK3576_HDMI_AUD_I2S_MODE_STD |
-                         ((uint32_t)bits << RK3576_HDMI_AUD_WIDTH_SHIFT) |
-                         ((uint32_t)(channels - 1)
-                          << RK3576_HDMI_AUD_CHANNELS_SHIFT));
+  rk3576_hdmi_putreg(
+      RK3576_HDMI_AUDIO_INTERFACE_CONFIG0,
+      RK3576_HDMI_AUD_IFACE_I2S | RK3576_HDMI_AUD_I2S_MODE_STD |
+          ((uint32_t)bits << RK3576_HDMI_AUD_WIDTH_SHIFT) |
+          ((uint32_t)(channels - 1) << RK3576_HDMI_AUD_CHANNELS_SHIFT));
 
   rk3576_hdmi_putreg(RK3576_HDMI_AUDPKT_ACR_CONFIG0,
                      (n << RK3576_HDMI_AUDPKT_ACR_N_SHIFT) &
@@ -1579,8 +1559,7 @@ int rk3576_hdmi_audio_config(uint32_t samplerate, uint8_t channels,
 
   nxmutex_unlock(&priv->lock);
 
-  ginfo("HDMI: audio %" PRIu32 " Hz, %u ch, %u bit, N %" PRIu32
-        ", CTS %llu\n",
+  ginfo("HDMI: audio %" PRIu32 " Hz, %u ch, %u bit, N %" PRIu32 ", CTS %llu\n",
         samplerate, channels, bits, n, (unsigned long long)cts);
   return OK;
 }

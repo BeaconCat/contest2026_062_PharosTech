@@ -118,16 +118,16 @@ struct rk3576_spi_desc_s
 
 struct rk3576_spi_priv_s
 {
-  struct spi_dev_s dev;  /* Base class (must be first)               */
-  uintptr_t base;        /* Controller register base                 */
-  int port;              /* Controller index (0..4)                  */
-  uint32_t clkin;        /* Functional clock into BAUDR (Hz)         */
-  uint32_t frequency;    /* Requested bus frequency (Hz)             */
-  uint32_t actual;       /* Frequency the divider actually yields    */
-  uint8_t nbits;         /* Frame width in bits (4, 8 or 16)         */
-  uint8_t mode;          /* enum spi_mode_e currently programmed     */
-  bool initialized;      /* True once the port has been set up       */
-  mutex_t lock;          /* Bus arbitration for SPI_LOCK()           */
+  struct spi_dev_s dev; /* Base class (must be first)               */
+  uintptr_t base;       /* Controller register base                 */
+  int port;             /* Controller index (0..4)                  */
+  uint32_t clkin;       /* Functional clock into BAUDR (Hz)         */
+  uint32_t frequency;   /* Requested bus frequency (Hz)             */
+  uint32_t actual;      /* Frequency the divider actually yields    */
+  uint8_t nbits;        /* Frame width in bits (4, 8 or 16)         */
+  uint8_t mode;         /* enum spi_mode_e currently programmed     */
+  bool initialized;     /* True once the port has been set up       */
+  mutex_t lock;         /* Bus arbitration for SPI_LOCK()           */
 };
 
 /****************************************************************************
@@ -144,8 +144,7 @@ static void rk3576_spi_setmode(struct spi_dev_s *dev, enum spi_mode_e mode);
 static void rk3576_spi_setbits(struct spi_dev_s *dev, int nbits);
 static uint8_t rk3576_spi_status(struct spi_dev_s *dev, uint32_t devid);
 #ifdef CONFIG_SPI_CMDDATA
-static int rk3576_spi_cmddata(struct spi_dev_s *dev, uint32_t devid,
-                              bool cmd);
+static int rk3576_spi_cmddata(struct spi_dev_s *dev, uint32_t devid, bool cmd);
 #endif
 static uint32_t rk3576_spi_send(struct spi_dev_s *dev, uint32_t wd);
 #ifdef CONFIG_SPI_EXCHANGE
@@ -162,42 +161,40 @@ static void rk3576_spi_recvblock(struct spi_dev_s *dev, void *rxbuffer,
  * Private Data
  ****************************************************************************/
 
-static const struct spi_ops_s g_rk3576_spi_ops =
-{
-  .lock         = rk3576_spi_lock,
-  .select       = rk3576_spi_select,
+static const struct spi_ops_s g_rk3576_spi_ops = {
+  .lock = rk3576_spi_lock,
+  .select = rk3576_spi_select,
   .setfrequency = rk3576_spi_setfrequency,
-  .setmode      = rk3576_spi_setmode,
-  .setbits      = rk3576_spi_setbits,
-  .status       = rk3576_spi_status,
+  .setmode = rk3576_spi_setmode,
+  .setbits = rk3576_spi_setbits,
+  .status = rk3576_spi_status,
 #ifdef CONFIG_SPI_CMDDATA
-  .cmddata      = rk3576_spi_cmddata,
+  .cmddata = rk3576_spi_cmddata,
 #endif
-  .send         = rk3576_spi_send,
+  .send = rk3576_spi_send,
 #ifdef CONFIG_SPI_EXCHANGE
-  .exchange     = rk3576_spi_exchange,
+  .exchange = rk3576_spi_exchange,
 #else
-  .sndblock     = rk3576_spi_sndblock,
-  .recvblock    = rk3576_spi_recvblock,
+  .sndblock = rk3576_spi_sndblock,
+  .recvblock = rk3576_spi_recvblock,
 #endif
 };
 
-static const struct rk3576_spi_desc_s g_rk3576_spi_desc[RK3576_SPI_NPORTS] =
-{
+static const struct rk3576_spi_desc_s g_rk3576_spi_desc[RK3576_SPI_NPORTS] = {
   {
-    .base = RK3576_SPI0_ADDR,
+      .base = RK3576_SPI0_ADDR,
   },
   {
-    .base = RK3576_SPI1_ADDR,
+      .base = RK3576_SPI1_ADDR,
   },
   {
-    .base = RK3576_SPI2_ADDR,
+      .base = RK3576_SPI2_ADDR,
   },
   {
-    .base = RK3576_SPI3_ADDR,
+      .base = RK3576_SPI3_ADDR,
   },
   {
-    .base = RK3576_SPI4_ADDR,
+      .base = RK3576_SPI4_ADDR,
   },
 };
 
@@ -315,8 +312,7 @@ static int rk3576_spi_clk_init(struct rk3576_spi_priv_s *priv)
   ret = clk_enable(pclk);
   if (ret < 0)
     {
-      spierr("ERROR: SPI%d: failed to enable %s: %d\n", priv->port, name,
-             ret);
+      spierr("ERROR: SPI%d: failed to enable %s: %d\n", priv->port, name, ret);
       return ret;
     }
 
@@ -336,8 +332,7 @@ static int rk3576_spi_clk_init(struct rk3576_spi_priv_s *priv)
   ret = clk_enable(fclk);
   if (ret < 0)
     {
-      spierr("ERROR: SPI%d: failed to enable %s: %d\n", priv->port, name,
-             ret);
+      spierr("ERROR: SPI%d: failed to enable %s: %d\n", priv->port, name, ret);
       return ret;
     }
 
@@ -428,10 +423,10 @@ static uint32_t rk3576_spi_setfrequency(struct spi_dev_s *dev,
   rk3576_spi_putreg(priv, RK3576_SPI_BAUDR, div);
 
   priv->frequency = frequency;
-  priv->actual    = priv->clkin / div;
+  priv->actual = priv->clkin / div;
 
-  spiinfo("SPI%d frequency %" PRIu32 " Hz -> div %" PRIu32
-          " actual %" PRIu32 " Hz\n",
+  spiinfo("SPI%d frequency %" PRIu32 " Hz -> div %" PRIu32 " actual %" PRIu32
+          " Hz\n",
           priv->port, frequency, div, priv->actual);
 
   return priv->actual;
@@ -516,7 +511,7 @@ static void rk3576_spi_setbits(struct spi_dev_s *dev, int nbits)
 
   rk3576_spi_modifyctrlr0(priv, SPI_CTRLR0_DFS_MASK | SPI_CTRLR0_BHT_8BIT,
                           (uint32_t)dfs |
-                          (nbits <= 8 ? SPI_CTRLR0_BHT_8BIT : 0));
+                              (nbits <= 8 ? SPI_CTRLR0_BHT_8BIT : 0));
 
   priv->nbits = (uint8_t)nbits;
 }
@@ -537,8 +532,7 @@ static uint8_t rk3576_spi_status(struct spi_dev_s *dev, uint32_t devid)
  ****************************************************************************/
 
 #ifdef CONFIG_SPI_CMDDATA
-static int rk3576_spi_cmddata(struct spi_dev_s *dev, uint32_t devid,
-                              bool cmd)
+static int rk3576_spi_cmddata(struct spi_dev_s *dev, uint32_t devid, bool cmd)
 {
   struct rk3576_spi_priv_s *priv = (struct rk3576_spi_priv_s *)dev;
 
@@ -570,16 +564,16 @@ static int rk3576_spi_transfer(struct rk3576_spi_priv_s *priv,
                                const void *txbuffer, void *rxbuffer,
                                size_t nwords)
 {
-  const uint8_t *tx8   = (const uint8_t *)txbuffer;
+  const uint8_t *tx8 = (const uint8_t *)txbuffer;
   const uint16_t *tx16 = (const uint16_t *)txbuffer;
-  uint8_t *rx8         = (uint8_t *)rxbuffer;
-  uint16_t *rx16       = (uint16_t *)rxbuffer;
-  bool wide            = (priv->nbits > 8);
-  size_t txcount       = 0;
-  size_t rxcount       = 0;
-  uint32_t stall       = 0;
+  uint8_t *rx8 = (uint8_t *)rxbuffer;
+  uint16_t *rx16 = (uint16_t *)rxbuffer;
+  bool wide = (priv->nbits > 8);
+  size_t txcount = 0;
+  size_t rxcount = 0;
+  uint32_t stall = 0;
   uint32_t regval;
-  int ret              = OK;
+  int ret = OK;
 
   DEBUGASSERT(nwords > 0 && nwords <= RK3576_SPI_MAX_FRAMES);
 
@@ -613,8 +607,7 @@ static int rk3576_spi_transfer(struct rk3576_spi_priv_s *priv,
        * overflow while we are busy filling the transmitter.
        */
 
-      while (txcount < nwords &&
-             (txcount - rxcount) < RK3576_SPI_FIFO_LEN &&
+      while (txcount < nwords && (txcount - rxcount) < RK3576_SPI_FIFO_LEN &&
              (rk3576_spi_getreg(priv, RK3576_SPI_SR) & SPI_SR_TF_FULL) == 0)
         {
           if (txbuffer == NULL)
@@ -654,9 +647,8 @@ static int rk3576_spi_transfer(struct rk3576_spi_priv_s *priv,
         }
       else
         {
-          while (rxcount < txcount &&
-                 (rk3576_spi_getreg(priv, RK3576_SPI_SR) &
-                  SPI_SR_RF_EMPTY) == 0)
+          while (rxcount < txcount && (rk3576_spi_getreg(priv, RK3576_SPI_SR) &
+                                       SPI_SR_RF_EMPTY) == 0)
             {
               regval = rk3576_spi_getreg(priv, RK3576_SPI_RXDR);
               if (wide)
@@ -679,11 +671,11 @@ static int rk3576_spi_transfer(struct rk3576_spi_priv_s *priv,
         }
       else if (++stall >= RK3576_SPI_NOPROGRESS_LIMIT)
         {
-          spierr("ERROR: SPI%d stalled, sr=%08" PRIx32
-                 " risr=%08" PRIx32 " tx=%zu rx=%zu of %zu\n",
+          spierr("ERROR: SPI%d stalled, sr=%08" PRIx32 " risr=%08" PRIx32
+                 " tx=%zu rx=%zu of %zu\n",
                  priv->port, rk3576_spi_getreg(priv, RK3576_SPI_SR),
-                 rk3576_spi_getreg(priv, RK3576_SPI_RISR),
-                 txcount, rxcount, nwords);
+                 rk3576_spi_getreg(priv, RK3576_SPI_RISR), txcount, rxcount,
+                 nwords);
           ret = -ETIMEDOUT;
           break;
         }
@@ -713,8 +705,8 @@ static int rk3576_spi_transfer(struct rk3576_spi_priv_s *priv,
   regval = rk3576_spi_getreg(priv, RK3576_SPI_RISR);
   if ((regval & (SPI_INT_RXOI | SPI_INT_TXOI)) != 0)
     {
-      spierr("ERROR: SPI%d FIFO overflow, risr=%08" PRIx32 "\n",
-             priv->port, regval);
+      spierr("ERROR: SPI%d FIFO overflow, risr=%08" PRIx32 "\n", priv->port,
+             regval);
       ret = -EIO;
     }
 
@@ -781,8 +773,8 @@ static uint32_t rk3576_spi_send(struct spi_dev_s *dev, uint32_t wd)
   struct rk3576_spi_priv_s *priv = (struct rk3576_spi_priv_s *)dev;
   uint16_t tx16 = (uint16_t)wd;
   uint16_t rx16 = 0;
-  uint8_t tx8   = (uint8_t)wd;
-  uint8_t rx8   = 0;
+  uint8_t tx8 = (uint8_t)wd;
+  uint8_t rx8 = 0;
   int ret;
 
   if (priv->nbits > 8)
@@ -860,7 +852,7 @@ static void rk3576_spi_hwinit(struct rk3576_spi_priv_s *priv)
 
   rk3576_spi_putreg(priv, RK3576_SPI_CTRLR0,
                     SPI_CTRLR0_FRF_SPI | SPI_CTRLR0_XFM_TR |
-                    SPI_CTRLR0_CSM_0CYCLE | SPI_CTRLR0_SSD);
+                        SPI_CTRLR0_CSM_0CYCLE | SPI_CTRLR0_SSD);
 
   rk3576_spi_putreg(priv, RK3576_SPI_SER, 0);
   rk3576_spi_putreg(priv, RK3576_SPI_IMR, 0);
@@ -889,9 +881,9 @@ static void rk3576_spi_hwinit(struct rk3576_spi_priv_s *priv)
    */
 
   priv->frequency = 0;
-  priv->actual    = 0;
-  priv->nbits     = 0;
-  priv->mode      = (uint8_t)SPIDEV_MODE3;
+  priv->actual = 0;
+  priv->nbits = 0;
+  priv->mode = (uint8_t)SPIDEV_MODE3;
 
   rk3576_spi_setfrequency(&priv->dev, RK3576_SPI_DEFAULT_HZ);
   rk3576_spi_setmode(&priv->dev, SPIDEV_MODE0);
@@ -928,8 +920,8 @@ struct spi_dev_s *rk3576_spi_initialize(int port)
     }
 
   priv->dev.ops = &g_rk3576_spi_ops;
-  priv->base    = g_rk3576_spi_desc[port].base;
-  priv->port    = port;
+  priv->base = g_rk3576_spi_desc[port].base;
+  priv->port = port;
 
   /* The clocks must be up before the first register access, and clkin must
    * be known before the first BAUDR programming in rk3576_spi_hwinit().
@@ -947,8 +939,8 @@ struct spi_dev_s *rk3576_spi_initialize(int port)
 
   priv->initialized = true;
 
-  spiinfo("SPI%d ready, base=%08" PRIxPTR " clkin=%" PRIu32 " Hz\n",
-          port, priv->base, priv->clkin);
+  spiinfo("SPI%d ready, base=%08" PRIxPTR " clkin=%" PRIu32 " Hz\n", port,
+          priv->base, priv->clkin);
 
   return &priv->dev;
 }
@@ -969,8 +961,7 @@ void weak_function rk3576_spi_bus_select(int port, uint32_t devid,
 
   if (port < 0 || port >= RK3576_SPI_NPORTS || cs >= (uint32_t)RK3576_SPI_NCS)
     {
-      spierr("ERROR: SPI%d has no native chip select %" PRIu32 "\n",
-             port, cs);
+      spierr("ERROR: SPI%d has no native chip select %" PRIu32 "\n", port, cs);
       return;
     }
 

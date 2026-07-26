@@ -75,21 +75,21 @@
 
 /* Analog registers touched during PCIe bring-up (vendor numbering). */
 
-#define RK3576_COMBPHY_PHYREG7  RK3576_COMBPHY_REG(0x07) /* SSC enable */
-#define RK3576_COMBPHY_PHYREG27 RK3576_COMBPHY_REG(0x27) /* PLL LPF trim */
-#define RK3576_COMBPHY_PHYREG29 RK3576_COMBPHY_REG(0x29) /* SU trim */
-#define RK3576_COMBPHY_PHYREG31 RK3576_COMBPHY_REG(0x1f) /* SSC spread */
-#define RK3576_COMBPHY_PHYREG33 RK3576_COMBPHY_REG(0x33) /* PLL KVCO */
-#define RK3576_COMBPHY_PHYREG44 RK3576_COMBPHY_REG(0x44) /* jitter ctrl */
+#define RK3576_COMBPHY_PHYREG7       RK3576_COMBPHY_REG(0x07) /* SSC enable */
+#define RK3576_COMBPHY_PHYREG27      RK3576_COMBPHY_REG(0x27) /* PLL LPF trim */
+#define RK3576_COMBPHY_PHYREG29      RK3576_COMBPHY_REG(0x29) /* SU trim */
+#define RK3576_COMBPHY_PHYREG31      RK3576_COMBPHY_REG(0x1f) /* SSC spread */
+#define RK3576_COMBPHY_PHYREG33      RK3576_COMBPHY_REG(0x33) /* PLL KVCO */
+#define RK3576_COMBPHY_PHYREG44      RK3576_COMBPHY_REG(0x44) /* jitter ctrl */
 
-#define RK3576_COMBPHY_SSC_EN         (1 << 4)
-#define RK3576_COMBPHY_SSC_DOWN_MASK  (3 << 4)
-#define RK3576_COMBPHY_SSC_DOWNWARD   (1 << 4)
-#define RK3576_COMBPHY_KVCO_MASK      (7 << 10)
-#define RK3576_COMBPHY_KVCO_VALUE     (2 << 10)
-#define RK3576_COMBPHY_JITTER_RANDOM  0x04
-#define RK3576_COMBPHY_PLL_LPF_TRIM   0x04
-#define RK3576_COMBPHY_SU_TRIM_100M   0x90
+#define RK3576_COMBPHY_SSC_EN        (1 << 4)
+#define RK3576_COMBPHY_SSC_DOWN_MASK (3 << 4)
+#define RK3576_COMBPHY_SSC_DOWNWARD  (1 << 4)
+#define RK3576_COMBPHY_KVCO_MASK     (7 << 10)
+#define RK3576_COMBPHY_KVCO_VALUE    (2 << 10)
+#define RK3576_COMBPHY_JITTER_RANDOM 0x04
+#define RK3576_COMBPHY_PLL_LPF_TRIM  0x04
+#define RK3576_COMBPHY_SU_TRIM_100M  0x90
 
 /* Pipe PHY GRF CON values selecting the PCIe personality.  The four CON
  * words are written wholesale (16-bit hiword mask 0xffff).
@@ -125,7 +125,7 @@
 
 /* PHY-ready polling: the vendor driver allows ~1 ms. */
 
-#define RK3576_COMBPHY_READY_US    2000
+#define RK3576_COMBPHY_READY_US     2000
 #define RK3576_COMBPHY_POLL_STEP_US 10
 
 /* Reset pulse widths (vendor sequence uses "a few microseconds"). */
@@ -158,12 +158,12 @@
 
 struct rk3576_combphy_config_s
 {
-  uintptr_t base;          /* Analog register file base */
-  uintptr_t phy_grf;       /* pipe-phy-grf syscon base */
-  uint32_t apb_rst_id;     /* combphy-apb reset id (vendor encoding) */
-  uint32_t phy_rst_id;     /* combphy reset id (vendor encoding) */
-  const char *refclk_name; /* CLK framework name of the reference clock */
-  const char *apbclk_name; /* CLK framework name of the APB clock */
+  uintptr_t base;           /* Analog register file base */
+  uintptr_t phy_grf;        /* pipe-phy-grf syscon base */
+  uint32_t apb_rst_id;      /* combphy-apb reset id (vendor encoding) */
+  uint32_t phy_rst_id;      /* combphy reset id (vendor encoding) */
+  const char *refclk_name;  /* CLK framework name of the reference clock */
+  const char *apbclk_name;  /* CLK framework name of the APB clock */
   const char *pipeclk_name; /* CLK framework name of the pipe clock */
 };
 
@@ -194,36 +194,33 @@ static int rk3576_combphy_wait_ready(struct rk3576_combphy_dev_s *dev);
  ****************************************************************************/
 
 static const struct rk3576_combphy_config_s
-    g_rk3576_combphy_config[RK3576_COMBPHY_NUM] =
-{
-  {
-    .base         = RK3576_COMBPHY0_ADDR,
-    .phy_grf      = RK3576_PIPE_PHY_GRF0_ADDR,
-    .apb_rst_id   = 0x20005,
-    .phy_rst_id   = 0x20015,
-    .refclk_name  = "clk_combphy0_ref_en",
-    .apbclk_name  = "pclk_combphy0_en",
-    .pipeclk_name = "clk_combphy0_pipe_en",
-  },
-  {
-    .base         = RK3576_COMBPHY1_ADDR,
-    .phy_grf      = RK3576_PIPE_PHY_GRF1_ADDR,
-    .apb_rst_id   = 0x20007,
-    .phy_rst_id   = 0x20018,
-    .refclk_name  = "clk_combphy1_ref_en",
-    .apbclk_name  = "pclk_combphy1_en",
-    .pipeclk_name = "clk_combphy1_pipe_en",
-  },
-};
+    g_rk3576_combphy_config[RK3576_COMBPHY_NUM] = {
+      {
+          .base = RK3576_COMBPHY0_ADDR,
+          .phy_grf = RK3576_PIPE_PHY_GRF0_ADDR,
+          .apb_rst_id = 0x20005,
+          .phy_rst_id = 0x20015,
+          .refclk_name = "clk_combphy0_ref_en",
+          .apbclk_name = "pclk_combphy0_en",
+          .pipeclk_name = "clk_combphy0_pipe_en",
+      },
+      {
+          .base = RK3576_COMBPHY1_ADDR,
+          .phy_grf = RK3576_PIPE_PHY_GRF1_ADDR,
+          .apb_rst_id = 0x20007,
+          .phy_rst_id = 0x20018,
+          .refclk_name = "clk_combphy1_ref_en",
+          .apbclk_name = "pclk_combphy1_en",
+          .pipeclk_name = "clk_combphy1_pipe_en",
+      },
+    };
 
-static struct rk3576_combphy_dev_s
-    g_rk3576_combphy_dev[RK3576_COMBPHY_NUM] =
-{
+static struct rk3576_combphy_dev_s g_rk3576_combphy_dev[RK3576_COMBPHY_NUM] = {
   {
-    .cfg = &g_rk3576_combphy_config[RK3576_COMBPHY0],
+      .cfg = &g_rk3576_combphy_config[RK3576_COMBPHY0],
   },
   {
-    .cfg = &g_rk3576_combphy_config[RK3576_COMBPHY1],
+      .cfg = &g_rk3576_combphy_config[RK3576_COMBPHY1],
   },
 };
 
@@ -354,7 +351,7 @@ static int rk3576_combphy_clk_init(struct rk3576_combphy_dev_s *dev)
   if (ret < 0)
     {
       pciwarn("WARNING: could not set %s to %u Hz: %d\n", cfg->refclk_name,
-               RK3576_COMBPHY_PCIE_REF_RATE, ret);
+              RK3576_COMBPHY_PCIE_REF_RATE, ret);
     }
 
   ret = clk_enable(clk);
@@ -405,10 +402,9 @@ static void rk3576_combphy_pcie_trim(struct rk3576_combphy_dev_s *dev)
 
   if (dev->ref_rate == RK3576_COMBPHY_REF_100MHZ)
     {
-      rk3576_combphy_grf_write(grf, RK3576_PIPE_PHY_GRF_CON1,
-                               RK3576_COMBPHY_PIPE_CLK_SHIFT,
-                               RK3576_COMBPHY_PIPE_CLK_MASK,
-                               RK3576_COMBPHY_PIPE_CLK_100M);
+      rk3576_combphy_grf_write(
+          grf, RK3576_PIPE_PHY_GRF_CON1, RK3576_COMBPHY_PIPE_CLK_SHIFT,
+          RK3576_COMBPHY_PIPE_CLK_MASK, RK3576_COMBPHY_PIPE_CLK_100M);
 
       /* PLL KVCO tuning for a 100 MHz reference. */
 
@@ -421,18 +417,15 @@ static void rk3576_combphy_pcie_trim(struct rk3576_combphy_dev_s *dev)
        * start-up trim to the values the vendor uses at 100 MHz.
        */
 
-      putreg32(RK3576_COMBPHY_JITTER_RANDOM,
-               base + RK3576_COMBPHY_PHYREG44);
-      putreg32(RK3576_COMBPHY_PLL_LPF_TRIM,
-               base + RK3576_COMBPHY_PHYREG27);
+      putreg32(RK3576_COMBPHY_JITTER_RANDOM, base + RK3576_COMBPHY_PHYREG44);
+      putreg32(RK3576_COMBPHY_PLL_LPF_TRIM, base + RK3576_COMBPHY_PHYREG27);
       putreg32(RK3576_COMBPHY_SU_TRIM_100M, base + RK3576_COMBPHY_PHYREG29);
     }
   else if (dev->ref_rate == RK3576_COMBPHY_REF_25MHZ)
     {
-      rk3576_combphy_grf_write(grf, RK3576_PIPE_PHY_GRF_CON1,
-                               RK3576_COMBPHY_PIPE_CLK_SHIFT,
-                               RK3576_COMBPHY_PIPE_CLK_MASK,
-                               RK3576_COMBPHY_PIPE_CLK_25M);
+      rk3576_combphy_grf_write(
+          grf, RK3576_PIPE_PHY_GRF_CON1, RK3576_COMBPHY_PIPE_CLK_SHIFT,
+          RK3576_COMBPHY_PIPE_CLK_MASK, RK3576_COMBPHY_PIPE_CLK_25M);
     }
   else
     {
@@ -441,7 +434,7 @@ static void rk3576_combphy_pcie_trim(struct rk3576_combphy_dev_s *dev)
        */
 
       pciwarn("WARNING: combphy reference %u Hz is not 100 MHz\n",
-               dev->ref_rate);
+              dev->ref_rate);
     }
 
   /* Finally enable spread spectrum on the transmit PLL. */
@@ -539,8 +532,7 @@ int rk3576_combphy_pcie_init(int phyid)
   ret = rk3576_combphy_wait_ready(dev);
   if (ret < 0)
     {
-      pcierr("ERROR: combphy%d not ready, grf status 0x%08" PRIx32 "\n",
-             phyid,
+      pcierr("ERROR: combphy%d not ready, grf status 0x%08" PRIx32 "\n", phyid,
              getreg32(dev->cfg->phy_grf + RK3576_PIPE_PHY_GRF_STATUS0));
       rk3576_combphy_reset_assert(dev->cfg->phy_rst_id);
       return ret;

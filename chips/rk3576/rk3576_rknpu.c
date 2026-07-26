@@ -158,8 +158,8 @@ struct rk3576_rknpu_core_s
 
 struct rk3576_rknpu_memobj_s
 {
-  void *va;     /* Allocation address, NULL when the slot is free */
-  size_t size;  /* Size the allocation was made with              */
+  void *va;    /* Allocation address, NULL when the slot is free */
+  size_t size; /* Size the allocation was made with              */
 };
 
 /* Driver state.  There is a single instance: the two cores are two
@@ -204,8 +204,7 @@ static void rk3576_rknpu_kick(struct rk3576_rknpu_core_s *core,
 static int rk3576_rknpu_wait(struct rk3576_rknpu_core_s *core,
                              uint32_t timeout_ms);
 
-static struct rk3576_rknpu_memobj_s *
-rk3576_rknpu_mem_lookup(uint32_t handle);
+static struct rk3576_rknpu_memobj_s *rk3576_rknpu_mem_lookup(uint32_t handle);
 static int rk3576_rknpu_mem_create(struct rk3576_rknpu_mem_s *arg);
 static int rk3576_rknpu_mem_map(struct rk3576_rknpu_mem_s *arg);
 static int rk3576_rknpu_mem_destroy(struct rk3576_rknpu_mem_s *arg);
@@ -222,27 +221,25 @@ static int rk3576_rknpu_fops_ioctl(struct file *filep, int cmd,
  ****************************************************************************/
 
 static const struct rk3576_rknpu_coredesc_s
-    g_rknpu_desc[RK3576_RKNPU_NCORES] =
-{
-  {
-    .base = RK3576_RKNPU0_ADDR,
-    .irq  = RK3576_IRQ_RKNN_CORE0,
-    .pd   = RK3576_PD_NPU0,
-  },
-  {
-    .base = RK3576_RKNPU1_ADDR,
-    .irq  = RK3576_IRQ_RKNN_CORE1,
-    .pd   = RK3576_PD_NPU1,
-  },
-};
+    g_rknpu_desc[RK3576_RKNPU_NCORES] = {
+      {
+          .base = RK3576_RKNPU0_ADDR,
+          .irq = RK3576_IRQ_RKNN_CORE0,
+          .pd = RK3576_PD_NPU0,
+      },
+      {
+          .base = RK3576_RKNPU1_ADDR,
+          .irq = RK3576_IRQ_RKNN_CORE1,
+          .pd = RK3576_PD_NPU1,
+      },
+    };
 
 /* Clocks the NPU needs, in dependency order: the DSU clock first because
  * it is the parent of every aclk below it.  Index 0 is kept as the DVFS
  * handle.
  */
 
-static const char * const g_rknpu_clocks[] =
-{
+static const char *const g_rknpu_clocks[] = {
   "clk_rknn_dsu0_en",   /* Core / DSU clock, parent of the aclks   */
   "hclk_rknn_root_en",  /* AHB register interface root             */
   "aclk_rknn0_en",      /* Core0 AXI                               */
@@ -254,19 +251,15 @@ static const char * const g_rknpu_clocks[] =
 
 /* The four CRU soft resets the device tree lists for npu@27700000. */
 
-static const uint32_t g_rknpu_resets[] =
-{
-  RK3576_RKNPU_RST_A0,
-  RK3576_RKNPU_RST_A1,
-  RK3576_RKNPU_RST_A_CBUF,
-  RK3576_RKNPU_RST_H_CBUF
-};
+static const uint32_t g_rknpu_resets[] = { RK3576_RKNPU_RST_A0,
+                                           RK3576_RKNPU_RST_A1,
+                                           RK3576_RKNPU_RST_A_CBUF,
+                                           RK3576_RKNPU_RST_H_CBUF };
 
 static struct rk3576_rknpu_dev_s g_rknpu;
 
-static const struct file_operations g_rk3576_rknpu_fops =
-{
-  .open  = rk3576_rknpu_fops_open,
+static const struct file_operations g_rk3576_rknpu_fops = {
+  .open = rk3576_rknpu_fops_open,
   .close = rk3576_rknpu_fops_close,
   .ioctl = rk3576_rknpu_fops_ioctl,
 };
@@ -306,8 +299,8 @@ static void rk3576_rknpu_putreg(struct rk3576_rknpu_core_s *core,
 static uintptr_t rk3576_rknpu_mmu_base(struct rk3576_rknpu_core_s *core,
                                        int bank)
 {
-  return core->desc->base + (bank == 0 ? RK3576_RKNPU_MMU0_OFFSET
-                                       : RK3576_RKNPU_MMU1_OFFSET);
+  return core->desc->base +
+         (bank == 0 ? RK3576_RKNPU_MMU0_OFFSET : RK3576_RKNPU_MMU1_OFFSET);
 }
 
 /****************************************************************************
@@ -342,8 +335,8 @@ static int rk3576_rknpu_clk_init(void)
       ret = clk_enable(clk);
       if (ret < 0)
         {
-          _err("ERROR: RKNPU: failed to enable %s: %d\n",
-               g_rknpu_clocks[i], ret);
+          _err("ERROR: RKNPU: failed to enable %s: %d\n", g_rknpu_clocks[i],
+               ret);
           return ret;
         }
 
@@ -371,8 +364,7 @@ static int rk3576_rknpu_clk_init(void)
 
 static int rk3576_rknpu_power_on(void)
 {
-  static const int g_rootpd[] =
-  {
+  static const int g_rootpd[] = {
     RK3576_PD_NPU,   /* VD_NPU voltage domain                 */
     RK3576_PD_NPUTOP /* RKNN_TOP, shared buffer, BIU, MCU     */
   };
@@ -421,12 +413,11 @@ static int rk3576_rknpu_power_on(void)
 
 static void rk3576_rknpu_rst_set(uint32_t id, bool on)
 {
-  uintptr_t reg = RK3576_CRU_ADDR +
-                  RK3576_CRU_SOFTRST_CON(RK3576_RKNPU_RST_BANK(id));
+  uintptr_t reg =
+      RK3576_CRU_ADDR + RK3576_CRU_SOFTRST_CON(RK3576_RKNPU_RST_BANK(id));
   uint32_t bit = RK3576_RKNPU_RST_BIT(id);
 
-  putreg32((UINT32_C(1) << (bit + 16)) | (on ? (UINT32_C(1) << bit) : 0),
-           reg);
+  putreg32((UINT32_C(1) << (bit + 16)) | (on ? (UINT32_C(1) << bit) : 0), reg);
 }
 
 /****************************************************************************
@@ -531,9 +522,8 @@ static int rk3576_rknpu_interrupt(int irq, void *context, void *arg)
           continue;
         }
 
-      _err("ERROR: RKNPU: MMU bank %d fault %08" PRIx32 " at %08" PRIx32
-           "\n", bank, mmustatus,
-           getreg32(mmu + RK3576_RKNPU_MMU_PAGE_FAULT_ADDR));
+      _err("ERROR: RKNPU: MMU bank %d fault %08" PRIx32 " at %08" PRIx32 "\n",
+           bank, mmustatus, getreg32(mmu + RK3576_RKNPU_MMU_PAGE_FAULT_ADDR));
 
       putreg32(mmustatus, mmu + RK3576_RKNPU_MMU_INT_CLEAR);
       putreg32(RK3576_RKNPU_MMU_CMD_PAGE_FAULT_DONE,
@@ -584,8 +574,10 @@ rk3576_rknpu_first_task(const struct rk3576_rknpu_task_s *task)
 {
   uintptr_t base = (uintptr_t)task->task_addr;
 
-  return (const struct rk3576_rknpu_hw_task_s *)
-         (base + task->task_start * RK3576_RKNPU_HW_TASK_BYTES);
+  return (
+      const struct rk3576_rknpu_hw_task_s *)(base +
+                                             task->task_start *
+                                                 RK3576_RKNPU_HW_TASK_BYTES);
 }
 
 /****************************************************************************
@@ -609,8 +601,7 @@ static int rk3576_rknpu_check(const struct rk3576_rknpu_task_s *task)
       return -EINVAL;
     }
 
-  if (task->task_number == 0 ||
-      task->task_number > RK3576_RKNPU_PC_TASK_MAX)
+  if (task->task_number == 0 || task->task_number > RK3576_RKNPU_PC_TASK_MAX)
     {
       _err("ERROR: RKNPU: bad task count %" PRIu32 "\n", task->task_number);
       return -EINVAL;
@@ -628,9 +619,8 @@ static int rk3576_rknpu_check(const struct rk3576_rknpu_task_s *task)
    * PC_DMA_BASE_ADDR is a 32-bit register.
    */
 
-  last = task->task_addr +
-         ((uint64_t)task->task_start + task->task_number) *
-         RK3576_RKNPU_HW_TASK_BYTES;
+  last = task->task_addr + ((uint64_t)task->task_start + task->task_number) *
+                               RK3576_RKNPU_HW_TASK_BYTES;
 
   if (last > RK3576_RKNPU_DMA_LIMIT)
     {
@@ -660,8 +650,8 @@ static void rk3576_rknpu_kick(struct rk3576_rknpu_core_s *core,
   uint32_t dmabase;
 
   core->intstatus = 0;
-  core->mmufault  = false;
-  core->done      = false;
+  core->mmufault = false;
+  core->done = false;
 
   /* Drain a stale post left by a previous, timed-out submission. */
 
@@ -694,14 +684,13 @@ static void rk3576_rknpu_kick(struct rk3576_rknpu_core_s *core,
 
   /* How many descriptors the engine has to walk, and where they are. */
 
-  rk3576_rknpu_putreg(core, RK3576_RKNPU_PC_TASK_CONTROL,
-                      RK3576_RKNPU_PC_TASK_MODE |
-                      (task->task_number <<
-                       RK3576_RKNPU_PC_TASK_NUMBER_SHIFT));
+  rk3576_rknpu_putreg(
+      core, RK3576_RKNPU_PC_TASK_CONTROL,
+      RK3576_RKNPU_PC_TASK_MODE |
+          (task->task_number << RK3576_RKNPU_PC_TASK_NUMBER_SHIFT));
 
-  dmabase = (uint32_t)(task->task_addr +
-                       (uint64_t)task->task_start *
-                       RK3576_RKNPU_HW_TASK_BYTES);
+  dmabase = (uint32_t)(task->task_addr + (uint64_t)task->task_start *
+                                             RK3576_RKNPU_HW_TASK_BYTES);
 
   rk3576_rknpu_putreg(core, RK3576_RKNPU_PC_DMA_BASE_ADDR, dmabase);
 
@@ -729,8 +718,7 @@ static int rk3576_rknpu_wait(struct rk3576_rknpu_core_s *core,
 {
   int ret;
 
-  ret = nxsem_tickwait_uninterruptible(&core->donesem,
-                                       MSEC2TICK(timeout_ms));
+  ret = nxsem_tickwait_uninterruptible(&core->donesem, MSEC2TICK(timeout_ms));
   if (ret < 0)
     {
       _err("ERROR: RKNPU: core at %08lx timed out, pc status %08" PRIx32
@@ -763,8 +751,7 @@ static int rk3576_rknpu_wait(struct rk3576_rknpu_core_s *core,
  *
  ****************************************************************************/
 
-static struct rk3576_rknpu_memobj_s *rk3576_rknpu_mem_lookup(
-    uint32_t handle)
+static struct rk3576_rknpu_memobj_s *rk3576_rknpu_mem_lookup(uint32_t handle)
 {
   struct rk3576_rknpu_memobj_s *obj;
 
@@ -793,8 +780,7 @@ static int rk3576_rknpu_mem_create(struct rk3576_rknpu_mem_s *arg)
   int i;
   int ret;
 
-  if (arg->flags != 0 || arg->size == 0 ||
-      arg->size >= RK3576_RKNPU_DMA_LIMIT)
+  if (arg->flags != 0 || arg->size == 0 || arg->size >= RK3576_RKNPU_DMA_LIMIT)
     {
       return -EINVAL;
     }
@@ -839,12 +825,12 @@ static int rk3576_rknpu_mem_create(struct rk3576_rknpu_mem_s *arg)
       return -EMFILE;
     }
 
-  g_rknpu.mem[i].va   = va;
+  g_rknpu.mem[i].va = va;
   g_rknpu.mem[i].size = (size_t)arg->size;
   nxmutex_unlock(&g_rknpu.memlock);
 
-  arg->handle   = (uint32_t)i + 1;
-  arg->va       = (uint64_t)(uintptr_t)va;
+  arg->handle = (uint32_t)i + 1;
+  arg->va = (uint64_t)(uintptr_t)va;
   arg->dma_addr = (uint64_t)pa;
   return OK;
 }
@@ -879,8 +865,8 @@ static int rk3576_rknpu_mem_map(struct rk3576_rknpu_mem_s *arg)
       return -ENOENT;
     }
 
-  arg->size     = obj->size;
-  arg->va       = (uint64_t)(uintptr_t)obj->va;
+  arg->size = obj->size;
+  arg->va = (uint64_t)(uintptr_t)obj->va;
   arg->dma_addr = (uint64_t)up_addrenv_va_to_pa(obj->va);
   nxmutex_unlock(&g_rknpu.memlock);
   return OK;
@@ -914,9 +900,9 @@ static int rk3576_rknpu_mem_destroy(struct rk3576_rknpu_mem_s *arg)
       return -ENOENT;
     }
 
-  va        = obj->va;
-  size      = obj->size;
-  obj->va   = NULL;
+  va = obj->va;
+  size = obj->size;
+  obj->va = NULL;
   obj->size = 0;
   nxmutex_unlock(&g_rknpu.memlock);
 
@@ -1098,8 +1084,7 @@ static int rk3576_rknpu_fops_ioctl(struct file *filep, int cmd,
         return rk3576_rknpu_mem_destroy((struct rk3576_rknpu_mem_s *)arg);
 
       case RK3576_RKNPUIOC_MEM_SYNC:
-        return rk3576_rknpu_mem_sync_ioctl(
-            (struct rk3576_rknpu_sync_s *)arg);
+        return rk3576_rknpu_mem_sync_ioctl((struct rk3576_rknpu_sync_s *)arg);
 
       default:
         return -ENOTTY;
@@ -1134,8 +1119,7 @@ int rk3576_rknpu_initialize(void)
    * that pads it differently would corrupt every job.
    */
 
-  DEBUGASSERT(RK3576_RKNPU_HW_TASK_BYTES ==
-              RK3576_RKNPU_HW_TASK_ABI_BYTES);
+  DEBUGASSERT(RK3576_RKNPU_HW_TASK_BYTES == RK3576_RKNPU_HW_TASK_ABI_BYTES);
   DEBUGASSERT(RK3576_RKNPU_NCORES_ABI == RK3576_RKNPU_NCORES);
 
   /* Power first: a gated domain reads back as zeroes and swallows
@@ -1172,10 +1156,10 @@ int rk3576_rknpu_initialize(void)
       goto err_destroy;
     }
 
-  g_rknpu.version    = rk3576_rknpu_getreg(&g_rknpu.core[0],
-                                           RK3576_RKNPU_VERSION);
-  g_rknpu.versionnum = rk3576_rknpu_getreg(&g_rknpu.core[0],
-                                           RK3576_RKNPU_VERSION_NUM);
+  g_rknpu.version =
+      rk3576_rknpu_getreg(&g_rknpu.core[0], RK3576_RKNPU_VERSION);
+  g_rknpu.versionnum =
+      rk3576_rknpu_getreg(&g_rknpu.core[0], RK3576_RKNPU_VERSION_NUM);
 
   if (g_rknpu.version == 0 || g_rknpu.version == UINT32_MAX)
     {
@@ -1196,8 +1180,8 @@ int rk3576_rknpu_initialize(void)
       ret = irq_attach(core->desc->irq, rk3576_rknpu_interrupt, core);
       if (ret < 0)
         {
-          _err("ERROR: RKNPU: irq_attach(%d) failed: %d\n",
-               core->desc->irq, ret);
+          _err("ERROR: RKNPU: irq_attach(%d) failed: %d\n", core->desc->irq,
+               ret);
           goto err_detach;
         }
 
@@ -1333,9 +1317,9 @@ int rk3576_rknpu_submit(struct rk3576_rknpu_task_s *task)
   timeout = task->timeout_ms != 0 ? task->timeout_ms
                                   : RK3576_RKNPU_DEFAULT_TIMEOUT_MS;
 
-  first   = rk3576_rknpu_first_task(task);
-  taskva  = (uintptr_t)task->task_addr +
-            task->task_start * RK3576_RKNPU_HW_TASK_BYTES;
+  first = rk3576_rknpu_first_task(task);
+  taskva = (uintptr_t)task->task_addr +
+           task->task_start * RK3576_RKNPU_HW_TASK_BYTES;
   tasklen = task->task_number * RK3576_RKNPU_HW_TASK_BYTES;
 
   memset(task->int_status, 0, sizeof(task->int_status));
@@ -1378,7 +1362,7 @@ int rk3576_rknpu_submit(struct rk3576_rknpu_task_s *task)
           result = ret;
         }
 
-      task->int_status[i]   = core->intstatus;
+      task->int_status[i] = core->intstatus;
       task->task_counter[i] =
           rk3576_rknpu_getreg(core, RK3576_RKNPU_PC_TASK_STATUS);
 

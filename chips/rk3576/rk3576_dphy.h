@@ -77,8 +77,7 @@
  *
  ****************************************************************************/
 
-int rk3576_dphy_initialize(int phy_id, uint32_t lane_rate_mbps,
-                           int num_lanes);
+int rk3576_dphy_initialize(int phy_id, uint32_t lane_rate_mbps, int num_lanes);
 
 /****************************************************************************
  * Name: rk3576_dphy_uninitialize

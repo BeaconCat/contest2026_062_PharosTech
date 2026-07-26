@@ -62,23 +62,23 @@
  */
 
 #ifndef RK3576_SPI0_ADDR
-#  define RK3576_SPI0_ADDR 0x2acf0000
+#define RK3576_SPI0_ADDR 0x2acf0000
 #endif
 #ifndef RK3576_SPI1_ADDR
-#  define RK3576_SPI1_ADDR 0x2ad00000
+#define RK3576_SPI1_ADDR 0x2ad00000
 #endif
 #ifndef RK3576_SPI2_ADDR
-#  define RK3576_SPI2_ADDR 0x2ad10000
+#define RK3576_SPI2_ADDR 0x2ad10000
 #endif
 #ifndef RK3576_SPI3_ADDR
-#  define RK3576_SPI3_ADDR 0x2ad20000
+#define RK3576_SPI3_ADDR 0x2ad20000
 #endif
 
 /* Number of controller instances and per-controller hardware limits. */
 
-#define RK3576_SPI_NPORTS    5  /* SPI0 .. SPI4                          */
-#define RK3576_SPI_NCS       2  /* Native chip selects per controller    */
-#define RK3576_SPI_FIFO_LEN  32 /* TX and RX FIFO depth, in frames       */
+#define RK3576_SPI_NPORTS   5  /* SPI0 .. SPI4                          */
+#define RK3576_SPI_NCS      2  /* Native chip selects per controller    */
+#define RK3576_SPI_FIFO_LEN 32 /* TX and RX FIFO depth, in frames       */
 
 /* Maximum number of frames in one hardware transfer.  CTRLR1 holds
  * (frames - 1) in a 16-bit field, so 0xffff frames is the ceiling; longer
@@ -121,94 +121,94 @@
 
 /* CTRLR0 (0x00) ************************************************************/
 
-#define SPI_CTRLR0_DFS_SHIFT    0 /* [1:0] Data frame size            */
-#define SPI_CTRLR0_DFS_MASK     (0x3 << SPI_CTRLR0_DFS_SHIFT)
-#define SPI_CTRLR0_DFS_4BIT     (0x0 << SPI_CTRLR0_DFS_SHIFT)
-#define SPI_CTRLR0_DFS_8BIT     (0x1 << SPI_CTRLR0_DFS_SHIFT)
-#define SPI_CTRLR0_DFS_16BIT    (0x2 << SPI_CTRLR0_DFS_SHIFT)
+#define SPI_CTRLR0_DFS_SHIFT     0 /* [1:0] Data frame size            */
+#define SPI_CTRLR0_DFS_MASK      (0x3 << SPI_CTRLR0_DFS_SHIFT)
+#define SPI_CTRLR0_DFS_4BIT      (0x0 << SPI_CTRLR0_DFS_SHIFT)
+#define SPI_CTRLR0_DFS_8BIT      (0x1 << SPI_CTRLR0_DFS_SHIFT)
+#define SPI_CTRLR0_DFS_16BIT     (0x2 << SPI_CTRLR0_DFS_SHIFT)
 
-#define SPI_CTRLR0_CFS_SHIFT    2 /* [5:2] Microwire control frame size */
-#define SPI_CTRLR0_CFS_MASK     (0xf << SPI_CTRLR0_CFS_SHIFT)
+#define SPI_CTRLR0_CFS_SHIFT     2 /* [5:2] Microwire control frame size */
+#define SPI_CTRLR0_CFS_MASK      (0xf << SPI_CTRLR0_CFS_SHIFT)
 
-#define SPI_CTRLR0_SCPH         (1 << 6)  /* Serial clock phase      */
-#define SPI_CTRLR0_SCPOL        (1 << 7)  /* Serial clock polarity   */
+#define SPI_CTRLR0_SCPH          (1 << 6) /* Serial clock phase      */
+#define SPI_CTRLR0_SCPOL         (1 << 7) /* Serial clock polarity   */
 
-#define SPI_CTRLR0_CSM_SHIFT    8 /* [9:8] Idle cycles between frames */
-#define SPI_CTRLR0_CSM_MASK     (0x3 << SPI_CTRLR0_CSM_SHIFT)
-#define SPI_CTRLR0_CSM_0CYCLE   (0x0 << SPI_CTRLR0_CSM_SHIFT)
+#define SPI_CTRLR0_CSM_SHIFT     8 /* [9:8] Idle cycles between frames */
+#define SPI_CTRLR0_CSM_MASK      (0x3 << SPI_CTRLR0_CSM_SHIFT)
+#define SPI_CTRLR0_CSM_0CYCLE    (0x0 << SPI_CTRLR0_CSM_SHIFT)
 
-#define SPI_CTRLR0_SSD          (1 << 10) /* 1 = half-cycle ss_n hold  */
-#define SPI_CTRLR0_EM_BIG       (1 << 11) /* 1 = big endian            */
-#define SPI_CTRLR0_FBM_LSB      (1 << 12) /* 1 = LSB transmitted first */
-#define SPI_CTRLR0_BHT_8BIT     (1 << 13) /* 1 = 8-bit APB FIFO access */
+#define SPI_CTRLR0_SSD           (1 << 10) /* 1 = half-cycle ss_n hold  */
+#define SPI_CTRLR0_EM_BIG        (1 << 11) /* 1 = big endian            */
+#define SPI_CTRLR0_FBM_LSB       (1 << 12) /* 1 = LSB transmitted first */
+#define SPI_CTRLR0_BHT_8BIT      (1 << 13) /* 1 = 8-bit APB FIFO access */
 
-#define SPI_CTRLR0_RSD_SHIFT    14 /* [15:14] RX sample delay, in cycles */
-#define SPI_CTRLR0_RSD_MASK     (0x3 << SPI_CTRLR0_RSD_SHIFT)
+#define SPI_CTRLR0_RSD_SHIFT     14 /* [15:14] RX sample delay, in cycles */
+#define SPI_CTRLR0_RSD_MASK      (0x3 << SPI_CTRLR0_RSD_SHIFT)
 
-#define SPI_CTRLR0_FRF_SHIFT    16 /* [17:16] Frame format */
-#define SPI_CTRLR0_FRF_MASK     (0x3 << SPI_CTRLR0_FRF_SHIFT)
-#define SPI_CTRLR0_FRF_SPI      (0x0 << SPI_CTRLR0_FRF_SHIFT) /* Motorola  */
-#define SPI_CTRLR0_FRF_SSP      (0x1 << SPI_CTRLR0_FRF_SHIFT) /* TI SSP    */
+#define SPI_CTRLR0_FRF_SHIFT     16 /* [17:16] Frame format */
+#define SPI_CTRLR0_FRF_MASK      (0x3 << SPI_CTRLR0_FRF_SHIFT)
+#define SPI_CTRLR0_FRF_SPI       (0x0 << SPI_CTRLR0_FRF_SHIFT) /* Motorola  */
+#define SPI_CTRLR0_FRF_SSP       (0x1 << SPI_CTRLR0_FRF_SHIFT) /* TI SSP    */
 #define SPI_CTRLR0_FRF_MICROWIRE (0x2 << SPI_CTRLR0_FRF_SHIFT)
 
-#define SPI_CTRLR0_XFM_SHIFT    18 /* [19:18] Transfer mode */
-#define SPI_CTRLR0_XFM_MASK     (0x3 << SPI_CTRLR0_XFM_SHIFT)
-#define SPI_CTRLR0_XFM_TR       (0x0 << SPI_CTRLR0_XFM_SHIFT) /* TX and RX */
-#define SPI_CTRLR0_XFM_TO       (0x1 << SPI_CTRLR0_XFM_SHIFT) /* TX only   */
-#define SPI_CTRLR0_XFM_RO       (0x2 << SPI_CTRLR0_XFM_SHIFT) /* RX only   */
+#define SPI_CTRLR0_XFM_SHIFT     18 /* [19:18] Transfer mode */
+#define SPI_CTRLR0_XFM_MASK      (0x3 << SPI_CTRLR0_XFM_SHIFT)
+#define SPI_CTRLR0_XFM_TR        (0x0 << SPI_CTRLR0_XFM_SHIFT) /* TX and RX */
+#define SPI_CTRLR0_XFM_TO        (0x1 << SPI_CTRLR0_XFM_SHIFT) /* TX only   */
+#define SPI_CTRLR0_XFM_RO        (0x2 << SPI_CTRLR0_XFM_SHIFT) /* RX only   */
 
-#define SPI_CTRLR0_OPM_SLAVE    (1 << 20) /* 0 = master, 1 = slave      */
-#define SPI_CTRLR0_MTM_3WIRE    (1 << 21) /* Microwire 3-wire transmit  */
-#define SPI_CTRLR0_SOI_SHIFT    23        /* [24:23] Slave output index */
-#define SPI_CTRLR0_SOI_MASK     (0x3 << SPI_CTRLR0_SOI_SHIFT)
+#define SPI_CTRLR0_OPM_SLAVE     (1 << 20) /* 0 = master, 1 = slave      */
+#define SPI_CTRLR0_MTM_3WIRE     (1 << 21) /* Microwire 3-wire transmit  */
+#define SPI_CTRLR0_SOI_SHIFT     23        /* [24:23] Slave output index */
+#define SPI_CTRLR0_SOI_MASK      (0x3 << SPI_CTRLR0_SOI_SHIFT)
 
 /* CTRLR1 (0x04): number of frames to transfer, minus one. */
 
-#define SPI_CTRLR1_NDF_MASK     0x0000ffff
+#define SPI_CTRLR1_NDF_MASK 0x0000ffff
 
 /* ENR (0x08) ***************************************************************/
 
-#define SPI_ENR_ENABLE          (1 << 0)
+#define SPI_ENR_ENABLE (1 << 0)
 
 /* SER (0x0c): one bit per native chip select. */
 
-#define SPI_SER_CS(n)           (1 << (n))
-#define SPI_SER_MASK            0x00000003
+#define SPI_SER_CS(n) (1 << (n))
+#define SPI_SER_MASK  0x00000003
 
 /* BAUDR (0x10): sclk_out = spi_clk / BAUDR.  Only even values are legal. */
 
-#define SPI_BAUDR_MIN           2
-#define SPI_BAUDR_MAX           0xfffe
+#define SPI_BAUDR_MIN 2
+#define SPI_BAUDR_MAX 0xfffe
 
 /* SR (0x24) ****************************************************************/
 
-#define SPI_SR_BUSY             (1 << 0) /* Master transfer in progress */
-#define SPI_SR_TF_FULL          (1 << 1) /* TX FIFO full                */
-#define SPI_SR_TF_EMPTY         (1 << 2) /* TX FIFO empty               */
-#define SPI_SR_RF_EMPTY         (1 << 3) /* RX FIFO empty               */
-#define SPI_SR_RF_FULL          (1 << 4) /* RX FIFO full                */
-#define SPI_SR_SLAVE_TX_BUSY    (1 << 5) /* Slave transfer in progress  */
+#define SPI_SR_BUSY          (1 << 0) /* Master transfer in progress */
+#define SPI_SR_TF_FULL       (1 << 1) /* TX FIFO full                */
+#define SPI_SR_TF_EMPTY      (1 << 2) /* TX FIFO empty               */
+#define SPI_SR_RF_EMPTY      (1 << 3) /* RX FIFO empty               */
+#define SPI_SR_RF_FULL       (1 << 4) /* RX FIFO full                */
+#define SPI_SR_SLAVE_TX_BUSY (1 << 5) /* Slave transfer in progress  */
 
 /* IMR / ISR / RISR / ICR (0x2c .. 0x38) share the same bit layout. */
 
-#define SPI_INT_TXEI            (1 << 0) /* TX FIFO empty               */
-#define SPI_INT_TXOI            (1 << 1) /* TX FIFO overflow            */
-#define SPI_INT_RXUI            (1 << 2) /* RX FIFO underflow           */
-#define SPI_INT_RXOI            (1 << 3) /* RX FIFO overflow            */
-#define SPI_INT_RXFI            (1 << 4) /* RX FIFO threshold reached   */
-#define SPI_INT_CS_INACTIVE     (1 << 6) /* ss_n went inactive          */
-#define SPI_INT_ALL             0x0000005f
+#define SPI_INT_TXEI        (1 << 0) /* TX FIFO empty               */
+#define SPI_INT_TXOI        (1 << 1) /* TX FIFO overflow            */
+#define SPI_INT_RXUI        (1 << 2) /* RX FIFO underflow           */
+#define SPI_INT_RXOI        (1 << 3) /* RX FIFO overflow            */
+#define SPI_INT_RXFI        (1 << 4) /* RX FIFO threshold reached   */
+#define SPI_INT_CS_INACTIVE (1 << 6) /* ss_n went inactive          */
+#define SPI_INT_ALL         0x0000005f
 
 /* DMACR (0x3c) *************************************************************/
 
-#define SPI_DMACR_RDE           (1 << 0) /* RX DMA enable */
-#define SPI_DMACR_TDE           (1 << 1) /* TX DMA enable */
+#define SPI_DMACR_RDE (1 << 0) /* RX DMA enable */
+#define SPI_DMACR_TDE (1 << 1) /* TX DMA enable */
 
 /* PL330 peripheral request lines for SPI4, from the vendor device tree
  * (dmas = <&dmac0 12 &dmac0 13>, dma-names = "tx", "rx").
  */
 
-#define RK3576_SPI4_DRQ_TX      12
-#define RK3576_SPI4_DRQ_RX      13
+#define RK3576_SPI4_DRQ_TX 12
+#define RK3576_SPI4_DRQ_RX 13
 
 #endif /* __ARCH_ARM64_SRC_RK3576_HARDWARE_RK3576_SPI_H */

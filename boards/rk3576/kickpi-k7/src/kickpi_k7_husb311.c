@@ -82,126 +82,122 @@
 
 /* Board resources ***********************************************************/
 
-#define HUSB311_I2C_ADDR          0x4e
-#define HUSB311_I2C_FREQUENCY     400000
+#define HUSB311_I2C_ADDR      0x4e
+#define HUSB311_I2C_FREQUENCY 400000
 
 /* ALERT line: GPIO4_D1, active low, level triggered.  Pin D1 lives in the
  * fourth eight-pin group of bank 4, hence the GPIO4_3 combined interrupt.
  */
 
-#define HUSB311_ALERT_PORT        4
-#define HUSB311_ALERT_PIN         25
-#define HUSB311_ALERT_IRQ         RK3576_IRQ_GPIO4_3
-#define HUSB311_ALERT_PINSET      (GPIO_PORT4 | GPIO_PIN_D1 | GPIO_INPUT | \
-                                   GPIO_PULLUP | GPIO_EXTI |               \
-                                   GPIO_INT_LEVEL | GPIO_INT_LOW_FALLING)
+#define HUSB311_ALERT_PORT 4
+#define HUSB311_ALERT_PIN  25
+#define HUSB311_ALERT_IRQ  RK3576_IRQ_GPIO4_3
+#define HUSB311_ALERT_PINSET                                         \
+  (GPIO_PORT4 | GPIO_PIN_D1 | GPIO_INPUT | GPIO_PULLUP | GPIO_EXTI | \
+   GPIO_INT_LEVEL | GPIO_INT_LOW_FALLING)
 
 /* Service thread ***********************************************************/
 
-#define HUSB311_THREAD_NAME       "husb311"
-#define HUSB311_THREAD_PRIO       CONFIG_KICKPI_K7_HUSB311_PRIORITY
-#define HUSB311_THREAD_STACK      CONFIG_KICKPI_K7_HUSB311_STACKSIZE
+#define HUSB311_THREAD_NAME  "husb311"
+#define HUSB311_THREAD_PRIO  CONFIG_KICKPI_K7_HUSB311_PRIORITY
+#define HUSB311_THREAD_STACK CONFIG_KICKPI_K7_HUSB311_STACKSIZE
 
 /* Worst case wakeup period.  The ALERT line drives the thread; this only
  * bounds the latency of the software timers below.
  */
 
-#define HUSB311_POLL_MS           200
+#define HUSB311_POLL_MS 200
 
 /* PD timers (USB PD r2.0 chapter 6.5), rounded to whole milliseconds */
 
-#define HUSB311_T_SENDER_RSP_MS   30    /* tSenderResponse  24..30 ms */
-#define HUSB311_T_PS_TRANSITION_MS 500  /* tPSTransition   450..550 ms */
+#define HUSB311_T_SENDER_RSP_MS      30  /* tSenderResponse  24..30 ms */
+#define HUSB311_T_PS_TRANSITION_MS   500 /* tPSTransition   450..550 ms */
 #define HUSB311_T_TYPEC_SINK_WAIT_MS 500 /* tTypeCSinkWaitCap 310..620 */
-#define HUSB311_T_VDM_RSP_MS      30    /* tVDMSenderResponse 24..30 ms */
+#define HUSB311_T_VDM_RSP_MS         30  /* tVDMSenderResponse 24..30 ms */
 
 /* TCPCI register map *******************************************************/
 
-#define HUSB311_REG_VENDOR_ID     0x00  /* 16-bit */
-#define HUSB311_REG_PRODUCT_ID    0x02  /* 16-bit */
-#define HUSB311_REG_DEVICE_ID     0x04  /* 16-bit */
-#define HUSB311_REG_TYPEC_REV     0x06  /* 16-bit */
-#define HUSB311_REG_USBPD_REV     0x08  /* 16-bit */
-#define HUSB311_REG_PD_IF_REV     0x0a  /* 16-bit */
-#define HUSB311_REG_ALERT         0x0c  /* 16-bit, write-1-to-clear */
-#define HUSB311_REG_ALERT_MASK    0x0e  /* 16-bit */
+#define HUSB311_REG_VENDOR_ID      0x00 /* 16-bit */
+#define HUSB311_REG_PRODUCT_ID     0x02 /* 16-bit */
+#define HUSB311_REG_DEVICE_ID      0x04 /* 16-bit */
+#define HUSB311_REG_TYPEC_REV      0x06 /* 16-bit */
+#define HUSB311_REG_USBPD_REV      0x08 /* 16-bit */
+#define HUSB311_REG_PD_IF_REV      0x0a /* 16-bit */
+#define HUSB311_REG_ALERT          0x0c /* 16-bit, write-1-to-clear */
+#define HUSB311_REG_ALERT_MASK     0x0e /* 16-bit */
 #define HUSB311_REG_POWER_STAT_MSK 0x10 /* 8-bit */
 #define HUSB311_REG_FAULT_STAT_MSK 0x11 /* 8-bit */
-#define HUSB311_REG_STD_OUT_CFG   0x13  /* 8-bit */
-#define HUSB311_REG_TCPC_CTRL     0x14  /* 8-bit */
-#define HUSB311_REG_ROLE_CTRL     0x15  /* 8-bit */
-#define HUSB311_REG_FAULT_CTRL    0x16  /* 8-bit */
-#define HUSB311_REG_POWER_CTRL    0x17  /* 8-bit */
-#define HUSB311_REG_CC_STATUS     0x18  /* 8-bit */
-#define HUSB311_REG_POWER_STATUS  0x19  /* 8-bit */
-#define HUSB311_REG_FAULT_STATUS  0x1a  /* 8-bit, write-1-to-clear */
-#define HUSB311_REG_COMMAND       0x1c  /* 8-bit */
-#define HUSB311_REG_DEV_CAP_1     0x1e  /* 16-bit */
-#define HUSB311_REG_MSG_HDR_INFO  0x22  /* 8-bit */
+#define HUSB311_REG_STD_OUT_CFG    0x13 /* 8-bit */
+#define HUSB311_REG_TCPC_CTRL      0x14 /* 8-bit */
+#define HUSB311_REG_ROLE_CTRL      0x15 /* 8-bit */
+#define HUSB311_REG_FAULT_CTRL     0x16 /* 8-bit */
+#define HUSB311_REG_POWER_CTRL     0x17 /* 8-bit */
+#define HUSB311_REG_CC_STATUS      0x18 /* 8-bit */
+#define HUSB311_REG_POWER_STATUS   0x19 /* 8-bit */
+#define HUSB311_REG_FAULT_STATUS   0x1a /* 8-bit, write-1-to-clear */
+#define HUSB311_REG_COMMAND        0x1c /* 8-bit */
+#define HUSB311_REG_DEV_CAP_1      0x1e /* 16-bit */
+#define HUSB311_REG_MSG_HDR_INFO   0x22 /* 8-bit */
 #define HUSB311_REG_RECEIVE_DETECT 0x23 /* 8-bit */
-#define HUSB311_REG_RX_BYTE_CNT   0x30  /* 8-bit, head of the RX block */
-#define HUSB311_REG_RX_FRAME_TYPE 0x31  /* 8-bit */
-#define HUSB311_REG_RX_HEADER     0x32  /* 16-bit */
-#define HUSB311_REG_RX_DATA       0x34  /* up to 28 bytes */
-#define HUSB311_REG_TRANSMIT      0x50  /* 8-bit */
-#define HUSB311_REG_TX_BYTE_CNT   0x51  /* 8-bit, head of the TX block */
-#define HUSB311_REG_TX_HEADER     0x52  /* 16-bit */
-#define HUSB311_REG_TX_DATA       0x54  /* up to 28 bytes */
-#define HUSB311_REG_VBUS_VOLTAGE  0x70  /* 16-bit */
+#define HUSB311_REG_RX_BYTE_CNT    0x30 /* 8-bit, head of the RX block */
+#define HUSB311_REG_RX_FRAME_TYPE  0x31 /* 8-bit */
+#define HUSB311_REG_RX_HEADER      0x32 /* 16-bit */
+#define HUSB311_REG_RX_DATA        0x34 /* up to 28 bytes */
+#define HUSB311_REG_TRANSMIT       0x50 /* 8-bit */
+#define HUSB311_REG_TX_BYTE_CNT    0x51 /* 8-bit, head of the TX block */
+#define HUSB311_REG_TX_HEADER      0x52 /* 16-bit */
+#define HUSB311_REG_TX_DATA        0x54 /* up to 28 bytes */
+#define HUSB311_REG_VBUS_VOLTAGE   0x70 /* 16-bit */
 
 /* ALERT / ALERT_MASK bits */
 
-#define HUSB311_ALERT_CC_STATUS   (1 << 0)
-#define HUSB311_ALERT_POWER_STATUS (1 << 1)
-#define HUSB311_ALERT_RX_STATUS   (1 << 2)
-#define HUSB311_ALERT_RX_HARD_RST (1 << 3)
-#define HUSB311_ALERT_TX_FAILED   (1 << 4)
-#define HUSB311_ALERT_TX_DISCARD  (1 << 5)
-#define HUSB311_ALERT_TX_SUCCESS  (1 << 6)
-#define HUSB311_ALERT_V_ALARM_HI  (1 << 7)
-#define HUSB311_ALERT_V_ALARM_LO  (1 << 8)
-#define HUSB311_ALERT_FAULT       (1 << 9)
-#define HUSB311_ALERT_RX_OVERFLOW (1 << 10)
+#define HUSB311_ALERT_CC_STATUS     (1 << 0)
+#define HUSB311_ALERT_POWER_STATUS  (1 << 1)
+#define HUSB311_ALERT_RX_STATUS     (1 << 2)
+#define HUSB311_ALERT_RX_HARD_RST   (1 << 3)
+#define HUSB311_ALERT_TX_FAILED     (1 << 4)
+#define HUSB311_ALERT_TX_DISCARD    (1 << 5)
+#define HUSB311_ALERT_TX_SUCCESS    (1 << 6)
+#define HUSB311_ALERT_V_ALARM_HI    (1 << 7)
+#define HUSB311_ALERT_V_ALARM_LO    (1 << 8)
+#define HUSB311_ALERT_FAULT         (1 << 9)
+#define HUSB311_ALERT_RX_OVERFLOW   (1 << 10)
 #define HUSB311_ALERT_VBUS_SNK_DISC (1 << 11)
 
-#define HUSB311_ALERT_ENABLED     (HUSB311_ALERT_CC_STATUS |    \
-                                   HUSB311_ALERT_POWER_STATUS | \
-                                   HUSB311_ALERT_RX_STATUS |    \
-                                   HUSB311_ALERT_RX_HARD_RST |  \
-                                   HUSB311_ALERT_TX_FAILED |    \
-                                   HUSB311_ALERT_TX_DISCARD |   \
-                                   HUSB311_ALERT_TX_SUCCESS |   \
-                                   HUSB311_ALERT_FAULT |        \
-                                   HUSB311_ALERT_RX_OVERFLOW |  \
-                                   HUSB311_ALERT_VBUS_SNK_DISC)
+#define HUSB311_ALERT_ENABLED                             \
+  (HUSB311_ALERT_CC_STATUS | HUSB311_ALERT_POWER_STATUS | \
+   HUSB311_ALERT_RX_STATUS | HUSB311_ALERT_RX_HARD_RST |  \
+   HUSB311_ALERT_TX_FAILED | HUSB311_ALERT_TX_DISCARD |   \
+   HUSB311_ALERT_TX_SUCCESS | HUSB311_ALERT_FAULT |       \
+   HUSB311_ALERT_RX_OVERFLOW | HUSB311_ALERT_VBUS_SNK_DISC)
 
 /* TCPC_CONTROL bits */
 
-#define HUSB311_TCPC_CTRL_ORIENT  (1 << 0)  /* 1: CC2 is the active line */
+#define HUSB311_TCPC_CTRL_ORIENT  (1 << 0) /* 1: CC2 is the active line */
 #define HUSB311_TCPC_CTRL_BIST    (1 << 1)
 #define HUSB311_TCPC_CTRL_DBG_ACC (1 << 2)
 
 /* ROLE_CONTROL bits */
 
-#define HUSB311_ROLE_CC1_SHIFT    0
-#define HUSB311_ROLE_CC2_SHIFT    2
-#define HUSB311_ROLE_RP_SHIFT     4
-#define HUSB311_ROLE_DRP          (1 << 6)
+#define HUSB311_ROLE_CC1_SHIFT 0
+#define HUSB311_ROLE_CC2_SHIFT 2
+#define HUSB311_ROLE_RP_SHIFT  4
+#define HUSB311_ROLE_DRP       (1 << 6)
 
-#define HUSB311_CC_TERM_RA        0
-#define HUSB311_CC_TERM_RP        1
-#define HUSB311_CC_TERM_RD        2
-#define HUSB311_CC_TERM_OPEN      3
+#define HUSB311_CC_TERM_RA     0
+#define HUSB311_CC_TERM_RP     1
+#define HUSB311_CC_TERM_RD     2
+#define HUSB311_CC_TERM_OPEN   3
 
-#define HUSB311_RP_DEFAULT        0
-#define HUSB311_RP_1A5            1
-#define HUSB311_RP_3A0            2
+#define HUSB311_RP_DEFAULT     0
+#define HUSB311_RP_1A5         1
+#define HUSB311_RP_3A0         2
 
 /* POWER_CONTROL bits */
 
-#define HUSB311_PWR_CTRL_VCONN_EN (1 << 0)
+#define HUSB311_PWR_CTRL_VCONN_EN   (1 << 0)
 #define HUSB311_PWR_CTRL_AUTO_DISCH (1 << 4)
-#define HUSB311_PWR_CTRL_DIS_V_MON (1 << 6)
+#define HUSB311_PWR_CTRL_DIS_V_MON  (1 << 6)
 
 /* CC_STATUS bits */
 
@@ -209,17 +205,17 @@
 #define HUSB311_CC_STATUS_CC1_SHIFT 0
 #define HUSB311_CC_STATUS_CC2_MASK  (3 << 2)
 #define HUSB311_CC_STATUS_CC2_SHIFT 2
-#define HUSB311_CC_STATUS_CONNRES   (1 << 4)  /* 1: we present Rd (sink) */
+#define HUSB311_CC_STATUS_CONNRES   (1 << 4) /* 1: we present Rd (sink) */
 #define HUSB311_CC_STATUS_LOOKING   (1 << 5)
 
 /* POWER_STATUS bits */
 
-#define HUSB311_PWR_STAT_SINKING  (1 << 0)
-#define HUSB311_PWR_STAT_VCONN    (1 << 1)
+#define HUSB311_PWR_STAT_SINKING   (1 << 0)
+#define HUSB311_PWR_STAT_VCONN     (1 << 1)
 #define HUSB311_PWR_STAT_VBUS_PRES (1 << 2)
-#define HUSB311_PWR_STAT_VBUS_DET (1 << 3)
-#define HUSB311_PWR_STAT_SOURCING (1 << 4)
-#define HUSB311_PWR_STAT_SRC_HV   (1 << 5)
+#define HUSB311_PWR_STAT_VBUS_DET  (1 << 3)
+#define HUSB311_PWR_STAT_SOURCING  (1 << 4)
+#define HUSB311_PWR_STAT_SRC_HV    (1 << 5)
 #define HUSB311_PWR_STAT_TCPC_INIT (1 << 6)
 #define HUSB311_PWR_STAT_DEBUG_ACC (1 << 7)
 
@@ -253,115 +249,115 @@
 
 /* TRANSMIT register: [2:0] SOP type, [5:4] retry count */
 
-#define HUSB311_TX_SOP            0
-#define HUSB311_TX_SOP_P          1
-#define HUSB311_TX_SOP_PP         2
-#define HUSB311_TX_HARD_RESET     5
-#define HUSB311_TX_CABLE_RESET    6
-#define HUSB311_TX_RETRY_SHIFT    4
-#define HUSB311_TX_RETRY_COUNT    3
+#define HUSB311_TX_SOP         0
+#define HUSB311_TX_SOP_P       1
+#define HUSB311_TX_SOP_PP      2
+#define HUSB311_TX_HARD_RESET  5
+#define HUSB311_TX_CABLE_RESET 6
+#define HUSB311_TX_RETRY_SHIFT 4
+#define HUSB311_TX_RETRY_COUNT 3
 
 /* VBUS_VOLTAGE: [9:0] raw counts of 25 mV, [11:10] scale factor */
 
-#define HUSB311_VBUS_RAW_MASK     0x03ff
-#define HUSB311_VBUS_SCALE_SHIFT  10
-#define HUSB311_VBUS_SCALE_MASK   0x0003
-#define HUSB311_VBUS_LSB_MV       25
+#define HUSB311_VBUS_RAW_MASK    0x03ff
+#define HUSB311_VBUS_SCALE_SHIFT 10
+#define HUSB311_VBUS_SCALE_MASK  0x0003
+#define HUSB311_VBUS_LSB_MV      25
 
 /* PD message header ********************************************************/
 
-#define PD_HDR_TYPE_MASK          0x001f
-#define PD_HDR_DATA_ROLE          (1 << 5)
-#define PD_HDR_REV_SHIFT          6
-#define PD_HDR_PWR_ROLE           (1 << 8)
-#define PD_HDR_MSGID_SHIFT        9
-#define PD_HDR_MSGID_MASK         0x0007
-#define PD_HDR_NDO_SHIFT          12
-#define PD_HDR_NDO_MASK           0x0007
-#define PD_HDR_EXTENDED           (1 << 15)
+#define PD_HDR_TYPE_MASK   0x001f
+#define PD_HDR_DATA_ROLE   (1 << 5)
+#define PD_HDR_REV_SHIFT   6
+#define PD_HDR_PWR_ROLE    (1 << 8)
+#define PD_HDR_MSGID_SHIFT 9
+#define PD_HDR_MSGID_MASK  0x0007
+#define PD_HDR_NDO_SHIFT   12
+#define PD_HDR_NDO_MASK    0x0007
+#define PD_HDR_EXTENDED    (1 << 15)
 
-#define PD_REV_2_0                1
+#define PD_REV_2_0         1
 
-#define PD_HDR_TYPE(h)            ((h) & PD_HDR_TYPE_MASK)
-#define PD_HDR_NDO(h)             (((h) >> PD_HDR_NDO_SHIFT) & PD_HDR_NDO_MASK)
+#define PD_HDR_TYPE(h)     ((h)&PD_HDR_TYPE_MASK)
+#define PD_HDR_NDO(h)      (((h) >> PD_HDR_NDO_SHIFT) & PD_HDR_NDO_MASK)
 
 /* Control message types */
 
-#define PD_CTRL_GOOD_CRC          1
-#define PD_CTRL_ACCEPT            3
-#define PD_CTRL_REJECT            4
-#define PD_CTRL_PS_RDY            6
-#define PD_CTRL_GET_SOURCE_CAP    7
-#define PD_CTRL_GET_SINK_CAP      8
-#define PD_CTRL_DR_SWAP           9
-#define PD_CTRL_PR_SWAP           10
-#define PD_CTRL_VCONN_SWAP        11
-#define PD_CTRL_WAIT              12
-#define PD_CTRL_SOFT_RESET        13
+#define PD_CTRL_GOOD_CRC       1
+#define PD_CTRL_ACCEPT         3
+#define PD_CTRL_REJECT         4
+#define PD_CTRL_PS_RDY         6
+#define PD_CTRL_GET_SOURCE_CAP 7
+#define PD_CTRL_GET_SINK_CAP   8
+#define PD_CTRL_DR_SWAP        9
+#define PD_CTRL_PR_SWAP        10
+#define PD_CTRL_VCONN_SWAP     11
+#define PD_CTRL_WAIT           12
+#define PD_CTRL_SOFT_RESET     13
 
 /* Data message types */
 
-#define PD_DATA_SOURCE_CAP        1
-#define PD_DATA_REQUEST           2
-#define PD_DATA_SINK_CAP          4
-#define PD_DATA_VENDOR_DEFINED    15
+#define PD_DATA_SOURCE_CAP     1
+#define PD_DATA_REQUEST        2
+#define PD_DATA_SINK_CAP       4
+#define PD_DATA_VENDOR_DEFINED 15
 
 /* Fixed supply PDO fields (source view) */
 
-#define PD_PDO_TYPE_MASK          (3u << 30)
-#define PD_PDO_TYPE_FIXED         (0u << 30)
-#define PD_PDO_FIXED_VOLT_SHIFT   10      /* 50 mV units */
-#define PD_PDO_FIXED_VOLT_MASK    0x03ff
-#define PD_PDO_FIXED_CURR_MASK    0x03ff  /* 10 mA units */
-#define PD_PDO_FIXED_VOLT_LSB_MV  50
-#define PD_PDO_FIXED_CURR_LSB_MA  10
+#define PD_PDO_TYPE_MASK         (3u << 30)
+#define PD_PDO_TYPE_FIXED        (0u << 30)
+#define PD_PDO_FIXED_VOLT_SHIFT  10 /* 50 mV units */
+#define PD_PDO_FIXED_VOLT_MASK   0x03ff
+#define PD_PDO_FIXED_CURR_MASK   0x03ff /* 10 mA units */
+#define PD_PDO_FIXED_VOLT_LSB_MV 50
+#define PD_PDO_FIXED_CURR_LSB_MA 10
 
 /* Fixed Request Data Object fields */
 
-#define PD_RDO_OBJPOS_SHIFT       28
-#define PD_RDO_CAP_MISMATCH       (1u << 26)
-#define PD_RDO_USB_COMM           (1u << 25)
-#define PD_RDO_NO_SUSPEND         (1u << 24)
-#define PD_RDO_OP_CURR_SHIFT      10
+#define PD_RDO_OBJPOS_SHIFT  28
+#define PD_RDO_CAP_MISMATCH  (1u << 26)
+#define PD_RDO_USB_COMM      (1u << 25)
+#define PD_RDO_NO_SUSPEND    (1u << 24)
+#define PD_RDO_OP_CURR_SHIFT 10
 
 /* Board capabilities, verbatim from the device tree connector node */
 
-#define HUSB311_SINK_PDO          0x04019064u  /* Fixed 5 V 1.0 A */
-#define HUSB311_SOURCE_PDO        0x0401912cu  /* Fixed 5 V 3.0 A */
+#define HUSB311_SINK_PDO   0x04019064u /* Fixed 5 V 1.0 A */
+#define HUSB311_SOURCE_PDO 0x0401912cu /* Fixed 5 V 3.0 A */
 
 /* Highest voltage this board is wired to accept.  The connector only
  * advertises a 5 V sink PDO, so anything above vSafe5V is rejected when
  * picking a source capability.
  */
 
-#define HUSB311_SINK_MAX_MV       5000
+#define HUSB311_SINK_MAX_MV 5000
 
 /* Structured VDM (USB PD r2.0 chapter 6.4.4) */
 
-#define PD_VDM_SVID_SHIFT         16
-#define PD_VDM_STRUCTURED         (1u << 15)
-#define PD_VDM_VERSION_SHIFT      13
-#define PD_VDM_VERSION_1_0        0
-#define PD_VDM_CMDTYPE_SHIFT      6
-#define PD_VDM_CMDTYPE_MASK       3
-#define PD_VDM_CMDTYPE_REQ        0
-#define PD_VDM_CMDTYPE_ACK        1
-#define PD_VDM_CMDTYPE_NAK        2
-#define PD_VDM_CMD_MASK           0x1f
-#define PD_VDM_CMD_DISC_IDENTITY  1
-#define PD_VDM_CMD_DISC_SVIDS     2
-#define PD_VDM_CMD_DISC_MODES     3
-#define PD_VDM_CMD_ENTER_MODE     4
+#define PD_VDM_SVID_SHIFT        16
+#define PD_VDM_STRUCTURED        (1u << 15)
+#define PD_VDM_VERSION_SHIFT     13
+#define PD_VDM_VERSION_1_0       0
+#define PD_VDM_CMDTYPE_SHIFT     6
+#define PD_VDM_CMDTYPE_MASK      3
+#define PD_VDM_CMDTYPE_REQ       0
+#define PD_VDM_CMDTYPE_ACK       1
+#define PD_VDM_CMDTYPE_NAK       2
+#define PD_VDM_CMD_MASK          0x1f
+#define PD_VDM_CMD_DISC_IDENTITY 1
+#define PD_VDM_CMD_DISC_SVIDS    2
+#define PD_VDM_CMD_DISC_MODES    3
+#define PD_VDM_CMD_ENTER_MODE    4
 
-#define PD_SID_PD                 0xff00u  /* Standard PD SID */
-#define PD_SID_DISPLAYPORT        0xff01u  /* VESA DisplayPort, per DT */
+#define PD_SID_PD                0xff00u /* Standard PD SID */
+#define PD_SID_DISPLAYPORT       0xff01u /* VESA DisplayPort, per DT */
 
-#define HUSB311_MAX_SVIDS         12
-#define HUSB311_MAX_DP_MODES      6
+#define HUSB311_MAX_SVIDS        12
+#define HUSB311_MAX_DP_MODES     6
 
 /* Text snapshot returned by read() */
 
-#define HUSB311_SNAPSHOT_SIZE     512
+#define HUSB311_SNAPSHOT_SIZE 512
 
 /****************************************************************************
  * Private Types
@@ -369,47 +365,47 @@
 
 /* Discovery state of the DisplayPort alternate mode */
 
-#define HUSB311_DP_IDLE           0
-#define HUSB311_DP_DISC_ID        1
-#define HUSB311_DP_DISC_SVIDS     2
-#define HUSB311_DP_DISC_MODES     3
-#define HUSB311_DP_MODES_KNOWN    4
-#define HUSB311_DP_UNSUPPORTED    5
+#define HUSB311_DP_IDLE        0
+#define HUSB311_DP_DISC_ID     1
+#define HUSB311_DP_DISC_SVIDS  2
+#define HUSB311_DP_DISC_MODES  3
+#define HUSB311_DP_MODES_KNOWN 4
+#define HUSB311_DP_UNSUPPORTED 5
 
 struct husb311_dev_s
 {
-  struct i2c_master_s *i2c;      /* I2C2 master this TCPC hangs off */
-  mutex_t              lock;     /* Serialises register and state access */
-  sem_t                alert;    /* Posted by the ALERT interrupt handler */
-  bool                 running;  /* Service thread is alive */
-  pid_t                pid;      /* Service thread */
+  struct i2c_master_s *i2c; /* I2C2 master this TCPC hangs off */
+  mutex_t lock;             /* Serialises register and state access */
+  sem_t alert;              /* Posted by the ALERT interrupt handler */
+  bool running;             /* Service thread is alive */
+  pid_t pid;                /* Service thread */
 
   /* Type-C layer */
 
-  uint8_t              role;     /* HUSB311_ROLE_* programmed */
-  uint8_t              cc1;      /* HUSB311_CC_* */
-  uint8_t              cc2;      /* HUSB311_CC_* */
-  uint8_t              orientation;
-  uint8_t              partner;
-  bool                 attached;
-  bool                 vbus_present;
-  uint16_t             vbus_mv;
+  uint8_t role; /* HUSB311_ROLE_* programmed */
+  uint8_t cc1;  /* HUSB311_CC_* */
+  uint8_t cc2;  /* HUSB311_CC_* */
+  uint8_t orientation;
+  uint8_t partner;
+  bool attached;
+  bool vbus_present;
+  uint16_t vbus_mv;
 
   /* PD protocol layer */
 
-  uint8_t              pd_state;
-  uint8_t              msgid;    /* Our outgoing MessageID counter */
-  bool                 explicit_contract;
-  clock_t              deadline; /* 0: no timer armed */
-  uint8_t              nr_src_pdo;
-  uint32_t             src_pdo[HUSB311_MAX_PDO];
-  uint32_t             rdo;
+  uint8_t pd_state;
+  uint8_t msgid; /* Our outgoing MessageID counter */
+  bool explicit_contract;
+  clock_t deadline; /* 0: no timer armed */
+  uint8_t nr_src_pdo;
+  uint32_t src_pdo[HUSB311_MAX_PDO];
+  uint32_t rdo;
 
   /* DisplayPort alternate mode discovery */
 
-  uint8_t              dp_state;
-  uint8_t              nr_dp_modes;
-  uint32_t             dp_modes[HUSB311_MAX_DP_MODES];
+  uint8_t dp_state;
+  uint8_t nr_dp_modes;
+  uint32_t dp_modes[HUSB311_MAX_DP_MODES];
 };
 
 /****************************************************************************
@@ -418,8 +414,8 @@ struct husb311_dev_s
 
 /* Register level helpers */
 
-static int husb311_read(struct husb311_dev_s *priv, uint8_t reg,
-                        uint8_t *buf, size_t len);
+static int husb311_read(struct husb311_dev_s *priv, uint8_t reg, uint8_t *buf,
+                        size_t len);
 static int husb311_write(struct husb311_dev_s *priv, uint8_t reg,
                          const uint8_t *buf, size_t len);
 static int husb311_read8(struct husb311_dev_s *priv, uint8_t reg,
@@ -475,26 +471,23 @@ static ssize_t husb311_dev_read(struct file *filep, char *buffer,
                                 size_t buflen);
 static ssize_t husb311_dev_write(struct file *filep, const char *buffer,
                                  size_t buflen);
-static int husb311_dev_ioctl(struct file *filep, int cmd,
-                             unsigned long arg);
+static int husb311_dev_ioctl(struct file *filep, int cmd, unsigned long arg);
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static struct husb311_dev_s g_husb311 =
-{
+static struct husb311_dev_s g_husb311 = {
   .lock = NXMUTEX_INITIALIZER,
 };
 
-static const struct file_operations g_husb311_fops =
-{
-  NULL,               /* open */
-  NULL,               /* close */
-  husb311_dev_read,   /* read */
-  husb311_dev_write,  /* write */
-  NULL,               /* seek */
-  husb311_dev_ioctl,  /* ioctl */
+static const struct file_operations g_husb311_fops = {
+  NULL,              /* open */
+  NULL,              /* close */
+  husb311_dev_read,  /* read */
+  husb311_dev_write, /* write */
+  NULL,              /* seek */
+  husb311_dev_ioctl, /* ioctl */
 };
 
 /****************************************************************************
@@ -510,22 +503,22 @@ static const struct file_operations g_husb311_fops =
  *
  ****************************************************************************/
 
-static int husb311_read(struct husb311_dev_s *priv, uint8_t reg,
-                        uint8_t *buf, size_t len)
+static int husb311_read(struct husb311_dev_s *priv, uint8_t reg, uint8_t *buf,
+                        size_t len)
 {
   struct i2c_msg_s msg[2];
 
   msg[0].frequency = HUSB311_I2C_FREQUENCY;
-  msg[0].addr      = HUSB311_I2C_ADDR;
-  msg[0].flags     = 0;
-  msg[0].buffer    = &reg;
-  msg[0].length    = 1;
+  msg[0].addr = HUSB311_I2C_ADDR;
+  msg[0].flags = 0;
+  msg[0].buffer = &reg;
+  msg[0].length = 1;
 
   msg[1].frequency = HUSB311_I2C_FREQUENCY;
-  msg[1].addr      = HUSB311_I2C_ADDR;
-  msg[1].flags     = I2C_M_READ;
-  msg[1].buffer    = buf;
-  msg[1].length    = len;
+  msg[1].addr = HUSB311_I2C_ADDR;
+  msg[1].flags = I2C_M_READ;
+  msg[1].buffer = buf;
+  msg[1].length = len;
 
   return I2C_TRANSFER(priv->i2c, msg, 2);
 }
@@ -556,10 +549,10 @@ static int husb311_write(struct husb311_dev_s *priv, uint8_t reg,
   memcpy(&txbuf[1], buf, len);
 
   msg.frequency = HUSB311_I2C_FREQUENCY;
-  msg.addr      = HUSB311_I2C_ADDR;
-  msg.flags     = 0;
-  msg.buffer    = txbuf;
-  msg.length    = len + 1;
+  msg.addr = HUSB311_I2C_ADDR;
+  msg.flags = 0;
+  msg.buffer = txbuf;
+  msg.length = len + 1;
 
   return I2C_TRANSFER(priv->i2c, &msg, 1);
 }
@@ -573,14 +566,12 @@ static int husb311_write(struct husb311_dev_s *priv, uint8_t reg,
  *
  ****************************************************************************/
 
-static int husb311_read8(struct husb311_dev_s *priv, uint8_t reg,
-                         uint8_t *val)
+static int husb311_read8(struct husb311_dev_s *priv, uint8_t reg, uint8_t *val)
 {
   return husb311_read(priv, reg, val, 1);
 }
 
-static int husb311_write8(struct husb311_dev_s *priv, uint8_t reg,
-                          uint8_t val)
+static int husb311_write8(struct husb311_dev_s *priv, uint8_t reg, uint8_t val)
 {
   return husb311_write(priv, reg, &val, 1);
 }
@@ -768,19 +759,19 @@ static void husb311_detach(struct husb311_dev_s *priv)
       uinfo("HUSB311: detached\n");
     }
 
-  priv->attached          = false;
-  priv->orientation       = HUSB311_ORIENT_NONE;
-  priv->partner           = HUSB311_PARTNER_NONE;
-  priv->cc1               = HUSB311_CC_OPEN;
-  priv->cc2               = HUSB311_CC_OPEN;
-  priv->pd_state          = HUSB311_PD_DISABLED;
+  priv->attached = false;
+  priv->orientation = HUSB311_ORIENT_NONE;
+  priv->partner = HUSB311_PARTNER_NONE;
+  priv->cc1 = HUSB311_CC_OPEN;
+  priv->cc2 = HUSB311_CC_OPEN;
+  priv->pd_state = HUSB311_PD_DISABLED;
   priv->explicit_contract = false;
-  priv->nr_src_pdo        = 0;
-  priv->nr_dp_modes       = 0;
-  priv->dp_state          = HUSB311_DP_IDLE;
-  priv->rdo               = 0;
-  priv->msgid             = 0;
-  priv->deadline          = 0;
+  priv->nr_src_pdo = 0;
+  priv->nr_dp_modes = 0;
+  priv->dp_state = HUSB311_DP_IDLE;
+  priv->rdo = 0;
+  priv->msgid = 0;
+  priv->deadline = 0;
 
   /* Stop accepting PD traffic and stop sinking VBUS while unattached */
 
@@ -852,9 +843,9 @@ static int husb311_update_cc(struct husb311_dev_s *priv)
 
   if (priv->cc1 == HUSB311_CC_RA && priv->cc2 == HUSB311_CC_RA)
     {
-      priv->partner     = HUSB311_PARTNER_AUDIO;
+      priv->partner = HUSB311_PARTNER_AUDIO;
       priv->orientation = HUSB311_ORIENT_NONE;
-      priv->attached    = true;
+      priv->attached = true;
       return OK;
     }
 
@@ -884,9 +875,9 @@ static int husb311_update_cc(struct husb311_dev_s *priv)
 
   /* Tell the PHY which CC line to run BMC signalling on */
 
-  ret = husb311_write8(priv, HUSB311_REG_TCPC_CTRL,
-                       priv->orientation == HUSB311_ORIENT_CC2 ?
-                       HUSB311_TCPC_CTRL_ORIENT : 0);
+  ret = husb311_write8(
+      priv, HUSB311_REG_TCPC_CTRL,
+      priv->orientation == HUSB311_ORIENT_CC2 ? HUSB311_TCPC_CTRL_ORIENT : 0);
   if (ret < 0)
     {
       return ret;
@@ -1006,9 +997,9 @@ static int husb311_transmit(struct husb311_dev_s *priv, uint8_t sop,
         }
     }
 
-  return husb311_write8(priv, HUSB311_REG_TRANSMIT,
-                        sop | (HUSB311_TX_RETRY_COUNT <<
-                               HUSB311_TX_RETRY_SHIFT));
+  return husb311_write8(
+      priv, HUSB311_REG_TRANSMIT,
+      sop | (HUSB311_TX_RETRY_COUNT << HUSB311_TX_RETRY_SHIFT));
 }
 
 /****************************************************************************
@@ -1027,8 +1018,7 @@ static int husb311_send_ctrl(struct husb311_dev_s *priv, uint8_t type)
 
   header = (uint16_t)(type & PD_HDR_TYPE_MASK) |
            (PD_REV_2_0 << PD_HDR_REV_SHIFT) |
-           ((uint16_t)(priv->msgid & PD_HDR_MSGID_MASK) <<
-            PD_HDR_MSGID_SHIFT);
+           ((uint16_t)(priv->msgid & PD_HDR_MSGID_MASK) << PD_HDR_MSGID_SHIFT);
 
   priv->msgid = (priv->msgid + 1) & PD_HDR_MSGID_MASK;
 
@@ -1053,11 +1043,10 @@ static int husb311_send_data(struct husb311_dev_s *priv, uint8_t type,
       return -EINVAL;
     }
 
-  header = (uint16_t)(type & PD_HDR_TYPE_MASK) |
-           (PD_REV_2_0 << PD_HDR_REV_SHIFT) |
-           ((uint16_t)(priv->msgid & PD_HDR_MSGID_MASK) <<
-            PD_HDR_MSGID_SHIFT) |
-           ((uint16_t)ndo << PD_HDR_NDO_SHIFT);
+  header =
+      (uint16_t)(type & PD_HDR_TYPE_MASK) | (PD_REV_2_0 << PD_HDR_REV_SHIFT) |
+      ((uint16_t)(priv->msgid & PD_HDR_MSGID_MASK) << PD_HDR_MSGID_SHIFT) |
+      ((uint16_t)ndo << PD_HDR_NDO_SHIFT);
 
   priv->msgid = (priv->msgid + 1) & PD_HDR_MSGID_MASK;
 
@@ -1134,8 +1123,8 @@ static int husb311_select_pdo(struct husb311_dev_s *priv, uint32_t *rdo)
 
   /* Operating current asked for by our own sink PDO */
 
-  want_ma = (HUSB311_SINK_PDO & PD_PDO_FIXED_CURR_MASK) *
-            PD_PDO_FIXED_CURR_LSB_MA;
+  want_ma =
+      (HUSB311_SINK_PDO & PD_PDO_FIXED_CURR_MASK) * PD_PDO_FIXED_CURR_LSB_MA;
 
   for (i = 0; i < priv->nr_src_pdo; i++)
     {
@@ -1161,7 +1150,7 @@ static int husb311_select_pdo(struct husb311_dev_s *priv, uint32_t *rdo)
           continue;
         }
 
-      best    = i + 1;
+      best = i + 1;
       best_mv = mv;
       best_ma = ma;
     }
@@ -1173,15 +1162,14 @@ static int husb311_select_pdo(struct husb311_dev_s *priv, uint32_t *rdo)
 
   mismatch = best_ma < want_ma;
 
-  *rdo = ((uint32_t)best << PD_RDO_OBJPOS_SHIFT) |
-         PD_RDO_USB_COMM | PD_RDO_NO_SUSPEND |
-         (mismatch ? PD_RDO_CAP_MISMATCH : 0) |
-         (((mismatch ? best_ma : want_ma) / PD_PDO_FIXED_CURR_LSB_MA) <<
-          PD_RDO_OP_CURR_SHIFT) |
+  *rdo = ((uint32_t)best << PD_RDO_OBJPOS_SHIFT) | PD_RDO_USB_COMM |
+         PD_RDO_NO_SUSPEND | (mismatch ? PD_RDO_CAP_MISMATCH : 0) |
+         (((mismatch ? best_ma : want_ma) / PD_PDO_FIXED_CURR_LSB_MA)
+          << PD_RDO_OP_CURR_SHIFT) |
          ((mismatch ? best_ma : want_ma) / PD_PDO_FIXED_CURR_LSB_MA);
 
-  uinfo("HUSB311: selecting PDO%u %" PRIu32 " mV %" PRIu32 " mA%s\n",
-        best, best_mv, best_ma, mismatch ? " (mismatch)" : "");
+  uinfo("HUSB311: selecting PDO%u %" PRIu32 " mV %" PRIu32 " mA%s\n", best,
+        best_mv, best_ma, mismatch ? " (mismatch)" : "");
 
   return (int)best;
 }
@@ -1208,7 +1196,7 @@ static int husb311_send_request(struct husb311_dev_s *priv)
       return ret;
     }
 
-  priv->rdo      = rdo;
+  priv->rdo = rdo;
   priv->pd_state = HUSB311_PD_REQ_SENT;
   husb311_arm_timer(priv, HUSB311_T_SENDER_RSP_MS);
 
@@ -1239,8 +1227,8 @@ static void husb311_handle_vdm(struct husb311_dev_s *priv,
       return;
     }
 
-  svid    = (uint16_t)(objs[0] >> PD_VDM_SVID_SHIFT);
-  cmd     = objs[0] & PD_VDM_CMD_MASK;
+  svid = (uint16_t)(objs[0] >> PD_VDM_SVID_SHIFT);
+  cmd = objs[0] & PD_VDM_CMD_MASK;
   cmdtype = (objs[0] >> PD_VDM_CMDTYPE_SHIFT) & PD_VDM_CMDTYPE_MASK;
 
   if (cmdtype == PD_VDM_CMDTYPE_REQ)
@@ -1249,8 +1237,8 @@ static void husb311_handle_vdm(struct husb311_dev_s *priv,
        * partner does not wait for tVDMSenderResponse.
        */
 
-      uint32_t nak = (objs[0] & ~((uint32_t)PD_VDM_CMDTYPE_MASK <<
-                                  PD_VDM_CMDTYPE_SHIFT)) |
+      uint32_t nak = (objs[0] & ~((uint32_t)PD_VDM_CMDTYPE_MASK
+                                  << PD_VDM_CMDTYPE_SHIFT)) |
                      ((uint32_t)PD_VDM_CMDTYPE_NAK << PD_VDM_CMDTYPE_SHIFT);
 
       husb311_send_data(priv, PD_DATA_VENDOR_DEFINED, &nak, 1);
@@ -1364,7 +1352,7 @@ static void husb311_handle_msg(struct husb311_dev_s *priv, uint16_t header,
               {
                 uwarn("HUSB311: request rejected, staying on 5 V\n");
                 priv->pd_state = HUSB311_PD_WAIT_SRCCAP;
-                priv->rdo      = 0;
+                priv->rdo = 0;
                 priv->deadline = 0;
               }
             break;
@@ -1372,9 +1360,9 @@ static void husb311_handle_msg(struct husb311_dev_s *priv, uint16_t header,
           case PD_CTRL_PS_RDY:
             if (priv->pd_state == HUSB311_PD_WAIT_PSRDY)
               {
-                priv->pd_state          = HUSB311_PD_READY;
+                priv->pd_state = HUSB311_PD_READY;
                 priv->explicit_contract = true;
-                priv->deadline          = 0;
+                priv->deadline = 0;
                 husb311_update_vbus(priv);
                 uinfo("HUSB311: explicit contract, vbus=%u mV\n",
                       priv->vbus_mv);
@@ -1386,8 +1374,8 @@ static void husb311_handle_msg(struct husb311_dev_s *priv, uint16_t header,
                 if (priv->dp_state == HUSB311_DP_IDLE)
                   {
                     priv->dp_state = HUSB311_DP_DISC_ID;
-                    husb311_send_vdm(priv, PD_SID_PD,
-                                     PD_VDM_CMD_DISC_IDENTITY, NULL, 0);
+                    husb311_send_vdm(priv, PD_SID_PD, PD_VDM_CMD_DISC_IDENTITY,
+                                     NULL, 0);
                     husb311_arm_timer(priv, HUSB311_T_VDM_RSP_MS);
                   }
               }
@@ -1434,8 +1422,8 @@ static void husb311_handle_msg(struct husb311_dev_s *priv, uint16_t header,
   switch (type)
     {
       case PD_DATA_SOURCE_CAP:
-        priv->nr_src_pdo = (uint8_t)(ndo > HUSB311_MAX_PDO ?
-                                     HUSB311_MAX_PDO : ndo);
+        priv->nr_src_pdo =
+            (uint8_t)(ndo > HUSB311_MAX_PDO ? HUSB311_MAX_PDO : ndo);
         for (i = 0; i < priv->nr_src_pdo; i++)
           {
             priv->src_pdo[i] = objs[i];
@@ -1525,8 +1513,7 @@ static int husb311_receive(struct husb311_dev_s *priv)
 
   for (i = 0; i < ndo; i++)
     {
-      objs[i] = (uint32_t)buf[4 + 4 * i] |
-                ((uint32_t)buf[5 + 4 * i] << 8) |
+      objs[i] = (uint32_t)buf[4 + 4 * i] | ((uint32_t)buf[5 + 4 * i] << 8) |
                 ((uint32_t)buf[6 + 4 * i] << 16) |
                 ((uint32_t)buf[7 + 4 * i] << 24);
     }
@@ -1546,17 +1533,17 @@ static int husb311_receive(struct husb311_dev_s *priv)
 
 static void husb311_pd_reset(struct husb311_dev_s *priv, bool hard)
 {
-  priv->msgid    = 0;
+  priv->msgid = 0;
   priv->deadline = 0;
-  priv->rdo      = 0;
+  priv->rdo = 0;
 
   if (hard)
     {
       priv->explicit_contract = false;
-      priv->nr_src_pdo        = 0;
-      priv->nr_dp_modes       = 0;
-      priv->dp_state          = HUSB311_DP_IDLE;
-      priv->pd_state          = HUSB311_PD_HARD_RESET;
+      priv->nr_src_pdo = 0;
+      priv->nr_dp_modes = 0;
+      priv->dp_state = HUSB311_DP_IDLE;
+      priv->pd_state = HUSB311_PD_HARD_RESET;
     }
 
   /* Accept SOP and hard reset once again */
@@ -1720,8 +1707,8 @@ static void husb311_service(struct husb311_dev_s *priv)
           husb311_arm_timer(priv, HUSB311_T_TYPEC_SINK_WAIT_MS);
         }
 
-      if ((alert & (HUSB311_ALERT_CC_STATUS |
-                    HUSB311_ALERT_VBUS_SNK_DISC)) != 0)
+      if ((alert & (HUSB311_ALERT_CC_STATUS | HUSB311_ALERT_VBUS_SNK_DISC)) !=
+          0)
         {
           husb311_update_cc(priv);
         }
@@ -1741,8 +1728,7 @@ static void husb311_service(struct husb311_dev_s *priv)
           husb311_receive(priv);
         }
 
-      if ((alert & (HUSB311_ALERT_TX_FAILED |
-                    HUSB311_ALERT_TX_DISCARD)) != 0)
+      if ((alert & (HUSB311_ALERT_TX_FAILED | HUSB311_ALERT_TX_DISCARD)) != 0)
         {
           /* The TCPC already retried nRetryCount times.  A discard means
            * an incoming message won the race and our transmission has to
@@ -1832,16 +1818,15 @@ static ssize_t husb311_dev_read(struct file *filep, char *buffer,
                    "contract:  %s\n"
                    "rdo:       0x%08" PRIx32 "\n"
                    "src_pdos:  %u\n",
-                   priv->attached ? "yes" : "no",
-                   priv->cc1, priv->cc2, priv->orientation, priv->partner,
-                   priv->role, priv->vbus_mv,
-                   priv->vbus_present ? "present" : "absent",
-                   priv->pd_state,
+                   priv->attached ? "yes" : "no", priv->cc1, priv->cc2,
+                   priv->orientation, priv->partner, priv->role, priv->vbus_mv,
+                   priv->vbus_present ? "present" : "absent", priv->pd_state,
                    priv->explicit_contract ? "explicit" : "implicit",
                    priv->rdo, priv->nr_src_pdo);
 
-  for (i = 0; i < priv->nr_src_pdo && total > 0 &&
-              (size_t)total < sizeof(snapshot); i++)
+  for (i = 0;
+       i < priv->nr_src_pdo && total > 0 && (size_t)total < sizeof(snapshot);
+       i++)
     {
       total += snprintf(&snapshot[total], sizeof(snapshot) - total,
                         "  pdo[%d]: 0x%08" PRIx32 "\n", i, priv->src_pdo[i]);
@@ -1892,8 +1877,7 @@ static ssize_t husb311_dev_write(struct file *filep, const char *buffer,
  * Name: husb311_dev_ioctl
  ****************************************************************************/
 
-static int husb311_dev_ioctl(struct file *filep, int cmd,
-                             unsigned long arg)
+static int husb311_dev_ioctl(struct file *filep, int cmd, unsigned long arg)
 {
   struct husb311_dev_s *priv = &g_husb311;
   int ret = OK;
@@ -1905,7 +1889,7 @@ static int husb311_dev_ioctl(struct file *filep, int cmd,
       case HUSB311_IOC_GET_STATUS:
         {
           struct husb311_status_s *status =
-            (struct husb311_status_s *)((uintptr_t)arg);
+              (struct husb311_status_s *)((uintptr_t)arg);
 
           if (status == NULL)
             {
@@ -1936,7 +1920,7 @@ static int husb311_dev_ioctl(struct file *filep, int cmd,
       case HUSB311_IOC_GET_CAPS:
         {
           struct husb311_caps_s *caps =
-            (struct husb311_caps_s *)((uintptr_t)arg);
+              (struct husb311_caps_s *)((uintptr_t)arg);
 
           if (caps == NULL)
             {
@@ -2005,25 +1989,25 @@ int kickpi_k7_husb311_initialize(struct i2c_master_s *i2c)
   ret = husb311_read16(priv, HUSB311_REG_VENDOR_ID, &vendor);
   if (ret < 0)
     {
-      uerr("ERROR: HUSB311 not responding at 0x%02x: %d\n",
-           HUSB311_I2C_ADDR, ret);
+      uerr("ERROR: HUSB311 not responding at 0x%02x: %d\n", HUSB311_I2C_ADDR,
+           ret);
       return ret;
     }
 
   husb311_read16(priv, HUSB311_REG_PRODUCT_ID, &product);
   husb311_read16(priv, HUSB311_REG_DEVICE_ID, &device);
 
-  uinfo("HUSB311: vendor 0x%04x product 0x%04x device 0x%04x\n",
-        vendor, product, device);
+  uinfo("HUSB311: vendor 0x%04x product 0x%04x device 0x%04x\n", vendor,
+        product, device);
 
   nxsem_init(&priv->alert, 0, 0);
 
-  priv->cc1         = HUSB311_CC_OPEN;
-  priv->cc2         = HUSB311_CC_OPEN;
+  priv->cc1 = HUSB311_CC_OPEN;
+  priv->cc2 = HUSB311_CC_OPEN;
   priv->orientation = HUSB311_ORIENT_NONE;
-  priv->partner     = HUSB311_PARTNER_NONE;
-  priv->pd_state    = HUSB311_PD_DISABLED;
-  priv->dp_state    = HUSB311_DP_IDLE;
+  priv->partner = HUSB311_PARTNER_NONE;
+  priv->pd_state = HUSB311_PD_DISABLED;
+  priv->dp_state = HUSB311_DP_IDLE;
 
   /* Mask everything while the TCPC is being configured */
 
@@ -2140,17 +2124,17 @@ int kickpi_k7_husb311_get_cc_status(struct husb311_status_s *status)
 
   nxmutex_lock(&priv->lock);
 
-  status->cc1               = priv->cc1;
-  status->cc2               = priv->cc2;
-  status->orientation       = priv->orientation;
-  status->partner           = priv->partner;
-  status->role              = priv->role;
-  status->pd_state          = priv->pd_state;
-  status->attached          = priv->attached;
-  status->vbus_present      = priv->vbus_present;
+  status->cc1 = priv->cc1;
+  status->cc2 = priv->cc2;
+  status->orientation = priv->orientation;
+  status->partner = priv->partner;
+  status->role = priv->role;
+  status->pd_state = priv->pd_state;
+  status->attached = priv->attached;
+  status->vbus_present = priv->vbus_present;
   status->explicit_contract = priv->explicit_contract;
-  status->vbus_mv           = priv->vbus_mv;
-  status->rdo               = priv->rdo;
+  status->vbus_mv = priv->vbus_mv;
+  status->rdo = priv->rdo;
 
   nxmutex_unlock(&priv->lock);
   return OK;

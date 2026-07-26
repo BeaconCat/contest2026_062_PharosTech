@@ -61,14 +61,14 @@
 #include <unistd.h>
 
 #ifdef CONFIG_EXAMPLES_LLM_NPU
-#  include <nuttx/arch.h>
+#include <nuttx/arch.h>
 #endif
 
 #include "llm_transformer.h"
 
 #if defined(__aarch64__) && defined(__ARM_NEON)
-#  include <arm_neon.h>
-#  define LLM_HAVE_NEON 1
+#include <arm_neon.h>
+#define LLM_HAVE_NEON 1
 #endif
 
 /****************************************************************************
@@ -79,22 +79,22 @@
  * calling thread than to hand out to the pool.
  */
 
-#define LLM_THREAD_MIN_WORK   (16 * 1024)
+#define LLM_THREAD_MIN_WORK (16 * 1024)
 
 /* Model image is read in chunks so that a partial read or a short file is
  * detected early and the progress indicator stays responsive.
  */
 
-#define LLM_READ_CHUNK        (1024 * 1024)
-#define LLM_PROGRESS_STEP     (32 * 1024 * 1024)
+#define LLM_READ_CHUNK    (1024 * 1024)
+#define LLM_PROGRESS_STEP (32 * 1024 * 1024)
 
 /* Model image alignment: matches the D-cache line and keeps every 64-byte
  * aligned tensor payload aligned in memory as well.
  */
 
-#define LLM_IMAGE_ALIGN       64
+#define LLM_IMAGE_ALIGN 64
 
-#define LLM_MAX(a, b)         ((a) > (b) ? (a) : (b))
+#define LLM_MAX(a, b)   ((a) > (b) ? (a) : (b))
 
 /* The on-disk structures are parsed by direct memcpy, so a layout change
  * has to be caught at build time rather than by a corrupt model.
@@ -110,41 +110,36 @@ _Static_assert(sizeof(struct llm_file_tensor_s) == LLM_FILE_TENSOR_BYTES,
  ****************************************************************************/
 
 static uint64_t llm_now_ms(void);
-static float    llm_dot_f32(const float *a, const float *b, int n);
-static float    llm_dot_f16(const uint16_t *w, const float *x, int n);
-static float    llm_dot_q4_0(const uint8_t *blk, const float *x, int n);
-static void     llm_accum_scaled(float *acc, const float *v, float a, int n);
-static void     llm_row_to_f32(float *out, const struct llm_tensor_s *t,
-                               int row);
-static size_t   llm_row_stride(const struct llm_tensor_s *t);
-static void     llm_row_range(int rows, int nthreads, int id, int *begin,
-                              int *end);
-static void    *llm_worker(void *argp);
-static int      llm_pool_start(struct llm_pool_s *pool, int nthreads);
-static void     llm_pool_stop(struct llm_pool_s *pool);
-static void     llm_pool_run(struct llm_pool_s *pool, float *out,
-                             const float *x,
-                             const struct llm_tensor_s *w);
+static float llm_dot_f32(const float *a, const float *b, int n);
+static float llm_dot_f16(const uint16_t *w, const float *x, int n);
+static float llm_dot_q4_0(const uint8_t *blk, const float *x, int n);
+static void llm_accum_scaled(float *acc, const float *v, float a, int n);
+static void llm_row_to_f32(float *out, const struct llm_tensor_s *t, int row);
+static size_t llm_row_stride(const struct llm_tensor_s *t);
+static void llm_row_range(int rows, int nthreads, int id, int *begin,
+                          int *end);
+static void *llm_worker(void *argp);
+static int llm_pool_start(struct llm_pool_s *pool, int nthreads);
+static void llm_pool_stop(struct llm_pool_s *pool);
+static void llm_pool_run(struct llm_pool_s *pool, float *out, const float *x,
+                         const struct llm_tensor_s *w);
 #ifdef CONFIG_EXAMPLES_LLM_NPU
-static bool     llm_npu_symbol_present(void);
-static bool     llm_dma_symbol_present(void);
+static bool llm_npu_symbol_present(void);
+static bool llm_dma_symbol_present(void);
 #endif
-static int      llm_matmul_npu(struct llm_model_s *model, float *out,
-                               const float *x,
-                               const struct llm_tensor_s *w);
-static void     llm_bias_add(float *out, const struct llm_tensor_s *b,
-                             int n);
+static int llm_matmul_npu(struct llm_model_s *model, float *out,
+                          const float *x, const struct llm_tensor_s *w);
+static void llm_bias_add(float *out, const struct llm_tensor_s *b, int n);
 static const struct llm_file_tensor_s *
-                llm_find_tensor(const struct llm_file_tensor_s *tab,
-                                uint32_t n, const char *name);
-static int      llm_bind(struct llm_model_s *model,
-                         const struct llm_file_tensor_s *tab, uint32_t ntab,
-                         struct llm_tensor_s *out, const char *name,
-                         uint32_t rows, uint32_t cols, bool required);
-static int      llm_read_image(const char *path, void **image,
-                               size_t *bytes);
-static int      llm_state_alloc(struct llm_model_s *model);
-static void     llm_state_free(struct llm_model_s *model);
+llm_find_tensor(const struct llm_file_tensor_s *tab, uint32_t n,
+                const char *name);
+static int llm_bind(struct llm_model_s *model,
+                    const struct llm_file_tensor_s *tab, uint32_t ntab,
+                    struct llm_tensor_s *out, const char *name, uint32_t rows,
+                    uint32_t cols, bool required);
+static int llm_read_image(const char *path, void **image, size_t *bytes);
+static int llm_state_alloc(struct llm_model_s *model);
+static void llm_state_free(struct llm_model_s *model);
 
 /****************************************************************************
  * Private Functions
@@ -251,7 +246,7 @@ static float llm_dot_q4_0(const uint8_t *blk, const float *x, int n)
 
 #ifdef LLM_HAVE_NEON
   const uint8x16_t nibble = vdupq_n_u8(0x0f);
-  const int8x16_t  zeropt = vdupq_n_s8(8);
+  const int8x16_t zeropt = vdupq_n_s8(8);
 
   for (i = 0; i < nblocks; i++)
     {
@@ -342,8 +337,7 @@ static void llm_accum_scaled(float *acc, const float *v, float a, int n)
 #ifdef LLM_HAVE_NEON
   for (; i + 4 <= n; i += 4)
     {
-      vst1q_f32(acc + i, vfmaq_n_f32(vld1q_f32(acc + i), vld1q_f32(v + i),
-                                     a));
+      vst1q_f32(acc + i, vfmaq_n_f32(vld1q_f32(acc + i), vld1q_f32(v + i), a));
     }
 #endif
 
@@ -388,8 +382,8 @@ static size_t llm_row_stride(const struct llm_tensor_s *t)
 
 static void llm_row_to_f32(float *out, const struct llm_tensor_s *t, int row)
 {
-  const uint8_t *base = (const uint8_t *)t->data +
-                        (size_t)row * llm_row_stride(t);
+  const uint8_t *base =
+      (const uint8_t *)t->data + (size_t)row * llm_row_stride(t);
   int n = (int)t->cols;
   int i;
 
@@ -450,8 +444,7 @@ static void llm_row_to_f32(float *out, const struct llm_tensor_s *t, int row)
  *
  ****************************************************************************/
 
-static void llm_row_range(int rows, int nthreads, int id, int *begin,
-                          int *end)
+static void llm_row_range(int rows, int nthreads, int id, int *begin, int *end)
 {
   int base = rows / nthreads;
   int rem = rows % nthreads;
@@ -477,7 +470,7 @@ static void *llm_worker(void *argp)
   struct llm_pool_s *pool = arg->pool;
   const int id = arg->id;
 
-  for (; ; )
+  for (;;)
     {
       int begin;
       int end;
@@ -495,10 +488,8 @@ static void *llm_worker(void *argp)
           break;
         }
 
-      llm_row_range((int)pool->job_w->rows, pool->nthreads, id, &begin,
-                    &end);
-      llm_matmul_cpu_rows(pool->job_out, pool->job_x, pool->job_w, begin,
-                          end);
+      llm_row_range((int)pool->job_w->rows, pool->nthreads, id, &begin, &end);
+      llm_matmul_cpu_rows(pool->job_out, pool->job_x, pool->job_w, begin, end);
 
       sem_post(&pool->done);
     }
@@ -580,8 +571,7 @@ static int llm_pool_start(struct llm_pool_s *pool, int nthreads)
       pthread_attr_setaffinity_np(&attr, sizeof(cpuset), &cpuset);
 #endif
 
-      ret = pthread_create(&pool->tid[i], &attr, llm_worker,
-                           &pool->arg[i]);
+      ret = pthread_create(&pool->tid[i], &attr, llm_worker, &pool->arg[i]);
       if (ret != 0)
         {
           /* Tear the partially built pool down through the normal path so
@@ -648,8 +638,8 @@ static void llm_pool_stop(struct llm_pool_s *pool)
  *
  ****************************************************************************/
 
-static void llm_pool_run(struct llm_pool_s *pool, float *out,
-                         const float *x, const struct llm_tensor_s *w)
+static void llm_pool_run(struct llm_pool_s *pool, float *out, const float *x,
+                         const struct llm_tensor_s *w)
 {
   int begin;
   int end;
@@ -692,8 +682,8 @@ static void llm_pool_run(struct llm_pool_s *pool, float *out,
 #ifdef CONFIG_EXAMPLES_LLM_NPU
 static bool llm_npu_symbol_present(void)
 {
-  int (* volatile fn)(uint32_t, const void *, const void *, void *,
-                      uint32_t, uint32_t, uint32_t) = rk3576_rknn_matmul_run;
+  int (*volatile fn)(uint32_t, const void *, const void *, void *, uint32_t,
+                     uint32_t, uint32_t) = rk3576_rknn_matmul_run;
 
   return fn != NULL;
 }
@@ -704,7 +694,7 @@ static bool llm_npu_symbol_present(void)
 
 static bool llm_dma_symbol_present(void)
 {
-  void *(* volatile fn)(size_t) = rk3576_dma_alloc;
+  void *(*volatile fn)(size_t) = rk3576_dma_alloc;
 
   return fn != NULL;
 }
@@ -734,14 +724,12 @@ static int llm_matmul_npu(struct llm_model_s *model, float *out,
   size_t wbytes = (size_t)w->rows * llm_row_stride(w);
   int ret;
 
-  if (!llm_npu_symbol_present() || s->npu_act == NULL ||
-      s->npu_out == NULL)
+  if (!llm_npu_symbol_present() || s->npu_act == NULL || s->npu_out == NULL)
     {
       return -ENODEV;
     }
 
-  if (w->dtype != LLM_DTYPE_Q4_0 ||
-      (w->cols % LLM_NPU_K_ALIGN) != 0 ||
+  if (w->dtype != LLM_DTYPE_Q4_0 || (w->cols % LLM_NPU_K_ALIGN) != 0 ||
       (w->rows % LLM_NPU_N_ALIGN) != 0 ||
       (size_t)w->rows * w->cols < LLM_NPU_MIN_WORK)
     {
@@ -779,8 +767,7 @@ static int llm_matmul_npu(struct llm_model_s *model, float *out,
       return ret;
     }
 
-  up_invalidate_dcache((uintptr_t)s->npu_out,
-                       (uintptr_t)s->npu_out + obytes);
+  up_invalidate_dcache((uintptr_t)s->npu_out, (uintptr_t)s->npu_out + obytes);
   memcpy(out, s->npu_out, obytes);
   return OK;
 #else
@@ -853,8 +840,8 @@ llm_find_tensor(const struct llm_file_tensor_s *tab, uint32_t n,
 
 static int llm_bind(struct llm_model_s *model,
                     const struct llm_file_tensor_s *tab, uint32_t ntab,
-                    struct llm_tensor_s *out, const char *name,
-                    uint32_t rows, uint32_t cols, bool required)
+                    struct llm_tensor_s *out, const char *name, uint32_t rows,
+                    uint32_t cols, bool required)
 {
   const struct llm_file_tensor_s *e = llm_find_tensor(tab, ntab, name);
   size_t expect;
@@ -874,7 +861,8 @@ static int llm_bind(struct llm_model_s *model,
 
   if (e->rows != rows || e->cols != cols)
     {
-      fprintf(stderr, "llm: tensor '%s' shape %" PRIu32 "x%" PRIu32
+      fprintf(stderr,
+              "llm: tensor '%s' shape %" PRIu32 "x%" PRIu32
               ", expected %" PRIu32 "x%" PRIu32 "\n",
               name, e->rows, e->cols, rows, cols);
       return -EINVAL;
@@ -893,26 +881,28 @@ static int llm_bind(struct llm_model_s *model,
       case LLM_DTYPE_Q4_0:
         if ((cols % LLM_Q4_BLOCK_SIZE) != 0)
           {
-            fprintf(stderr, "llm: tensor '%s' cols %" PRIu32
-                    " not a multiple of %d\n", name, cols,
-                    LLM_Q4_BLOCK_SIZE);
+            fprintf(stderr,
+                    "llm: tensor '%s' cols %" PRIu32 " not a multiple of %d\n",
+                    name, cols, LLM_Q4_BLOCK_SIZE);
             return -EINVAL;
           }
 
-        expect = (size_t)rows * (cols / LLM_Q4_BLOCK_SIZE) *
-                 LLM_Q4_BLOCK_BYTES;
+        expect =
+            (size_t)rows * (cols / LLM_Q4_BLOCK_SIZE) * LLM_Q4_BLOCK_BYTES;
         break;
 
       default:
-        fprintf(stderr, "llm: tensor '%s' unknown dtype %" PRIu32 "\n",
-                name, e->dtype);
+        fprintf(stderr, "llm: tensor '%s' unknown dtype %" PRIu32 "\n", name,
+                e->dtype);
         return -EINVAL;
     }
 
   if (e->nbytes != expect)
     {
-      fprintf(stderr, "llm: tensor '%s' payload %" PRIu64 " bytes, "
-              "expected %zu\n", name, (uint64_t)e->nbytes, expect);
+      fprintf(stderr,
+              "llm: tensor '%s' payload %" PRIu64 " bytes, "
+              "expected %zu\n",
+              name, (uint64_t)e->nbytes, expect);
       return -EINVAL;
     }
 
@@ -968,8 +958,7 @@ static int llm_read_image(const char *path, void **image, size_t *bytes)
   buf = (uint8_t *)memalign(LLM_IMAGE_ALIGN, total);
   if (buf == NULL)
     {
-      fprintf(stderr, "llm: cannot allocate %zu bytes for the model\n",
-              total);
+      fprintf(stderr, "llm: cannot allocate %zu bytes for the model\n", total);
       return -ENOMEM;
     }
 
@@ -1009,8 +998,7 @@ static int llm_read_image(const char *path, void **image, size_t *bytes)
 
       if (n == 0)
         {
-          fprintf(stderr, "llm: short file, %zu of %zu bytes\n", got,
-                  total);
+          fprintf(stderr, "llm: short file, %zu of %zu bytes\n", got, total);
           ret = -EIO;
           break;
         }
@@ -1061,18 +1049,16 @@ static int llm_state_alloc(struct llm_model_s *model)
   s->hb = (float *)calloc((size_t)cfg->ffn_dim, sizeof(float));
   s->hb2 = (float *)calloc((size_t)cfg->ffn_dim, sizeof(float));
   s->q = (float *)calloc((size_t)cfg->q_dim, sizeof(float));
-  s->att = (float *)calloc((size_t)cfg->n_heads * cfg->max_seq_len,
-                           sizeof(float));
+  s->att =
+      (float *)calloc((size_t)cfg->n_heads * cfg->max_seq_len, sizeof(float));
   s->logits = (float *)calloc((size_t)cfg->vocab_size, sizeof(float));
   s->key_cache = (float *)calloc(kv_elems, sizeof(float));
   s->value_cache = (float *)calloc(kv_elems, sizeof(float));
-  s->rope_freq = (float *)calloc((size_t)(cfg->head_dim / 2),
-                                 sizeof(float));
+  s->rope_freq = (float *)calloc((size_t)(cfg->head_dim / 2), sizeof(float));
 
   if (s->x == NULL || s->xb == NULL || s->xb2 == NULL || s->hb == NULL ||
-      s->hb2 == NULL || s->q == NULL || s->att == NULL ||
-      s->logits == NULL || s->key_cache == NULL ||
-      s->value_cache == NULL || s->rope_freq == NULL)
+      s->hb2 == NULL || s->q == NULL || s->att == NULL || s->logits == NULL ||
+      s->key_cache == NULL || s->value_cache == NULL || s->rope_freq == NULL)
     {
       fprintf(stderr, "llm: out of memory allocating the run state\n");
       return -ENOMEM;
@@ -1084,8 +1070,8 @@ static int llm_state_alloc(struct llm_model_s *model)
 
   for (i = 0; i < cfg->head_dim / 2; i++)
     {
-      s->rope_freq[i] = 1.0f / powf(cfg->rope_theta,
-                                    (float)(2 * i) / (float)cfg->head_dim);
+      s->rope_freq[i] =
+          1.0f / powf(cfg->rope_theta, (float)(2 * i) / (float)cfg->head_dim);
     }
 
   total = 2 * kv_elems * sizeof(float);
@@ -1112,7 +1098,7 @@ static int llm_state_alloc(struct llm_model_s *model)
       if (s->npu_act == NULL || s->npu_out == NULL)
         {
           fprintf(stderr, "llm: no DMA memory for the NPU staging "
-                  "buffers, CPU only\n");
+                          "buffers, CPU only\n");
 
           if (s->npu_act != NULL)
             {
@@ -1525,8 +1511,7 @@ void llm_attention(struct llm_model_s *model, int layer, int pos)
 
       for (t = 0; t <= pos; t++)
         {
-          const float *k = s->key_cache + hoff +
-                           (size_t)t * cfg->kv_dim;
+          const float *k = s->key_cache + hoff + (size_t)t * cfg->kv_dim;
 
           att[t] = llm_dot_f32(q, k, hd) * scale;
         }
@@ -1536,8 +1521,7 @@ void llm_attention(struct llm_model_s *model, int layer, int pos)
 
       for (t = 0; t <= pos; t++)
         {
-          const float *v = s->value_cache + hoff +
-                           (size_t)t * cfg->kv_dim;
+          const float *v = s->value_cache + hoff + (size_t)t * cfg->kv_dim;
 
           llm_accum_scaled(xb, v, att[t], hd);
         }
@@ -1574,8 +1558,8 @@ void llm_matmul_cpu_rows(float *out, const float *x,
       case LLM_DTYPE_F32:
         for (r = row_begin; r < row_end; r++)
           {
-            out[r] = llm_dot_f32((const float *)(base + (size_t)r * stride),
-                                 x, cols);
+            out[r] = llm_dot_f32((const float *)(base + (size_t)r * stride), x,
+                                 cols);
           }
         break;
 
@@ -1583,8 +1567,7 @@ void llm_matmul_cpu_rows(float *out, const float *x,
       default:
         for (r = row_begin; r < row_end; r++)
           {
-            out[r] = llm_dot_f16((const uint16_t *)(base +
-                                                    (size_t)r * stride),
+            out[r] = llm_dot_f16((const uint16_t *)(base + (size_t)r * stride),
                                  x, cols);
           }
         break;
@@ -1751,8 +1734,8 @@ float *llm_forward(struct llm_model_s *model, int token, int pos)
  * Name: llm_model_load
  ****************************************************************************/
 
-int llm_model_load(struct llm_model_s *model, const char *path,
-                   int nthreads, int maxseq)
+int llm_model_load(struct llm_model_s *model, const char *path, int nthreads,
+                   int maxseq)
 {
   const struct llm_file_tensor_s *tab;
   struct llm_file_header_s hdr;
@@ -1807,8 +1790,7 @@ int llm_model_load(struct llm_model_s *model, const char *path,
   if (cfg->hidden_dim <= 0 || cfg->ffn_dim <= 0 || cfg->n_layers <= 0 ||
       cfg->n_heads <= 0 || cfg->n_kv_heads <= 0 || cfg->head_dim <= 0 ||
       cfg->vocab_size <= 0 || cfg->max_seq_len <= 0 ||
-      (cfg->head_dim % 2) != 0 ||
-      (cfg->n_heads % cfg->n_kv_heads) != 0)
+      (cfg->head_dim % 2) != 0 || (cfg->n_heads % cfg->n_kv_heads) != 0)
     {
       fprintf(stderr, "llm: inconsistent model configuration\n");
       ret = -EINVAL;
@@ -1838,12 +1820,12 @@ int llm_model_load(struct llm_model_s *model, const char *path,
                                            hdr.tensor_table_off);
 
   printf("llm: %d layers, hidden %d, ffn %d, heads %d/%d, vocab %d, "
-         "ctx %d\n", cfg->n_layers, cfg->hidden_dim, cfg->ffn_dim,
-         cfg->n_heads, cfg->n_kv_heads, cfg->vocab_size, cfg->max_seq_len);
+         "ctx %d\n",
+         cfg->n_layers, cfg->hidden_dim, cfg->ffn_dim, cfg->n_heads,
+         cfg->n_kv_heads, cfg->vocab_size, cfg->max_seq_len);
 
-  model->w.layers = (struct llm_layer_s *)
-                    calloc((size_t)cfg->n_layers,
-                           sizeof(struct llm_layer_s));
+  model->w.layers = (struct llm_layer_s *)calloc((size_t)cfg->n_layers,
+                                                 sizeof(struct llm_layer_s));
   if (model->w.layers == NULL)
     {
       ret = -ENOMEM;
@@ -1851,15 +1833,14 @@ int llm_model_load(struct llm_model_s *model, const char *path,
     }
 
   ret = llm_bind(model, tab, hdr.n_tensors, &model->w.tok_emb, "tok_emb",
-                 (uint32_t)cfg->vocab_size, (uint32_t)cfg->hidden_dim,
-                 true);
+                 (uint32_t)cfg->vocab_size, (uint32_t)cfg->hidden_dim, true);
   if (ret < 0)
     {
       goto err;
     }
 
-  ret = llm_bind(model, tab, hdr.n_tensors, &model->w.out_norm, "out_norm",
-                 1, (uint32_t)cfg->hidden_dim, true);
+  ret = llm_bind(model, tab, hdr.n_tensors, &model->w.out_norm, "out_norm", 1,
+                 (uint32_t)cfg->hidden_dim, true);
   if (ret < 0)
     {
       goto err;
@@ -1878,9 +1859,9 @@ int llm_model_load(struct llm_model_s *model, const char *path,
     }
   else
     {
-      ret = llm_bind(model, tab, hdr.n_tensors, &model->w.output, "output",
-                     (uint32_t)cfg->vocab_size, (uint32_t)cfg->hidden_dim,
-                     true);
+      ret =
+          llm_bind(model, tab, hdr.n_tensors, &model->w.output, "output",
+                   (uint32_t)cfg->vocab_size, (uint32_t)cfg->hidden_dim, true);
       if (ret < 0)
         {
           goto err;
@@ -1897,33 +1878,33 @@ int llm_model_load(struct llm_model_s *model, const char *path,
       if (ret == OK)
         {
           snprintf(name, sizeof(name), "blk.%d.attn_q", l);
-          ret = llm_bind(model, tab, hdr.n_tensors, &ly->wq, name,
-                         (uint32_t)cfg->q_dim, (uint32_t)cfg->hidden_dim,
-                         true);
+          ret =
+              llm_bind(model, tab, hdr.n_tensors, &ly->wq, name,
+                       (uint32_t)cfg->q_dim, (uint32_t)cfg->hidden_dim, true);
         }
 
       if (ret == OK)
         {
           snprintf(name, sizeof(name), "blk.%d.attn_k", l);
-          ret = llm_bind(model, tab, hdr.n_tensors, &ly->wk, name,
-                         (uint32_t)cfg->kv_dim, (uint32_t)cfg->hidden_dim,
-                         true);
+          ret =
+              llm_bind(model, tab, hdr.n_tensors, &ly->wk, name,
+                       (uint32_t)cfg->kv_dim, (uint32_t)cfg->hidden_dim, true);
         }
 
       if (ret == OK)
         {
           snprintf(name, sizeof(name), "blk.%d.attn_v", l);
-          ret = llm_bind(model, tab, hdr.n_tensors, &ly->wv, name,
-                         (uint32_t)cfg->kv_dim, (uint32_t)cfg->hidden_dim,
-                         true);
+          ret =
+              llm_bind(model, tab, hdr.n_tensors, &ly->wv, name,
+                       (uint32_t)cfg->kv_dim, (uint32_t)cfg->hidden_dim, true);
         }
 
       if (ret == OK)
         {
           snprintf(name, sizeof(name), "blk.%d.attn_o", l);
-          ret = llm_bind(model, tab, hdr.n_tensors, &ly->wo, name,
-                         (uint32_t)cfg->hidden_dim, (uint32_t)cfg->q_dim,
-                         true);
+          ret =
+              llm_bind(model, tab, hdr.n_tensors, &ly->wo, name,
+                       (uint32_t)cfg->hidden_dim, (uint32_t)cfg->q_dim, true);
         }
 
       if (ret == OK && cfg->qkv_bias)
@@ -2008,10 +1989,9 @@ int llm_model_load(struct llm_model_s *model, const char *path,
           goto err;
         }
 
-      ret = llm_tokenizer_init(&model->tok,
-                               (const uint8_t *)model->image +
-                               hdr.tokenizer_off, hdr.tokenizer_bytes,
-                               hdr.bos_id, hdr.eos_id);
+      ret = llm_tokenizer_init(
+          &model->tok, (const uint8_t *)model->image + hdr.tokenizer_off,
+          hdr.tokenizer_bytes, hdr.bos_id, hdr.eos_id);
       if (ret < 0)
         {
           goto err;
@@ -2029,8 +2009,10 @@ int llm_model_load(struct llm_model_s *model, const char *path,
   ret = llm_pool_start(&model->pool, nthreads > 0 ? nthreads : 1);
   if (ret < 0)
     {
-      fprintf(stderr, "llm: worker pool failed (%d), running "
-              "single threaded\n", ret);
+      fprintf(stderr,
+              "llm: worker pool failed (%d), running "
+              "single threaded\n",
+              ret);
     }
 
   printf("llm: %d thread(s), backend %s, npu %s\n", model->pool.nthreads,
@@ -2099,9 +2081,9 @@ int llm_generate(struct llm_model_s *model, struct llm_sampler_s *sampler,
   if (opt->chat)
     {
       static const char fmt[] =
-        "<|im_start|>system\nYou are Nyabula, a helpful assistant running "
-        "on openvela.<|im_end|>\n<|im_start|>user\n%s<|im_end|>\n"
-        "<|im_start|>assistant\n";
+          "<|im_start|>system\nYou are Nyabula, a helpful assistant running "
+          "on openvela.<|im_end|>\n<|im_start|>user\n%s<|im_end|>\n"
+          "<|im_start|>assistant\n";
       size_t len = sizeof(fmt) + strlen(opt->prompt);
 
       text = (char *)malloc(len);
@@ -2114,9 +2096,9 @@ int llm_generate(struct llm_model_s *model, struct llm_sampler_s *sampler,
       snprintf(text, len, fmt, opt->prompt);
     }
 
-  n_prompt = llm_tokenizer_encode(&model->tok,
-                                  text != NULL ? text : opt->prompt,
-                                  opt->chat, tokens, cfg->max_seq_len);
+  n_prompt =
+      llm_tokenizer_encode(&model->tok, text != NULL ? text : opt->prompt,
+                           opt->chat, tokens, cfg->max_seq_len);
   free(text);
 
   if (n_prompt <= 0)
@@ -2188,12 +2170,10 @@ int llm_generate(struct llm_model_s *model, struct llm_sampler_s *sampler,
     uint64_t pre_ms = t_prefill - t_start;
     uint64_t dec_ms = t_end - t_prefill;
 
-    printf("llm: prefill %d tok in %" PRIu64 " ms (%.2f tok/s)\n",
-           n_prompt, pre_ms,
-           pre_ms ? (double)n_prompt * 1000.0 / (double)pre_ms : 0.0);
-    printf("llm: decode  %d tok in %" PRIu64 " ms (%.2f tok/s)\n",
-           generated, dec_ms,
-           dec_ms ? (double)generated * 1000.0 / (double)dec_ms : 0.0);
+    printf("llm: prefill %d tok in %" PRIu64 " ms (%.2f tok/s)\n", n_prompt,
+           pre_ms, pre_ms ? (double)n_prompt * 1000.0 / (double)pre_ms : 0.0);
+    printf("llm: decode  %d tok in %" PRIu64 " ms (%.2f tok/s)\n", generated,
+           dec_ms, dec_ms ? (double)generated * 1000.0 / (double)dec_ms : 0.0);
     printf("llm: matmul  npu %" PRIu32 " / cpu %" PRIu32 "\n",
            model->npu_calls, model->cpu_calls);
   }

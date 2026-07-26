@@ -87,7 +87,7 @@
 
 /* Ring oscillator speed and output width used for every conversion. */
 
-#define RK3576_RNG_CTL_CONFIG \
+#define RK3576_RNG_CTL_CONFIG                          \
   (RK3576_RNG_CTL_ENABLE | RK3576_RNG_CTL_LEN_256BIT | \
    RK3576_RNG_CTL_RING_FASTEST)
 
@@ -212,8 +212,8 @@ static int rk3576_rng_convert(uint8_t *dest, size_t len)
 
   rk3576_rng_putreg(RK3576_RNG_STATE, RK3576_RNG_STATE_DONE);
   rk3576_rng_putreg(RK3576_RNG_CTL, RK3576_RNG_WRITE_MASK |
-                                    RK3576_RNG_CTL_CONFIG |
-                                    RK3576_RNG_CTL_START);
+                                        RK3576_RNG_CTL_CONFIG |
+                                        RK3576_RNG_CTL_START);
 
   for (i = 0; i < RK3576_RNG_POLL_LIMIT; i++)
     {
@@ -226,14 +226,14 @@ static int rk3576_rng_convert(uint8_t *dest, size_t len)
   if (i >= RK3576_RNG_POLL_LIMIT)
     {
       _err("ERROR: RKRNG conversion timed out, state=0x%08" PRIx32 "\n",
-             rk3576_rng_getreg(RK3576_RNG_STATE));
+           rk3576_rng_getreg(RK3576_RNG_STATE));
 
       /* Leave START deasserted so the next attempt starts from a known
        * state.
        */
 
-      rk3576_rng_putreg(RK3576_RNG_CTL, RK3576_RNG_WRITE_MASK |
-                                        RK3576_RNG_CTL_CONFIG);
+      rk3576_rng_putreg(RK3576_RNG_CTL,
+                        RK3576_RNG_WRITE_MASK | RK3576_RNG_CTL_CONFIG);
       return -ETIMEDOUT;
     }
 
@@ -245,8 +245,8 @@ static int rk3576_rng_convert(uint8_t *dest, size_t len)
   /* Acknowledge (write one to clear) and deassert START. */
 
   rk3576_rng_putreg(RK3576_RNG_STATE, RK3576_RNG_STATE_DONE);
-  rk3576_rng_putreg(RK3576_RNG_CTL, RK3576_RNG_WRITE_MASK |
-                                    RK3576_RNG_CTL_CONFIG);
+  rk3576_rng_putreg(RK3576_RNG_CTL,
+                    RK3576_RNG_WRITE_MASK | RK3576_RNG_CTL_CONFIG);
 
   memcpy(dest, words, len);
 
@@ -289,8 +289,7 @@ static ssize_t rk3576_rng_fops_read(struct file *filep, char *buffer,
  * Private Data
  ****************************************************************************/
 
-static const struct file_operations g_rk3576_rng_fops =
-{
+static const struct file_operations g_rk3576_rng_fops = {
   .read = rk3576_rng_fops_read,
 };
 
@@ -332,8 +331,8 @@ int rk3576_rng_initialize(void)
        */
 
       rk3576_rng_putreg(RK3576_RNG_AUTO_RQSTS, RK3576_RNG_RESEED_INTERVAL);
-      rk3576_rng_putreg(RK3576_RNG_CTL, RK3576_RNG_WRITE_MASK |
-                                        RK3576_RNG_CTL_CONFIG);
+      rk3576_rng_putreg(RK3576_RNG_CTL,
+                        RK3576_RNG_WRITE_MASK | RK3576_RNG_CTL_CONFIG);
       rk3576_rng_putreg(RK3576_RNG_STATE, RK3576_RNG_STATE_DONE);
 
       g_rk3576_rng_ready = true;

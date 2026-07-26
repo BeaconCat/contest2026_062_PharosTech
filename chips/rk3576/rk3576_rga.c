@@ -89,7 +89,7 @@
 
 /* Number of polling iterations while waiting for a soft reset to retire. */
 
-#define RK3576_RGA_RESET_RETRIES 1000
+#define RK3576_RGA_RESET_RETRIES  1000
 #define RK3576_RGA_RESET_DELAY_US 1
 
 /* Size of the DMA-resident command list, in bytes. */
@@ -108,12 +108,12 @@
 
 struct rk3576_rga_desc_s
 {
-  uintptr_t base;     /* Register window base address           */
-  int irq;            /* GIC interrupt number                   */
-  const char *aclk;   /* AXI clock gate name                    */
-  const char *hclk;   /* AHB clock gate name                    */
-  const char *cclk;   /* Core functional clock gate name        */
-  const char *devpath;/* Character device path                  */
+  uintptr_t base;      /* Register window base address           */
+  int irq;             /* GIC interrupt number                   */
+  const char *aclk;    /* AXI clock gate name                    */
+  const char *hclk;    /* AHB clock gate name                    */
+  const char *cclk;    /* Core functional clock gate name        */
+  const char *devpath; /* Character device path                  */
 };
 
 /* Per-core run-time state. */
@@ -147,10 +147,8 @@ static unsigned int rk3576_rga_bpp(uint8_t format);
 static bool rk3576_rga_is_yuv(uint8_t format);
 static bool rk3576_rga_is_420(uint8_t format);
 static bool rk3576_rga_surface_valid(const struct rk3576_rga_surface_s *s);
-static uint32_t rk3576_rga_plane_offset(
-    const struct rk3576_rga_surface_s *s);
-static uint32_t rk3576_rga_chroma_offset(
-    const struct rk3576_rga_surface_s *s);
+static uint32_t rk3576_rga_plane_offset(const struct rk3576_rga_surface_s *s);
+static uint32_t rk3576_rga_chroma_offset(const struct rk3576_rga_surface_s *s);
 static uint32_t rk3576_rga_scale_factor(uint32_t src, uint32_t dst,
                                         uint32_t *mode);
 static uint8_t rk3576_rga_pick_csc(const struct rk3576_rga_surface_s *src,
@@ -165,8 +163,8 @@ static void rk3576_rga_build_alpha(struct rk3576_rga_dev_s *priv,
                                    const struct rk3576_rga_op_s *op);
 static int rk3576_rga_submit(struct rk3576_rga_dev_s *priv);
 static int rk3576_rga_run(struct rk3576_rga_dev_s *priv,
-                          const struct rk3576_rga_op_s *op,
-                          uint32_t fillcolor, bool fill);
+                          const struct rk3576_rga_op_s *op, uint32_t fillcolor,
+                          bool fill);
 
 static struct rk3576_rga_dev_s *rk3576_rga_default_dev(void);
 
@@ -179,31 +177,29 @@ static int rk3576_rga_fops_ioctl(struct file *filep, int cmd,
  * Private Data
  ****************************************************************************/
 
-static const struct rk3576_rga_desc_s g_rga_desc[RK3576_RGA_NCORES] =
-{
+static const struct rk3576_rga_desc_s g_rga_desc[RK3576_RGA_NCORES] = {
   {
-    .base    = RK3576_RGA0_ADDR,
-    .irq     = RK3576_IRQ_RGA0,
-    .aclk    = "aclk_rga2_0_en",
-    .hclk    = "hclk_rga2_0_en",
-    .cclk    = "clk_rga2_0_en",
-    .devpath = "/dev/rga0",
+      .base = RK3576_RGA0_ADDR,
+      .irq = RK3576_IRQ_RGA0,
+      .aclk = "aclk_rga2_0_en",
+      .hclk = "hclk_rga2_0_en",
+      .cclk = "clk_rga2_0_en",
+      .devpath = "/dev/rga0",
   },
   {
-    .base    = RK3576_RGA1_ADDR,
-    .irq     = RK3576_IRQ_RGA1,
-    .aclk    = "aclk_rga2_1_en",
-    .hclk    = "hclk_rga2_1_en",
-    .cclk    = "clk_rga2_1_en",
-    .devpath = "/dev/rga1",
+      .base = RK3576_RGA1_ADDR,
+      .irq = RK3576_IRQ_RGA1,
+      .aclk = "aclk_rga2_1_en",
+      .hclk = "hclk_rga2_1_en",
+      .cclk = "clk_rga2_1_en",
+      .devpath = "/dev/rga1",
   },
 };
 
 static struct rk3576_rga_dev_s g_rga_dev[RK3576_RGA_NCORES];
 
-static const struct file_operations g_rk3576_rga_fops =
-{
-  .open  = rk3576_rga_fops_open,
+static const struct file_operations g_rk3576_rga_fops = {
+  .open = rk3576_rga_fops_open,
   .close = rk3576_rga_fops_close,
   .ioctl = rk3576_rga_fops_ioctl,
 };
@@ -327,8 +323,8 @@ static int rk3576_rga_reset(struct rk3576_rga_dev_s *priv)
 
   rk3576_rga_putreg(priv, RK3576_RGA_SYS_CTRL_OFFSET,
                     RK3576_RGA_SYS_CTRL_SOFT_RESET |
-                    RK3576_RGA_SYS_CTRL_CCLK_SRESET |
-                    RK3576_RGA_SYS_CTRL_ACLK_SRESET);
+                        RK3576_RGA_SYS_CTRL_CCLK_SRESET |
+                        RK3576_RGA_SYS_CTRL_ACLK_SRESET);
 
   for (i = 0; i < RK3576_RGA_RESET_RETRIES; i++)
     {
@@ -446,9 +442,8 @@ static bool rk3576_rga_is_yuv(uint8_t format)
 static bool rk3576_rga_is_420(uint8_t format)
 {
   return format == RK3576_RGA_FMT_YUV420SP ||
-         format == RK3576_RGA_FMT_YUV420P  ||
-         format == RK3576_RGA_FMT_YUYV420  ||
-         format == RK3576_RGA_FMT_UYVY420;
+         format == RK3576_RGA_FMT_YUV420P ||
+         format == RK3576_RGA_FMT_YUYV420 || format == RK3576_RGA_FMT_UYVY420;
 }
 
 /****************************************************************************
@@ -476,11 +471,10 @@ static bool rk3576_rga_surface_valid(const struct rk3576_rga_surface_s *s)
       return false;
     }
 
-  if (s->width == 0 || s->height == 0 ||
-      s->width > RK3576_RGA_MAX_WIDTH || s->height > RK3576_RGA_MAX_HEIGHT)
+  if (s->width == 0 || s->height == 0 || s->width > RK3576_RGA_MAX_WIDTH ||
+      s->height > RK3576_RGA_MAX_HEIGHT)
     {
-      gerr("ERROR: RGA rectangle %ux%u out of range\n",
-           s->width, s->height);
+      gerr("ERROR: RGA rectangle %ux%u out of range\n", s->width, s->height);
       return false;
     }
 
@@ -520,8 +514,7 @@ static uint32_t rk3576_rga_plane_offset(const struct rk3576_rga_surface_s *s)
 {
   unsigned int bpp = rk3576_rga_bpp(s->format);
 
-  return (uint32_t)s->yoffset * s->stride +
-         ((uint32_t)s->xoffset * bpp) / 8;
+  return (uint32_t)s->yoffset * s->stride + ((uint32_t)s->xoffset * bpp) / 8;
 }
 
 /****************************************************************************
@@ -535,8 +528,7 @@ static uint32_t rk3576_rga_plane_offset(const struct rk3576_rga_surface_s *s)
  *
  ****************************************************************************/
 
-static uint32_t rk3576_rga_chroma_offset(
-    const struct rk3576_rga_surface_s *s)
+static uint32_t rk3576_rga_chroma_offset(const struct rk3576_rga_surface_s *s)
 {
   uint32_t yoff = s->yoffset;
 
@@ -625,7 +617,7 @@ static uint8_t rk3576_rga_pick_csc(const struct rk3576_rga_surface_s *src,
 {
   if (override != RK3576_RGA_CSC_AUTO)
     {
-      return (uint8_t)override;
+      return (uint8_t) override;
     }
 
   if (rk3576_rga_is_yuv(src->format) != rk3576_rga_is_yuv(dst->format))
@@ -817,8 +809,9 @@ static void rk3576_rga_build_alpha(struct rk3576_rga_dev_s *priv,
             (RK3576_RGA_BLEND_SRCOVER | RK3576_RGA_BLEND_PREMUL)) != 0)
     {
       ctrl0 = RK3576_RGA_ALPHA_ROP_EN;
-      ctrl1 = (op->flags & RK3576_RGA_BLEND_PREMUL) != 0 ?
-              RK3576_RGA_BLEND_SRC_OVER_PREMUL : RK3576_RGA_BLEND_SRC_OVER;
+      ctrl1 = (op->flags & RK3576_RGA_BLEND_PREMUL) != 0
+                  ? RK3576_RGA_BLEND_SRC_OVER_PREMUL
+                  : RK3576_RGA_BLEND_SRC_OVER;
     }
 
   if ((op->flags & RK3576_RGA_GLOBAL_ALPHA) != 0)
@@ -868,11 +861,10 @@ static int rk3576_rga_submit(struct rk3576_rga_dev_s *priv)
    */
 
   rk3576_rga_putreg(priv, RK3576_RGA_SYS_CTRL_OFFSET, 0);
-  rk3576_rga_putreg(priv, RK3576_RGA_CMD_BASE_OFFSET,
-                    (uint32_t)priv->cmdpa);
+  rk3576_rga_putreg(priv, RK3576_RGA_CMD_BASE_OFFSET, (uint32_t)priv->cmdpa);
   rk3576_rga_putreg(priv, RK3576_RGA_SYS_CTRL_OFFSET,
                     RK3576_RGA_SYS_CTRL_CMD_MODE |
-                    RK3576_RGA_SYS_CTRL_AUTO_CKG);
+                        RK3576_RGA_SYS_CTRL_AUTO_CKG);
   rk3576_rga_putreg(priv, RK3576_RGA_INT_OFFSET,
                     RK3576_RGA_INT_CLR_ALL | RK3576_RGA_INT_EN_ALL);
 
@@ -880,7 +872,7 @@ static int rk3576_rga_submit(struct rk3576_rga_dev_s *priv)
 
   rk3576_rga_putreg(priv, RK3576_RGA_CMD_CTRL_OFFSET,
                     (1 << RK3576_RGA_CMD_CTRL_NR_SHIFT) |
-                    RK3576_RGA_CMD_CTRL_START);
+                        RK3576_RGA_CMD_CTRL_START);
 
   ret = nxsem_tickwait_uninterruptible(&priv->donesem,
                                        MSEC2TICK(RK3576_RGA_TIMEOUT_MS));
@@ -922,8 +914,8 @@ static int rk3576_rga_submit(struct rk3576_rga_dev_s *priv)
  ****************************************************************************/
 
 static int rk3576_rga_run(struct rk3576_rga_dev_s *priv,
-                          const struct rk3576_rga_op_s *op,
-                          uint32_t fillcolor, bool fill)
+                          const struct rk3576_rga_op_s *op, uint32_t fillcolor,
+                          bool fill)
 {
   uint32_t mode;
   int ret;
@@ -963,12 +955,10 @@ static int rk3576_rga_run(struct rk3576_rga_dev_s *priv,
 
       /* Blending and ROP both need the destination as a second operand. */
 
-      if ((op->flags & (RK3576_RGA_BLEND_SRCOVER |
-                        RK3576_RGA_BLEND_PREMUL |
+      if ((op->flags & (RK3576_RGA_BLEND_SRCOVER | RK3576_RGA_BLEND_PREMUL |
                         RK3576_RGA_ROP_ENABLE)) != 0)
         {
-          mode |= RK3576_RGA_MODE_BITBLT_2SRC <<
-                  RK3576_RGA_MODE_BITBLT_SHIFT;
+          mode |= RK3576_RGA_MODE_BITBLT_2SRC << RK3576_RGA_MODE_BITBLT_SHIFT;
         }
     }
 
@@ -989,8 +979,8 @@ static int rk3576_rga_run(struct rk3576_rga_dev_s *priv,
     {
       up_invalidate_dcache((uintptr_t)op->dst.yrgb,
                            (uintptr_t)op->dst.yrgb +
-                           (uintptr_t)op->dst.stride *
-                           (op->dst.yoffset + op->dst.height));
+                               (uintptr_t)op->dst.stride *
+                                   (op->dst.yoffset + op->dst.height));
     }
 
   nxmutex_unlock(&priv->lock);
@@ -1110,8 +1100,7 @@ static int rk3576_rga_fops_ioctl(struct file *filep, int cmd,
             return -EINVAL;
           }
 
-        *(uint32_t *)arg =
-            rk3576_rga_getreg(priv, RK3576_RGA_VERSION_OFFSET);
+        *(uint32_t *)arg = rk3576_rga_getreg(priv, RK3576_RGA_VERSION_OFFSET);
         ret = OK;
         break;
 
@@ -1198,12 +1187,11 @@ int rk3576_rga_initialize(int core)
 
   up_enable_irq(priv->desc->irq);
 
-  ret = register_driver(priv->desc->devpath, &g_rk3576_rga_fops, 0666,
-                        priv);
+  ret = register_driver(priv->desc->devpath, &g_rk3576_rga_fops, 0666, priv);
   if (ret < 0)
     {
-      gerr("ERROR: register_driver(%s) failed: %d\n",
-           priv->desc->devpath, ret);
+      gerr("ERROR: register_driver(%s) failed: %d\n", priv->desc->devpath,
+           ret);
       up_disable_irq(priv->desc->irq);
       irq_detach(priv->desc->irq);
       goto err_free;
@@ -1212,7 +1200,8 @@ int rk3576_rga_initialize(int core)
   priv->initialized = true;
 
   ginfo("RGA core%d at %08lx: version %08" PRIx32 ", core clock %" PRIu32
-        " Hz\n", core, (unsigned long)priv->desc->base,
+        " Hz\n",
+        core, (unsigned long)priv->desc->base,
         rk3576_rga_getreg(priv, RK3576_RGA_VERSION_OFFSET), priv->coreclk);
 
   return OK;
@@ -1234,8 +1223,7 @@ err_free:
  ****************************************************************************/
 
 int rk3576_rga_blit(const struct rk3576_rga_surface_s *src,
-                    const struct rk3576_rga_surface_s *dst,
-                    uint32_t flags)
+                    const struct rk3576_rga_surface_s *dst, uint32_t flags)
 {
   struct rk3576_rga_dev_s *priv = rk3576_rga_default_dev();
   struct rk3576_rga_op_s op;
@@ -1311,8 +1299,7 @@ int rk3576_rga_scale(const struct rk3576_rga_surface_s *src,
  ****************************************************************************/
 
 int rk3576_rga_rotate(const struct rk3576_rga_surface_s *src,
-                      const struct rk3576_rga_surface_s *dst,
-                      int degrees)
+                      const struct rk3576_rga_surface_s *dst, int degrees)
 {
   uint32_t flags;
 
@@ -1351,8 +1338,7 @@ int rk3576_rga_rotate(const struct rk3576_rga_surface_s *src,
  ****************************************************************************/
 
 int rk3576_rga_csc(const struct rk3576_rga_surface_s *src,
-                   const struct rk3576_rga_surface_s *dst,
-                   int mode)
+                   const struct rk3576_rga_surface_s *dst, int mode)
 {
   struct rk3576_rga_dev_s *priv = rk3576_rga_default_dev();
   struct rk3576_rga_op_s op;
@@ -1362,8 +1348,8 @@ int rk3576_rga_csc(const struct rk3576_rga_surface_s *src,
       return -ENODEV;
     }
 
-  if (src == NULL || dst == NULL ||
-      mode < RK3576_RGA_CSC_AUTO || mode > RK3576_RGA_CSC_BT709L)
+  if (src == NULL || dst == NULL || mode < RK3576_RGA_CSC_AUTO ||
+      mode > RK3576_RGA_CSC_BT709L)
     {
       return -EINVAL;
     }

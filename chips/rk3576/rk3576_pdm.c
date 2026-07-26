@@ -132,11 +132,11 @@
 
 struct rk3576_pdm_desc_s
 {
-  uintptr_t base;         /* Register base address                     */
-  int irq;                /* GIC interrupt number                      */
-  const char *hclk_name;  /* AHB bus clock gate                        */
-  const char *clk_name;   /* Controller functional clock gate          */
-  const char *clkout_name;/* PDM bit-clock root ("pdm_clk_out")        */
+  uintptr_t base;          /* Register base address                     */
+  int irq;                 /* GIC interrupt number                      */
+  const char *hclk_name;   /* AHB bus clock gate                        */
+  const char *clk_name;    /* Controller functional clock gate          */
+  const char *clkout_name; /* PDM bit-clock root ("pdm_clk_out")        */
 };
 
 /* One PDM controller instance.  The I2S device must be the first member so
@@ -167,13 +167,11 @@ struct rk3576_pdm_s
  * Private Function Prototypes
  ****************************************************************************/
 
-static uint32_t rk3576_pdm_getreg(struct rk3576_pdm_s *priv,
-                                  unsigned int off);
+static uint32_t rk3576_pdm_getreg(struct rk3576_pdm_s *priv, unsigned int off);
 static void rk3576_pdm_putreg(struct rk3576_pdm_s *priv, unsigned int off,
                               uint32_t val);
-static void rk3576_pdm_modifyreg(struct rk3576_pdm_s *priv,
-                                 unsigned int off, uint32_t clrbits,
-                                 uint32_t setbits);
+static void rk3576_pdm_modifyreg(struct rk3576_pdm_s *priv, unsigned int off,
+                                 uint32_t clrbits, uint32_t setbits);
 
 static int rk3576_pdm_clk_init(struct rk3576_pdm_s *priv, uint32_t rate);
 static int rk3576_pdm_reset(struct rk3576_pdm_s *priv);
@@ -186,41 +184,34 @@ static void rk3576_pdm_dma_callback(struct dma_chan_s *chan, void *arg,
 static int rk3576_pdm_bounce_buffer(struct rk3576_pdm_s *priv, size_t len);
 static int rk3576_pdm_capture(struct rk3576_pdm_s *priv, size_t len);
 
-static uint32_t rk3576_pdm_rxchannels(struct i2s_dev_s *dev,
-                                      uint8_t channels);
-static uint32_t rk3576_pdm_rxsamplerate(struct i2s_dev_s *dev,
-                                        uint32_t rate);
+static uint32_t rk3576_pdm_rxchannels(struct i2s_dev_s *dev, uint8_t channels);
+static uint32_t rk3576_pdm_rxsamplerate(struct i2s_dev_s *dev, uint32_t rate);
 static uint32_t rk3576_pdm_rxdatawidth(struct i2s_dev_s *dev, int bits);
-static int rk3576_pdm_receive(struct i2s_dev_s *dev,
-                              struct ap_buffer_s *apb,
+static int rk3576_pdm_receive(struct i2s_dev_s *dev, struct ap_buffer_s *apb,
                               i2s_callback_t callback, void *arg,
                               uint32_t timeout);
-static uint32_t rk3576_pdm_txchannels(struct i2s_dev_s *dev,
-                                      uint8_t channels);
-static uint32_t rk3576_pdm_txsamplerate(struct i2s_dev_s *dev,
-                                        uint32_t rate);
+static uint32_t rk3576_pdm_txchannels(struct i2s_dev_s *dev, uint8_t channels);
+static uint32_t rk3576_pdm_txsamplerate(struct i2s_dev_s *dev, uint32_t rate);
 static uint32_t rk3576_pdm_txdatawidth(struct i2s_dev_s *dev, int bits);
 static int rk3576_pdm_send(struct i2s_dev_s *dev, struct ap_buffer_s *apb,
                            i2s_callback_t callback, void *arg,
                            uint32_t timeout);
-static int rk3576_pdm_ioctl(struct i2s_dev_s *dev, int cmd,
-                            unsigned long arg);
+static int rk3576_pdm_ioctl(struct i2s_dev_s *dev, int cmd, unsigned long arg);
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static const struct i2s_ops_s g_rk3576_pdm_ops =
-{
-  .i2s_rxchannels   = rk3576_pdm_rxchannels,
+static const struct i2s_ops_s g_rk3576_pdm_ops = {
+  .i2s_rxchannels = rk3576_pdm_rxchannels,
   .i2s_rxsamplerate = rk3576_pdm_rxsamplerate,
-  .i2s_rxdatawidth  = rk3576_pdm_rxdatawidth,
-  .i2s_receive      = rk3576_pdm_receive,
-  .i2s_txchannels   = rk3576_pdm_txchannels,
+  .i2s_rxdatawidth = rk3576_pdm_rxdatawidth,
+  .i2s_receive = rk3576_pdm_receive,
+  .i2s_txchannels = rk3576_pdm_txchannels,
   .i2s_txsamplerate = rk3576_pdm_txsamplerate,
-  .i2s_txdatawidth  = rk3576_pdm_txdatawidth,
-  .i2s_send         = rk3576_pdm_send,
-  .i2s_ioctl        = rk3576_pdm_ioctl,
+  .i2s_txdatawidth = rk3576_pdm_txdatawidth,
+  .i2s_send = rk3576_pdm_send,
+  .i2s_ioctl = rk3576_pdm_ioctl,
 };
 
 /* Static per-controller description.  Clock names follow the RK3576 clock
@@ -228,21 +219,20 @@ static const struct i2s_ops_s g_rk3576_pdm_ops =
  * clock-names of the vendor device tree nodes.
  */
 
-static const struct rk3576_pdm_desc_s g_rk3576_pdm_desc[RK3576_PDM_NCTRL] =
-{
+static const struct rk3576_pdm_desc_s g_rk3576_pdm_desc[RK3576_PDM_NCTRL] = {
   {
-    .base        = RK3576_PDM0_ADDR,
-    .irq         = RK3576_IRQ_PDM0,
-    .hclk_name   = "hclk_pdm0_en",
-    .clk_name    = "clk_pdm0_en",
-    .clkout_name = "clk_pdm0_out_en",
+      .base = RK3576_PDM0_ADDR,
+      .irq = RK3576_IRQ_PDM0,
+      .hclk_name = "hclk_pdm0_en",
+      .clk_name = "clk_pdm0_en",
+      .clkout_name = "clk_pdm0_out_en",
   },
   {
-    .base        = RK3576_PDM1_ADDR,
-    .irq         = RK3576_IRQ_PDM1,
-    .hclk_name   = "hclk_pdm1_en",
-    .clk_name    = "clk_pdm1_en",
-    .clkout_name = "clk_pdm1_out_en",
+      .base = RK3576_PDM1_ADDR,
+      .irq = RK3576_IRQ_PDM1,
+      .hclk_name = "hclk_pdm1_en",
+      .clk_name = "clk_pdm1_en",
+      .clkout_name = "clk_pdm1_out_en",
   },
 };
 
@@ -259,8 +249,7 @@ static struct rk3576_pdm_s g_rk3576_pdm[RK3576_PDM_NCTRL];
  *   Read one controller register.
  ****************************************************************************/
 
-static uint32_t rk3576_pdm_getreg(struct rk3576_pdm_s *priv,
-                                  unsigned int off)
+static uint32_t rk3576_pdm_getreg(struct rk3576_pdm_s *priv, unsigned int off)
 {
   return getreg32(priv->desc->base + off);
 }
@@ -287,9 +276,8 @@ static void rk3576_pdm_putreg(struct rk3576_pdm_s *priv, unsigned int off,
  *   has to be done in software.
  ****************************************************************************/
 
-static void rk3576_pdm_modifyreg(struct rk3576_pdm_s *priv,
-                                 unsigned int off, uint32_t clrbits,
-                                 uint32_t setbits)
+static void rk3576_pdm_modifyreg(struct rk3576_pdm_s *priv, unsigned int off,
+                                 uint32_t clrbits, uint32_t setbits)
 {
   uint32_t regval = rk3576_pdm_getreg(priv, off);
 
@@ -387,8 +375,7 @@ static int rk3576_pdm_clk_init(struct rk3576_pdm_s *priv, uint32_t rate)
   ret = clk_enable(clkout);
   if (ret < 0)
     {
-      auderr("ERROR: failed to enable %s: %d\n",
-             priv->desc->clkout_name, ret);
+      auderr("ERROR: failed to enable %s: %d\n", priv->desc->clkout_name, ret);
       return ret;
     }
 
@@ -418,8 +405,7 @@ set_rate:
   produced = actual / (RK3576_PDM_FD_RATIO * RK3576_PDM_OSR);
   error = produced > rate ? produced - rate : rate - produced;
 
-  if ((uint64_t)error * 1000 > (uint64_t)rate *
-      RK3576_PDM_RATE_TOLERANCE_PPT)
+  if ((uint64_t)error * 1000 > (uint64_t)rate * RK3576_PDM_RATE_TOLERANCE_PPT)
     {
       auderr("ERROR: %s = %" PRIu32 " Hz yields %" PRIu32 " Hz, "
              "wanted %" PRIu32 " Hz\n",
@@ -427,8 +413,8 @@ set_rate:
       return -ERANGE;
     }
 
-  audinfo("PDM clkout %" PRIu32 " Hz -> %" PRIu32 " Hz sample rate\n",
-          actual, produced);
+  audinfo("PDM clkout %" PRIu32 " Hz -> %" PRIu32 " Hz sample rate\n", actual,
+          produced);
   return OK;
 }
 
@@ -446,8 +432,8 @@ static int rk3576_pdm_reset(struct rk3576_pdm_s *priv)
 {
   int retries;
 
-  rk3576_pdm_modifyreg(priv, RK3576_PDM_SYSCONFIG,
-                       PDM_SYSCONFIG_RX_START, PDM_SYSCONFIG_RX_CLR);
+  rk3576_pdm_modifyreg(priv, RK3576_PDM_SYSCONFIG, PDM_SYSCONFIG_RX_START,
+                       PDM_SYSCONFIG_RX_CLR);
 
   for (retries = 0; retries < RK3576_PDM_RESET_RETRIES; retries++)
     {
@@ -502,8 +488,7 @@ static int rk3576_pdm_configure(struct rk3576_pdm_s *priv)
   paths = 0;
   valid = 0;
   for (i = 0;
-       i * RK3576_PDM_MICS_PER_PATH < priv->nchannels &&
-       i < RK3576_PDM_NPATHS;
+       i * RK3576_PDM_MICS_PER_PATH < priv->nchannels && i < RK3576_PDM_NPATHS;
        i++)
     {
       paths |= 1u << (PDM_CTRL0_PATH_SHIFT + i);
@@ -517,8 +502,7 @@ static int rk3576_pdm_configure(struct rk3576_pdm_s *priv)
   /* CIC decimation filter gain */
 
   rk3576_pdm_putreg(priv, RK3576_PDM_CTRL1,
-                    PDM_CTRL1_FILTER_GAIN(
-                      RK3576_PDM_FILTER_GAIN_DEFAULT));
+                    PDM_CTRL1_FILTER_GAIN(RK3576_PDM_FILTER_GAIN_DEFAULT));
 
   /* Decimation ratio and bit-clock generation.  The fractional divider is
    * left at 4.0, which is what rk3576_pdm_clk_init() assumed when it
@@ -527,7 +511,7 @@ static int rk3576_pdm_configure(struct rk3576_pdm_s *priv)
 
   rk3576_pdm_putreg(priv, RK3576_PDM_CLK_CTRL,
                     PDM_CLK_CTRL_DS_RATIO_128 | PDM_CLK_CTRL_CKP_NORMAL |
-                    PDM_CLK_CTRL_FD_RATIO_40 | PDM_CLK_CTRL_CLK_EN);
+                        PDM_CLK_CTRL_FD_RATIO_40 | PDM_CLK_CTRL_CLK_EN);
 
   /* Remove the microphone DC offset.  60 Hz is below the voice band and
    * well above the MEMS 1/f corner.
@@ -535,7 +519,7 @@ static int rk3576_pdm_configure(struct rk3576_pdm_s *priv)
 
   rk3576_pdm_putreg(priv, RK3576_PDM_HPF_CTRL,
                     PDM_HPF_CTRL_CF_60 | PDM_HPF_CTRL_RXL_EN |
-                    PDM_HPF_CTRL_RXR_EN);
+                        PDM_HPF_CTRL_RXR_EN);
 
   /* Raise a DMA request once the FIFO is half full. */
 
@@ -563,8 +547,7 @@ static int rk3576_pdm_configure(struct rk3576_pdm_s *priv)
 static void rk3576_pdm_hw_start(struct rk3576_pdm_s *priv)
 {
   rk3576_pdm_modifyreg(priv, RK3576_PDM_DMA_CTRL, 0, PDM_DMA_CTRL_RDE);
-  rk3576_pdm_modifyreg(priv, RK3576_PDM_SYSCONFIG, 0,
-                       PDM_SYSCONFIG_RX_START);
+  rk3576_pdm_modifyreg(priv, RK3576_PDM_SYSCONFIG, 0, PDM_SYSCONFIG_RX_START);
   priv->started = true;
 }
 
@@ -578,8 +561,7 @@ static void rk3576_pdm_hw_start(struct rk3576_pdm_s *priv)
 
 static void rk3576_pdm_hw_stop(struct rk3576_pdm_s *priv)
 {
-  rk3576_pdm_modifyreg(priv, RK3576_PDM_SYSCONFIG,
-                       PDM_SYSCONFIG_RX_START, 0);
+  rk3576_pdm_modifyreg(priv, RK3576_PDM_SYSCONFIG, PDM_SYSCONFIG_RX_START, 0);
   rk3576_pdm_modifyreg(priv, RK3576_PDM_DMA_CTRL, PDM_DMA_CTRL_RDE, 0);
   rk3576_pdm_putreg(priv, RK3576_PDM_INT_CLR, PDM_INT_ALL);
   rk3576_pdm_reset(priv);
@@ -703,12 +685,11 @@ static int rk3576_pdm_capture(struct rk3576_pdm_s *priv, size_t len)
    * stale lines covering it before the transfer starts.
    */
 
-  up_invalidate_dcache((uintptr_t)priv->dmabuf,
-                       (uintptr_t)priv->dmabuf + len);
+  up_invalidate_dcache((uintptr_t)priv->dmabuf, (uintptr_t)priv->dmabuf + len);
 
   memset(&cfg, 0, sizeof(cfg));
   cfg.direction = DMA_DEV_TO_MEM;
-  cfg.src_drq   = RK3576_PDM_DMA_RX_DRQ;
+  cfg.src_drq = RK3576_PDM_DMA_RX_DRQ;
   cfg.src_width = RK3576_PDM_FIFO_WIDTH;
   cfg.dst_width = RK3576_PDM_FIFO_WIDTH;
 
@@ -734,10 +715,10 @@ static int rk3576_pdm_capture(struct rk3576_pdm_s *priv, size_t len)
 
   /* Nominal duration of the buffer, with generous slack. */
 
-  timeout_ms = (uint32_t)
-    (((uint64_t)len * 1000 * RK3576_PDM_TIMEOUT_FACTOR) /
-     ((uint64_t)priv->samplerate * priv->nchannels *
-      (priv->datawidth / 8))) + 1;
+  timeout_ms = (uint32_t)(((uint64_t)len * 1000 * RK3576_PDM_TIMEOUT_FACTOR) /
+                          ((uint64_t)priv->samplerate * priv->nchannels *
+                           (priv->datawidth / 8))) +
+               1;
 
   ret = nxsem_tickwait_uninterruptible(&priv->done, MSEC2TICK(timeout_ms));
   if (ret < 0)
@@ -775,8 +756,7 @@ static int rk3576_pdm_capture(struct rk3576_pdm_s *priv, size_t len)
  *   The channel count in effect, or zero if the request was rejected.
  ****************************************************************************/
 
-static uint32_t rk3576_pdm_rxchannels(struct i2s_dev_s *dev,
-                                      uint8_t channels)
+static uint32_t rk3576_pdm_rxchannels(struct i2s_dev_s *dev, uint8_t channels)
 {
   struct rk3576_pdm_s *priv = (struct rk3576_pdm_s *)dev;
 
@@ -875,8 +855,7 @@ static uint32_t rk3576_pdm_rxdatawidth(struct i2s_dev_s *dev, int bits)
  *   OK on success, a negated errno on failure.
  ****************************************************************************/
 
-static int rk3576_pdm_receive(struct i2s_dev_s *dev,
-                              struct ap_buffer_s *apb,
+static int rk3576_pdm_receive(struct i2s_dev_s *dev, struct ap_buffer_s *apb,
                               i2s_callback_t callback, void *arg,
                               uint32_t timeout)
 {
@@ -946,8 +925,7 @@ errout:
  *   I2S method: not supported, the PDM block has no transmit path.
  ****************************************************************************/
 
-static uint32_t rk3576_pdm_txchannels(struct i2s_dev_s *dev,
-                                      uint8_t channels)
+static uint32_t rk3576_pdm_txchannels(struct i2s_dev_s *dev, uint8_t channels)
 {
   UNUSED(dev);
   UNUSED(channels);
@@ -1008,8 +986,7 @@ static int rk3576_pdm_send(struct i2s_dev_s *dev, struct ap_buffer_s *apb,
  *   I2S method: no controller-specific commands are implemented.
  ****************************************************************************/
 
-static int rk3576_pdm_ioctl(struct i2s_dev_s *dev, int cmd,
-                            unsigned long arg)
+static int rk3576_pdm_ioctl(struct i2s_dev_s *dev, int cmd, unsigned long arg)
 {
   UNUSED(dev);
   UNUSED(cmd);
@@ -1048,12 +1025,12 @@ struct i2s_dev_s *rk3576_pdm_initialize(int controller)
       return &priv->dev;
     }
 
-  priv->desc       = &g_rk3576_pdm_desc[controller];
+  priv->desc = &g_rk3576_pdm_desc[controller];
   priv->samplerate = RK3576_PDM_DEFAULT_RATE;
-  priv->datawidth  = RK3576_PDM_DEFAULT_WIDTH;
-  priv->nchannels  = RK3576_PDM_DEFAULT_CHANNELS;
+  priv->datawidth = RK3576_PDM_DEFAULT_WIDTH;
+  priv->nchannels = RK3576_PDM_DEFAULT_CHANNELS;
   priv->configured = false;
-  priv->started    = false;
+  priv->started = false;
 
   nxmutex_init(&priv->lock);
   nxsem_init(&priv->done, 0, 0);

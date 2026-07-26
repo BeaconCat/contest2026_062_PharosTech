@@ -44,9 +44,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <syslog.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <syslog.h>
 #include <unistd.h>
 
 #include "rkllm_format.h"
@@ -55,24 +55,24 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define RKLLM_NAME_FMT_MAX      96    /* "blk.<n>.<suffix>" scratch buffer */
+#define RKLLM_NAME_FMT_MAX 96 /* "blk.<n>.<suffix>" scratch buffer */
 
 /* This is an application, not a driver, so it has no CONFIG_DEBUG_<subsys>
  * knob of its own.  Route the diagnostics through syslog at the usual
  * severities.
  */
 
-#define llmerr(fmt, ...)   syslog(LOG_ERR,     "llm: " fmt, ##__VA_ARGS__)
-#define llmwarn(fmt, ...)  syslog(LOG_WARNING, "llm: " fmt, ##__VA_ARGS__)
-#define llminfo(fmt, ...)  syslog(LOG_INFO,    "llm: " fmt, ##__VA_ARGS__)
+#define llmerr(fmt, ...)  syslog(LOG_ERR, "llm: " fmt, ##__VA_ARGS__)
+#define llmwarn(fmt, ...) syslog(LOG_WARNING, "llm: " fmt, ##__VA_ARGS__)
+#define llminfo(fmt, ...) syslog(LOG_INFO, "llm: " fmt, ##__VA_ARGS__)
 
 /* Inferred .rkllm record sizes.  TODO: confirm with a real model, see the
  * verification note at the top of rkllm_parse_rkllm().
  */
 
-#define RKLLM_HDR_SIZE_MIN      sizeof(struct rkllm_disk_hdr_s)
-#define RKLLM_ENTRY_NAME_MAX    64
-#define RKLLM_ENTRY_SIZE_MIN    sizeof(struct rkllm_disk_tensor_s)
+#define RKLLM_HDR_SIZE_MIN   sizeof(struct rkllm_disk_hdr_s)
+#define RKLLM_ENTRY_NAME_MAX 64
+#define RKLLM_ENTRY_SIZE_MIN sizeof(struct rkllm_disk_tensor_s)
 
 /* Inferred .rkllm dtype codes.  They follow the RKNN tensor type ordering
  * used by rknn_matmul_api (float32, float16, int8, int4, uint8), which is
@@ -80,11 +80,11 @@
  * TODO: confirm; a mis-mapped dtype shows up immediately as garbage logits.
  */
 
-#define RKLLM_DT_FLOAT32        0
-#define RKLLM_DT_FLOAT16        1
-#define RKLLM_DT_INT8           2
-#define RKLLM_DT_INT4           3
-#define RKLLM_DT_UINT8          4
+#define RKLLM_DT_FLOAT32 0
+#define RKLLM_DT_FLOAT16 1
+#define RKLLM_DT_INT8    2
+#define RKLLM_DT_INT4    3
+#define RKLLM_DT_UINT8   4
 
 /****************************************************************************
  * Private Types
@@ -94,10 +94,10 @@
 
 begin_packed_struct struct nllm_disk_hdr_s
 {
-  char     magic[NLLM_MAGIC_LEN];   /* "NLLM"                             */
+  char magic[NLLM_MAGIC_LEN]; /* "NLLM"                             */
   uint32_t version;
-  uint32_t header_size;             /* == NLLM_HEADER_SIZE for version 1  */
-  uint32_t flags;                   /* NLLM_FLAG_*                        */
+  uint32_t header_size; /* == NLLM_HEADER_SIZE for version 1  */
+  uint32_t flags;       /* NLLM_FLAG_*                        */
 
   uint32_t arch;
   uint32_t n_layer;
@@ -109,12 +109,12 @@ begin_packed_struct struct nllm_disk_hdr_s
   uint32_t vocab_size;
   uint32_t max_seq_len;
 
-  float    rope_theta;
-  float    rms_eps;
+  float rope_theta;
+  float rms_eps;
 
-  int32_t  bos_token_id;
-  int32_t  eos_token_id;
-  int32_t  pad_token_id;
+  int32_t bos_token_id;
+  int32_t eos_token_id;
+  int32_t pad_token_id;
 
   uint32_t quant_type;
   uint32_t group_size;
@@ -130,40 +130,40 @@ begin_packed_struct struct nllm_disk_hdr_s
   uint64_t data_size;
   uint64_t file_size;
 
-  uint32_t hdr_crc32;               /* CRC32 of bytes [0, 144)            */
-  uint8_t  reserved1[108];
+  uint32_t hdr_crc32; /* CRC32 of bytes [0, 144)            */
+  uint8_t reserved1[108];
 } end_packed_struct;
 
 begin_packed_struct struct nllm_disk_tensor_s
 {
-  char     name[NLLM_TENSOR_NAME_MAX];
+  char name[NLLM_TENSOR_NAME_MAX];
   uint32_t dtype;
   uint32_t ndim;
   uint32_t dims[NLLM_MAX_DIMS];
   uint64_t nelem;
   uint32_t group_size;
   uint32_t ngroups;
-  uint64_t data_off;                /* absolute file offset               */
-  uint64_t data_size;               /* quants + scales (+ zeros)          */
-  uint32_t scale_off;               /* relative to data_off, 0 if none    */
-  uint32_t zero_off;                /* relative to data_off, 0 if none    */
+  uint64_t data_off;  /* absolute file offset               */
+  uint64_t data_size; /* quants + scales (+ zeros)          */
+  uint32_t scale_off; /* relative to data_off, 0 if none    */
+  uint32_t zero_off;  /* relative to data_off, 0 if none    */
 } end_packed_struct;
 
 begin_packed_struct struct nllm_disk_tok_s
 {
-  char     magic[NLLM_MAGIC_LEN];   /* "NTOK"                             */
+  char magic[NLLM_MAGIC_LEN]; /* "NTOK"                             */
   uint32_t version;
   uint32_t n_tokens;
   uint32_t flags;
 
-  int32_t  unk_id;
-  int32_t  bos_id;
-  int32_t  eos_id;
-  int32_t  pad_id;
+  int32_t unk_id;
+  int32_t bos_id;
+  int32_t eos_id;
+  int32_t pad_id;
 
-  uint32_t off_offsets;             /* all offsets relative to section    */
+  uint32_t off_offsets; /* all offsets relative to section    */
   uint32_t off_lengths;
-  uint32_t off_scores;              /* 0 when the model has no scores     */
+  uint32_t off_scores; /* 0 when the model has no scores     */
   uint32_t off_pool;
   uint32_t pool_size;
   uint32_t reserved0;
@@ -174,7 +174,7 @@ begin_packed_struct struct nllm_disk_tok_s
 
 begin_packed_struct struct rkllm_disk_hdr_s
 {
-  char     magic[4];                /* "RKLL" or "RKNN", see TODO         */
+  char magic[4]; /* "RKLL" or "RKNN", see TODO         */
   uint32_t version;
   uint32_t header_size;
   uint32_t model_type;
@@ -193,7 +193,7 @@ begin_packed_struct struct rkllm_disk_hdr_s
 
 begin_packed_struct struct rkllm_disk_tensor_s
 {
-  char     name[RKLLM_ENTRY_NAME_MAX];
+  char name[RKLLM_ENTRY_NAME_MAX];
   uint32_t dtype;
   uint32_t ndim;
   uint32_t dims[NLLM_MAX_DIMS];
@@ -218,10 +218,10 @@ begin_packed_struct struct rkllm_disk_cfg_s
   uint32_t n_ff;
   uint32_t vocab_size;
   uint32_t max_context_len;
-  float    rope_theta;
-  float    rms_eps;
-  int32_t  bos_token_id;
-  int32_t  eos_token_id;
+  float rope_theta;
+  float rms_eps;
+  int32_t bos_token_id;
+  int32_t eos_token_id;
   uint32_t quant_bits;
   uint32_t group_size;
 } end_packed_struct;
@@ -230,46 +230,45 @@ begin_packed_struct struct rkllm_disk_cfg_s
 
 struct rkllm_slot_s
 {
-  struct nllm_disk_tensor_s rec;    /* normalised tensor record           */
-  uint32_t                  scale_off;
-  uint32_t                  zero_off;
-  void                     *cache;  /* lazily read payload, may be NULL   */
+  struct nllm_disk_tensor_s rec; /* normalised tensor record           */
+  uint32_t scale_off;
+  uint32_t zero_off;
+  void *cache; /* lazily read payload, may be NULL   */
 };
 
 struct rkllm_ctx_s
 {
-  int                   fd;
-  int                   kind;       /* enum rkllm_kind_e                  */
-  off_t                 filesize;
+  int fd;
+  int kind; /* enum rkllm_kind_e                  */
+  off_t filesize;
 
-  uint8_t              *image;      /* whole file, preload mode only      */
+  uint8_t *image; /* whole file, preload mode only      */
 
-  struct llm_config_s   config;
+  struct llm_config_s config;
 
-  int                   ntensors;
-  struct rkllm_slot_s  *slots;
+  int ntensors;
+  struct rkllm_slot_s *slots;
 
-  uint8_t              *tokblob;    /* tokenizer section, always in RAM   */
-  size_t                toksize;
-  bool                  has_tok;
+  uint8_t *tokblob; /* tokenizer section, always in RAM   */
+  size_t toksize;
+  bool has_tok;
 };
 
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
-static int      rkllm_read_at(int fd, void *dst, size_t len, off_t off);
+static int rkllm_read_at(int fd, void *dst, size_t len, off_t off);
 static uint64_t rkllm_dims_product(const uint32_t *dims, uint32_t ndim);
-static size_t   rkllm_dtype_bits(uint32_t dtype);
-static int      rkllm_parse_nllm(struct rkllm_ctx_s *ctx);
-static int      rkllm_parse_rkllm(struct rkllm_ctx_s *ctx);
-static int      rkllm_map_rkllm_dtype(uint32_t dtype, uint32_t group_size);
-static int      rkllm_slot_payload(struct rkllm_ctx_s *ctx,
-                                   struct rkllm_slot_s *slot,
-                                   const void **payload);
-static int      rkllm_fill_tensor(struct rkllm_ctx_s *ctx, int index,
-                                  struct llm_tensor_s *tensor);
-static void     rkllm_free_slots(struct rkllm_ctx_s *ctx);
+static size_t rkllm_dtype_bits(uint32_t dtype);
+static int rkllm_parse_nllm(struct rkllm_ctx_s *ctx);
+static int rkllm_parse_rkllm(struct rkllm_ctx_s *ctx);
+static int rkllm_map_rkllm_dtype(uint32_t dtype, uint32_t group_size);
+static int rkllm_slot_payload(struct rkllm_ctx_s *ctx,
+                              struct rkllm_slot_s *slot, const void **payload);
+static int rkllm_fill_tensor(struct rkllm_ctx_s *ctx, int index,
+                             struct llm_tensor_s *tensor);
+static void rkllm_free_slots(struct rkllm_ctx_s *ctx);
 
 /****************************************************************************
  * Private Functions
@@ -286,7 +285,7 @@ static void     rkllm_free_slots(struct rkllm_ctx_s *ctx);
 static int rkllm_read_at(int fd, void *dst, size_t len, off_t off)
 {
   uint8_t *p = (uint8_t *)dst;
-  size_t   done = 0;
+  size_t done = 0;
 
   if (lseek(fd, off, SEEK_SET) != off)
     {
@@ -389,11 +388,11 @@ static size_t rkllm_dtype_bits(uint32_t dtype)
 
 static int rkllm_parse_nllm(struct rkllm_ctx_s *ctx)
 {
-  struct nllm_disk_hdr_s     hdr;
+  struct nllm_disk_hdr_s hdr;
   struct nllm_disk_tensor_s *table = NULL;
-  size_t                     tablebytes;
-  int                        ret;
-  int                        i;
+  size_t tablebytes;
+  int ret;
+  int i;
 
   ret = rkllm_read_at(ctx->fd, &hdr, sizeof(hdr), 0);
   if (ret < 0)
@@ -427,24 +426,25 @@ static int rkllm_parse_nllm(struct rkllm_ctx_s *ctx)
       return -EINVAL;
     }
 
-  ctx->config.arch         = hdr.arch;
-  ctx->config.n_layer      = hdr.n_layer;
-  ctx->config.n_embd       = hdr.n_embd;
-  ctx->config.n_head       = hdr.n_head;
-  ctx->config.n_kv_head    = hdr.n_kv_head != 0 ? hdr.n_kv_head : hdr.n_head;
-  ctx->config.head_dim     = hdr.head_dim != 0 ? hdr.head_dim :
-                             (hdr.n_head != 0 ? hdr.n_embd / hdr.n_head : 0);
-  ctx->config.n_ff         = hdr.n_ff;
-  ctx->config.vocab_size   = hdr.vocab_size;
-  ctx->config.max_seq_len  = hdr.max_seq_len;
-  ctx->config.rope_theta   = hdr.rope_theta;
-  ctx->config.rms_eps      = hdr.rms_eps;
+  ctx->config.arch = hdr.arch;
+  ctx->config.n_layer = hdr.n_layer;
+  ctx->config.n_embd = hdr.n_embd;
+  ctx->config.n_head = hdr.n_head;
+  ctx->config.n_kv_head = hdr.n_kv_head != 0 ? hdr.n_kv_head : hdr.n_head;
+  ctx->config.head_dim = hdr.head_dim != 0
+                             ? hdr.head_dim
+                             : (hdr.n_head != 0 ? hdr.n_embd / hdr.n_head : 0);
+  ctx->config.n_ff = hdr.n_ff;
+  ctx->config.vocab_size = hdr.vocab_size;
+  ctx->config.max_seq_len = hdr.max_seq_len;
+  ctx->config.rope_theta = hdr.rope_theta;
+  ctx->config.rms_eps = hdr.rms_eps;
   ctx->config.bos_token_id = hdr.bos_token_id;
   ctx->config.eos_token_id = hdr.eos_token_id;
   ctx->config.pad_token_id = hdr.pad_token_id;
-  ctx->config.quant_type   = hdr.quant_type;
-  ctx->config.group_size   = hdr.group_size;
-  ctx->config.flags        = hdr.flags;
+  ctx->config.quant_type = hdr.quant_type;
+  ctx->config.group_size = hdr.group_size;
+  ctx->config.flags = hdr.flags;
 
   table = (struct nllm_disk_tensor_s *)malloc(tablebytes);
   if (table == NULL)
@@ -452,16 +452,15 @@ static int rkllm_parse_nllm(struct rkllm_ctx_s *ctx)
       return -ENOMEM;
     }
 
-  ret = rkllm_read_at(ctx->fd, table, tablebytes,
-                      (off_t)hdr.tensor_table_off);
+  ret = rkllm_read_at(ctx->fd, table, tablebytes, (off_t)hdr.tensor_table_off);
   if (ret < 0)
     {
       free(table);
       return ret;
     }
 
-  ctx->slots = (struct rkllm_slot_s *)
-               calloc(hdr.n_tensors, sizeof(struct rkllm_slot_s));
+  ctx->slots = (struct rkllm_slot_s *)calloc(hdr.n_tensors,
+                                             sizeof(struct rkllm_slot_s));
   if (ctx->slots == NULL)
     {
       free(table);
@@ -481,8 +480,8 @@ static int rkllm_parse_nllm(struct rkllm_ctx_s *ctx)
 
       if (rkllm_dtype_bits(src->dtype) == 0)
         {
-          llmerr("ERROR: tensor %d unknown dtype %" PRIu32 "\n",
-                 i, src->dtype);
+          llmerr("ERROR: tensor %d unknown dtype %" PRIu32 "\n", i,
+                 src->dtype);
           free(table);
           return -ENOTSUP;
         }
@@ -490,7 +489,7 @@ static int rkllm_parse_nllm(struct rkllm_ctx_s *ctx)
       memcpy(&ctx->slots[i].rec, src, sizeof(*src));
       ctx->slots[i].rec.name[NLLM_TENSOR_NAME_MAX - 1] = '\0';
       ctx->slots[i].scale_off = src->scale_off;
-      ctx->slots[i].zero_off  = src->zero_off;
+      ctx->slots[i].zero_off = src->zero_off;
     }
 
   ctx->ntensors = (int)hdr.n_tensors;
@@ -515,8 +514,8 @@ static int rkllm_parse_nllm(struct rkllm_ctx_s *ctx)
         }
 
       ctx->toksize = (size_t)hdr.tokenizer_size;
-      ctx->has_tok = memcmp(ctx->tokblob, NLLM_TOKENIZER_MAGIC,
-                            NLLM_MAGIC_LEN) == 0;
+      ctx->has_tok =
+          memcmp(ctx->tokblob, NLLM_TOKENIZER_MAGIC, NLLM_MAGIC_LEN) == 0;
       if (!ctx->has_tok)
         {
           llmwarn("WARNING: tokenizer section magic mismatch, ignored\n");
@@ -583,13 +582,13 @@ static int rkllm_map_rkllm_dtype(uint32_t dtype, uint32_t group_size)
 
 static int rkllm_parse_rkllm(struct rkllm_ctx_s *ctx)
 {
-  struct rkllm_disk_hdr_s  hdr;
-  struct rkllm_disk_cfg_s  cfg;
-  uint8_t                 *table = NULL;
-  size_t                   stride;
-  size_t                   tablebytes;
-  int                      ret;
-  int                      i;
+  struct rkllm_disk_hdr_s hdr;
+  struct rkllm_disk_cfg_s cfg;
+  uint8_t *table = NULL;
+  size_t stride;
+  size_t tablebytes;
+  int ret;
+  int i;
 
   ret = rkllm_read_at(ctx->fd, &hdr, sizeof(hdr), 0);
   if (ret < 0)
@@ -613,12 +612,11 @@ static int rkllm_parse_rkllm(struct rkllm_ctx_s *ctx)
       return -ENOTSUP;
     }
 
-  stride = hdr.tensor_entry_size != 0 ? hdr.tensor_entry_size :
-                                        RKLLM_ENTRY_SIZE_MIN;
+  stride = hdr.tensor_entry_size != 0 ? hdr.tensor_entry_size
+                                      : RKLLM_ENTRY_SIZE_MIN;
   if (stride < RKLLM_ENTRY_SIZE_MIN)
     {
-      llmerr("ERROR: .rkllm entry stride %zu below inferred record\n",
-             stride);
+      llmerr("ERROR: .rkllm entry stride %zu below inferred record\n", stride);
       return -ENOTSUP;
     }
 
@@ -637,8 +635,7 @@ static int rkllm_parse_rkllm(struct rkllm_ctx_s *ctx)
   if (hdr.config_size >= sizeof(cfg) &&
       (off_t)(hdr.config_off + sizeof(cfg)) <= ctx->filesize)
     {
-      ret = rkllm_read_at(ctx->fd, &cfg, sizeof(cfg),
-                          (off_t)hdr.config_off);
+      ret = rkllm_read_at(ctx->fd, &cfg, sizeof(cfg), (off_t)hdr.config_off);
       if (ret < 0)
         {
           return ret;
@@ -649,24 +646,25 @@ static int rkllm_parse_rkllm(struct rkllm_ctx_s *ctx)
       llmwarn("WARNING: .rkllm config block absent or short\n");
     }
 
-  ctx->config.arch         = NLLM_ARCH_UNKNOWN;
-  ctx->config.n_layer      = cfg.n_layer;
-  ctx->config.n_embd       = cfg.n_embd;
-  ctx->config.n_head       = cfg.n_head;
-  ctx->config.n_kv_head    = cfg.n_kv_head != 0 ? cfg.n_kv_head : cfg.n_head;
-  ctx->config.head_dim     = cfg.head_dim != 0 ? cfg.head_dim :
-                             (cfg.n_head != 0 ? cfg.n_embd / cfg.n_head : 0);
-  ctx->config.n_ff         = cfg.n_ff;
-  ctx->config.vocab_size   = cfg.vocab_size;
-  ctx->config.max_seq_len  = cfg.max_context_len;
-  ctx->config.rope_theta   = cfg.rope_theta;
-  ctx->config.rms_eps      = cfg.rms_eps;
+  ctx->config.arch = NLLM_ARCH_UNKNOWN;
+  ctx->config.n_layer = cfg.n_layer;
+  ctx->config.n_embd = cfg.n_embd;
+  ctx->config.n_head = cfg.n_head;
+  ctx->config.n_kv_head = cfg.n_kv_head != 0 ? cfg.n_kv_head : cfg.n_head;
+  ctx->config.head_dim = cfg.head_dim != 0
+                             ? cfg.head_dim
+                             : (cfg.n_head != 0 ? cfg.n_embd / cfg.n_head : 0);
+  ctx->config.n_ff = cfg.n_ff;
+  ctx->config.vocab_size = cfg.vocab_size;
+  ctx->config.max_seq_len = cfg.max_context_len;
+  ctx->config.rope_theta = cfg.rope_theta;
+  ctx->config.rms_eps = cfg.rms_eps;
   ctx->config.bos_token_id = cfg.bos_token_id;
   ctx->config.eos_token_id = cfg.eos_token_id;
   ctx->config.pad_token_id = -1;
-  ctx->config.group_size   = cfg.group_size;
-  ctx->config.quant_type   = cfg.quant_bits == 4 ? NLLM_DTYPE_I4_ASYM :
-                             NLLM_DTYPE_I8;
+  ctx->config.group_size = cfg.group_size;
+  ctx->config.quant_type =
+      cfg.quant_bits == 4 ? NLLM_DTYPE_I4_ASYM : NLLM_DTYPE_I8;
 
   table = (uint8_t *)malloc(tablebytes);
   if (table == NULL)
@@ -674,16 +672,15 @@ static int rkllm_parse_rkllm(struct rkllm_ctx_s *ctx)
       return -ENOMEM;
     }
 
-  ret = rkllm_read_at(ctx->fd, table, tablebytes,
-                      (off_t)hdr.tensor_table_off);
+  ret = rkllm_read_at(ctx->fd, table, tablebytes, (off_t)hdr.tensor_table_off);
   if (ret < 0)
     {
       free(table);
       return ret;
     }
 
-  ctx->slots = (struct rkllm_slot_s *)
-               calloc(hdr.n_tensors, sizeof(struct rkllm_slot_s));
+  ctx->slots = (struct rkllm_slot_s *)calloc(hdr.n_tensors,
+                                             sizeof(struct rkllm_slot_s));
   if (ctx->slots == NULL)
     {
       free(table);
@@ -693,15 +690,15 @@ static int rkllm_parse_rkllm(struct rkllm_ctx_s *ctx)
   for (i = 0; i < (int)hdr.n_tensors; i++)
     {
       const struct rkllm_disk_tensor_s *src =
-        (const struct rkllm_disk_tensor_s *)(table + (size_t)i * stride);
+          (const struct rkllm_disk_tensor_s *)(table + (size_t)i * stride);
       struct nllm_disk_tensor_s *dst = &ctx->slots[i].rec;
       int dtype;
 
       dtype = rkllm_map_rkllm_dtype(src->dtype, cfg.group_size);
       if (dtype < 0)
         {
-          llmerr("ERROR: .rkllm tensor %d dtype %" PRIu32 " unsupported\n",
-                 i, src->dtype);
+          llmerr("ERROR: .rkllm tensor %d dtype %" PRIu32 " unsupported\n", i,
+                 src->dtype);
           free(table);
           return dtype;
         }
@@ -721,15 +718,15 @@ static int rkllm_parse_rkllm(struct rkllm_ctx_s *ctx)
 
       memcpy(dst->name, src->name, RKLLM_ENTRY_NAME_MAX);
       dst->name[NLLM_TENSOR_NAME_MAX - 1] = '\0';
-      dst->dtype      = (uint32_t)dtype;
-      dst->ndim       = src->ndim > NLLM_MAX_DIMS ? NLLM_MAX_DIMS : src->ndim;
+      dst->dtype = (uint32_t)dtype;
+      dst->ndim = src->ndim > NLLM_MAX_DIMS ? NLLM_MAX_DIMS : src->ndim;
       memcpy(dst->dims, src->dims, sizeof(dst->dims));
-      dst->nelem      = rkllm_dims_product(dst->dims, dst->ndim);
+      dst->nelem = rkllm_dims_product(dst->dims, dst->ndim);
       dst->group_size = cfg.group_size;
-      dst->ngroups    = cfg.group_size != 0 ?
-                        (uint32_t)(dst->nelem / cfg.group_size) : 0;
-      dst->data_off   = src->data_off;
-      dst->data_size  = src->data_size;
+      dst->ngroups =
+          cfg.group_size != 0 ? (uint32_t)(dst->nelem / cfg.group_size) : 0;
+      dst->data_off = src->data_off;
+      dst->data_size = src->data_size;
 
       /* TODO: the placement of the per-group scale and zero arrays inside
        * an RKLLM payload is unknown.  Assuming "quants first, then scales,
@@ -741,18 +738,18 @@ static int rkllm_parse_rkllm(struct rkllm_ctx_s *ctx)
 
       if (dst->ngroups != 0 && dst->nelem != 0)
         {
-          size_t qbytes = (size_t)((dst->nelem *
-                                    rkllm_dtype_bits(dst->dtype) + 7) / 8);
+          size_t qbytes =
+              (size_t)((dst->nelem * rkllm_dtype_bits(dst->dtype) + 7) / 8);
 
           ctx->slots[i].scale_off = (uint32_t)qbytes;
           if (dtype == NLLM_DTYPE_I4_ASYM)
             {
               ctx->slots[i].zero_off =
-                (uint32_t)(qbytes + dst->ngroups * sizeof(uint16_t));
+                  (uint32_t)(qbytes + dst->ngroups * sizeof(uint16_t));
             }
 
           ctx->slots[i].rec.scale_off = ctx->slots[i].scale_off;
-          ctx->slots[i].rec.zero_off  = ctx->slots[i].zero_off;
+          ctx->slots[i].rec.zero_off = ctx->slots[i].zero_off;
         }
     }
 
@@ -769,7 +766,8 @@ static int rkllm_parse_rkllm(struct rkllm_ctx_s *ctx)
       (off_t)(hdr.tokenizer_off + hdr.tokenizer_size) <= ctx->filesize)
     {
       llminfo("rkllm: tokenizer blob %" PRIu64 " bytes at %" PRIu64
-              " (raw, not parsed)\n", hdr.tokenizer_size, hdr.tokenizer_off);
+              " (raw, not parsed)\n",
+              hdr.tokenizer_size, hdr.tokenizer_off);
     }
 
   return OK;
@@ -785,8 +783,7 @@ static int rkllm_parse_rkllm(struct rkllm_ctx_s *ctx)
  ****************************************************************************/
 
 static int rkllm_slot_payload(struct rkllm_ctx_s *ctx,
-                              struct rkllm_slot_s *slot,
-                              const void **payload)
+                              struct rkllm_slot_s *slot, const void **payload)
 {
   int ret;
 
@@ -840,9 +837,9 @@ static int rkllm_fill_tensor(struct rkllm_ctx_s *ctx, int index,
                              struct llm_tensor_s *tensor)
 {
   struct rkllm_slot_s *slot = &ctx->slots[index];
-  const uint8_t       *base;
-  const void          *payload;
-  int                  ret;
+  const uint8_t *base;
+  const void *payload;
+  int ret;
 
   ret = rkllm_slot_payload(ctx, slot, &payload);
   if (ret < 0)
@@ -855,18 +852,18 @@ static int rkllm_fill_tensor(struct rkllm_ctx_s *ctx, int index,
   memset(tensor, 0, sizeof(*tensor));
   memcpy(tensor->name, slot->rec.name, NLLM_TENSOR_NAME_MAX);
   tensor->name[NLLM_TENSOR_NAME_MAX - 1] = '\0';
-  tensor->dtype      = slot->rec.dtype;
-  tensor->ndim       = slot->rec.ndim;
+  tensor->dtype = slot->rec.dtype;
+  tensor->ndim = slot->rec.ndim;
   memcpy(tensor->dims, slot->rec.dims, sizeof(tensor->dims));
-  tensor->nelem      = slot->rec.nelem;
+  tensor->nelem = slot->rec.nelem;
   tensor->group_size = slot->rec.group_size;
-  tensor->ngroups    = slot->rec.ngroups;
-  tensor->data       = payload;
-  tensor->size       = (size_t)slot->rec.data_size;
+  tensor->ngroups = slot->rec.ngroups;
+  tensor->data = payload;
+  tensor->size = (size_t)slot->rec.data_size;
 
   if (base != NULL && tensor->ngroups != 0)
     {
-      tensor->qdata  = base;
+      tensor->qdata = base;
       tensor->scales = (const uint16_t *)(base + slot->scale_off);
       if (tensor->dtype == NLLM_DTYPE_I4_ASYM && slot->zero_off != 0)
         {
@@ -913,9 +910,9 @@ static void rkllm_free_slots(struct rkllm_ctx_s *ctx)
 int rkllm_open(const char *path, uint32_t flags, struct rkllm_ctx_s **ctxp)
 {
   struct rkllm_ctx_s *ctx;
-  struct stat         sb;
-  char                magic[NLLM_MAGIC_LEN];
-  int                 ret;
+  struct stat sb;
+  char magic[NLLM_MAGIC_LEN];
+  int ret;
 
   if (path == NULL || ctxp == NULL)
     {
@@ -966,17 +963,17 @@ int rkllm_open(const char *path, uint32_t flags, struct rkllm_ctx_s **ctxp)
     }
   else
     {
-      llmerr("ERROR: unknown model magic %02x %02x %02x %02x\n",
-             magic[0], magic[1], magic[2], magic[3]);
+      llmerr("ERROR: unknown model magic %02x %02x %02x %02x\n", magic[0],
+             magic[1], magic[2], magic[3]);
       ret = -EINVAL;
       goto errout;
     }
 
   if ((flags & RKLLM_OPEN_PRELOAD) != 0)
     {
-      ctx->image = (uint8_t *)memalign(NLLM_DATA_ALIGN,
-                     ((size_t)ctx->filesize + NLLM_DATA_ALIGN - 1) &
-                     ~((size_t)NLLM_DATA_ALIGN - 1));
+      ctx->image = (uint8_t *)memalign(
+          NLLM_DATA_ALIGN, ((size_t)ctx->filesize + NLLM_DATA_ALIGN - 1) &
+                               ~((size_t)NLLM_DATA_ALIGN - 1));
       if (ctx->image == NULL)
         {
           ret = -ENOMEM;
@@ -990,8 +987,8 @@ int rkllm_open(const char *path, uint32_t flags, struct rkllm_ctx_s **ctxp)
         }
     }
 
-  ret = ctx->kind == RKLLM_KIND_NLLM ? rkllm_parse_nllm(ctx) :
-                                       rkllm_parse_rkllm(ctx);
+  ret = ctx->kind == RKLLM_KIND_NLLM ? rkllm_parse_nllm(ctx)
+                                     : rkllm_parse_rkllm(ctx);
   if (ret < 0)
     {
       goto errout;
@@ -1061,8 +1058,7 @@ int rkllm_get_tensor(struct rkllm_ctx_s *ctx, const char *name,
 
   for (i = 0; i < ctx->ntensors; i++)
     {
-      if (strncmp(ctx->slots[i].rec.name, name,
-                  NLLM_TENSOR_NAME_MAX) == 0)
+      if (strncmp(ctx->slots[i].rec.name, name, NLLM_TENSOR_NAME_MAX) == 0)
         {
           return rkllm_fill_tensor(ctx, i, tensor);
         }
@@ -1118,14 +1114,14 @@ int rkllm_get_tokenizer(struct rkllm_ctx_s *ctx, struct llm_tokenizer_s *tok)
     }
 
   memset(tok, 0, sizeof(*tok));
-  tok->n_tokens  = hdr->n_tokens;
-  tok->unk_id    = hdr->unk_id;
-  tok->bos_id    = hdr->bos_id;
-  tok->eos_id    = hdr->eos_id;
-  tok->pad_id    = hdr->pad_id;
-  tok->offsets   = (const uint32_t *)(ctx->tokblob + hdr->off_offsets);
-  tok->lengths   = (const uint32_t *)(ctx->tokblob + hdr->off_lengths);
-  tok->pool      = (const char *)(ctx->tokblob + hdr->off_pool);
+  tok->n_tokens = hdr->n_tokens;
+  tok->unk_id = hdr->unk_id;
+  tok->bos_id = hdr->bos_id;
+  tok->eos_id = hdr->eos_id;
+  tok->pad_id = hdr->pad_id;
+  tok->offsets = (const uint32_t *)(ctx->tokblob + hdr->off_offsets);
+  tok->lengths = (const uint32_t *)(ctx->tokblob + hdr->off_lengths);
+  tok->pool = (const char *)(ctx->tokblob + hdr->off_pool);
   tok->pool_size = hdr->pool_size;
 
   if (hdr->off_scores != 0 &&
@@ -1187,16 +1183,16 @@ int rkllm_container_kind(struct rkllm_ctx_s *ctx)
 float rkllm_fp16_to_fp32(uint16_t h)
 {
   uint32_t sign = (uint32_t)(h & 0x8000) << 16;
-  uint32_t exp  = (h >> 10) & 0x1f;
-  uint32_t man  = h & 0x3ff;
+  uint32_t exp = (h >> 10) & 0x1f;
+  uint32_t man = h & 0x3ff;
   uint32_t bits;
-  float    f;
+  float f;
 
   if (exp == 0)
     {
       if (man == 0)
         {
-          bits = sign;                       /* signed zero               */
+          bits = sign; /* signed zero               */
         }
       else
         {
@@ -1240,8 +1236,8 @@ int rkllm_dequant_group(const struct llm_tensor_s *tensor, uint32_t group,
 {
   uint32_t gs;
   uint32_t i;
-  float    scale;
-  float    zero = 0.0f;
+  float scale;
+  float zero = 0.0f;
 
   if (tensor == NULL || out == NULL || tensor->qdata == NULL ||
       tensor->scales == NULL)
@@ -1265,8 +1261,7 @@ int rkllm_dequant_group(const struct llm_tensor_s *tensor, uint32_t group,
     {
       case NLLM_DTYPE_I8:
         {
-          const int8_t *q = (const int8_t *)tensor->qdata +
-                            (size_t)group * gs;
+          const int8_t *q = (const int8_t *)tensor->qdata + (size_t)group * gs;
 
           for (i = 0; i < gs; i++)
             {
@@ -1288,7 +1283,7 @@ int rkllm_dequant_group(const struct llm_tensor_s *tensor, uint32_t group,
           for (i = 0; i < gs; i++)
             {
               uint8_t byte = q[i >> 1];
-              int     nib  = (i & 1) != 0 ? (byte >> 4) : (byte & 0x0f);
+              int nib = (i & 1) != 0 ? (byte >> 4) : (byte & 0x0f);
 
               if (tensor->dtype == NLLM_DTYPE_I4_SYM)
                 {

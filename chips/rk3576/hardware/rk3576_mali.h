@@ -92,56 +92,56 @@
 #define RK3576_MALI_TIMESTAMP_HI        0x009c
 #define RK3576_MALI_THREAD_MAX_THREADS  0x00a0 /* Shader core limits    */
 #define RK3576_MALI_THREAD_FEATURES     0x00ac
-#define RK3576_MALI_TEXTURE_FEATURES(n) (0x00b0 + ((n) * 4))
-#define RK3576_MALI_JS_FEATURES(n)      (0x00c0 + ((n) * 4))
+#define RK3576_MALI_TEXTURE_FEATURES(n) (0x00b0 + ((n)*4))
+#define RK3576_MALI_JS_FEATURES(n)      (0x00c0 + ((n)*4))
 
 /* Core availability / readiness / power control.  Every one of these is a
  * 64-bit core bitmask exposed as a LO/HI register pair.
  */
 
-#define RK3576_MALI_SHADER_PRESENT_LO   0x0100
-#define RK3576_MALI_SHADER_PRESENT_HI   0x0104
-#define RK3576_MALI_TILER_PRESENT_LO    0x0110
-#define RK3576_MALI_TILER_PRESENT_HI    0x0114
-#define RK3576_MALI_L2_PRESENT_LO       0x0120
-#define RK3576_MALI_L2_PRESENT_HI       0x0124
-#define RK3576_MALI_SHADER_READY_LO     0x0140
-#define RK3576_MALI_SHADER_READY_HI     0x0144
-#define RK3576_MALI_TILER_READY_LO      0x0150
-#define RK3576_MALI_TILER_READY_HI      0x0154
-#define RK3576_MALI_L2_READY_LO         0x0160
-#define RK3576_MALI_L2_READY_HI         0x0164
-#define RK3576_MALI_SHADER_PWRON_LO     0x0180
-#define RK3576_MALI_SHADER_PWRON_HI     0x0184
-#define RK3576_MALI_TILER_PWRON_LO      0x0190
-#define RK3576_MALI_TILER_PWRON_HI      0x0194
-#define RK3576_MALI_L2_PWRON_LO         0x01a0
-#define RK3576_MALI_L2_PWRON_HI         0x01a4
-#define RK3576_MALI_SHADER_PWROFF_LO    0x01c0
-#define RK3576_MALI_SHADER_PWROFF_HI    0x01c4
-#define RK3576_MALI_TILER_PWROFF_LO     0x01d0
-#define RK3576_MALI_TILER_PWROFF_HI     0x01d4
-#define RK3576_MALI_L2_PWROFF_LO        0x01e0
-#define RK3576_MALI_L2_PWROFF_HI        0x01e4
-#define RK3576_MALI_SHADER_PWRTRANS_LO  0x0200
-#define RK3576_MALI_TILER_PWRTRANS_LO   0x0210
-#define RK3576_MALI_L2_PWRTRANS_LO      0x0220
-#define RK3576_MALI_COHERENCY_FEATURES  0x0300
-#define RK3576_MALI_COHERENCY_ENABLE    0x0304
+#define RK3576_MALI_SHADER_PRESENT_LO  0x0100
+#define RK3576_MALI_SHADER_PRESENT_HI  0x0104
+#define RK3576_MALI_TILER_PRESENT_LO   0x0110
+#define RK3576_MALI_TILER_PRESENT_HI   0x0114
+#define RK3576_MALI_L2_PRESENT_LO      0x0120
+#define RK3576_MALI_L2_PRESENT_HI      0x0124
+#define RK3576_MALI_SHADER_READY_LO    0x0140
+#define RK3576_MALI_SHADER_READY_HI    0x0144
+#define RK3576_MALI_TILER_READY_LO     0x0150
+#define RK3576_MALI_TILER_READY_HI     0x0154
+#define RK3576_MALI_L2_READY_LO        0x0160
+#define RK3576_MALI_L2_READY_HI        0x0164
+#define RK3576_MALI_SHADER_PWRON_LO    0x0180
+#define RK3576_MALI_SHADER_PWRON_HI    0x0184
+#define RK3576_MALI_TILER_PWRON_LO     0x0190
+#define RK3576_MALI_TILER_PWRON_HI     0x0194
+#define RK3576_MALI_L2_PWRON_LO        0x01a0
+#define RK3576_MALI_L2_PWRON_HI        0x01a4
+#define RK3576_MALI_SHADER_PWROFF_LO   0x01c0
+#define RK3576_MALI_SHADER_PWROFF_HI   0x01c4
+#define RK3576_MALI_TILER_PWROFF_LO    0x01d0
+#define RK3576_MALI_TILER_PWROFF_HI    0x01d4
+#define RK3576_MALI_L2_PWROFF_LO       0x01e0
+#define RK3576_MALI_L2_PWROFF_HI       0x01e4
+#define RK3576_MALI_SHADER_PWRTRANS_LO 0x0200
+#define RK3576_MALI_TILER_PWRTRANS_LO  0x0210
+#define RK3576_MALI_L2_PWRTRANS_LO     0x0220
+#define RK3576_MALI_COHERENCY_FEATURES 0x0300
+#define RK3576_MALI_COHERENCY_ENABLE   0x0304
 
 /* Bifrost adds "core stacks": a shader core can only be powered up once
  * the stack it belongs to is up.
  */
 
-#define RK3576_MALI_STACK_PRESENT_LO    0x0e00
-#define RK3576_MALI_STACK_PRESENT_HI    0x0e04
-#define RK3576_MALI_STACK_READY_LO      0x0e40
-#define RK3576_MALI_STACK_READY_HI      0x0e44
-#define RK3576_MALI_STACK_PWRON_LO      0x0e80
-#define RK3576_MALI_STACK_PWRON_HI      0x0e84
-#define RK3576_MALI_STACK_PWROFF_LO     0x0ec0
-#define RK3576_MALI_STACK_PWROFF_HI     0x0ec4
-#define RK3576_MALI_STACK_PWRTRANS_LO   0x0f00
+#define RK3576_MALI_STACK_PRESENT_LO  0x0e00
+#define RK3576_MALI_STACK_PRESENT_HI  0x0e04
+#define RK3576_MALI_STACK_READY_LO    0x0e40
+#define RK3576_MALI_STACK_READY_HI    0x0e44
+#define RK3576_MALI_STACK_PWRON_LO    0x0e80
+#define RK3576_MALI_STACK_PWRON_HI    0x0e84
+#define RK3576_MALI_STACK_PWROFF_LO   0x0ec0
+#define RK3576_MALI_STACK_PWROFF_HI   0x0ec4
+#define RK3576_MALI_STACK_PWRTRANS_LO 0x0f00
 
 /* GPU_ID field extraction.  On Bifrost and later the upper half word is
  * the "arch/product" identifier and the lower half word the revision:
@@ -151,10 +151,10 @@
  *   [15:12] version major [11:8] version minor [7:0] version status
  */
 
-#define RK3576_MALI_GPU_ID_PRODUCT(id) (((id) >> 16) & 0xffff)
-#define RK3576_MALI_GPU_ID_VER_MAJOR(id) (((id) >> 12) & 0xf)
-#define RK3576_MALI_GPU_ID_VER_MINOR(id) (((id) >> 8) & 0xf)
-#define RK3576_MALI_GPU_ID_VER_STATUS(id) ((id) & 0xff)
+#define RK3576_MALI_GPU_ID_PRODUCT(id)    (((id) >> 16) & 0xffff)
+#define RK3576_MALI_GPU_ID_VER_MAJOR(id)  (((id) >> 12) & 0xf)
+#define RK3576_MALI_GPU_ID_VER_MINOR(id)  (((id) >> 8) & 0xf)
+#define RK3576_MALI_GPU_ID_VER_STATUS(id) ((id)&0xff)
 
 /* Product identifier of the Mali-G52 (Bifrost arch v7, product major 2).
  * The RK3576 integrates the MC3 configuration, so SHADER_PRESENT reads
@@ -178,30 +178,30 @@
 
 /* GPU_IRQ_RAWSTAT / _CLEAR / _MASK / _STATUS bits */
 
-#define RK3576_MALI_GPU_IRQ_FAULT            (1 << 0)
-#define RK3576_MALI_GPU_IRQ_PROTM_FAULT      (1 << 1)
-#define RK3576_MALI_GPU_IRQ_MULTIPLE_FAULT   (1 << 7)
-#define RK3576_MALI_GPU_IRQ_RESET_COMPLETED  (1 << 8)
-#define RK3576_MALI_GPU_IRQ_POWER_CHANGED    (1 << 9)
+#define RK3576_MALI_GPU_IRQ_FAULT             (1 << 0)
+#define RK3576_MALI_GPU_IRQ_PROTM_FAULT       (1 << 1)
+#define RK3576_MALI_GPU_IRQ_MULTIPLE_FAULT    (1 << 7)
+#define RK3576_MALI_GPU_IRQ_RESET_COMPLETED   (1 << 8)
+#define RK3576_MALI_GPU_IRQ_POWER_CHANGED     (1 << 9)
 #define RK3576_MALI_GPU_IRQ_POWER_CHANGED_ALL (1 << 10)
-#define RK3576_MALI_GPU_IRQ_PRFCNT_SAMPLE    (1 << 16)
-#define RK3576_MALI_GPU_IRQ_CLEAN_CACHES     (1 << 17)
+#define RK3576_MALI_GPU_IRQ_PRFCNT_SAMPLE     (1 << 16)
+#define RK3576_MALI_GPU_IRQ_CLEAN_CACHES      (1 << 17)
 
-#define RK3576_MALI_GPU_IRQ_ALL              0xffffffff
+#define RK3576_MALI_GPU_IRQ_ALL               0xffffffff
 
 /* The power-changed interrupts fire on every core transition and are of no
  * use to a polled power-up sequence, so they are kept masked.
  */
 
-#define RK3576_MALI_GPU_IRQ_ENABLED                                        \
-  (RK3576_MALI_GPU_IRQ_FAULT | RK3576_MALI_GPU_IRQ_PROTM_FAULT |           \
+#define RK3576_MALI_GPU_IRQ_ENABLED                              \
+  (RK3576_MALI_GPU_IRQ_FAULT | RK3576_MALI_GPU_IRQ_PROTM_FAULT | \
    RK3576_MALI_GPU_IRQ_MULTIPLE_FAULT | RK3576_MALI_GPU_IRQ_RESET_COMPLETED)
 
 /* GPU_STATUS bits */
 
-#define RK3576_MALI_GPU_STATUS_ACTIVE         (1 << 0)
-#define RK3576_MALI_GPU_STATUS_PRFCNT_ACTIVE  (1 << 2)
-#define RK3576_MALI_GPU_STATUS_PROTM_ACTIVE   (1 << 7)
+#define RK3576_MALI_GPU_STATUS_ACTIVE        (1 << 0)
+#define RK3576_MALI_GPU_STATUS_PRFCNT_ACTIVE (1 << 2)
+#define RK3576_MALI_GPU_STATUS_PROTM_ACTIVE  (1 << 7)
 
 /* PWR_KEY unlock value guarding PWR_OVERRIDE0/1 */
 
@@ -209,10 +209,10 @@
 
 /* JOB_CONTROL block ********************************************************/
 
-#define RK3576_MALI_JOB_IRQ_RAWSTAT 0x1000 /* Raw job interrupt state   */
-#define RK3576_MALI_JOB_IRQ_CLEAR   0x1004 /* Write-1-to-clear          */
-#define RK3576_MALI_JOB_IRQ_MASK    0x1008 /* Interrupt enable          */
-#define RK3576_MALI_JOB_IRQ_STATUS  0x100c /* RAWSTAT & MASK            */
+#define RK3576_MALI_JOB_IRQ_RAWSTAT  0x1000 /* Raw job interrupt state   */
+#define RK3576_MALI_JOB_IRQ_CLEAR    0x1004 /* Write-1-to-clear          */
+#define RK3576_MALI_JOB_IRQ_MASK     0x1008 /* Interrupt enable          */
+#define RK3576_MALI_JOB_IRQ_STATUS   0x100c /* RAWSTAT & MASK            */
 #define RK3576_MALI_JOB_IRQ_JS_STATE 0x1010 /* Per-slot busy state      */
 #define RK3576_MALI_JOB_IRQ_THROTTLE 0x1014 /* Interrupt coalescing     */
 
@@ -224,7 +224,7 @@
 
 /* Job slot register file.  Each slot occupies 0x80 bytes. */
 
-#define RK3576_MALI_JS_BASE(slot) (0x1800 + ((slot) * 0x80))
+#define RK3576_MALI_JS_BASE(slot)          (0x1800 + ((slot)*0x80))
 
 #define RK3576_MALI_JS_HEAD_LO(s)          (RK3576_MALI_JS_BASE(s) + 0x00)
 #define RK3576_MALI_JS_HEAD_HI(s)          (RK3576_MALI_JS_BASE(s) + 0x04)
@@ -258,41 +258,41 @@
 
 /* JS_CONFIG / JS_CONFIG_NEXT fields */
 
-#define RK3576_MALI_JS_CONFIG_AS_MASK              0x0f
-#define RK3576_MALI_JS_CONFIG_AS(n)                ((n) & 0x0f)
-#define RK3576_MALI_JS_CONFIG_START_FLUSH_CLEAN    (1 << 8)
-#define RK3576_MALI_JS_CONFIG_START_FLUSH_INV      (3 << 8)
-#define RK3576_MALI_JS_CONFIG_START_MMU            (1 << 10)
-#define RK3576_MALI_JS_CONFIG_JOB_CHAIN_FLAG       (1 << 11)
-#define RK3576_MALI_JS_CONFIG_END_FLUSH_CLEAN      (1 << 12)
-#define RK3576_MALI_JS_CONFIG_END_FLUSH_INV        (3 << 12)
-#define RK3576_MALI_JS_CONFIG_ENABLE_FLUSH_REDUCE  (1 << 14)
-#define RK3576_MALI_JS_CONFIG_DISABLE_DESC_WR_BK   (1 << 15)
-#define RK3576_MALI_JS_CONFIG_THREAD_PRI(n)        ((n) << 16)
+#define RK3576_MALI_JS_CONFIG_AS_MASK             0x0f
+#define RK3576_MALI_JS_CONFIG_AS(n)               ((n)&0x0f)
+#define RK3576_MALI_JS_CONFIG_START_FLUSH_CLEAN   (1 << 8)
+#define RK3576_MALI_JS_CONFIG_START_FLUSH_INV     (3 << 8)
+#define RK3576_MALI_JS_CONFIG_START_MMU           (1 << 10)
+#define RK3576_MALI_JS_CONFIG_JOB_CHAIN_FLAG      (1 << 11)
+#define RK3576_MALI_JS_CONFIG_END_FLUSH_CLEAN     (1 << 12)
+#define RK3576_MALI_JS_CONFIG_END_FLUSH_INV       (3 << 12)
+#define RK3576_MALI_JS_CONFIG_ENABLE_FLUSH_REDUCE (1 << 14)
+#define RK3576_MALI_JS_CONFIG_DISABLE_DESC_WR_BK  (1 << 15)
+#define RK3576_MALI_JS_CONFIG_THREAD_PRI(n)       ((n) << 16)
 
 /* JS_STATUS values.  Anything >= _FAULT_START is a failure. */
 
-#define RK3576_MALI_JS_STATUS_DONE            0x01
-#define RK3576_MALI_JS_STATUS_INTERRUPTED     0x02
-#define RK3576_MALI_JS_STATUS_STOPPED         0x03
-#define RK3576_MALI_JS_STATUS_TERMINATED      0x04
-#define RK3576_MALI_JS_STATUS_ACTIVE          0x08
-#define RK3576_MALI_JS_STATUS_FAULT_START     0x40
-#define RK3576_MALI_JS_STATUS_CONFIG_FAULT    0x40
-#define RK3576_MALI_JS_STATUS_POWER_FAULT     0x41
-#define RK3576_MALI_JS_STATUS_READ_FAULT      0x42
-#define RK3576_MALI_JS_STATUS_WRITE_FAULT     0x43
-#define RK3576_MALI_JS_STATUS_AFFINITY_FAULT  0x44
-#define RK3576_MALI_JS_STATUS_BUS_FAULT       0x48
-#define RK3576_MALI_JS_STATUS_INSTR_INVALID_PC 0x50
-#define RK3576_MALI_JS_STATUS_INSTR_INVALID_ENC 0x51
+#define RK3576_MALI_JS_STATUS_DONE                0x01
+#define RK3576_MALI_JS_STATUS_INTERRUPTED         0x02
+#define RK3576_MALI_JS_STATUS_STOPPED             0x03
+#define RK3576_MALI_JS_STATUS_TERMINATED          0x04
+#define RK3576_MALI_JS_STATUS_ACTIVE              0x08
+#define RK3576_MALI_JS_STATUS_FAULT_START         0x40
+#define RK3576_MALI_JS_STATUS_CONFIG_FAULT        0x40
+#define RK3576_MALI_JS_STATUS_POWER_FAULT         0x41
+#define RK3576_MALI_JS_STATUS_READ_FAULT          0x42
+#define RK3576_MALI_JS_STATUS_WRITE_FAULT         0x43
+#define RK3576_MALI_JS_STATUS_AFFINITY_FAULT      0x44
+#define RK3576_MALI_JS_STATUS_BUS_FAULT           0x48
+#define RK3576_MALI_JS_STATUS_INSTR_INVALID_PC    0x50
+#define RK3576_MALI_JS_STATUS_INSTR_INVALID_ENC   0x51
 #define RK3576_MALI_JS_STATUS_INSTR_BARRIER_FAULT 0x55
-#define RK3576_MALI_JS_STATUS_DATA_INVALID_FAULT 0x58
-#define RK3576_MALI_JS_STATUS_TILE_RANGE_FAULT 0x59
-#define RK3576_MALI_JS_STATUS_OUT_OF_MEMORY   0x60
-#define RK3576_MALI_JS_STATUS_UNKNOWN         0x7f
-#define RK3576_MALI_JS_STATUS_TRANSLATION_FAULT 0xc0
-#define RK3576_MALI_JS_STATUS_PERMISSION_FAULT 0xc8
+#define RK3576_MALI_JS_STATUS_DATA_INVALID_FAULT  0x58
+#define RK3576_MALI_JS_STATUS_TILE_RANGE_FAULT    0x59
+#define RK3576_MALI_JS_STATUS_OUT_OF_MEMORY       0x60
+#define RK3576_MALI_JS_STATUS_UNKNOWN             0x7f
+#define RK3576_MALI_JS_STATUS_TRANSLATION_FAULT   0xc0
+#define RK3576_MALI_JS_STATUS_PERMISSION_FAULT    0xc8
 
 /* MMU_CONTROL block ********************************************************/
 
@@ -309,7 +309,7 @@
 
 /* Address space register file.  Each AS occupies 0x40 bytes. */
 
-#define RK3576_MALI_AS_BASE(as) (0x2400 + ((as) * 0x40))
+#define RK3576_MALI_AS_BASE(as)           (0x2400 + ((as)*0x40))
 
 #define RK3576_MALI_AS_TRANSTAB_LO(a)     (RK3576_MALI_AS_BASE(a) + 0x00)
 #define RK3576_MALI_AS_TRANSTAB_HI(a)     (RK3576_MALI_AS_BASE(a) + 0x04)
@@ -364,12 +364,12 @@
 #define RK3576_MALI_AS_TRANSCFG_ADRMODE_AARCH64_4K  0x06
 #define RK3576_MALI_AS_TRANSCFG_ADRMODE_AARCH64_64K 0x08
 
-#define RK3576_MALI_AS_TRANSCFG_PTW_MEMATTR_NC (1 << 24)
-#define RK3576_MALI_AS_TRANSCFG_PTW_MEMATTR_WB (2 << 24)
-#define RK3576_MALI_AS_TRANSCFG_PTW_SH_NS      (0 << 28)
-#define RK3576_MALI_AS_TRANSCFG_PTW_SH_OS      (2 << 28)
-#define RK3576_MALI_AS_TRANSCFG_PTW_SH_IS      (3 << 28)
-#define RK3576_MALI_AS_TRANSCFG_PTW_RA         (1 << 30)
+#define RK3576_MALI_AS_TRANSCFG_PTW_MEMATTR_NC      (1 << 24)
+#define RK3576_MALI_AS_TRANSCFG_PTW_MEMATTR_WB      (2 << 24)
+#define RK3576_MALI_AS_TRANSCFG_PTW_SH_NS           (0 << 28)
+#define RK3576_MALI_AS_TRANSCFG_PTW_SH_OS           (2 << 28)
+#define RK3576_MALI_AS_TRANSCFG_PTW_SH_IS           (3 << 28)
+#define RK3576_MALI_AS_TRANSCFG_PTW_RA              (1 << 30)
 
 /* Bits 32..36 of AS_TRANSCFG, i.e. bits 0..4 of AS_TRANSCFG_HI. */
 
@@ -389,8 +389,8 @@
 
 #define RK3576_MALI_MEMATTR_IMP_DEF     0x88
 #define RK3576_MALI_MEMATTR_WRITE_ALLOC 0x8d
-#define RK3576_MALI_MEMATTR_DEFAULT_LO                                     \
-  (RK3576_MALI_MEMATTR_IMP_DEF | (RK3576_MALI_MEMATTR_WRITE_ALLOC << 8) |  \
+#define RK3576_MALI_MEMATTR_DEFAULT_LO                                    \
+  (RK3576_MALI_MEMATTR_IMP_DEF | (RK3576_MALI_MEMATTR_WRITE_ALLOC << 8) | \
    (RK3576_MALI_MEMATTR_IMP_DEF << 16))
 #define RK3576_MALI_MEMATTR_DEFAULT_HI 0x00000000
 
@@ -402,18 +402,18 @@
 
 /* Byte 0x10 of the header: descriptor size flag plus job type. */
 
-#define RK3576_MALI_JOB_SIZE_64BIT  (1 << 0)
-#define RK3576_MALI_JOB_TYPE_SHIFT  1
-#define RK3576_MALI_JOB_TYPE_MASK   0x7f
+#define RK3576_MALI_JOB_SIZE_64BIT (1 << 0)
+#define RK3576_MALI_JOB_TYPE_SHIFT 1
+#define RK3576_MALI_JOB_TYPE_MASK  0x7f
 
 /* Byte 0x11 of the header: dependency and cache behaviour flags. */
 
-#define RK3576_MALI_JOB_FLAG_BARRIER          (1 << 0)
-#define RK3576_MALI_JOB_FLAG_INVALIDATE_CACHE (1 << 1)
+#define RK3576_MALI_JOB_FLAG_BARRIER           (1 << 0)
+#define RK3576_MALI_JOB_FLAG_INVALIDATE_CACHE  (1 << 1)
 #define RK3576_MALI_JOB_FLAG_SUPPRESS_PREFETCH (1 << 3)
-#define RK3576_MALI_JOB_FLAG_ENABLE_TEXMAP    (1 << 4)
-#define RK3576_MALI_JOB_FLAG_RELAX_DEP1       (1 << 6)
-#define RK3576_MALI_JOB_FLAG_RELAX_DEP2       (1 << 7)
+#define RK3576_MALI_JOB_FLAG_ENABLE_TEXMAP     (1 << 4)
+#define RK3576_MALI_JOB_FLAG_RELAX_DEP1        (1 << 6)
+#define RK3576_MALI_JOB_FLAG_RELAX_DEP2        (1 << 7)
 
 /* Job types, as published in the Mesa GenXML "Job Type" enumeration. */
 

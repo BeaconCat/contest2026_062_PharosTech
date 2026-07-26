@@ -52,21 +52,21 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define LLM_DEFAULT_STEPS    128
-#define LLM_DEFAULT_TEMP     0.8f
-#define LLM_DEFAULT_TOPK     40
-#define LLM_DEFAULT_TOPP     0.9f
-#define LLM_DEFAULT_THREADS  4
-#define LLM_PROMPT_MAX       4096
+#define LLM_DEFAULT_STEPS   128
+#define LLM_DEFAULT_TEMP    0.8f
+#define LLM_DEFAULT_TOPK    40
+#define LLM_DEFAULT_TOPP    0.9f
+#define LLM_DEFAULT_THREADS 4
+#define LLM_PROMPT_MAX      4096
 
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
 static void llm_usage(const char *progname);
-static int  llm_parse_backend(const char *name, enum llm_backend_e *out);
-static int  llm_join_prompt(char *dst, size_t dstlen, int argc,
-                            char *argv[], int first);
+static int llm_parse_backend(const char *name, enum llm_backend_e *out);
+static int llm_join_prompt(char *dst, size_t dstlen, int argc, char *argv[],
+                           int first);
 
 /****************************************************************************
  * Private Functions
@@ -131,8 +131,8 @@ static int llm_parse_backend(const char *name, enum llm_backend_e *out)
  *
  ****************************************************************************/
 
-static int llm_join_prompt(char *dst, size_t dstlen, int argc,
-                           char *argv[], int first)
+static int llm_join_prompt(char *dst, size_t dstlen, int argc, char *argv[],
+                           int first)
 {
   size_t used = 0;
   int i;
@@ -298,8 +298,7 @@ int main(int argc, char *argv[])
 
   if (llm_join_prompt(prompt, LLM_PROMPT_MAX, argc, argv, i) < 0)
     {
-      fprintf(stderr, "llm: the prompt exceeds %d bytes\n",
-              LLM_PROMPT_MAX);
+      fprintf(stderr, "llm: the prompt exceeds %d bytes\n", LLM_PROMPT_MAX);
       free(prompt);
       return EXIT_FAILURE;
     }
@@ -343,8 +342,9 @@ int main(int argc, char *argv[])
   opt.quiet = quiet;
 
   printf("llm: backend %s, temp %.2f, top-k %d, top-p %.2f, seed "
-         "%llu\n", llm_backend_name(backend), (double)temperature, topk,
-         (double)topp, (unsigned long long)seed);
+         "%llu\n",
+         llm_backend_name(backend), (double)temperature, topk, (double)topp,
+         (unsigned long long)seed);
 
   ret = llm_generate(&model, &sampler, &opt);
   if (ret < 0)

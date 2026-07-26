@@ -94,10 +94,10 @@
 
 struct rk3576_csi_desc_s
 {
-  uintptr_t base;                  /* Register window base            */
-  int irq[RK3576_CSI_NIRQS];       /* GIC lines                       */
-  const char *pclk_name;           /* APB clock gate name             */
-  const char *iclk_name;           /* Interface clock gate, or NULL   */
+  uintptr_t base;            /* Register window base            */
+  int irq[RK3576_CSI_NIRQS]; /* GIC lines                       */
+  const char *pclk_name;     /* APB clock gate name             */
+  const char *iclk_name;     /* Interface clock gate, or NULL   */
 };
 
 /* Runtime state of one controller. */
@@ -116,8 +116,7 @@ struct rk3576_csi_s
  * Private Function Prototypes
  ****************************************************************************/
 
-static uint32_t rk3576_csi_getreg(struct rk3576_csi_s *priv,
-                                  unsigned int off);
+static uint32_t rk3576_csi_getreg(struct rk3576_csi_s *priv, unsigned int off);
 static void rk3576_csi_putreg(struct rk3576_csi_s *priv, unsigned int off,
                               uint32_t val);
 static int rk3576_csi_clk_init(struct rk3576_csi_s *priv);
@@ -137,71 +136,59 @@ static int rk3576_csi_interrupt(int irq, void *context, void *arg);
  */
 
 static const struct rk3576_csi_desc_s
-  g_rk3576_csi_desc[RK3576_CSI2HOST_NHOST] =
-{
-  {
-    .base      = RK3576_CSI2HOST0_ADDR,
-    .irq       =
+    g_rk3576_csi_desc[RK3576_CSI2HOST_NHOST] = {
       {
-        RK3576_IRQ_CSIHOST0_1, RK3576_IRQ_CSIHOST0_2
+          .base = RK3576_CSI2HOST0_ADDR,
+          .irq = { RK3576_IRQ_CSIHOST0_1, RK3576_IRQ_CSIHOST0_2 },
+          .pclk_name = "pclk_csi2host0_en",
+          .iclk_name = "iclk_csi2host0_en",
       },
-    .pclk_name = "pclk_csi2host0_en",
-    .iclk_name = "iclk_csi2host0_en",
-  },
-  {
-    .base      = RK3576_CSI2HOST1_ADDR,
-    .irq       =
       {
-        RK3576_IRQ_CSIHOST1_1, RK3576_IRQ_CSIHOST1_2
+          .base = RK3576_CSI2HOST1_ADDR,
+          .irq = { RK3576_IRQ_CSIHOST1_1, RK3576_IRQ_CSIHOST1_2 },
+          .pclk_name = "pclk_csi2host1_en",
+          .iclk_name = NULL,
       },
-    .pclk_name = "pclk_csi2host1_en",
-    .iclk_name = NULL,
-  },
-  {
-    .base      = RK3576_CSI2HOST2_ADDR,
-    .irq       =
       {
-        RK3576_IRQ_CSIHOST2_1, RK3576_IRQ_CSIHOST2_2
+          .base = RK3576_CSI2HOST2_ADDR,
+          .irq = { RK3576_IRQ_CSIHOST2_1, RK3576_IRQ_CSIHOST2_2 },
+          .pclk_name = "pclk_csi2host2_en",
+          .iclk_name = NULL,
       },
-    .pclk_name = "pclk_csi2host2_en",
-    .iclk_name = NULL,
-  },
-  {
-    .base      = RK3576_CSI2HOST3_ADDR,
-    .irq       =
       {
-        RK3576_IRQ_CSIHOST3_1, RK3576_IRQ_CSIHOST3_2
+          .base = RK3576_CSI2HOST3_ADDR,
+          .irq = { RK3576_IRQ_CSIHOST3_1, RK3576_IRQ_CSIHOST3_2 },
+          .pclk_name = "pclk_csi2host3_en",
+          .iclk_name = NULL,
       },
-    .pclk_name = "pclk_csi2host3_en",
-    .iclk_name = NULL,
-  },
-  {
-    .base      = RK3576_CSI2HOST4_ADDR,
-    .irq       =
       {
-        RK3576_IRQ_CSIHOST4_1, RK3576_IRQ_CSIHOST4_2
+          .base = RK3576_CSI2HOST4_ADDR,
+          .irq = { RK3576_IRQ_CSIHOST4_1, RK3576_IRQ_CSIHOST4_2 },
+          .pclk_name = "pclk_csi2host4_en",
+          .iclk_name = NULL,
       },
-    .pclk_name = "pclk_csi2host4_en",
-    .iclk_name = NULL,
-  },
-};
+    };
 
-static struct rk3576_csi_s g_rk3576_csi[RK3576_CSI2HOST_NHOST] =
-{
+static struct rk3576_csi_s g_rk3576_csi[RK3576_CSI2HOST_NHOST] = {
   {
-    .desc = &g_rk3576_csi_desc[0], .lock = SP_UNLOCKED,
+      .desc = &g_rk3576_csi_desc[0],
+      .lock = SP_UNLOCKED,
   },
   {
-    .desc = &g_rk3576_csi_desc[1], .lock = SP_UNLOCKED,
+      .desc = &g_rk3576_csi_desc[1],
+      .lock = SP_UNLOCKED,
   },
   {
-    .desc = &g_rk3576_csi_desc[2], .lock = SP_UNLOCKED,
+      .desc = &g_rk3576_csi_desc[2],
+      .lock = SP_UNLOCKED,
   },
   {
-    .desc = &g_rk3576_csi_desc[3], .lock = SP_UNLOCKED,
+      .desc = &g_rk3576_csi_desc[3],
+      .lock = SP_UNLOCKED,
   },
   {
-    .desc = &g_rk3576_csi_desc[4], .lock = SP_UNLOCKED,
+      .desc = &g_rk3576_csi_desc[4],
+      .lock = SP_UNLOCKED,
   },
 };
 
@@ -217,8 +204,7 @@ static struct rk3576_csi_s g_rk3576_csi[RK3576_CSI2HOST_NHOST] =
  *
  ****************************************************************************/
 
-static uint32_t rk3576_csi_getreg(struct rk3576_csi_s *priv,
-                                  unsigned int off)
+static uint32_t rk3576_csi_getreg(struct rk3576_csi_s *priv, unsigned int off)
 {
   return getreg32(priv->desc->base + off);
 }
@@ -273,8 +259,7 @@ static int rk3576_csi_clk_init(struct rk3576_csi_s *priv)
       ret = clk_enable(clk);
       if (ret < 0)
         {
-          verr("ERROR: failed to enable %s: %d\n", priv->desc->iclk_name,
-               ret);
+          verr("ERROR: failed to enable %s: %d\n", priv->desc->iclk_name, ret);
           return ret;
         }
     }
@@ -500,8 +485,7 @@ int rk3576_csi_initialize(int csi_id, const struct rk3576_csi_config_s *cfg)
   memset(&priv->stats, 0, sizeof(priv->stats));
 
   rk3576_csi_putreg(priv, RK3576_CSI2_N_LANES_OFFSET,
-                    (uint32_t)(cfg->num_lanes - 1) &
-                    RK3576_CSI2_N_LANES_MASK);
+                    (uint32_t)(cfg->num_lanes - 1) & RK3576_CSI2_N_LANES_MASK);
 
   rk3576_csi_program_ids(priv);
 
@@ -652,7 +636,7 @@ int rk3576_csi_get_stats(int csi_id, struct rk3576_csi_stats_s *stats)
       return -EINVAL;
     }
 
-  priv  = &g_rk3576_csi[csi_id];
+  priv = &g_rk3576_csi[csi_id];
   flags = spin_lock_irqsave(&priv->lock);
   memcpy(stats, &priv->stats, sizeof(*stats));
   spin_unlock_irqrestore(&priv->lock, flags);

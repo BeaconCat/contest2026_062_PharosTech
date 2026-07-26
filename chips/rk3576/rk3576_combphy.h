@@ -49,8 +49,8 @@
  * feeds PCIe port 1 on the RK3576.
  */
 
-#define RK3576_COMBPHY0 0
-#define RK3576_COMBPHY1 1
+#define RK3576_COMBPHY0    0
+#define RK3576_COMBPHY1    1
 #define RK3576_COMBPHY_NUM 2
 
 /****************************************************************************

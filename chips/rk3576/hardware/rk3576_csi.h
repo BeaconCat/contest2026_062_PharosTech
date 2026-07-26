@@ -77,7 +77,7 @@
 #define RK3576_CSI2HOST3_ADDR 0x27cb0000
 #define RK3576_CSI2HOST4_ADDR 0x27cc0000
 
-#define RK3576_CSI2HOST_SIZE 0x10000
+#define RK3576_CSI2HOST_SIZE  0x10000
 #define RK3576_CSI2HOST_NHOST 5
 
 #define RK3576_CSI2DPHY0_ADDR 0x2b030000
@@ -104,14 +104,14 @@
 #define RK3576_CSI2_DATA_IDS_1_OFFSET     0x0010 /* DT filter for DI0..DI3  */
 #define RK3576_CSI2_DATA_IDS_2_OFFSET     0x0014 /* DT filter for DI4..DI7  */
 #define RK3576_CSI2_INT_ST_PHY_FATAL_OFF  0x0020 /* PHY fatal status (RC)   */
-#define RK3576_CSI2_INT_MSK_PHY_FATAL_OFF 0x0024 /* PHY fatal mask          */
-#define RK3576_CSI2_INT_FORCE_PHY_FATAL_O 0x0028 /* PHY fatal force         */
+#define RK3576_CSI2_INT_MSK_PHY_FATAL_OFF 0x0024 /* PHY fatal mask */
+#define RK3576_CSI2_INT_FORCE_PHY_FATAL_O 0x0028 /* PHY fatal force */
 #define RK3576_CSI2_INT_ST_PKT_FATAL_OFF  0x0030 /* Packet fatal status     */
-#define RK3576_CSI2_INT_MSK_PKT_FATAL_OFF 0x0034 /* Packet fatal mask       */
-#define RK3576_CSI2_INT_FORCE_PKT_FATAL_O 0x0038 /* Packet fatal force      */
-#define RK3576_CSI2_INT_ST_FRAME_FATAL_OF 0x0040 /* Frame fatal status      */
-#define RK3576_CSI2_INT_MSK_FRAME_FATAL_O 0x0044 /* Frame fatal mask        */
-#define RK3576_CSI2_INT_FORCE_FRAME_FAT_O 0x0048 /* Frame fatal force       */
+#define RK3576_CSI2_INT_MSK_PKT_FATAL_OFF 0x0034 /* Packet fatal mask */
+#define RK3576_CSI2_INT_FORCE_PKT_FATAL_O 0x0038 /* Packet fatal force */
+#define RK3576_CSI2_INT_ST_FRAME_FATAL_OF 0x0040 /* Frame fatal status */
+#define RK3576_CSI2_INT_MSK_FRAME_FATAL_O 0x0044 /* Frame fatal mask */
+#define RK3576_CSI2_INT_FORCE_FRAME_FAT_O 0x0048 /* Frame fatal force */
 #define RK3576_CSI2_INT_ST_PHY_OFFSET     0x0050 /* PHY error status        */
 #define RK3576_CSI2_INT_MSK_PHY_OFFSET    0x0054 /* PHY error mask          */
 #define RK3576_CSI2_INT_FORCE_PHY_OFFSET  0x0058 /* PHY error force         */
@@ -120,7 +120,7 @@
 #define RK3576_CSI2_INT_FORCE_PKT_OFFSET  0x0068 /* Packet error force      */
 #define RK3576_CSI2_INT_ST_LINE_OFFSET    0x0070 /* Line error status       */
 #define RK3576_CSI2_INT_MSK_LINE_OFFSET   0x0074 /* Line error mask         */
-#define RK3576_CSI2_INT_FORCE_LINE_OFFSET 0x0078 /* Line error force        */
+#define RK3576_CSI2_INT_FORCE_LINE_OFFSET 0x0078 /* Line error force */
 
 /* CSI2_N_LANES: number of active data lanes minus one, bits [2:0]. */
 
@@ -144,19 +144,18 @@
  */
 
 #define RK3576_CSI2_DATA_IDS_PER_REG 4
-#define RK3576_CSI2_DATA_ID_SHIFT(n) (((n) & 3) * 8)
+#define RK3576_CSI2_DATA_ID_SHIFT(n) (((n)&3) * 8)
 #define RK3576_CSI2_DATA_ID_MASK(n)  (0xffu << RK3576_CSI2_DATA_ID_SHIFT(n))
-#define RK3576_CSI2_DATA_ID(vc, dt) \
-  ((((vc) & 0x3) << 6) | ((dt) & 0x3f))
+#define RK3576_CSI2_DATA_ID(vc, dt)  ((((vc)&0x3) << 6) | ((dt)&0x3f))
 
 /* CSI-2 data types (MIPI CSI-2 spec, table "Data Type Classes"). */
 
-#define RK3576_CSI2_DT_YUV422_8B 0x1e
+#define RK3576_CSI2_DT_YUV422_8B  0x1e
 #define RK3576_CSI2_DT_YUV422_10B 0x1f
-#define RK3576_CSI2_DT_RGB888    0x24
-#define RK3576_CSI2_DT_RAW8      0x2a
-#define RK3576_CSI2_DT_RAW10     0x2b
-#define RK3576_CSI2_DT_RAW12     0x2c
+#define RK3576_CSI2_DT_RGB888     0x24
+#define RK3576_CSI2_DT_RAW8       0x2a
+#define RK3576_CSI2_DT_RAW10      0x2b
+#define RK3576_CSI2_DT_RAW12      0x2c
 
 /* Rockchip MIPI RX D-PHY registers ****************************************
  *
@@ -164,7 +163,7 @@
  * byte offset = phy register index * 4.  Only the low 8 bits are valid.
  */
 
-#define RK3576_DPHY_REG(idx) ((idx) * 4)
+#define RK3576_DPHY_REG(idx) ((idx)*4)
 
 /* Lane enable / global control (PHY index 0x00). */
 

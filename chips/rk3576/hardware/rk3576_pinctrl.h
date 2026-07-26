@@ -120,12 +120,12 @@
 
 struct rk3576_pinctrl_route_s
 {
-  uint8_t  bank;       /* GPIO bank, 0..4                                  */
-  uint8_t  first_pin;  /* First pin covered by this region, 0..31          */
-  uint8_t  last_pin;   /* Last pin covered by this region, 0..31           */
-  uint32_t pull_base;  /* Bank-origin offset of the pull registers         */
-  uint32_t drv_base;   /* Bank-origin offset of the drive registers        */
-  uint32_t smt_base;   /* Bank-origin offset of the schmitt registers      */
+  uint8_t bank;       /* GPIO bank, 0..4                                  */
+  uint8_t first_pin;  /* First pin covered by this region, 0..31          */
+  uint8_t last_pin;   /* Last pin covered by this region, 0..31           */
+  uint32_t pull_base; /* Bank-origin offset of the pull registers         */
+  uint32_t drv_base;  /* Bank-origin offset of the drive registers        */
+  uint32_t smt_base;  /* Bank-origin offset of the schmitt registers      */
 };
 
 /****************************************************************************
@@ -133,14 +133,13 @@ struct rk3576_pinctrl_route_s
  ****************************************************************************/
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /* Complete pad-control routing table for GPIO0..GPIO4, 32 pins each. */
 
 extern const struct rk3576_pinctrl_route_s
-  g_rk3576_pinctrl_routes[RK3576_PINCTRL_NROUTES];
+    g_rk3576_pinctrl_routes[RK3576_PINCTRL_NROUTES];
 
 #ifdef __cplusplus
 }

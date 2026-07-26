@@ -111,10 +111,10 @@
 
 struct rk3576_crypto_dev_s
 {
-  mutex_t  lock;    /* Serialises access to the single hardware instance   */
-  sem_t    done;    /* Posted by the ISR when the LLI list completes       */
-  bool     ready;   /* Set once the block has been brought up              */
-  uint32_t status;  /* DMA_INT_ST latched by the ISR                       */
+  mutex_t lock;    /* Serialises access to the single hardware instance   */
+  sem_t done;      /* Posted by the ISR when the LLI list completes       */
+  bool ready;      /* Set once the block has been brought up              */
+  uint32_t status; /* DMA_INT_ST latched by the ISR                       */
 
   struct rk3576_crypto_lli_s *lli; /* DMA descriptor, DMA-safe memory      */
   uint8_t *src;                    /* Input bounce buffer                  */
@@ -128,28 +128,25 @@ struct rk3576_crypto_dev_s
 static inline uint32_t rk3576_crypto_getreg(unsigned int off);
 static inline void rk3576_crypto_putreg(unsigned int off, uint32_t val);
 static inline void rk3576_crypto_putmasked(unsigned int off, uint32_t val);
-static int  rk3576_crypto_clk_init(void);
-static int  rk3576_crypto_reset(void);
-static int  rk3576_crypto_interrupt(int irq, void *context, void *arg);
-static int  rk3576_crypto_run(size_t srclen, size_t dstlen,
-                              uint32_t user_define);
+static int rk3576_crypto_clk_init(void);
+static int rk3576_crypto_reset(void);
+static int rk3576_crypto_interrupt(int irq, void *context, void *arg);
+static int rk3576_crypto_run(size_t srclen, size_t dstlen,
+                             uint32_t user_define);
 static void rk3576_crypto_write_regs(unsigned int off, const uint8_t *data,
                                      size_t len);
 static void rk3576_crypto_read_regs(unsigned int off, uint8_t *data,
                                     size_t len);
-static int  rk3576_crypto_aes_setup(const uint8_t *key, size_t keylen,
-                                    const uint8_t *iv, int mode,
-                                    bool encrypt);
-static int  rk3576_crypto_hash_submit(struct rk3576_crypto_sha256_s *ctx,
-                                      const uint8_t *in, size_t len,
-                                      bool last);
+static int rk3576_crypto_aes_setup(const uint8_t *key, size_t keylen,
+                                   const uint8_t *iv, int mode, bool encrypt);
+static int rk3576_crypto_hash_submit(struct rk3576_crypto_sha256_s *ctx,
+                                     const uint8_t *in, size_t len, bool last);
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static struct rk3576_crypto_dev_s g_rk3576_crypto =
-{
+static struct rk3576_crypto_dev_s g_rk3576_crypto = {
   .lock = NXMUTEX_INITIALIZER,
   .done = SEM_INITIALIZER(0),
 };
@@ -203,12 +200,11 @@ static inline void rk3576_crypto_putmasked(unsigned int off, uint32_t val)
 
 static int rk3576_crypto_clk_init(void)
 {
-  static const char * const names[] =
-    {
-      "aclk_crypto_ns_en",
-      "hclk_crypto_ns_en",
-      "clk_pka_crypto_ns_en",
-    };
+  static const char *const names[] = {
+    "aclk_crypto_ns_en",
+    "hclk_crypto_ns_en",
+    "clk_pka_crypto_ns_en",
+  };
 
   struct clk_s *clk;
   unsigned int i;
@@ -253,7 +249,7 @@ static int rk3576_crypto_reset(void)
 
   rk3576_crypto_putmasked(RK3576_CRYPTO_RST_CTL,
                           RK3576_CRYPTO_SW_CC_RESET |
-                          RK3576_CRYPTO_SW_PKA_RESET);
+                              RK3576_CRYPTO_SW_PKA_RESET);
 
   for (i = 0; i < RK3576_CRYPTO_RESET_LIMIT; i++)
     {
@@ -264,7 +260,7 @@ static int rk3576_crypto_reset(void)
     }
 
   _err("ERROR: crypto reset timed out, rst_ctl=0x%08" PRIx32 "\n",
-           rk3576_crypto_getreg(RK3576_CRYPTO_RST_CTL));
+       rk3576_crypto_getreg(RK3576_CRYPTO_RST_CTL));
   return -ETIMEDOUT;
 }
 
@@ -320,14 +316,14 @@ static int rk3576_crypto_run(size_t srclen, size_t dstlen,
   struct rk3576_crypto_lli_s *lli = priv->lli;
   int ret;
 
-  lli->src_addr    = (uint32_t)up_addrenv_va_to_pa(priv->src);
-  lli->src_len     = (uint32_t)srclen;
-  lli->dst_addr    = dstlen ? (uint32_t)up_addrenv_va_to_pa(priv->dst) : 0;
-  lli->dst_len     = (uint32_t)dstlen;
+  lli->src_addr = (uint32_t)up_addrenv_va_to_pa(priv->src);
+  lli->src_len = (uint32_t)srclen;
+  lli->dst_addr = dstlen ? (uint32_t)up_addrenv_va_to_pa(priv->dst) : 0;
+  lli->dst_len = (uint32_t)dstlen;
   lli->user_define = user_define;
-  lli->reserve     = 0;
-  lli->dma_ctrl    = RK3576_CRYPTO_LLI_LIST_DONE;
-  lli->next_addr   = 0;
+  lli->reserve = 0;
+  lli->dma_ctrl = RK3576_CRYPTO_LLI_LIST_DONE;
+  lli->next_addr = 0;
 
   /* Push the payload and the descriptor out of the D-cache before handing
    * them to the engine.
@@ -349,21 +345,20 @@ static int rk3576_crypto_run(size_t srclen, size_t dstlen,
   rk3576_crypto_putreg(RK3576_CRYPTO_DMA_INT_ST, RK3576_CRYPTO_INT_ALL);
   rk3576_crypto_putreg(RK3576_CRYPTO_DMA_INT_EN,
                        RK3576_CRYPTO_INT_LIST_DONE |
-                       RK3576_CRYPTO_INT_ERR_MASK);
+                           RK3576_CRYPTO_INT_ERR_MASK);
 
   rk3576_crypto_putreg(RK3576_CRYPTO_DMA_LLI_ADDR,
                        (uint32_t)up_addrenv_va_to_pa(lli));
   rk3576_crypto_putmasked(RK3576_CRYPTO_DMA_CTL, RK3576_CRYPTO_DMA_START);
 
-  ret = nxsem_tickwait_uninterruptible(&priv->done,
-                                MSEC2TICK(RK3576_CRYPTO_DMA_TIMEOUT_MS));
+  ret = nxsem_tickwait_uninterruptible(
+      &priv->done, MSEC2TICK(RK3576_CRYPTO_DMA_TIMEOUT_MS));
   if (ret < 0)
     {
       rk3576_crypto_putreg(RK3576_CRYPTO_DMA_INT_EN, 0);
-      _err("ERROR: DMA timed out, st=0x%08" PRIx32
-               " state=0x%08" PRIx32 "\n",
-               rk3576_crypto_getreg(RK3576_CRYPTO_DMA_ST),
-               rk3576_crypto_getreg(RK3576_CRYPTO_DMA_STATE));
+      _err("ERROR: DMA timed out, st=0x%08" PRIx32 " state=0x%08" PRIx32 "\n",
+           rk3576_crypto_getreg(RK3576_CRYPTO_DMA_ST),
+           rk3576_crypto_getreg(RK3576_CRYPTO_DMA_STATE));
       return -ETIMEDOUT;
     }
 
@@ -507,8 +502,7 @@ static int rk3576_crypto_aes_setup(const uint8_t *key, size_t keylen,
 
   rk3576_crypto_putmasked(RK3576_CRYPTO_BC_CTL, 0);
   rk3576_crypto_putmasked(RK3576_CRYPTO_HASH_CTL, 0);
-  rk3576_crypto_putmasked(RK3576_CRYPTO_FIFO_CTL,
-                          RK3576_CRYPTO_FIFO_CONFIG);
+  rk3576_crypto_putmasked(RK3576_CRYPTO_FIFO_CTL, RK3576_CRYPTO_FIFO_CONFIG);
 
   rk3576_crypto_write_regs(RK3576_CRYPTO_CIPHER_KEY0, key, keylen);
 
@@ -538,8 +532,7 @@ static int rk3576_crypto_aes_setup(const uint8_t *key, size_t keylen,
  ****************************************************************************/
 
 static int rk3576_crypto_hash_submit(struct rk3576_crypto_sha256_s *ctx,
-                                     const uint8_t *in, size_t len,
-                                     bool last)
+                                     const uint8_t *in, size_t len, bool last)
 {
   struct rk3576_crypto_dev_s *priv = &g_rk3576_crypto;
   uint32_t user_define = 0;
@@ -625,8 +618,7 @@ int rk3576_crypto_initialize(void)
 
   rk3576_crypto_putmasked(RK3576_CRYPTO_CLK_CTL,
                           RK3576_CRYPTO_AUTO_CLKGATE_EN);
-  rk3576_crypto_putmasked(RK3576_CRYPTO_FIFO_CTL,
-                          RK3576_CRYPTO_FIFO_CONFIG);
+  rk3576_crypto_putmasked(RK3576_CRYPTO_FIFO_CTL, RK3576_CRYPTO_FIFO_CONFIG);
   rk3576_crypto_putmasked(RK3576_CRYPTO_BC_CTL, 0);
   rk3576_crypto_putmasked(RK3576_CRYPTO_HASH_CTL, 0);
   rk3576_crypto_putreg(RK3576_CRYPTO_DMA_INT_EN, 0);
@@ -635,8 +627,7 @@ int rk3576_crypto_initialize(void)
   ret = irq_attach(RK3576_IRQ_NSCRYPTO, rk3576_crypto_interrupt, priv);
   if (ret < 0)
     {
-      _err("ERROR: failed to attach IRQ %d: %d\n",
-               RK3576_IRQ_NSCRYPTO, ret);
+      _err("ERROR: failed to attach IRQ %d: %d\n", RK3576_IRQ_NSCRYPTO, ret);
       goto errout_with_mem;
     }
 
@@ -679,9 +670,9 @@ errout:
  *
  ****************************************************************************/
 
-int rk3576_crypto_aes(const uint8_t *key, size_t keylen, uint8_t *iv,
-                      int mode, bool encrypt, const uint8_t *in,
-                      uint8_t *out, size_t len)
+int rk3576_crypto_aes(const uint8_t *key, size_t keylen, uint8_t *iv, int mode,
+                      bool encrypt, const uint8_t *in, uint8_t *out,
+                      size_t len)
 {
   struct rk3576_crypto_dev_s *priv = &g_rk3576_crypto;
   int ret;
@@ -693,8 +684,7 @@ int rk3576_crypto_aes(const uint8_t *key, size_t keylen, uint8_t *iv,
 
   if ((len % RK3576_CRYPTO_AES_BLOCKLEN) != 0)
     {
-      _err("ERROR: length %zu is not a whole number of AES blocks\n",
-               len);
+      _err("ERROR: length %zu is not a whole number of AES blocks\n", len);
       return -EINVAL;
     }
 
@@ -723,8 +713,8 @@ int rk3576_crypto_aes(const uint8_t *key, size_t keylen, uint8_t *iv,
 
   while (len > 0)
     {
-      size_t chunk = len > RK3576_CRYPTO_BOUNCE_SIZE ?
-                     RK3576_CRYPTO_BOUNCE_SIZE : len;
+      size_t chunk =
+          len > RK3576_CRYPTO_BOUNCE_SIZE ? RK3576_CRYPTO_BOUNCE_SIZE : len;
 
       memcpy(priv->src, in, chunk);
 
@@ -734,8 +724,8 @@ int rk3576_crypto_aes(const uint8_t *key, size_t keylen, uint8_t *iv,
 
       ret = rk3576_crypto_run(chunk, chunk,
                               RK3576_CRYPTO_LLI_CIPHER_EN |
-                              RK3576_CRYPTO_LLI_STR_START |
-                              RK3576_CRYPTO_LLI_STR_LAST);
+                                  RK3576_CRYPTO_LLI_STR_START |
+                                  RK3576_CRYPTO_LLI_STR_LAST);
       if (ret < 0)
         {
           goto errout;
@@ -743,7 +733,7 @@ int rk3576_crypto_aes(const uint8_t *key, size_t keylen, uint8_t *iv,
 
       memcpy(out, priv->dst, chunk);
 
-      in  += chunk;
+      in += chunk;
       out += chunk;
       len -= chunk;
     }
@@ -798,13 +788,11 @@ int rk3576_crypto_sha256_init(struct rk3576_crypto_sha256_s *ctx)
   ctx->locked = true;
 
   rk3576_crypto_putmasked(RK3576_CRYPTO_BC_CTL, 0);
-  rk3576_crypto_putmasked(RK3576_CRYPTO_FIFO_CTL,
-                          RK3576_CRYPTO_FIFO_CONFIG);
-  rk3576_crypto_putreg(RK3576_CRYPTO_HASH_VALID,
-                       RK3576_CRYPTO_HASH_IS_VALID);
+  rk3576_crypto_putmasked(RK3576_CRYPTO_FIFO_CTL, RK3576_CRYPTO_FIFO_CONFIG);
+  rk3576_crypto_putreg(RK3576_CRYPTO_HASH_VALID, RK3576_CRYPTO_HASH_IS_VALID);
   rk3576_crypto_putmasked(RK3576_CRYPTO_HASH_CTL,
                           RK3576_CRYPTO_HASH_ALG_SHA256 |
-                          RK3576_CRYPTO_HASH_ENABLE);
+                              RK3576_CRYPTO_HASH_ENABLE);
   return OK;
 }
 
@@ -838,8 +826,8 @@ int rk3576_crypto_sha256_update(struct rk3576_crypto_sha256_s *ctx,
 
       memcpy(ctx->block + ctx->nblock, in, fill);
       ctx->nblock += fill;
-      in          += fill;
-      len         -= fill;
+      in += fill;
+      len -= fill;
 
       if (ctx->nblock < RK3576_CRYPTO_SHA256_BLOCKLEN || len == 0)
         {
@@ -866,8 +854,9 @@ int rk3576_crypto_sha256_update(struct rk3576_crypto_sha256_s *ctx,
 
   while (len > RK3576_CRYPTO_SHA256_BLOCKLEN)
     {
-      size_t chunk = len > RK3576_CRYPTO_BOUNCE_SIZE ?
-                     RK3576_CRYPTO_BOUNCE_SIZE : len - 1;
+      size_t chunk = len > RK3576_CRYPTO_BOUNCE_SIZE
+                         ? RK3576_CRYPTO_BOUNCE_SIZE
+                         : len - 1;
 
       chunk -= chunk % RK3576_CRYPTO_SHA256_BLOCKLEN;
       if (chunk == 0)
@@ -881,7 +870,7 @@ int rk3576_crypto_sha256_update(struct rk3576_crypto_sha256_s *ctx,
           goto errout;
         }
 
-      in  += chunk;
+      in += chunk;
       len -= chunk;
     }
 
@@ -983,10 +972,7 @@ int rk3576_crypto_sha256(const uint8_t *in, size_t len, uint8_t *out)
  *
  ****************************************************************************/
 
-int up_cryptoinitialize(void)
-{
-  return rk3576_crypto_initialize();
-}
+int up_cryptoinitialize(void) { return rk3576_crypto_initialize(); }
 
 #if defined(CONFIG_CRYPTO_AES)
 

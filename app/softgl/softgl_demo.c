@@ -62,22 +62,22 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SOFTGL_DEMO_RES_DEFAULT   360
-#define SOFTGL_DEMO_FRAMES        120
-#define SOFTGL_DEMO_TEXSIZE       64
-#define SOFTGL_DEMO_FPS_WINDOW    30
+#define SOFTGL_DEMO_RES_DEFAULT 360
+#define SOFTGL_DEMO_FRAMES      120
+#define SOFTGL_DEMO_TEXSIZE     64
+#define SOFTGL_DEMO_FPS_WINDOW  30
 
 /* Camera. */
 
-#define SOFTGL_DEMO_FOV_DEG       42.0f
-#define SOFTGL_DEMO_ZNEAR         0.2f
-#define SOFTGL_DEMO_ZFAR          40.0f
+#define SOFTGL_DEMO_FOV_DEG 42.0f
+#define SOFTGL_DEMO_ZNEAR   0.2f
+#define SOFTGL_DEMO_ZFAR    40.0f
 
 /* Background: a dark warm grey that suits the round panels. */
 
-#define SOFTGL_DEMO_CLEAR         SOFTGL_RGB565(18, 16, 24)
+#define SOFTGL_DEMO_CLEAR        SOFTGL_RGB565(18, 16, 24)
 
-#define SOFTGL_DEMO_NSEC_PER_SEC  1000000000ll
+#define SOFTGL_DEMO_NSEC_PER_SEC 1000000000ll
 
 /****************************************************************************
  * Private Types
@@ -88,12 +88,12 @@
 struct softgl_demo_builder_s
 {
   struct softgl_vertex_s *verts;
-  uint16_t               *idx;
-  uint32_t                nverts;
-  uint32_t                nidx;
-  uint32_t                vcap;
-  uint32_t                icap;
-  bool                    failed;
+  uint16_t *idx;
+  uint32_t nverts;
+  uint32_t nidx;
+  uint32_t vcap;
+  uint32_t icap;
+  bool failed;
 };
 
 /****************************************************************************
@@ -112,8 +112,7 @@ static void softgl_demo_add_quad(struct softgl_demo_builder_s *bld,
                                  float vscale);
 static void softgl_demo_add_box(struct softgl_demo_builder_s *bld,
                                 struct softgl_vec3_s center,
-                                struct softgl_vec3_s halfsize,
-                                float uvscale);
+                                struct softgl_vec3_s halfsize, float uvscale);
 static void softgl_demo_add_pyramid(struct softgl_demo_builder_s *bld,
                                     struct softgl_vec3_s base_center,
                                     struct softgl_vec3_s halfsize,
@@ -182,7 +181,7 @@ static bool softgl_demo_builder_grow(struct softgl_demo_builder_s *bld,
         }
 
       bld->verts = p;
-      bld->vcap  = cap;
+      bld->vcap = cap;
     }
 
   if (bld->nidx + addidx > bld->icap)
@@ -202,7 +201,7 @@ static bool softgl_demo_builder_grow(struct softgl_demo_builder_s *bld,
           return false;
         }
 
-      bld->idx  = p;
+      bld->idx = p;
       bld->icap = cap;
     }
 
@@ -228,20 +227,8 @@ static void softgl_demo_add_quad(struct softgl_demo_builder_s *bld,
 {
   struct softgl_vec3_s n;
   struct softgl_vec3_s corner[4];
-  const float uv[4][2] =
-  {
-    {
-      0.0f, 0.0f
-    },
-    {
-      1.0f, 0.0f
-    },
-    {
-      1.0f, 1.0f
-    },
-    {
-      0.0f, 1.0f
-    }
+  const float uv[4][2] = {
+    { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f }
   };
 
   uint16_t base;
@@ -252,8 +239,8 @@ static void softgl_demo_add_quad(struct softgl_demo_builder_s *bld,
       return;
     }
 
-  n = softgl_vec3_normalize(softgl_vec3_cross(softgl_vec3_sub(p1, p0),
-                                              softgl_vec3_sub(p3, p0)));
+  n = softgl_vec3_normalize(
+      softgl_vec3_cross(softgl_vec3_sub(p1, p0), softgl_vec3_sub(p3, p0)));
 
   corner[0] = p0;
   corner[1] = p1;
@@ -272,8 +259,8 @@ static void softgl_demo_add_quad(struct softgl_demo_builder_s *bld,
       v->nrm[0] = n.x;
       v->nrm[1] = n.y;
       v->nrm[2] = n.z;
-      v->uv[0]  = uv[i][0] * uscale;
-      v->uv[1]  = uv[i][1] * vscale;
+      v->uv[0] = uv[i][0] * uscale;
+      v->uv[1] = uv[i][1] * vscale;
     }
 
   bld->idx[bld->nidx++] = base;
@@ -294,8 +281,7 @@ static void softgl_demo_add_quad(struct softgl_demo_builder_s *bld,
 
 static void softgl_demo_add_box(struct softgl_demo_builder_s *bld,
                                 struct softgl_vec3_s center,
-                                struct softgl_vec3_s halfsize,
-                                float uvscale)
+                                struct softgl_vec3_s halfsize, float uvscale)
 {
   float x0 = center.x - halfsize.x;
   float x1 = center.x + halfsize.x;
@@ -354,9 +340,8 @@ static void softgl_demo_add_pyramid(struct softgl_demo_builder_s *bld,
                                     struct softgl_vec3_s halfsize,
                                     float height)
 {
-  struct softgl_vec3_s apex = softgl_vec3(base_center.x,
-                                          base_center.y + height,
-                                          base_center.z);
+  struct softgl_vec3_s apex =
+      softgl_vec3(base_center.x, base_center.y + height, base_center.z);
   struct softgl_vec3_s c[4];
   uint16_t base;
   int i;
@@ -377,18 +362,9 @@ static void softgl_demo_add_pyramid(struct softgl_demo_builder_s *bld,
       struct softgl_vec3_s n;
       int k;
       struct softgl_vec3_s tri[3];
-      const float triuv[3][2] =
-      {
-        {
-          0.0f, 0.0f
-        },
-        {
-          1.0f, 0.0f
-        },
-        {
-          0.5f, 1.0f
-        }
-      };
+      const float triuv[3][2] = { { 0.0f, 0.0f },
+                                  { 1.0f, 0.0f },
+                                  { 0.5f, 1.0f } };
 
       if (!softgl_demo_builder_grow(bld, 3, 3))
         {
@@ -399,8 +375,8 @@ static void softgl_demo_add_pyramid(struct softgl_demo_builder_s *bld,
       tri[1] = b;
       tri[2] = apex;
 
-      n = softgl_vec3_normalize(softgl_vec3_cross(softgl_vec3_sub(b, a),
-                                                  softgl_vec3_sub(apex, a)));
+      n = softgl_vec3_normalize(
+          softgl_vec3_cross(softgl_vec3_sub(b, a), softgl_vec3_sub(apex, a)));
 
       base = (uint16_t)bld->nverts;
 
@@ -414,8 +390,8 @@ static void softgl_demo_add_pyramid(struct softgl_demo_builder_s *bld,
           v->nrm[0] = n.x;
           v->nrm[1] = n.y;
           v->nrm[2] = n.z;
-          v->uv[0]  = triuv[k][0];
-          v->uv[1]  = triuv[k][1];
+          v->uv[0] = triuv[k][0];
+          v->uv[1] = triuv[k][1];
         }
 
       bld->idx[bld->nidx++] = base;
@@ -444,11 +420,11 @@ static bool softgl_demo_builder_finish(struct softgl_demo_builder_s *bld,
     }
 
   memset(mesh, 0, sizeof(*mesh));
-  mesh->vertices     = bld->verts;
-  mesh->indices      = bld->idx;
-  mesh->nvertices    = bld->nverts;
-  mesh->nindices     = bld->nidx;
-  mesh->owned        = true;
+  mesh->vertices = bld->verts;
+  mesh->indices = bld->idx;
+  mesh->nvertices = bld->nverts;
+  mesh->nindices = bld->nidx;
+  mesh->owned = true;
   mesh->basecolor[0] = 1.0f;
   mesh->basecolor[1] = 1.0f;
   mesh->basecolor[2] = 1.0f;
@@ -543,8 +519,7 @@ static int softgl_demo_make_cat(struct softgl_mesh_s *mesh)
  *
  ****************************************************************************/
 
-static int softgl_demo_make_texture(struct softgl_texture_s *tex,
-                                    bool checker)
+static int softgl_demo_make_texture(struct softgl_texture_s *tex, bool checker)
 {
   const int size = SOFTGL_DEMO_TEXSIZE;
   uint16_t *px;
@@ -579,9 +554,8 @@ static int softgl_demo_make_texture(struct softgl_texture_s *tex,
                * per-texel noise so the surface is not flat.
                */
 
-              int stripe = (int)(24.0f *
-                            sinf((float)x * 0.55f) *
-                            sinf((float)y * 0.13f));
+              int stripe = (int)(24.0f * sinf((float)x * 0.55f) *
+                                 sinf((float)y * 0.13f));
               int noise = ((x * 37 + y * 17) & 7) - 4;
 
               r = 214 - stripe + noise;
@@ -599,9 +573,9 @@ static int softgl_demo_make_texture(struct softgl_texture_s *tex,
 
   memset(tex, 0, sizeof(*tex));
   tex->pixels = px;
-  tex->width  = (uint16_t)size;
+  tex->width = (uint16_t)size;
   tex->height = (uint16_t)size;
-  tex->owned  = true;
+  tex->owned = true;
   return OK;
 }
 
@@ -798,8 +772,8 @@ int main(int argc, FAR char *argv[])
       ret = softgl_bind_fbdev(ctx, fbdev);
       if (ret < 0)
         {
-          printf("softgl: %s unavailable (%d), running headless\n",
-                 fbdev, ret);
+          printf("softgl: %s unavailable (%d), running headless\n", fbdev,
+                 ret);
         }
     }
 
@@ -809,14 +783,14 @@ int main(int argc, FAR char *argv[])
   softgl_set_cull(ctx, SOFTGL_CULL_BACK);
 
   light.direction = softgl_vec3(-0.45f, 0.75f, 0.5f);
-  light.color     = softgl_vec3(0.95f, 0.90f, 0.82f);
-  light.ambient   = softgl_vec3(0.22f, 0.22f, 0.30f);
-  light.specular  = 0.40f;
+  light.color = softgl_vec3(0.95f, 0.90f, 0.82f);
+  light.ambient = softgl_vec3(0.22f, 0.22f, 0.30f);
+  light.specular = 0.40f;
   light.shininess = 32.0f;
   softgl_set_light(ctx, &light);
 
-  softgl_mat4_perspective(&proj, SOFTGL_DEG2RAD(SOFTGL_DEMO_FOV_DEG),
-                          1.0f, SOFTGL_DEMO_ZNEAR, SOFTGL_DEMO_ZFAR);
+  softgl_mat4_perspective(&proj, SOFTGL_DEG2RAD(SOFTGL_DEMO_FOV_DEG), 1.0f,
+                          SOFTGL_DEMO_ZNEAR, SOFTGL_DEMO_ZFAR);
   softgl_set_matrix(ctx, SOFTGL_MATRIX_PROJECTION, &proj);
 
   softgl_mat4_lookat(&view, softgl_vec3(0.0f, 1.6f, 5.2f),
@@ -824,12 +798,12 @@ int main(int argc, FAR char *argv[])
                      softgl_vec3(0.0f, 1.0f, 0.0f));
   softgl_set_matrix(ctx, SOFTGL_MATRIX_VIEW, &view);
 
-  printf("softgl: %dx%d RGB565, %u tris, %d raster band(s)\n",
-         res, res, (unsigned)(mesh.nindices / 3), ctx->nbands);
+  printf("softgl: %dx%d RGB565, %u tris, %d raster band(s)\n", res, res,
+         (unsigned)(mesh.nindices / 3), ctx->nbands);
 
   /* ---- Main loop ------------------------------------------------------ */
 
-  t_total  = softgl_demo_now_ns();
+  t_total = softgl_demo_now_ns();
   t_window = t_total;
 
   for (frame = 0; frames == 0 || frame < frames; frame++)
@@ -864,20 +838,19 @@ int main(int argc, FAR char *argv[])
       if (((frame + 1) % SOFTGL_DEMO_FPS_WINDOW) == 0)
         {
           int64_t now = softgl_demo_now_ns();
-          double secs = (double)(now - t_window) /
-                        (double)SOFTGL_DEMO_NSEC_PER_SEC;
+          double secs =
+              (double)(now - t_window) / (double)SOFTGL_DEMO_NSEC_PER_SEC;
 
           printf("softgl: frame %d  %.1f fps  (%.2f ms/frame, "
                  "worst %.2f ms, %u tris drawn)\n",
                  frame + 1,
                  secs > 0.0 ? (double)SOFTGL_DEMO_FPS_WINDOW / secs : 0.0,
                  secs * 1000.0 / (double)SOFTGL_DEMO_FPS_WINDOW,
-                 (double)worst / 1.0e6,
-                 (unsigned)ctx->stat_tris_drawn);
+                 (double)worst / 1.0e6, (unsigned)ctx->stat_tris_drawn);
 
           fflush(stdout);
           t_window = now;
-          worst    = 0;
+          worst = 0;
           ctx->stat_tris_drawn = 0;
         }
     }
@@ -898,8 +871,8 @@ int main(int argc, FAR char *argv[])
   elapsed = (double)(softgl_demo_now_ns() - t_total) /
             (double)SOFTGL_DEMO_NSEC_PER_SEC;
 
-  printf("softgl: %d frames in %.2f s -> %.1f fps average\n",
-         frame, elapsed, elapsed > 0.0 ? (double)frame / elapsed : 0.0);
+  printf("softgl: %d frames in %.2f s -> %.1f fps average\n", frame, elapsed,
+         elapsed > 0.0 ? (double)frame / elapsed : 0.0);
 
   softgl_destroy_context(ctx);
   softgl_texture_free(&tex);

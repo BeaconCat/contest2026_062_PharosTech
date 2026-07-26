@@ -87,14 +87,14 @@
  * names can be string literals.
  */
 
-#define RK3576_IR_PCLK_NAME    "pclk_pwm0_en"
-#define RK3576_IR_FCLK_NAME    "clk_pwm0_osc_en"
+#define RK3576_IR_PCLK_NAME "pclk_pwm0_en"
+#define RK3576_IR_FCLK_NAME "clk_pwm0_osc_en"
 
 /* Power-key mode mandates a 1 MHz counting clock (TRM 34.6.2 step 2).
  * One tick therefore equals one microsecond.
  */
 
-#define RK3576_IR_CAP_CLK_HZ   1000000
+#define RK3576_IR_CAP_CLK_HZ 1000000
 
 /* PWM_CLK_CTRL divider limits: f = f_in / (2^prescale * 2 * scale). */
 
@@ -119,9 +119,9 @@
 #define RK3576_IR_TOL_DEN            10
 
 #define RK3576_IR_MIN_US(us) \
-  ((us) - ((us) * RK3576_IR_TOL_NUM) / RK3576_IR_TOL_DEN)
+  ((us) - ((us)*RK3576_IR_TOL_NUM) / RK3576_IR_TOL_DEN)
 #define RK3576_IR_MAX_US(us) \
-  ((us) + ((us) * RK3576_IR_TOL_NUM) / RK3576_IR_TOL_DEN)
+  ((us) + ((us)*RK3576_IR_TOL_NUM) / RK3576_IR_TOL_DEN)
 
 #define RK3576_IR_THRESHOLD(us) \
   PWM_PWRMATCH_CNT(RK3576_IR_MIN_US(us), RK3576_IR_MAX_US(us))
@@ -146,28 +146,28 @@
 
 struct rk3576_ir_dev_s
 {
-  uintptr_t base;                   /* PWM channel register window        */
-  struct clk_s *pclk;               /* APB interface clock                */
-  struct clk_s *fclk;               /* Counting-clock source (osc)        */
-  uint32_t fclk_hz;                 /* Real rate of fclk, from the tree   */
-  bool initialized;                 /* Hardware brought up                */
+  uintptr_t base;     /* PWM channel register window        */
+  struct clk_s *pclk; /* APB interface clock                */
+  struct clk_s *fclk; /* Counting-clock source (osc)        */
+  uint32_t fclk_hz;   /* Real rate of fclk, from the tree   */
+  bool initialized;   /* Hardware brought up                */
 
   /* Decoded-event queue, filled from interrupt context */
 
   uint32_t queue[RK3576_IR_QUEUE_SIZE];
-  uint8_t head;                     /* Next slot to write (producer)      */
-  uint8_t tail;                     /* Next slot to read  (consumer)      */
-  spinlock_t lock;                  /* Guards queue/head/tail             */
+  uint8_t head;    /* Next slot to write (producer)      */
+  uint8_t tail;    /* Next slot to read  (consumer)      */
+  spinlock_t lock; /* Guards queue/head/tail             */
 
-  sem_t waitsem;                    /* Signalled when an event is queued  */
-  mutex_t readlock;                 /* Serialises concurrent readers      */
-  bool waiting;                     /* A reader is blocked on waitsem     */
+  sem_t waitsem;    /* Signalled when an event is queued  */
+  mutex_t readlock; /* Serialises concurrent readers      */
+  bool waiting;     /* A reader is blocked on waitsem     */
 
   /* Auto-repeat tracking */
 
-  uint32_t last_key;                /* Previous decoded addr/cmd          */
-  clock_t last_tick;                /* Timestamp of the previous frame    */
-  bool have_last;                   /* last_key/last_tick are valid       */
+  uint32_t last_key; /* Previous decoded addr/cmd          */
+  clock_t last_tick; /* Timestamp of the previous frame    */
+  bool have_last;    /* last_key/last_tick are valid       */
 
   /* Optional user callback, invoked from interrupt context */
 
@@ -194,25 +194,21 @@ static void rk3576_ir_post(struct rk3576_ir_dev_s *priv, uint32_t key);
 static int rk3576_ir_interrupt(int irq, void *context, void *arg);
 static int rk3576_ir_hw_setup(struct rk3576_ir_dev_s *priv);
 
-static ssize_t rk3576_ir_read(struct file *filep, char *buffer,
-                              size_t buflen);
-static int rk3576_ir_poll(struct file *filep, struct pollfd *fds,
-                          bool setup);
+static ssize_t rk3576_ir_read(struct file *filep, char *buffer, size_t buflen);
+static int rk3576_ir_poll(struct file *filep, struct pollfd *fds, bool setup);
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static const struct file_operations g_rk3576_ir_fops =
-{
-  .read  = rk3576_ir_read,
-  .poll  = rk3576_ir_poll,
+static const struct file_operations g_rk3576_ir_fops = {
+  .read = rk3576_ir_read,
+  .poll = rk3576_ir_poll,
 };
 
-static struct rk3576_ir_dev_s g_rk3576_ir =
-{
-  .lock     = SP_UNLOCKED,
-  .waitsem  = SEM_INITIALIZER(0),
+static struct rk3576_ir_dev_s g_rk3576_ir = {
+  .lock = SP_UNLOCKED,
+  .waitsem = SEM_INITIALIZER(0),
   .readlock = NXMUTEX_INITIALIZER,
 };
 
@@ -372,18 +368,16 @@ static bool rk3576_ir_decode(uint32_t raw, uint32_t *key)
   unsigned int i;
 
   candidates[0] = raw;
-  candidates[1] = ((raw & 0x000000ffu) << 24) |
-                  ((raw & 0x0000ff00u) << 8)  |
-                  ((raw & 0x00ff0000u) >> 8)  |
-                  ((raw & 0xff000000u) >> 24);
+  candidates[1] = ((raw & 0x000000ffu) << 24) | ((raw & 0x0000ff00u) << 8) |
+                  ((raw & 0x00ff0000u) >> 8) | ((raw & 0xff000000u) >> 24);
 
   for (i = 0; i < 2; i++)
     {
       uint32_t frame = candidates[i];
-      uint32_t addr  = frame & 0xffu;
+      uint32_t addr = frame & 0xffu;
       uint32_t naddr = (frame >> 8) & 0xffu;
-      uint32_t cmd   = (frame >> 16) & 0xffu;
-      uint32_t ncmd  = (frame >> 24) & 0xffu;
+      uint32_t cmd = (frame >> 16) & 0xffu;
+      uint32_t ncmd = (frame >> 24) & 0xffu;
 
       if (((cmd ^ ncmd) & 0xffu) != 0xffu)
         {
@@ -508,7 +502,7 @@ static int rk3576_ir_interrupt(int irq, void *context, void *arg)
       key |= RK3576_IR_KEY_REPEAT;
     }
 
-  priv->last_key  = key & ~RK3576_IR_KEY_REPEAT;
+  priv->last_key = key & ~RK3576_IR_KEY_REPEAT;
   priv->last_tick = now;
   priv->have_last = true;
 
@@ -540,20 +534,20 @@ static int rk3576_ir_hw_setup(struct rk3576_ir_dev_s *priv)
 
   /* Step 2: 1 MHz counting clock out of the 24 MHz oscillator branch. */
 
-  ret = rk3576_ir_calc_divider(priv->fclk_hz, RK3576_IR_CAP_CLK_HZ,
-                               &prescale, &scale);
+  ret = rk3576_ir_calc_divider(priv->fclk_hz, RK3576_IR_CAP_CLK_HZ, &prescale,
+                               &scale);
   if (ret < 0)
     {
       _err("ERROR: cannot derive %d Hz from %" PRIu32 " Hz\n",
-             RK3576_IR_CAP_CLK_HZ, priv->fclk_hz);
+           RK3576_IR_CAP_CLK_HZ, priv->fclk_hz);
       return ret;
     }
 
   regval = ((prescale << PWM_CLK_PRESCALE_SHIFT) & PWM_CLK_PRESCALE_MASK) |
            ((scale << PWM_CLK_SCALE_SHIFT) & PWM_CLK_SCALE_MASK) |
            PWM_CLK_SRC_SEL_CLK_OSC;
-  regval |= (PWM_CLK_PRESCALE_MASK | PWM_CLK_SCALE_MASK |
-             PWM_CLK_SRC_SEL_MASK) << 16;
+  regval |= (PWM_CLK_PRESCALE_MASK | PWM_CLK_SCALE_MASK | PWM_CLK_SRC_SEL_MASK)
+            << 16;
 
   rk3576_ir_putreg(priv, RK3576_PWM_CLK_CTRL, regval);
 
@@ -561,7 +555,7 @@ static int rk3576_ir_hw_setup(struct rk3576_ir_dev_s *priv)
 
   rk3576_ir_putreg(priv, RK3576_PWM_CTRL,
                    PWM_HIWORD(PWM_CTRL_MODE_CAPTURE) |
-                   PWM_HIWORD_CLR(PWM_CTRL_MODE_MASK));
+                       PWM_HIWORD_CLR(PWM_CTRL_MODE_MASK));
 
   /* Step 4: grant the power-key resource to this channel.  The arbiter is
    * shared by all channels of the controller and is a plain (non
@@ -569,15 +563,14 @@ static int rk3576_ir_hw_setup(struct rk3576_ir_dev_s *priv)
    */
 
   rk3576_ir_putreg(priv, RK3576_PWM_PWRMATCH_ARBITER,
-                   (1u << RK3576_IR_PWM_CHANNEL) <<
-                   PWM_PWRMATCH_GRANT_SHIFT);
+                   (1u << RK3576_IR_PWM_CHANNEL) << PWM_PWRMATCH_GRANT_SHIFT);
 
   /* Step 5: enable the power-key interrupt, mask everything else. */
 
   rk3576_ir_putreg(priv, RK3576_PWM_INTSTS, PWM_INT_ALL);
   rk3576_ir_putreg(priv, RK3576_PWM_INT_EN,
-                   PWM_HIWORD(PWM_INT_PWR) | PWM_HIWORD_CLR(PWM_INT_ALL &
-                                                            ~PWM_INT_PWR));
+                   PWM_HIWORD(PWM_INT_PWR) |
+                       PWM_HIWORD_CLR(PWM_INT_ALL & ~PWM_INT_PWR));
   rk3576_ir_putreg(priv, RK3576_PWM_INT_MASK, PWM_HIWORD_CLR(PWM_INT_ALL));
 
   /* Step 6: PWM_PWRMATCH_VALUE0..15 select the codes that assert the
@@ -608,11 +601,10 @@ static int rk3576_ir_hw_setup(struct rk3576_ir_dev_s *priv)
    * and interrupt on every frame rather than only on a match.
    */
 
-  rk3576_ir_putreg(priv, RK3576_PWM_PWRMATCH_CTRL,
-                   PWM_HIWORD(PWM_PWRMATCH_POLARITY_NEG |
-                              PWM_PWRMATCH_CAPTURE_DIRECT |
-                              PWM_PWRMATCH_INT_NO_MATCH |
-                              PWM_PWRMATCH_ENABLE));
+  rk3576_ir_putreg(
+      priv, RK3576_PWM_PWRMATCH_CTRL,
+      PWM_HIWORD(PWM_PWRMATCH_POLARITY_NEG | PWM_PWRMATCH_CAPTURE_DIRECT |
+                 PWM_PWRMATCH_INT_NO_MATCH | PWM_PWRMATCH_ENABLE));
 
   /* Step 10: the optional glitch filter is left disabled; the external
    * receiver module already demodulates and shapes the 38 kHz carrier.
@@ -624,7 +616,8 @@ static int rk3576_ir_hw_setup(struct rk3576_ir_dev_s *priv)
                    PWM_HIWORD(PWM_ENABLE_CLK_EN | PWM_ENABLE_EN));
 
   _info("IR: capture running, fclk=%" PRIu32 " Hz prescale=%" PRIu32
-          " scale=%" PRIu32 "\n", priv->fclk_hz, prescale, scale);
+        " scale=%" PRIu32 "\n",
+        priv->fclk_hz, prescale, scale);
   return OK;
 }
 
@@ -637,8 +630,7 @@ static int rk3576_ir_hw_setup(struct rk3576_ir_dev_s *priv)
  *
  ****************************************************************************/
 
-static ssize_t rk3576_ir_read(struct file *filep, char *buffer,
-                              size_t buflen)
+static ssize_t rk3576_ir_read(struct file *filep, char *buffer, size_t buflen)
 {
   struct inode *inode = filep->f_inode;
   struct rk3576_ir_dev_s *priv = inode->i_private;
@@ -657,7 +649,7 @@ static ssize_t rk3576_ir_read(struct file *filep, char *buffer,
       return ret;
     }
 
-  for (; ; )
+  for (;;)
     {
       flags = spin_lock_irqsave(&priv->lock);
 
@@ -793,8 +785,7 @@ int rk3576_ir_initialize(const char *devpath)
       return -EBUSY;
     }
 
-  priv->base = RK3576_PWM0_ADDR +
-               RK3576_IR_PWM_CHANNEL * RK3576_PWM_CH_STRIDE;
+  priv->base = RK3576_PWM0_ADDR + RK3576_IR_PWM_CHANNEL * RK3576_PWM_CH_STRIDE;
   priv->head = 0;
   priv->tail = 0;
   priv->have_last = false;
@@ -814,8 +805,8 @@ int rk3576_ir_initialize(const char *devpath)
   ret = irq_attach(RK3576_IRQ_PWM0_2CH_0, rk3576_ir_interrupt, priv);
   if (ret < 0)
     {
-      _err("ERROR: failed to attach IR IRQ %d: %d\n",
-             RK3576_IRQ_PWM0_2CH_0, ret);
+      _err("ERROR: failed to attach IR IRQ %d: %d\n", RK3576_IRQ_PWM0_2CH_0,
+           ret);
       goto errout_disable;
     }
 

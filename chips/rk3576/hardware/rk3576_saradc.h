@@ -62,7 +62,6 @@
  * guard keeps this header working either way.
  */
 
-
 /* Hardware capabilities.  CONV_CON.channel_sel is four bits wide, but
  * RK3576 only routes eight analog inputs and only implements DATA0..DATA7.
  */
@@ -78,8 +77,8 @@
 #define RK3576_SARADC_T_AS_SOC     0x000c /* Analog settling timing        */
 #define RK3576_SARADC_T_DAS_SOC    0x0010 /* Data available after SOC      */
 #define RK3576_SARADC_T_SEL_SOC    0x0018 /* Channel select to SOC timing  */
-#define RK3576_SARADC_HIGH_COMP(n) (0x0100 + ((n) * 4)) /* n = 0..7        */
-#define RK3576_SARADC_LOW_COMP(n)  (0x0180 + ((n) * 4)) /* n = 0..7        */
+#define RK3576_SARADC_HIGH_COMP(n) (0x0100 + ((n)*4)) /* n = 0..7        */
+#define RK3576_SARADC_LOW_COMP(n)  (0x0180 + ((n)*4)) /* n = 0..7        */
 #define RK3576_SARADC_DEBOUNCE     0x0200 /* Threshold debounce count      */
 #define RK3576_SARADC_HT_INT_EN    0x0204 /* High-threshold IE (HIWORD)    */
 #define RK3576_SARADC_LT_INT_EN    0x0208 /* Low-threshold IE (HIWORD)     */
@@ -91,18 +90,20 @@
 #define RK3576_SARADC_HT_INT_ST    0x0220 /* High-threshold IS (W1C)       */
 #define RK3576_SARADC_LT_INT_ST    0x0224 /* Low-threshold IS (W1C)        */
 #define RK3576_SARADC_MT_INT_ST    0x0228 /* Middle-threshold IS (W1C)     */
-#define RK3576_SARADC_DATA(n)      (0x0300 + ((n) * 4)) /* n = 0..7        */
+#define RK3576_SARADC_DATA(n)      (0x0300 + ((n)*4)) /* n = 0..7        */
 
 /* SARADC_CONV_CON (0x0000, HIWORD) ****************************************/
 
-#define SARADC_CONV_CON_CHANNEL_SEL_MASK  0x000f   /* [3:0] channel select */
+#define SARADC_CONV_CON_CHANNEL_SEL_MASK  0x000f /* [3:0] channel select */
 #define SARADC_CONV_CON_CHANNEL_SEL_SHIFT 0
 #define SARADC_CONV_CON_START             (1 << 4) /* Start conversion     */
 #define SARADC_CONV_CON_SINGLE_MODE       (1 << 5) /* One-shot conversion  */
 
 /* SARADC_END_INT_EN (0x0210, HIWORD) **************************************/
 
-#define SARADC_END_INT_EN_EN (1 << 0) /* End-of-conversion interrupt enable */
+#define SARADC_END_INT_EN_EN                     \
+  (1 << 0) /* End-of-conversion interrupt enable \
+            */
 
 /* SARADC_ST_CON (0x0214) **************************************************/
 
@@ -162,7 +163,6 @@
 #define RK3576_SARADC_HIWORD(bits) \
   (((uint32_t)(bits) << 16) | (uint32_t)(bits))
 #define RK3576_SARADC_HIWORD_CLR(bits) ((uint32_t)(bits) << 16)
-#define RK3576_SARADC_HIWORD_ALL(val) \
-  (0xffff0000u | ((uint32_t)(val) & 0xffffu))
+#define RK3576_SARADC_HIWORD_ALL(val)  (0xffff0000u | ((uint32_t)(val)&0xffffu))
 
 #endif /* __VENDOR_ROCKCHIP_CHIPS_RK3576_HARDWARE_RK3576_SARADC_H */

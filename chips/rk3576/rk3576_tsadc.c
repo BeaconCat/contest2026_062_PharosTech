@@ -74,8 +74,8 @@
 #include <nuttx/spinlock.h>
 
 #ifdef CONFIG_SENSORS
-#  include <nuttx/fs/fs.h>
-#  include <nuttx/sensors/sensor.h>
+#include <nuttx/fs/fs.h>
+#include <nuttx/sensors/sensor.h>
 #endif
 
 #include "arm64_internal.h"
@@ -90,8 +90,8 @@
 
 /* Thermal policy, taken from the vendor device tree (see file header). */
 
-#define RK3576_TSADC_TRIP_INT_MC   115000 /* thermal-zones critical trip */
-#define RK3576_TSADC_TRIP_SHUT_MC  120000 /* rockchip,hw-tshut-temp      */
+#define RK3576_TSADC_TRIP_INT_MC  115000 /* thermal-zones critical trip */
+#define RK3576_TSADC_TRIP_SHUT_MC 120000 /* rockchip,hw-tshut-temp      */
 
 /* Time one channel spends in the conversion loop, in milliseconds.  The
  * hardware counts clk_tsadc cycles, so the register value depends on the
@@ -125,13 +125,13 @@ struct rk3576_tsadc_entry_s
 
 struct rk3576_tsadc_dev_s
 {
-  uintptr_t base;                 /* Register base address              */
-  int irq;                        /* GIC interrupt number               */
-  uint32_t clk_hz;                /* clk_tsadc rate, Hz                 */
-  uint32_t chanmask;              /* Channels taking part in auto mode  */
-  bool initialized;               /* Controller is up and looping       */
-  rk3576_tsadc_alarm_cb_t alarm;  /* Over-temperature notification      */
-  void *alarm_arg;                /* Opaque callback argument           */
+  uintptr_t base;                /* Register base address              */
+  int irq;                       /* GIC interrupt number               */
+  uint32_t clk_hz;               /* clk_tsadc rate, Hz                 */
+  uint32_t chanmask;             /* Channels taking part in auto mode  */
+  bool initialized;              /* Controller is up and looping       */
+  rk3576_tsadc_alarm_cb_t alarm; /* Over-temperature notification      */
+  void *alarm_arg;               /* Opaque callback argument           */
 };
 
 #ifdef CONFIG_SENSORS
@@ -159,23 +159,21 @@ static int rk3576_tsadc_interrupt(int irq, void *context, void *arg);
 static int rk3576_tsadc_activate(struct sensor_lowerhalf_s *lower,
                                  struct file *filep, bool enabled);
 static int rk3576_tsadc_fetch(struct sensor_lowerhalf_s *lower,
-                              struct file *filep, char *buffer,
-                              size_t buflen);
+                              struct file *filep, char *buffer, size_t buflen);
 #endif
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static struct rk3576_tsadc_dev_s g_rk3576_tsadc =
-{
-  .base        = RK3576_TSADC_ADDR,
-  .irq         = RK3576_IRQ_TSADC,
-  .clk_hz      = RK3576_TSADC_CLK_HZ,
-  .chanmask    = 0,
+static struct rk3576_tsadc_dev_s g_rk3576_tsadc = {
+  .base = RK3576_TSADC_ADDR,
+  .irq = RK3576_IRQ_TSADC,
+  .clk_hz = RK3576_TSADC_CLK_HZ,
+  .chanmask = 0,
   .initialized = false,
-  .alarm       = NULL,
-  .alarm_arg   = NULL,
+  .alarm = NULL,
+  .alarm_arg = NULL,
 };
 
 /* Rockchip v4 code-to-temperature calibration table, shared by the RK3588
@@ -190,32 +188,31 @@ static struct rk3576_tsadc_dev_s g_rk3576_tsadc =
  * +/- 5 C until that trim is applied.
  */
 
-static const struct rk3576_tsadc_entry_s g_rk3576_tsadc_table[] =
-{
-  {    0, -40000 }, {  215, -40000 }, {  285, -35000 }, {  354, -30000 },
-  {  424, -25000 }, {  493, -20000 }, {  562, -15000 }, {  632, -10000 },
-  {  702,  -5000 }, {  771,      0 }, {  841,   5000 }, {  910,  10000 },
-  {  980,  15000 }, { 1050,  20000 }, { 1119,  25000 }, { 1189,  30000 },
-  { 1259,  35000 }, { 1328,  40000 }, { 1398,  45000 }, { 1468,  50000 },
-  { 1538,  55000 }, { 1608,  60000 }, { 1678,  65000 }, { 1747,  70000 },
-  { 1817,  75000 }, { 1887,  80000 }, { 1957,  85000 }, { 2027,  90000 },
-  { 2097,  95000 }, { 2167, 100000 }, { 2237, 105000 }, { 2307, 110000 },
-  { 2377, 115000 }, { 2447, 120000 }, { 2517, 125000 },
-  { TSADC_DATA_MASK, 125000 },
+static const struct rk3576_tsadc_entry_s g_rk3576_tsadc_table[] = {
+  { 0, -40000 },    { 215, -40000 },  { 285, -35000 },
+  { 354, -30000 },  { 424, -25000 },  { 493, -20000 },
+  { 562, -15000 },  { 632, -10000 },  { 702, -5000 },
+  { 771, 0 },       { 841, 5000 },    { 910, 10000 },
+  { 980, 15000 },   { 1050, 20000 },  { 1119, 25000 },
+  { 1189, 30000 },  { 1259, 35000 },  { 1328, 40000 },
+  { 1398, 45000 },  { 1468, 50000 },  { 1538, 55000 },
+  { 1608, 60000 },  { 1678, 65000 },  { 1747, 70000 },
+  { 1817, 75000 },  { 1887, 80000 },  { 1957, 85000 },
+  { 2027, 90000 },  { 2097, 95000 },  { 2167, 100000 },
+  { 2237, 105000 }, { 2307, 110000 }, { 2377, 115000 },
+  { 2447, 120000 }, { 2517, 125000 }, { TSADC_DATA_MASK, 125000 },
 };
 
 #define RK3576_TSADC_TABLE_LEN \
   (sizeof(g_rk3576_tsadc_table) / sizeof(g_rk3576_tsadc_table[0]))
 
 #ifdef CONFIG_SENSORS
-static const struct sensor_ops_s g_rk3576_tsadc_sensor_ops =
-{
+static const struct sensor_ops_s g_rk3576_tsadc_sensor_ops = {
   .activate = rk3576_tsadc_activate,
-  .fetch    = rk3576_tsadc_fetch,
+  .fetch = rk3576_tsadc_fetch,
 };
 
-static struct rk3576_tsadc_sensor_s
-  g_rk3576_tsadc_sensor[RK3576_TSADC_NCHAN];
+static struct rk3576_tsadc_sensor_s g_rk3576_tsadc_sensor[RK3576_TSADC_NCHAN];
 #endif
 
 /****************************************************************************
@@ -269,7 +266,8 @@ static int32_t rk3576_tsadc_code_to_temp(uint32_t code)
         }
 
       return lo->temp_mc + ((hi->temp_mc - lo->temp_mc) *
-                            ((int32_t)code - (int32_t)lo->code)) / span;
+                            ((int32_t)code - (int32_t)lo->code)) /
+                               span;
     }
 
   return RK3576_TSADC_TEMP_MAX_MC;
@@ -312,7 +310,8 @@ static uint32_t rk3576_tsadc_temp_to_code(int32_t temp_mc)
 
       return (uint32_t)((int32_t)lo->code +
                         (((int32_t)hi->code - (int32_t)lo->code) *
-                         (temp_mc - lo->temp_mc)) / span);
+                         (temp_mc - lo->temp_mc)) /
+                            span);
     }
 
   return TSADC_DATA_MASK;
@@ -415,14 +414,12 @@ static void rk3576_tsadc_hw_init(void)
   rk3576_tsadc_putreg(RK3576_TSADC_AUTO_PERIOD, period);
   rk3576_tsadc_putreg(RK3576_TSADC_AUTO_PERIOD_HT, period);
 
-  rk3576_tsadc_putreg(RK3576_TSADC_HIGH_INT_DEBOUNCE,
-                      RK3576_TSADC_DEBOUNCE);
-  rk3576_tsadc_putreg(RK3576_TSADC_HIGH_TSHUT_DEBOUNCE,
-                      RK3576_TSADC_DEBOUNCE);
+  rk3576_tsadc_putreg(RK3576_TSADC_HIGH_INT_DEBOUNCE, RK3576_TSADC_DEBOUNCE);
+  rk3576_tsadc_putreg(RK3576_TSADC_HIGH_TSHUT_DEBOUNCE, RK3576_TSADC_DEBOUNCE);
 
   /* Per-channel comparator thresholds. */
 
-  int_code  = rk3576_tsadc_temp_to_code(RK3576_TSADC_TRIP_INT_MC);
+  int_code = rk3576_tsadc_temp_to_code(RK3576_TSADC_TRIP_INT_MC);
   shut_code = rk3576_tsadc_temp_to_code(RK3576_TSADC_TRIP_SHUT_MC);
 
   for (ch = 0; ch < RK3576_TSADC_NCHAN; ch++)
@@ -459,19 +456,19 @@ static void rk3576_tsadc_hw_init(void)
                       TSADC_HLT_INT_PD_HT_ALL | TSADC_HLT_INT_PD_LT_ALL);
   rk3576_tsadc_putreg(RK3576_TSADC_EOC_HSHUT_PD,
                       TSADC_EOC_HSHUT_PD_SHUT_ALL |
-                      TSADC_EOC_HSHUT_PD_USR_EOC |
-                      TSADC_EOC_HSHUT_PD_ROUND);
+                          TSADC_EOC_HSHUT_PD_USR_EOC |
+                          TSADC_EOC_HSHUT_PD_ROUND);
 
   /* Start the loop.  Q_SEL selects the (q_max - q) result polarity, which
    * is the one the v4 calibration table above is expressed in; the
    * TSHUT pad is active low (hw-tshut-polarity = 0).
    */
 
-  rk3576_tsadc_putreg(RK3576_TSADC_AUTO_CON,
-                      RK3576_TSADC_WE(TSADC_AUTO_CON_AUTO_EN |
-                                      TSADC_AUTO_CON_Q_SEL) |
-                      RK3576_TSADC_WE_CLR(TSADC_AUTO_CON_TSHUT_POL_HIGH |
-                                          TSADC_AUTO_CON_ROUND_INT_EN));
+  rk3576_tsadc_putreg(
+      RK3576_TSADC_AUTO_CON,
+      RK3576_TSADC_WE(TSADC_AUTO_CON_AUTO_EN | TSADC_AUTO_CON_Q_SEL) |
+          RK3576_TSADC_WE_CLR(TSADC_AUTO_CON_TSHUT_POL_HIGH |
+                              TSADC_AUTO_CON_ROUND_INT_EN));
 }
 
 /****************************************************************************
@@ -492,7 +489,7 @@ static int rk3576_tsadc_interrupt(int irq, void *context, void *arg)
   uint32_t chanmask;
   uint32_t shutmask;
 
-  hltpd  = rk3576_tsadc_getreg(RK3576_TSADC_HLT_INT_PD);
+  hltpd = rk3576_tsadc_getreg(RK3576_TSADC_HLT_INT_PD);
   shutpd = rk3576_tsadc_getreg(RK3576_TSADC_EOC_HSHUT_PD);
 
   /* Write 1 to clear.  Only the bits that were actually latched are
@@ -517,8 +514,8 @@ static int rk3576_tsadc_interrupt(int irq, void *context, void *arg)
       return OK;
     }
 
-  snwarn("TSADC over-temperature: int=0x%02" PRIx32 " shut=0x%02" PRIx32
-         "\n", chanmask, shutmask);
+  snwarn("TSADC over-temperature: int=0x%02" PRIx32 " shut=0x%02" PRIx32 "\n",
+         chanmask, shutmask);
 
   if (dev->alarm != NULL)
     {
@@ -543,8 +540,7 @@ static int rk3576_tsadc_interrupt(int irq, void *context, void *arg)
 static int rk3576_tsadc_activate(struct sensor_lowerhalf_s *lower,
                                  struct file *filep, bool enabled)
 {
-  struct rk3576_tsadc_sensor_s *priv =
-    (struct rk3576_tsadc_sensor_s *)lower;
+  struct rk3576_tsadc_sensor_s *priv = (struct rk3576_tsadc_sensor_s *)lower;
 
   priv->enabled = enabled;
   return OK;
@@ -560,11 +556,9 @@ static int rk3576_tsadc_activate(struct sensor_lowerhalf_s *lower,
  ****************************************************************************/
 
 static int rk3576_tsadc_fetch(struct sensor_lowerhalf_s *lower,
-                              struct file *filep, char *buffer,
-                              size_t buflen)
+                              struct file *filep, char *buffer, size_t buflen)
 {
-  struct rk3576_tsadc_sensor_s *priv =
-    (struct rk3576_tsadc_sensor_s *)lower;
+  struct rk3576_tsadc_sensor_s *priv = (struct rk3576_tsadc_sensor_s *)lower;
   struct sensor_temp temp;
   struct timespec ts;
   int millicelsius;
@@ -588,8 +582,8 @@ static int rk3576_tsadc_fetch(struct sensor_lowerhalf_s *lower,
 
   clock_systime_timespec(&ts);
 
-  temp.timestamp   = 1000000ull * (uint64_t)ts.tv_sec +
-                     (uint64_t)ts.tv_nsec / 1000ull;
+  temp.timestamp =
+      1000000ull * (uint64_t)ts.tv_sec + (uint64_t)ts.tv_nsec / 1000ull;
   temp.temperature = (float)millicelsius / 1000.0f;
 
   memcpy(buffer, &temp, sizeof(temp));
@@ -635,8 +629,8 @@ int rk3576_tsadc_initialize(uint32_t chanmask)
 
   rk3576_tsadc_hw_init();
 
-  ret = irq_attach(g_rk3576_tsadc.irq, rk3576_tsadc_interrupt,
-                   &g_rk3576_tsadc);
+  ret =
+      irq_attach(g_rk3576_tsadc.irq, rk3576_tsadc_interrupt, &g_rk3576_tsadc);
   if (ret < 0)
     {
       snerr("ERROR: irq_attach(%d) failed: %d\n", g_rk3576_tsadc.irq, ret);
@@ -649,8 +643,8 @@ int rk3576_tsadc_initialize(uint32_t chanmask)
 
   g_rk3576_tsadc.initialized = true;
 
-  sninfo("TSADC up: base=%08" PRIxPTR " clk=%" PRIu32 "Hz chans=0x%02"
-         PRIx32 " int=%dmC shut=%dmC\n",
+  sninfo("TSADC up: base=%08" PRIxPTR " clk=%" PRIu32 "Hz chans=0x%02" PRIx32
+         " int=%dmC shut=%dmC\n",
          g_rk3576_tsadc.base, g_rk3576_tsadc.clk_hz, chanmask,
          RK3576_TSADC_TRIP_INT_MC, RK3576_TSADC_TRIP_SHUT_MC);
   return OK;
@@ -710,7 +704,7 @@ int rk3576_tsadc_set_alarm_cb(rk3576_tsadc_alarm_cb_t cb, void *arg)
 {
   irqstate_t flags = enter_critical_section();
 
-  g_rk3576_tsadc.alarm     = cb;
+  g_rk3576_tsadc.alarm = cb;
   g_rk3576_tsadc.alarm_arg = arg;
 
   leave_critical_section(flags);
@@ -748,10 +742,10 @@ int rk3576_tsadc_register(int ch, int devno)
       return -EEXIST;
     }
 
-  priv->ch            = ch;
-  priv->enabled       = false;
-  priv->lower.ops     = &g_rk3576_tsadc_sensor_ops;
-  priv->lower.type    = SENSOR_TYPE_AMBIENT_TEMPERATURE;
+  priv->ch = ch;
+  priv->enabled = false;
+  priv->lower.ops = &g_rk3576_tsadc_sensor_ops;
+  priv->lower.type = SENSOR_TYPE_AMBIENT_TEMPERATURE;
 
   /* Fetch-only device: the hardware keeps a single latched result per
    * channel, so no circular buffer is needed.
@@ -762,8 +756,8 @@ int rk3576_tsadc_register(int ch, int devno)
   ret = sensor_register(&priv->lower, devno);
   if (ret < 0)
     {
-      snerr("ERROR: sensor_register(ch=%d, devno=%d) failed: %d\n", ch,
-            devno, ret);
+      snerr("ERROR: sensor_register(ch=%d, devno=%d) failed: %d\n", ch, devno,
+            ret);
       priv->lower.ops = NULL;
       return ret;
     }

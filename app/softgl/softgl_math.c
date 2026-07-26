@@ -40,7 +40,7 @@
 #include "softgl.h"
 
 #ifdef __ARM_NEON
-#  include <arm_neon.h>
+#include <arm_neon.h>
 #endif
 
 /****************************************************************************
@@ -49,15 +49,15 @@
 
 /* Below this squared length a vector is treated as degenerate. */
 
-#define SOFTGL_EPSILON_SQ         1e-20f
+#define SOFTGL_EPSILON_SQ 1e-20f
 
 /* Determinants smaller than this make a matrix non invertible. */
 
-#define SOFTGL_DET_EPSILON        1e-12f
+#define SOFTGL_DET_EPSILON 1e-12f
 
 /* Above this dot product slerp degenerates into a linear interpolation. */
 
-#define SOFTGL_SLERP_LINEAR_DOT   0.9995f
+#define SOFTGL_SLERP_LINEAR_DOT 0.9995f
 
 /****************************************************************************
  * Public Functions
@@ -121,8 +121,7 @@ struct softgl_vec3_s softgl_vec3_scale(struct softgl_vec3_s a, float s)
 struct softgl_vec3_s softgl_vec3_cross(struct softgl_vec3_s a,
                                        struct softgl_vec3_s b)
 {
-  return softgl_vec3(a.y * b.z - a.z * b.y,
-                     a.z * b.x - a.x * b.z,
+  return softgl_vec3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z,
                      a.x * b.y - a.y * b.x);
 }
 
@@ -155,8 +154,8 @@ struct softgl_vec3_s softgl_vec3_normalize(struct softgl_vec3_s a)
 void softgl_mat4_identity(struct softgl_mat4_s *out)
 {
   memset(out->m, 0, sizeof(out->m));
-  out->m[0]  = 1.0f;
-  out->m[5]  = 1.0f;
+  out->m[0] = 1.0f;
+  out->m[5] = 1.0f;
   out->m[10] = 1.0f;
   out->m[15] = 1.0f;
 }
@@ -169,8 +168,7 @@ void softgl_mat4_identity(struct softgl_mat4_s *out)
  *
  ****************************************************************************/
 
-void softgl_mat4_mul(struct softgl_mat4_s *out,
-                     const struct softgl_mat4_s *a,
+void softgl_mat4_mul(struct softgl_mat4_s *out, const struct softgl_mat4_s *a,
                      const struct softgl_mat4_s *b)
 {
   struct softgl_mat4_s tmp;
@@ -221,8 +219,8 @@ struct softgl_vec4_s softgl_mat4_mul_vec4(const struct softgl_mat4_s *m,
 
   vst1q_f32((float *)&r, acc);
 #else
-  r.x = m->m[0] * v.x + m->m[4] * v.y + m->m[8]  * v.z + m->m[12] * v.w;
-  r.y = m->m[1] * v.x + m->m[5] * v.y + m->m[9]  * v.z + m->m[13] * v.w;
+  r.x = m->m[0] * v.x + m->m[4] * v.y + m->m[8] * v.z + m->m[12] * v.w;
+  r.y = m->m[1] * v.x + m->m[5] * v.y + m->m[9] * v.z + m->m[13] * v.w;
   r.z = m->m[2] * v.x + m->m[6] * v.y + m->m[10] * v.z + m->m[14] * v.w;
   r.w = m->m[3] * v.x + m->m[7] * v.y + m->m[11] * v.z + m->m[15] * v.w;
 #endif
@@ -242,7 +240,7 @@ struct softgl_vec3_s softgl_mat4_mul_point(const struct softgl_mat4_s *m,
                                            struct softgl_vec3_s v)
 {
   struct softgl_vec4_s r =
-    softgl_mat4_mul_vec4(m, softgl_vec4(v.x, v.y, v.z, 1.0f));
+      softgl_mat4_mul_vec4(m, softgl_vec4(v.x, v.y, v.z, 1.0f));
 
   return softgl_vec3(r.x, r.y, r.z);
 }
@@ -259,7 +257,7 @@ struct softgl_vec3_s softgl_mat4_mul_dir(const struct softgl_mat4_s *m,
                                          struct softgl_vec3_s v)
 {
   struct softgl_vec4_s r =
-    softgl_mat4_mul_vec4(m, softgl_vec4(v.x, v.y, v.z, 0.0f));
+      softgl_mat4_mul_vec4(m, softgl_vec4(v.x, v.y, v.z, 0.0f));
 
   return softgl_vec3(r.x, r.y, r.z);
 }
@@ -303,69 +301,53 @@ bool softgl_mat4_inverse(struct softgl_mat4_s *out,
   float det;
   int i;
 
-  inv[0]  =  s[5] * s[10] * s[15] - s[5]  * s[11] * s[14] -
-             s[9] * s[6]  * s[15] + s[9]  * s[7]  * s[14] +
-             s[13] * s[6] * s[11] - s[13] * s[7]  * s[10];
+  inv[0] = s[5] * s[10] * s[15] - s[5] * s[11] * s[14] - s[9] * s[6] * s[15] +
+           s[9] * s[7] * s[14] + s[13] * s[6] * s[11] - s[13] * s[7] * s[10];
 
-  inv[4]  = -s[4] * s[10] * s[15] + s[4]  * s[11] * s[14] +
-             s[8] * s[6]  * s[15] - s[8]  * s[7]  * s[14] -
-             s[12] * s[6] * s[11] + s[12] * s[7]  * s[10];
+  inv[4] = -s[4] * s[10] * s[15] + s[4] * s[11] * s[14] + s[8] * s[6] * s[15] -
+           s[8] * s[7] * s[14] - s[12] * s[6] * s[11] + s[12] * s[7] * s[10];
 
-  inv[8]  =  s[4] * s[9]  * s[15] - s[4]  * s[11] * s[13] -
-             s[8] * s[5]  * s[15] + s[8]  * s[7]  * s[13] +
-             s[12] * s[5] * s[11] - s[12] * s[7]  * s[9];
+  inv[8] = s[4] * s[9] * s[15] - s[4] * s[11] * s[13] - s[8] * s[5] * s[15] +
+           s[8] * s[7] * s[13] + s[12] * s[5] * s[11] - s[12] * s[7] * s[9];
 
-  inv[12] = -s[4] * s[9]  * s[14] + s[4]  * s[10] * s[13] +
-             s[8] * s[5]  * s[14] - s[8]  * s[6]  * s[13] -
-             s[12] * s[5] * s[10] + s[12] * s[6]  * s[9];
+  inv[12] = -s[4] * s[9] * s[14] + s[4] * s[10] * s[13] + s[8] * s[5] * s[14] -
+            s[8] * s[6] * s[13] - s[12] * s[5] * s[10] + s[12] * s[6] * s[9];
 
-  inv[1]  = -s[1] * s[10] * s[15] + s[1]  * s[11] * s[14] +
-             s[9] * s[2]  * s[15] - s[9]  * s[3]  * s[14] -
-             s[13] * s[2] * s[11] + s[13] * s[3]  * s[10];
+  inv[1] = -s[1] * s[10] * s[15] + s[1] * s[11] * s[14] + s[9] * s[2] * s[15] -
+           s[9] * s[3] * s[14] - s[13] * s[2] * s[11] + s[13] * s[3] * s[10];
 
-  inv[5]  =  s[0] * s[10] * s[15] - s[0]  * s[11] * s[14] -
-             s[8] * s[2]  * s[15] + s[8]  * s[3]  * s[14] +
-             s[12] * s[2] * s[11] - s[12] * s[3]  * s[10];
+  inv[5] = s[0] * s[10] * s[15] - s[0] * s[11] * s[14] - s[8] * s[2] * s[15] +
+           s[8] * s[3] * s[14] + s[12] * s[2] * s[11] - s[12] * s[3] * s[10];
 
-  inv[9]  = -s[0] * s[9]  * s[15] + s[0]  * s[11] * s[13] +
-             s[8] * s[1]  * s[15] - s[8]  * s[3]  * s[13] -
-             s[12] * s[1] * s[11] + s[12] * s[3]  * s[9];
+  inv[9] = -s[0] * s[9] * s[15] + s[0] * s[11] * s[13] + s[8] * s[1] * s[15] -
+           s[8] * s[3] * s[13] - s[12] * s[1] * s[11] + s[12] * s[3] * s[9];
 
-  inv[13] =  s[0] * s[9]  * s[14] - s[0]  * s[10] * s[13] -
-             s[8] * s[1]  * s[14] + s[8]  * s[2]  * s[13] +
-             s[12] * s[1] * s[10] - s[12] * s[2]  * s[9];
+  inv[13] = s[0] * s[9] * s[14] - s[0] * s[10] * s[13] - s[8] * s[1] * s[14] +
+            s[8] * s[2] * s[13] + s[12] * s[1] * s[10] - s[12] * s[2] * s[9];
 
-  inv[2]  =  s[1] * s[6]  * s[15] - s[1]  * s[7]  * s[14] -
-             s[5] * s[2]  * s[15] + s[5]  * s[3]  * s[14] +
-             s[13] * s[2] * s[7]  - s[13] * s[3]  * s[6];
+  inv[2] = s[1] * s[6] * s[15] - s[1] * s[7] * s[14] - s[5] * s[2] * s[15] +
+           s[5] * s[3] * s[14] + s[13] * s[2] * s[7] - s[13] * s[3] * s[6];
 
-  inv[6]  = -s[0] * s[6]  * s[15] + s[0]  * s[7]  * s[14] +
-             s[4] * s[2]  * s[15] - s[4]  * s[3]  * s[14] -
-             s[12] * s[2] * s[7]  + s[12] * s[3]  * s[6];
+  inv[6] = -s[0] * s[6] * s[15] + s[0] * s[7] * s[14] + s[4] * s[2] * s[15] -
+           s[4] * s[3] * s[14] - s[12] * s[2] * s[7] + s[12] * s[3] * s[6];
 
-  inv[10] =  s[0] * s[5]  * s[15] - s[0]  * s[7]  * s[13] -
-             s[4] * s[1]  * s[15] + s[4]  * s[3]  * s[13] +
-             s[12] * s[1] * s[7]  - s[12] * s[3]  * s[5];
+  inv[10] = s[0] * s[5] * s[15] - s[0] * s[7] * s[13] - s[4] * s[1] * s[15] +
+            s[4] * s[3] * s[13] + s[12] * s[1] * s[7] - s[12] * s[3] * s[5];
 
-  inv[14] = -s[0] * s[5]  * s[14] + s[0]  * s[6]  * s[13] +
-             s[4] * s[1]  * s[14] - s[4]  * s[2]  * s[13] -
-             s[12] * s[1] * s[6]  + s[12] * s[2]  * s[5];
+  inv[14] = -s[0] * s[5] * s[14] + s[0] * s[6] * s[13] + s[4] * s[1] * s[14] -
+            s[4] * s[2] * s[13] - s[12] * s[1] * s[6] + s[12] * s[2] * s[5];
 
-  inv[3]  = -s[1] * s[6]  * s[11] + s[1]  * s[7]  * s[10] +
-             s[5] * s[2]  * s[11] - s[5]  * s[3]  * s[10] -
-             s[9] * s[2]  * s[7]  + s[9]  * s[3]  * s[6];
+  inv[3] = -s[1] * s[6] * s[11] + s[1] * s[7] * s[10] + s[5] * s[2] * s[11] -
+           s[5] * s[3] * s[10] - s[9] * s[2] * s[7] + s[9] * s[3] * s[6];
 
-  inv[7]  =  s[0] * s[6]  * s[11] - s[0]  * s[7]  * s[10] -
-             s[4] * s[2]  * s[11] + s[4]  * s[3]  * s[10] +
-             s[8] * s[2]  * s[7]  - s[8]  * s[3]  * s[6];
+  inv[7] = s[0] * s[6] * s[11] - s[0] * s[7] * s[10] - s[4] * s[2] * s[11] +
+           s[4] * s[3] * s[10] + s[8] * s[2] * s[7] - s[8] * s[3] * s[6];
 
-  inv[11] = -s[0] * s[5]  * s[11] + s[0]  * s[7]  * s[9] +
-             s[4] * s[1]  * s[11] - s[4]  * s[3]  * s[9] -
-             s[8] * s[1]  * s[7]  + s[8]  * s[3]  * s[5];
+  inv[11] = -s[0] * s[5] * s[11] + s[0] * s[7] * s[9] + s[4] * s[1] * s[11] -
+            s[4] * s[3] * s[9] - s[8] * s[1] * s[7] + s[8] * s[3] * s[5];
 
-  inv[15] =  s[0] * s[5]  * s[10] - s[0]  * s[6]  * s[9] -
-             s[4] * s[1]  * s[10] + s[4]  * s[2]  * s[9] +
-             s[8] * s[1]  * s[6]  - s[8]  * s[2]  * s[5];
+  inv[15] = s[0] * s[5] * s[10] - s[0] * s[6] * s[9] - s[4] * s[1] * s[10] +
+            s[4] * s[2] * s[9] + s[8] * s[1] * s[6] - s[8] * s[2] * s[5];
 
   det = s[0] * inv[0] + s[1] * inv[4] + s[2] * inv[8] + s[3] * inv[12];
   if (det > -SOFTGL_DET_EPSILON && det < SOFTGL_DET_EPSILON)
@@ -402,8 +384,8 @@ void softgl_mat4_translate(struct softgl_mat4_s *out, float x, float y,
 void softgl_mat4_scale(struct softgl_mat4_s *out, float x, float y, float z)
 {
   softgl_mat4_identity(out);
-  out->m[0]  = x;
-  out->m[5]  = y;
+  out->m[0] = x;
+  out->m[5] = y;
   out->m[10] = z;
 }
 
@@ -426,16 +408,16 @@ void softgl_mat4_rotate(struct softgl_mat4_s *out, struct softgl_vec3_s axis,
 
   softgl_mat4_identity(out);
 
-  out->m[0]  = t * a.x * a.x + c;
-  out->m[1]  = t * a.x * a.y + s * a.z;
-  out->m[2]  = t * a.x * a.z - s * a.y;
+  out->m[0] = t * a.x * a.x + c;
+  out->m[1] = t * a.x * a.y + s * a.z;
+  out->m[2] = t * a.x * a.z - s * a.y;
 
-  out->m[4]  = t * a.x * a.y - s * a.z;
-  out->m[5]  = t * a.y * a.y + c;
-  out->m[6]  = t * a.y * a.z + s * a.x;
+  out->m[4] = t * a.x * a.y - s * a.z;
+  out->m[5] = t * a.y * a.y + c;
+  out->m[6] = t * a.y * a.z + s * a.x;
 
-  out->m[8]  = t * a.x * a.z + s * a.y;
-  out->m[9]  = t * a.y * a.z - s * a.x;
+  out->m[8] = t * a.x * a.z + s * a.y;
+  out->m[9] = t * a.y * a.z - s * a.x;
   out->m[10] = t * a.z * a.z + c;
 }
 
@@ -455,8 +437,8 @@ void softgl_mat4_perspective(struct softgl_mat4_s *out, float fovy_radians,
   float nf = 1.0f / (znear - zfar);
 
   memset(out->m, 0, sizeof(out->m));
-  out->m[0]  = f / aspect;
-  out->m[5]  = f;
+  out->m[0] = f / aspect;
+  out->m[5] = f;
   out->m[10] = (zfar + znear) * nf;
   out->m[11] = -1.0f;
   out->m[14] = 2.0f * zfar * znear * nf;
@@ -474,13 +456,13 @@ void softgl_mat4_ortho(struct softgl_mat4_s *out, float left, float right,
   float fn = 1.0f / (zfar - znear);
 
   memset(out->m, 0, sizeof(out->m));
-  out->m[0]  =  2.0f * rl;
-  out->m[5]  =  2.0f * tb;
+  out->m[0] = 2.0f * rl;
+  out->m[5] = 2.0f * tb;
   out->m[10] = -2.0f * fn;
   out->m[12] = -(right + left) * rl;
   out->m[13] = -(top + bottom) * tb;
   out->m[14] = -(zfar + znear) * fn;
-  out->m[15] =  1.0f;
+  out->m[15] = 1.0f;
 }
 
 /****************************************************************************
@@ -495,28 +477,27 @@ void softgl_mat4_ortho(struct softgl_mat4_s *out, float left, float right,
 void softgl_mat4_lookat(struct softgl_mat4_s *out, struct softgl_vec3_s eye,
                         struct softgl_vec3_s center, struct softgl_vec3_s up)
 {
-  struct softgl_vec3_s f = softgl_vec3_normalize(
-                             softgl_vec3_sub(center, eye));
+  struct softgl_vec3_s f = softgl_vec3_normalize(softgl_vec3_sub(center, eye));
   struct softgl_vec3_s s = softgl_vec3_normalize(softgl_vec3_cross(f, up));
   struct softgl_vec3_s u = softgl_vec3_cross(s, f);
 
   softgl_mat4_identity(out);
 
-  out->m[0]  =  s.x;
-  out->m[4]  =  s.y;
-  out->m[8]  =  s.z;
+  out->m[0] = s.x;
+  out->m[4] = s.y;
+  out->m[8] = s.z;
 
-  out->m[1]  =  u.x;
-  out->m[5]  =  u.y;
-  out->m[9]  =  u.z;
+  out->m[1] = u.x;
+  out->m[5] = u.y;
+  out->m[9] = u.z;
 
-  out->m[2]  = -f.x;
-  out->m[6]  = -f.y;
+  out->m[2] = -f.x;
+  out->m[6] = -f.y;
   out->m[10] = -f.z;
 
   out->m[12] = -softgl_vec3_dot(s, eye);
   out->m[13] = -softgl_vec3_dot(u, eye);
-  out->m[14] =  softgl_vec3_dot(f, eye);
+  out->m[14] = softgl_vec3_dot(f, eye);
 }
 
 /****************************************************************************
@@ -629,10 +610,10 @@ struct softgl_quat_s softgl_quat_slerp(struct softgl_quat_s a,
     }
   else
     {
-      theta     = acosf(dot);
+      theta = acosf(dot);
       sin_theta = sinf(theta);
-      wa        = sinf((1.0f - t) * theta) / sin_theta;
-      wb        = sinf(t * theta) / sin_theta;
+      wa = sinf((1.0f - t) * theta) / sin_theta;
+      wb = sinf(t * theta) / sin_theta;
     }
 
   q.x = a.x * wa + b.x * wb;
@@ -672,15 +653,15 @@ void softgl_quat_to_mat4(struct softgl_mat4_s *out, struct softgl_quat_s q)
 
   softgl_mat4_identity(out);
 
-  out->m[0]  = 1.0f - 2.0f * (yy + zz);
-  out->m[1]  =        2.0f * (xy + wz);
-  out->m[2]  =        2.0f * (xz - wy);
+  out->m[0] = 1.0f - 2.0f * (yy + zz);
+  out->m[1] = 2.0f * (xy + wz);
+  out->m[2] = 2.0f * (xz - wy);
 
-  out->m[4]  =        2.0f * (xy - wz);
-  out->m[5]  = 1.0f - 2.0f * (xx + zz);
-  out->m[6]  =        2.0f * (yz + wx);
+  out->m[4] = 2.0f * (xy - wz);
+  out->m[5] = 1.0f - 2.0f * (xx + zz);
+  out->m[6] = 2.0f * (yz + wx);
 
-  out->m[8]  =        2.0f * (xz + wy);
-  out->m[9]  =        2.0f * (yz - wx);
+  out->m[8] = 2.0f * (xz + wy);
+  out->m[9] = 2.0f * (yz - wx);
   out->m[10] = 1.0f - 2.0f * (xx + yy);
 }

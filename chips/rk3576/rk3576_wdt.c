@@ -141,25 +141,23 @@ static int rk3576_wdt_ioctl(struct watchdog_lowerhalf_s *lower, int cmd,
  * Private Data
  ****************************************************************************/
 
-static const struct watchdog_ops_s g_rk3576_wdt_ops =
-{
-  .start      = rk3576_wdt_start,
-  .stop       = rk3576_wdt_stop,
-  .keepalive  = rk3576_wdt_keepalive,
-  .getstatus  = rk3576_wdt_getstatus,
+static const struct watchdog_ops_s g_rk3576_wdt_ops = {
+  .start = rk3576_wdt_start,
+  .stop = rk3576_wdt_stop,
+  .keepalive = rk3576_wdt_keepalive,
+  .getstatus = rk3576_wdt_getstatus,
   .settimeout = rk3576_wdt_settimeout,
-  .capture    = rk3576_wdt_capture,
-  .ioctl      = rk3576_wdt_ioctl,
+  .capture = rk3576_wdt_capture,
+  .ioctl = rk3576_wdt_ioctl,
 };
 
-static struct rk3576_wdt_lowerhalf_s g_rk3576_wdt =
-{
-  .ops     = &g_rk3576_wdt_ops,
-  .base    = RK3576_WDT_NS_ADDR,
-  .irq     = RK3576_IRQ_WDT_NS,
+static struct rk3576_wdt_lowerhalf_s g_rk3576_wdt = {
+  .ops = &g_rk3576_wdt_ops,
+  .base = RK3576_WDT_NS_ADDR,
+  .irq = RK3576_IRQ_WDT_NS,
   .handler = NULL,
   .started = false,
-  .lock    = SP_UNLOCKED,
+  .lock = SP_UNLOCKED,
 };
 
 /****************************************************************************
@@ -274,8 +272,7 @@ static uint32_t rk3576_wdt_ticks_to_ms(struct rk3576_wdt_lowerhalf_s *priv,
  ****************************************************************************/
 
 static uint8_t rk3576_wdt_select_torr(struct rk3576_wdt_lowerhalf_s *priv,
-                                      uint32_t timeout_ms,
-                                      uint32_t *actual_ms)
+                                      uint32_t timeout_ms, uint32_t *actual_ms)
 {
   uint32_t best_ms = 0;
   uint64_t best_diff = UINT64_MAX;
@@ -291,8 +288,8 @@ static uint8_t rk3576_wdt_select_torr(struct rk3576_wdt_lowerhalf_s *priv,
       if (diff < best_diff)
         {
           best_diff = diff;
-          best_ms   = ms;
-          best      = i;
+          best_ms = ms;
+          best = i;
         }
     }
 
@@ -326,8 +323,7 @@ static void rk3576_wdt_kick(struct rk3576_wdt_lowerhalf_s *priv)
 
 static int rk3576_wdt_interrupt(int irq, void *context, void *arg)
 {
-  struct rk3576_wdt_lowerhalf_s *priv =
-    (struct rk3576_wdt_lowerhalf_s *)arg;
+  struct rk3576_wdt_lowerhalf_s *priv = (struct rk3576_wdt_lowerhalf_s *)arg;
 
   /* Reading WDT_EOI clears the interrupt without restarting the counter. */
 
@@ -349,8 +345,7 @@ static int rk3576_wdt_interrupt(int irq, void *context, void *arg)
 
 static int rk3576_wdt_start(struct watchdog_lowerhalf_s *lower)
 {
-  struct rk3576_wdt_lowerhalf_s *priv =
-    (struct rk3576_wdt_lowerhalf_s *)lower;
+  struct rk3576_wdt_lowerhalf_s *priv = (struct rk3576_wdt_lowerhalf_s *)lower;
   irqstate_t flags;
   uint32_t cr;
 
@@ -392,8 +387,7 @@ static int rk3576_wdt_start(struct watchdog_lowerhalf_s *lower)
 
 static int rk3576_wdt_stop(struct watchdog_lowerhalf_s *lower)
 {
-  struct rk3576_wdt_lowerhalf_s *priv =
-    (struct rk3576_wdt_lowerhalf_s *)lower;
+  struct rk3576_wdt_lowerhalf_s *priv = (struct rk3576_wdt_lowerhalf_s *)lower;
   irqstate_t flags;
   uint32_t cr;
   int ret = OK;
@@ -433,8 +427,7 @@ static int rk3576_wdt_stop(struct watchdog_lowerhalf_s *lower)
 
 static int rk3576_wdt_keepalive(struct watchdog_lowerhalf_s *lower)
 {
-  struct rk3576_wdt_lowerhalf_s *priv =
-    (struct rk3576_wdt_lowerhalf_s *)lower;
+  struct rk3576_wdt_lowerhalf_s *priv = (struct rk3576_wdt_lowerhalf_s *)lower;
 
   rk3576_wdt_kick(priv);
   return OK;
@@ -447,8 +440,7 @@ static int rk3576_wdt_keepalive(struct watchdog_lowerhalf_s *lower)
 static int rk3576_wdt_getstatus(struct watchdog_lowerhalf_s *lower,
                                 struct watchdog_status_s *status)
 {
-  struct rk3576_wdt_lowerhalf_s *priv =
-    (struct rk3576_wdt_lowerhalf_s *)lower;
+  struct rk3576_wdt_lowerhalf_s *priv = (struct rk3576_wdt_lowerhalf_s *)lower;
 
   status->flags = 0;
   if (priv->started)
@@ -463,9 +455,9 @@ static int rk3576_wdt_getstatus(struct watchdog_lowerhalf_s *lower,
 
   /* Report the rounded period the hardware really implements. */
 
-  status->timeout  = priv->period;
+  status->timeout = priv->period;
   status->timeleft =
-    rk3576_wdt_ticks_to_ms(priv, rk3576_wdt_getreg(priv, RK3576_WDT_CCVR));
+      rk3576_wdt_ticks_to_ms(priv, rk3576_wdt_getreg(priv, RK3576_WDT_CCVR));
 
   return OK;
 }
@@ -482,24 +474,24 @@ static int rk3576_wdt_getstatus(struct watchdog_lowerhalf_s *lower,
 static int rk3576_wdt_settimeout(struct watchdog_lowerhalf_s *lower,
                                  uint32_t timeout)
 {
-  struct rk3576_wdt_lowerhalf_s *priv =
-    (struct rk3576_wdt_lowerhalf_s *)lower;
-  uint32_t max_ms = rk3576_wdt_ticks_to_ms(
-    priv, WDT_TORR_TICKS(WDT_TORR_PERIOD_NR - 1));
+  struct rk3576_wdt_lowerhalf_s *priv = (struct rk3576_wdt_lowerhalf_s *)lower;
+  uint32_t max_ms =
+      rk3576_wdt_ticks_to_ms(priv, WDT_TORR_TICKS(WDT_TORR_PERIOD_NR - 1));
   uint32_t min_ms = rk3576_wdt_ticks_to_ms(priv, WDT_TORR_TICKS(0));
   irqstate_t flags;
 
   if (timeout < min_ms || timeout > max_ms)
     {
-      wderr("ERROR: timeout %" PRIu32 "ms out of range [%" PRIu32
-            ", %" PRIu32 "]\n", timeout, min_ms, max_ms);
+      wderr("ERROR: timeout %" PRIu32 "ms out of range [%" PRIu32 ", %" PRIu32
+            "]\n",
+            timeout, min_ms, max_ms);
       return -ERANGE;
     }
 
   flags = spin_lock_irqsave(&priv->lock);
 
   priv->timeout = timeout;
-  priv->torr    = rk3576_wdt_select_torr(priv, timeout, &priv->period);
+  priv->torr = rk3576_wdt_select_torr(priv, timeout, &priv->period);
 
   rk3576_wdt_putreg(priv, RK3576_WDT_TORR,
                     (uint32_t)priv->torr << WDT_TORR_PERIOD_SHIFT);
@@ -533,15 +525,14 @@ static int rk3576_wdt_settimeout(struct watchdog_lowerhalf_s *lower,
 static xcpt_t rk3576_wdt_capture(struct watchdog_lowerhalf_s *lower,
                                  xcpt_t handler)
 {
-  struct rk3576_wdt_lowerhalf_s *priv =
-    (struct rk3576_wdt_lowerhalf_s *)lower;
+  struct rk3576_wdt_lowerhalf_s *priv = (struct rk3576_wdt_lowerhalf_s *)lower;
   irqstate_t flags;
   xcpt_t oldhandler;
   uint32_t cr;
 
   flags = spin_lock_irqsave(&priv->lock);
 
-  oldhandler    = priv->handler;
+  oldhandler = priv->handler;
   priv->handler = handler;
 
   cr = rk3576_wdt_getreg(priv, RK3576_WDT_CR);
@@ -619,8 +610,7 @@ int rk3576_wdt_initialize(int minor)
   priv->handler = NULL;
   priv->started = false;
   priv->timeout = RK3576_WDT_DEFAULT_TIMEOUT_MS;
-  priv->torr    = rk3576_wdt_select_torr(priv, priv->timeout,
-                                         &priv->period);
+  priv->torr = rk3576_wdt_select_torr(priv, priv->timeout, &priv->period);
 
   rk3576_wdt_putreg(priv, RK3576_WDT_TORR,
                     (uint32_t)priv->torr << WDT_TORR_PERIOD_SHIFT);
@@ -640,16 +630,16 @@ int rk3576_wdt_initialize(int minor)
   up_disable_irq(priv->irq);
 
   snprintf(devpath, sizeof(devpath), "/dev/watchdog%d", minor);
-  if (watchdog_register(devpath, (struct watchdog_lowerhalf_s *)priv) ==
-      NULL)
+  if (watchdog_register(devpath, (struct watchdog_lowerhalf_s *)priv) == NULL)
     {
       wderr("ERROR: watchdog_register(%s) failed\n", devpath);
       irq_detach(priv->irq);
       return -EEXIST;
     }
 
-  wdinfo("%s registered: base=%08" PRIxPTR " tclk=%" PRIu32 "Hz period=%"
-         PRIu32 "ms\n", devpath, priv->base, priv->tclk_hz, priv->period);
+  wdinfo("%s registered: base=%08" PRIxPTR " tclk=%" PRIu32
+         "Hz period=%" PRIu32 "ms\n",
+         devpath, priv->base, priv->tclk_hz, priv->period);
   return OK;
 }
 
