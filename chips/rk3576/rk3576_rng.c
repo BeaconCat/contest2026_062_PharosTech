@@ -436,6 +436,21 @@ void up_rnginitialize(void)
  *
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: devrandom_register
+ *
+ * Description:
+ *   Strong-symbol override of the weak devrandom_register() stub in
+ *   virtio-rng.c.  Called by drivers_initialize() when CONFIG_DEV_RANDOM=y
+ *   and CONFIG_ARCH_HAVE_RNG=y.  Delegates to up_rnginitialize() which
+ *   brings up the RKRNG hardware and registers /dev/random.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_DEV_RANDOM
+void devrandom_register(void) { up_rnginitialize(); }
+#endif
+
 #ifdef CONFIG_DEV_URANDOM_ARCH
 void devurandom_register(void)
 {
