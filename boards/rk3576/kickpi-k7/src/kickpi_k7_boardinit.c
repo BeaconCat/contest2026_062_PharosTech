@@ -28,10 +28,12 @@
 #include "rk3576_clk_tree.h"
 #include "rk3576_gpio.h"
 #include <arch/board/board.h>
+#include <errno.h>
 #include <nuttx/board.h>
 #include <nuttx/config.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/mount.h>
 #include <syslog.h>
 
 #ifdef CONFIG_RK3576_SDMMC
@@ -169,6 +171,18 @@ void board_late_initialize(void)
    */
 
   rk3576_clk_tree_initialize();
+
+#ifdef CONFIG_FS_TMPFS
+  /* ADB file transfer and audio utilities create files and message queues
+   * below /tmp.  Mount tmpfs before the initial application starts so OTA
+   * remains usable immediately after every reboot.
+   */
+
+  if (mount(NULL, "/tmp", "tmpfs", 0, NULL) < 0 && errno != EBUSY)
+    {
+      syslog(LOG_ERR, "ERROR: failed to mount tmpfs at /tmp: %d\n", errno);
+    }
+#endif
 
   /* Perform board initialization */
 
