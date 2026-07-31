@@ -47,6 +47,11 @@ enum kickpi_k7_audio_output_e
   KICKPI_K7_AUDIO_OUTPUT_OFF,
 };
 
+enum kickpi_k7_audio_channel_e
+{
+  KICKPI_K7_AUDIO_CHANNEL_STEREO = 0,
+  KICKPI_K7_AUDIO_CHANNEL_MONO,
+};
 #endif
 
 /****************************************************************************
@@ -70,6 +75,12 @@ int kickpi_k7_audio_set_output(enum kickpi_k7_audio_output_e output);
 enum kickpi_k7_audio_output_e kickpi_k7_audio_get_output(void);
 bool kickpi_k7_audio_headphones_connected(void);
 bool kickpi_k7_audio_headphone_detect_level(void);
+int kickpi_k7_audio_set_channel(enum kickpi_k7_audio_channel_e channel);
+enum kickpi_k7_audio_channel_e kickpi_k7_audio_get_channel(void);
+int kickpi_k7_audio_set_swap(bool enable);
+bool kickpi_k7_audio_get_swap(void);
+int kickpi_k7_audio_set_polarity(bool invert_left, bool invert_right);
+void kickpi_k7_audio_get_polarity(bool *invert_left, bool *invert_right);
 #endif
 
 #endif /* __ASSEMBLY__ */

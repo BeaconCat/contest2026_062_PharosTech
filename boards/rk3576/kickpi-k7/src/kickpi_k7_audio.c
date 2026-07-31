@@ -123,7 +123,12 @@ static bool g_headphones_connected;
 static bool g_headphones_sample;
 static uint8_t g_headphones_debounce;
 static enum kickpi_k7_audio_output_e g_audio_output;
+static enum kickpi_k7_audio_channel_e g_audio_channel;
+static bool g_audio_swap;
+static bool g_audio_invert_left;
+static bool g_audio_invert_right;
 static struct audio_lowerhalf_s *g_es8388;
+static struct audio_lowerhalf_s *g_pcm;
 static struct work_s g_headphone_work;
 static mutex_t g_audio_lock = NXMUTEX_INITIALIZER;
 
@@ -288,6 +293,7 @@ int kickpi_k7_audio_initialize(void)
   g_headphones_sample = g_headphones_connected;
   g_headphones_debounce = KICKPI_K7_HP_DEBOUNCE_COUNT;
   g_audio_output = kickpi_k7_audio_default_output();
+  g_audio_channel = KICKPI_K7_AUDIO_CHANNEL_STEREO;
 
   /* Mux the SAI1 signal group. */
 
@@ -351,6 +357,8 @@ int kickpi_k7_audio_initialize(void)
       syslog(LOG_ERR, "ERROR: pcm_decode_initialize failed\n");
       return -ENODEV;
     }
+
+  g_pcm = pcm;
 
   ret = audio_register(KICKPI_K7_PCM_DEVNAME, pcm);
   if (ret < 0)
@@ -438,6 +446,153 @@ bool kickpi_k7_audio_headphones_connected(void)
 bool kickpi_k7_audio_headphone_detect_level(void)
 {
   return rk3576_gpio_read(KICKPI_K7_HP_DETECT);
+}
+
+int kickpi_k7_audio_set_channel(enum kickpi_k7_audio_channel_e channel)
+{
+  enum kickpi_k7_audio_channel_e previous;
+  int ret;
+
+  if (channel > KICKPI_K7_AUDIO_CHANNEL_MONO)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&g_audio_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!g_audio_initialized)
+    {
+      ret = -EAGAIN;
+    }
+  else
+    {
+      previous = g_audio_channel;
+      ret =
+          pcm_decode_set_mono(g_pcm, channel == KICKPI_K7_AUDIO_CHANNEL_MONO);
+      if (ret >= 0)
+        {
+          g_audio_channel = channel;
+        }
+      else
+        {
+          g_audio_channel = previous;
+        }
+    }
+
+  nxmutex_unlock(&g_audio_lock);
+  return ret;
+}
+
+enum kickpi_k7_audio_channel_e kickpi_k7_audio_get_channel(void)
+{
+  enum kickpi_k7_audio_channel_e channel;
+  int ret;
+
+  ret = nxmutex_lock(&g_audio_lock);
+  if (ret < 0)
+    {
+      return KICKPI_K7_AUDIO_CHANNEL_STEREO;
+    }
+
+  channel = g_audio_channel;
+  nxmutex_unlock(&g_audio_lock);
+  return channel;
+}
+
+int kickpi_k7_audio_set_swap(bool enable)
+{
+  int ret;
+
+  ret = nxmutex_lock(&g_audio_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = g_audio_initialized ? pcm_decode_set_swap(g_pcm, enable) : -EAGAIN;
+  if (ret >= 0)
+    {
+      g_audio_swap = enable;
+    }
+
+  nxmutex_unlock(&g_audio_lock);
+  return ret;
+}
+
+bool kickpi_k7_audio_get_swap(void)
+{
+  bool enable;
+  int ret;
+
+  ret = nxmutex_lock(&g_audio_lock);
+  if (ret < 0)
+    {
+      return false;
+    }
+
+  enable = g_audio_swap;
+  nxmutex_unlock(&g_audio_lock);
+  return enable;
+}
+
+int kickpi_k7_audio_set_polarity(bool invert_left, bool invert_right)
+{
+  int ret;
+
+  ret = nxmutex_lock(&g_audio_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = g_audio_initialized
+            ? pcm_decode_set_polarity(g_pcm, invert_left, invert_right)
+            : -EAGAIN;
+  if (ret >= 0)
+    {
+      g_audio_invert_left = invert_left;
+      g_audio_invert_right = invert_right;
+    }
+
+  nxmutex_unlock(&g_audio_lock);
+  return ret;
+}
+
+void kickpi_k7_audio_get_polarity(bool *invert_left, bool *invert_right)
+{
+  int ret;
+
+  if (invert_left != NULL)
+    {
+      *invert_left = false;
+    }
+
+  if (invert_right != NULL)
+    {
+      *invert_right = false;
+    }
+
+  ret = nxmutex_lock(&g_audio_lock);
+  if (ret < 0)
+    {
+      return;
+    }
+
+  if (invert_left != NULL)
+    {
+      *invert_left = g_audio_invert_left;
+    }
+
+  if (invert_right != NULL)
+    {
+      *invert_right = g_audio_invert_right;
+    }
+
+  nxmutex_unlock(&g_audio_lock);
 }
 
 #endif /* CONFIG_KICKPI_K7_AUDIO */
