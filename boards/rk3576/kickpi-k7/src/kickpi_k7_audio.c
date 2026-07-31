@@ -36,13 +36,20 @@
 #include <errno.h>
 #include <nuttx/config.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <syslog.h>
+#include <unistd.h>
 
 #include <nuttx/audio/audio.h>
 #include <nuttx/audio/es8388.h>
 #include <nuttx/audio/i2s.h>
 #include <nuttx/audio/pcm.h>
+#include <nuttx/clock.h>
 #include <nuttx/i2c/i2c_master.h>
+#include <nuttx/mutex.h>
+#include <nuttx/wqueue.h>
+
+#include <arch/board/board.h>
 
 #include "arm64_internal.h"
 #include "kickpi_k7.h"
@@ -56,11 +63,25 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define KICKPI_K7_ES8388_I2C_BUS  3      /* ES8388 on I2C3 (2ac60000) */
-#define KICKPI_K7_ES8388_I2C_ADDR 0x10   /* DTS es8388@10             */
-#define KICKPI_K7_ES8388_I2C_FREQ 100000 /* 100 kHz control clock     */
-#define KICKPI_K7_SAI_BUS         1      /* SAI1                      */
-#define KICKPI_K7_PCM_DEVNAME     "pcm0"
+#define KICKPI_K7_ES8388_I2C_BUS    3      /* ES8388 on I2C3 (2ac60000) */
+#define KICKPI_K7_ES8388_I2C_ADDR   0x10   /* DTS es8388@10             */
+#define KICKPI_K7_ES8388_I2C_FREQ   100000 /* 100 kHz control clock     */
+#define KICKPI_K7_SAI_BUS           1      /* SAI1                      */
+#define KICKPI_K7_PCM_DEVNAME       "pcm0"
+
+#define KICKPI_K7_HP_DETECT_POLL_MS 100
+#define KICKPI_K7_HP_DEBOUNCE_COUNT 2
+#define KICKPI_K7_SPK_ENABLE_MS     30
+#define KICKPI_K7_SPK_DISABLE_MS    40
+
+/* GPIO0_D3 is high when a headphone plug is present.  GPIO4_B1 enables the
+ * external speaker amplifier when driven high.
+ */
+
+#define KICKPI_K7_HP_DETECT \
+  (GPIO_PORT0 | GPIO_PIN_D3 | GPIO_INPUT | GPIO_PULLUP)
+#define KICKPI_K7_SPK_ENABLE \
+  (GPIO_PORT4 | GPIO_PIN_B1 | GPIO_OUTPUT | GPIO_PULLDOWN)
 
 /* SYS_GRF_SOC_CON18 bit 1 routes SAI1 MCLK to the selected IO pin. */
 
@@ -88,12 +109,147 @@
  * Private Data
  ****************************************************************************/
 
+static void kickpi_k7_audio_set_output_power(enum es8388_output_route_e route,
+                                             bool enable);
+
 static const struct es8388_lower_s g_es8388_lower = {
   .frequency = KICKPI_K7_ES8388_I2C_FREQ,
   .address = KICKPI_K7_ES8388_I2C_ADDR,
+  .set_output = kickpi_k7_audio_set_output_power,
 };
 
 static bool g_audio_initialized;
+static bool g_headphones_connected;
+static bool g_headphones_sample;
+static uint8_t g_headphones_debounce;
+static enum kickpi_k7_audio_output_e g_audio_output;
+static struct audio_lowerhalf_s *g_es8388;
+static struct work_s g_headphone_work;
+static mutex_t g_audio_lock = NXMUTEX_INITIALIZER;
+
+/****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
+static bool kickpi_k7_audio_read_headphones(void)
+{
+  return rk3576_gpio_read(KICKPI_K7_HP_DETECT);
+}
+
+static void kickpi_k7_audio_set_output_power(enum es8388_output_route_e route,
+                                             bool enable)
+{
+  bool speaker = enable && (route == ES8388_OUTPUT_ROUTE_LINE2 ||
+                            route == ES8388_OUTPUT_ROUTE_BOTH);
+
+  if (speaker)
+    {
+      usleep(KICKPI_K7_SPK_ENABLE_MS * USEC_PER_MSEC);
+    }
+
+  rk3576_gpio_write(KICKPI_K7_SPK_ENABLE, speaker);
+
+  if (!speaker)
+    {
+      usleep(KICKPI_K7_SPK_DISABLE_MS * USEC_PER_MSEC);
+    }
+}
+
+static enum kickpi_k7_audio_output_e kickpi_k7_audio_default_output(void)
+{
+#if defined(CONFIG_KICKPI_K7_AUDIO_OUTPUT_HEADPHONES)
+  return KICKPI_K7_AUDIO_OUTPUT_HEADPHONES;
+#elif defined(CONFIG_KICKPI_K7_AUDIO_OUTPUT_SPEAKER)
+  return KICKPI_K7_AUDIO_OUTPUT_SPEAKER;
+#elif defined(CONFIG_KICKPI_K7_AUDIO_OUTPUT_BOTH)
+  return KICKPI_K7_AUDIO_OUTPUT_BOTH;
+#elif defined(CONFIG_KICKPI_K7_AUDIO_OUTPUT_OFF)
+  return KICKPI_K7_AUDIO_OUTPUT_OFF;
+#else
+  return KICKPI_K7_AUDIO_OUTPUT_AUTO;
+#endif
+}
+
+static int kickpi_k7_audio_apply_output(void)
+{
+  enum es8388_output_route_e route;
+  int ret;
+
+  switch (g_audio_output)
+    {
+      case KICKPI_K7_AUDIO_OUTPUT_AUTO:
+        route = g_headphones_connected ? ES8388_OUTPUT_ROUTE_LINE1
+                                       : ES8388_OUTPUT_ROUTE_LINE2;
+        break;
+
+      case KICKPI_K7_AUDIO_OUTPUT_HEADPHONES:
+        route = ES8388_OUTPUT_ROUTE_LINE1;
+        break;
+
+      case KICKPI_K7_AUDIO_OUTPUT_SPEAKER:
+        route = ES8388_OUTPUT_ROUTE_LINE2;
+        break;
+
+      case KICKPI_K7_AUDIO_OUTPUT_BOTH:
+        route = ES8388_OUTPUT_ROUTE_BOTH;
+        break;
+
+      case KICKPI_K7_AUDIO_OUTPUT_OFF:
+        route = ES8388_OUTPUT_ROUTE_NONE;
+        break;
+
+      default:
+        return -EINVAL;
+    }
+
+  ret = es8388_set_output_route(g_es8388, route);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  return OK;
+}
+
+static void kickpi_k7_audio_headphone_worker(void *arg)
+{
+  bool sample = kickpi_k7_audio_read_headphones();
+  int ret;
+
+  (void)arg;
+
+  if (sample != g_headphones_sample)
+    {
+      g_headphones_sample = sample;
+      g_headphones_debounce = 1;
+    }
+  else if (g_headphones_debounce < KICKPI_K7_HP_DEBOUNCE_COUNT)
+    {
+      g_headphones_debounce++;
+    }
+
+  if (g_headphones_debounce == KICKPI_K7_HP_DEBOUNCE_COUNT &&
+      sample != g_headphones_connected)
+    {
+      ret = nxmutex_lock(&g_audio_lock);
+      if (ret < 0)
+        {
+          goto reschedule;
+        }
+
+      g_headphones_connected = sample;
+      if (g_audio_initialized && g_audio_output == KICKPI_K7_AUDIO_OUTPUT_AUTO)
+        {
+          kickpi_k7_audio_apply_output();
+        }
+
+      nxmutex_unlock(&g_audio_lock);
+    }
+
+reschedule:
+  work_queue(LPWORK, &g_headphone_work, kickpi_k7_audio_headphone_worker, NULL,
+             MSEC2TICK(KICKPI_K7_HP_DETECT_POLL_MS));
+}
 
 /****************************************************************************
  * Public Functions
@@ -113,7 +269,6 @@ static bool g_audio_initialized;
 
 int kickpi_k7_audio_initialize(void)
 {
-  struct audio_lowerhalf_s *es8388;
   struct audio_lowerhalf_s *pcm;
   struct i2c_master_s *i2c;
   struct i2s_dev_s *i2s;
@@ -123,6 +278,16 @@ int kickpi_k7_audio_initialize(void)
     {
       return OK;
     }
+
+  /* Keep the amplifier disabled before touching clocks or the codec. */
+
+  rk3576_config_gpio(KICKPI_K7_SPK_ENABLE);
+  rk3576_gpio_write(KICKPI_K7_SPK_ENABLE, false);
+  rk3576_config_gpio(KICKPI_K7_HP_DETECT);
+  g_headphones_connected = kickpi_k7_audio_read_headphones();
+  g_headphones_sample = g_headphones_connected;
+  g_headphones_debounce = KICKPI_K7_HP_DEBOUNCE_COUNT;
+  g_audio_output = kickpi_k7_audio_default_output();
 
   /* Mux the SAI1 signal group. */
 
@@ -166,14 +331,21 @@ int kickpi_k7_audio_initialize(void)
    * (so it accepts WAV/PCM streams) and register the audio device.
    */
 
-  es8388 = es8388_initialize(i2c, i2s, &g_es8388_lower);
-  if (es8388 == NULL)
+  g_es8388 = es8388_initialize(i2c, i2s, &g_es8388_lower);
+  if (g_es8388 == NULL)
     {
       syslog(LOG_ERR, "ERROR: es8388_initialize failed\n");
       return -ENODEV;
     }
 
-  pcm = pcm_decode_initialize(es8388);
+  ret = kickpi_k7_audio_apply_output();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: audio route init failed: %d\n", ret);
+      return ret;
+    }
+
+  pcm = pcm_decode_initialize(g_es8388);
   if (pcm == NULL)
     {
       syslog(LOG_ERR, "ERROR: pcm_decode_initialize failed\n");
@@ -191,7 +363,81 @@ int kickpi_k7_audio_initialize(void)
   syslog(LOG_INFO, "INFO: audio ready: /dev/audio/%s (ES8388 on SAI1)\n",
          KICKPI_K7_PCM_DEVNAME);
   g_audio_initialized = true;
+  work_queue(LPWORK, &g_headphone_work, kickpi_k7_audio_headphone_worker, NULL,
+             MSEC2TICK(KICKPI_K7_HP_DETECT_POLL_MS));
   return OK;
+}
+
+int kickpi_k7_audio_set_output(enum kickpi_k7_audio_output_e output)
+{
+  enum kickpi_k7_audio_output_e previous;
+  int ret;
+
+  if (output > KICKPI_K7_AUDIO_OUTPUT_OFF)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&g_audio_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!g_audio_initialized)
+    {
+      ret = -EAGAIN;
+    }
+  else
+    {
+      previous = g_audio_output;
+      g_audio_output = output;
+      ret = kickpi_k7_audio_apply_output();
+      if (ret < 0)
+        {
+          g_audio_output = previous;
+        }
+    }
+
+  nxmutex_unlock(&g_audio_lock);
+  return ret;
+}
+
+enum kickpi_k7_audio_output_e kickpi_k7_audio_get_output(void)
+{
+  enum kickpi_k7_audio_output_e output;
+  int ret;
+
+  ret = nxmutex_lock(&g_audio_lock);
+  if (ret < 0)
+    {
+      return KICKPI_K7_AUDIO_OUTPUT_OFF;
+    }
+
+  output = g_audio_output;
+  nxmutex_unlock(&g_audio_lock);
+  return output;
+}
+
+bool kickpi_k7_audio_headphones_connected(void)
+{
+  bool connected;
+  int ret;
+
+  ret = nxmutex_lock(&g_audio_lock);
+  if (ret < 0)
+    {
+      return false;
+    }
+
+  connected = g_headphones_connected;
+  nxmutex_unlock(&g_audio_lock);
+  return connected;
+}
+
+bool kickpi_k7_audio_headphone_detect_level(void)
+{
+  return rk3576_gpio_read(KICKPI_K7_HP_DETECT);
 }
 
 #endif /* CONFIG_KICKPI_K7_AUDIO */

@@ -29,39 +29,49 @@
 
 #include <nuttx/config.h>
 
+#include <stdbool.h>
+
 #ifndef __ASSEMBLY__
 
 /****************************************************************************
+ * Public Types
+ ****************************************************************************/
 
- * * Public Function Prototypes
+#ifdef CONFIG_KICKPI_K7_AUDIO
+enum kickpi_k7_audio_output_e
+{
+  KICKPI_K7_AUDIO_OUTPUT_AUTO = 0,
+  KICKPI_K7_AUDIO_OUTPUT_HEADPHONES,
+  KICKPI_K7_AUDIO_OUTPUT_SPEAKER,
+  KICKPI_K7_AUDIO_OUTPUT_BOTH,
+  KICKPI_K7_AUDIO_OUTPUT_OFF,
+};
 
- * ****************************************************************************/
+#endif
+
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
 
 #ifdef CONFIG_KICKPI_K7_AUDIO
 /****************************************************************************
-
- * * Name: kickpi_k7_audio_initialize
+ * Name: kickpi_k7_audio_initialize
  *
  * Description:
- *   Initialize the
- * on-board ES8388 codec and SAI1 interface, then register
- * /dev/audio/pcm0.
- * Repeated calls are safe.
+ *   Initialize the on-board ES8388 codec and SAI1 interface, then register
+ *   /dev/audio/pcm0.  Repeated calls are safe.
  *
  * Returned Value:
- *   Zero on success; a
- * negated errno value on failure.
- *
-
- * ****************************************************************************/
+ *   Zero on success; a negated errno value on failure.
+ ****************************************************************************/
 
 int kickpi_k7_audio_initialize(void);
+int kickpi_k7_audio_set_output(enum kickpi_k7_audio_output_e output);
+enum kickpi_k7_audio_output_e kickpi_k7_audio_get_output(void);
+bool kickpi_k7_audio_headphones_connected(void);
+bool kickpi_k7_audio_headphone_detect_level(void);
 #endif
 
 #endif /* __ASSEMBLY__ */
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
 
 #endif /* __BOARDS_ARM64_RK3576_KICKPI_K7_INCLUDE_BOARD_H */
