@@ -1,148 +1,146 @@
-# contest2026_062_PharosTech
+# RK3576 Ultimate BSP for KICKPI-K7
 
-👋 欢迎参加 **2026 首届 openvela AI 硬件开发者大赛**！
+Pharos Tech（队伍 062）为 KICKPI-K7 / RK3576 开发的 openvela BSP 集成分支。
+本分支用于集中保存和编译验证尚未拆分上游的芯片、板级与产品实验代码；成熟功能会按驱动拆成独立 PR。
 
-这是组委会为你的队伍创建的**专属参赛仓库**（本仓为样例/模板，队伍编号 `062`；你看到的将是你自己的 `contest2026_<编号>_<队伍名>`）。比赛期间，你的全部参赛代码、打包产物与 AI Coding 日志都提交到这里。
+> 分支：`rk3576-ultimate-bsp`
+> 基线：openvela `dev-ai-contest-2026`
+> 当前置信度：基础 BSP 与部分外设已上板；本分支新增驱动多数仅完成编译验证，不能据此视为硬件可用。
 
-> 本仓既是「代码仓」，又内置了一键拉取整套 openvela 工程的 `repo` 清单（manifest）。你只需跟它打交道，**自始至终只动一个文件夹**。
+## 快速开始
 
----
-
-## 一、先读这些官方文档
-
-**通用（所有赛道必读）：**
-
-| 文档                                                                                                                                     | 用途                                           |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| [《大赛总览》](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/contest_overview.md)                        | 赛道、流程、评分、资源，建议先通读             |
-| [《参赛代码提交指南》](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/code_submission_guide.md)           | 仓库获取、提交流程、时间与权限（**以此为准**） |
-| [《AI Coding 日志归集与提交手册》](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/ai_coding_log_guide.md) | 如何导出 AI 对话日志并提交到 `logs/`           |
-
-**按你的赛道选读（三选一）：**
-
-| 赛道                  | 教程导航                                                                                                                                                 |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 快应用 / 手表应用创新 | [快应用教程导航](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/quickapp/quickapp_guide_index.md)                         |
-| AI 硬件产品创新       | [AI 硬件赛道教程导航](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/ai_hardware/ai_hardware_guide_index.md)              |
-| 新硬件适配            | [新硬件适配赛道教程导航](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/hardware_porting/hardware_porting_guide_index.md) |
-
----
-
-## 二、第一步：拉取完整工程
-
-用组委会提供的命令一键拉取「openvela 全量源码 + 你的专属仓」：
+使用队伍 manifest 获取完整工程，不要单独 clone 本仓代替 `repo`：
 
 ```bash
-repo init -u https://github.com/open-vela/contest2026_062_PharosTech \
-  -b dev-ai-contest-2026 -m contest2026_062_PharosTech.xml
-repo sync -c -j8
+repo init \
+  -u https://github.com/BeaconCat/contest2026_062_PharosTech \
+  -b rk3576-ultimate-bsp \
+  -m contest2026_062_PharosTech.xml
+repo sync -c -j4
+
+cd <openvela-workspace>
+export PATH="$PWD/prebuilts/gcc/linux-x86_64/aarch64-none-elf/bin:$PATH"
+./build.sh vendor/rockchip/boards/rk3576/kickpi-k7/configs/nsh -j4
 ```
 
-同步后，你的整个仓库位于工作区的 `contest2026_062_PharosTech/`，openvela 全量源码在外层（`nuttx/`、`apps/`、`packages/`、`vendor/` 等）。
+产物：
 
----
+- `nuttx/nuttx`：带符号 ELF
+- `nuttx/nuttx.bin`：RK3576 BL33 裸二进制
 
-## 三、第二步：在哪里写代码
+生成 KICKPI-K7 FIT 和整卡镜像：
 
-**只在自己的仓目录 `contest2026_062_PharosTech/` 里开发。** 不同作品形态放在对应子目录，manifest 会通过 `<linkfile>` 把它们**软链**到 openvela 编译树该在的位置——你不用手动 copy：
+```bash
+vendor/rockchip/tools/k7_sdpack/build_sd.sh \
+  nuttx/nuttx.bin /path/to/rkbin /path/to/output
+```
 
-| 作品形态 | 你的代码放这里             | 系统自动映射到                                 |
-| -------- | -------------------------- | ---------------------------------------------- |
-| 应用     | `app/hello_app/`           | `packages/demos/contest2026_062_hello_app`     |
-| 快应用   | `quickapp/hello_quickapp/` | `packages/apps/contest2026_062_hello_quickapp` |
-| 板级适配 | `board/contest_board/`     | `vendor/openvela/boards/contest2026_062_board` |
+## 如何确认不是“假编译通过”
 
-> 用不到的形态目录可以删掉；新增作品时按同样规则加子目录，并在 `contest2026_062_PharosTech.xml` 里补一条 `<linkfile>` 映射即可。**生产仓库（packages/nuttx/vendor 等）零改动。**
+退出码为 0 只能说明当前配置完成了链接。新增驱动必须同时检查 Kconfig 和归档符号：
 
-建议仓库目录约定（便于评委定位）：
+```bash
+grep '^CONFIG_RK3576_' nuttx/.config
+
+aarch64-none-elf-nm -g --defined-only \
+  nuttx/arch/arm64/src/libarch.a | grep ' T rk3576_'
+```
+
+本分支默认 `nsh` 配置启用一组编译回归驱动：power-domain、pinctrl、mailbox、OTP、RNG、watchdog、SPI、I3C、SARADC、TSADC 和 IR。链接器可能从最终 ELF 删除未被初始化路径引用的函数，因此应以 `libarch.a` 验证编译收录，以最终 ELF 验证运行时集成。
+
+## 已上板基础能力
+
+| 模块 | 状态 | 说明 |
+|---|---|---|
+| 启动、MMU、GICv2、PSCI | 实测确认 | MiniLoader → BL33，NSH 可用 |
+| UART0 | 实测确认 | DW16550，1.5 Mbaud |
+| GPIO / IOMUX | 实测确认 | 5 个 bank，中断支持 |
+| I2C | 实测确认 | 10 个控制器，HYM8563 实测 |
+| SDMMC | 实测确认 | PIO + IDMAC，GPT/FAT |
+| eMMC | 实测确认 | dwcmshc / SDHCI |
+| PL330 DMA | 实测确认 | 8 通道，音频链路使用 |
+| USB DWC3 gadget | 实测确认 | CDC-ACM 与 ADB |
+| PWM | 实测确认 | Rockchip PWM v4 |
+| SAI + ES8388 | 实测确认 | 32/44.1/48/96 kHz 播放链路另行维护 |
+
+## Ultimate BSP 驱动集合
+
+### 基础与低速外设
+
+- 电源域、pinctrl、外设时钟树、SMP CPU boot、mailbox
+- watchdog、SPI、OTP、TRNG、SARADC、TSADC、I3C、IR、PDM、Crypto
+
+### 网络与高速外设
+
+- GMAC ×2
+- PCIe Root Complex 与 Combo PHY
+- SeekWave SV6621 相关实验代码
+
+### 显示、多媒体与摄像头
+
+- VOP2、HDMI TX、RGA、RKVDEC
+- CSI-2 host、D-PHY、VICAP、ISP
+- RK806、HYM8563、HUSB311、IMX415 板级驱动
+
+### AI 与图形
+
+- RKNPU 实验驱动与 RKNN matmul
+- Mali-G52 Job Manager 实验驱动
+- `app/llm/` CPU/NPU 可切换推理实验
+- `app/softgl/` CPU 软件光栅化实验
+
+其中大量模块仍处于“编译通过”或“仅推断”阶段。请查看代码、提交历史和项目实测日志，不要把驱动存在等同于硬件完成验证。
+
+## 重要风险
+
+### 时钟 Gate 冲突
+
+部分多媒体、PCIe、GMAC、NPU 时钟定义来自尚未完全裁决的资料，多个驱动曾声明相同 gate 位。错误地执行 `clk_disable()` 可能关闭其他模块并造成系统假死。未完成 TRM/DTS/板上交叉验证前，不要同时启用这些高风险驱动。
+
+RK3576 没有 NPLL。可用 PLL 为 BPLL、VPLL、AUPLL、CPLL、GPLL，以及 PMU 域 PPLL。
+
+### 编译不等于上板可用
+
+状态定义：
+
+- 实测确认：开发板运行得到预期结果
+- 编译通过：构建和符号检查通过，但未完成板上验证
+- 仅推断：根据 TRM、DTS 或同类驱动实现，尚未验证
+
+提交或评审时必须明确标注，不得把推断写成事实。
+
+## 建议验证顺序
+
+1. Watchdog：验证时钟、IRQ 和复位路径
+2. SPI：双屏 QSPI 的前置能力
+3. Mailbox：AMP / RPMsg 地基
+4. OTP：读取唯一 ID，供网络地址生成
+5. RNG：验证随机数质量与 NuttX devrandom 接口
+6. Mali：先完成上电和 GPU ID 读取
+7. 最后处理存在 gate 冲突的多媒体、网络和 NPU 模块
+
+每完成一个功能节点，再整理为独立提交或 PR；不要把未验证的 Ultimate BSP 整包直接提交上游。
+
+## 目录
 
 ```text
-app/ | quickapp/ | board/   # 你的作品代码
-logs/                       # AI Coding 日志（主动导出后提交，格式见 logs/README.md）
-README.md                   # 作品说明（提交前请改成你自己的，见第六节）
+boards/rk3576/kickpi-k7/  板级配置、初始化和板载器件
+chips/rk3576/             RK3576 芯片驱动
+app/llm/                  LLM 推理实验
+app/softgl/               软件 3D 光栅化实验
+tools/k7_ota/             ADB/Ymodem 热更新工具
+tools/k7_sdpack/          FIT 与 SD 镜像打包工具
 ```
 
-> 仓内附带了一个 `.gitignore.example`，给出了**编译产物**等不需要进仓的文件示例。如需启用，`cp .gitignore.example .gitignore` 后按需增删即可。**注意 `logs/` 下最终导出的 AI Coding 日志必须提交，不要忽略。**
->
-> `logs/` 的目录结构与提交格式见 [logs/README.md](logs/README.md)。
+## 协作约定
 
----
+- 贡献代码的 C/H 注释、syslog 和调试字符串使用英文。
+- 公共 API 放在模块公共头中，禁止散落手写原型。
+- 文件使用完整 SPDX + Apache-2.0 banner，头文件必须自包含。
+- 初始化进入 `board_late_initialize()`，不放入 `board_app_initialize()`。
+- 提交前运行 clang-format，并检查无冲突标记、无构建产物、无失效 TODO。
+- 硬件验证结果同步记录到项目 `实测日志.md`，同时标记置信度。
 
-## 四、第三步：编译与运行
+## 当前构建记录
 
-编译/运行步骤随作品形态不同而不同，请参考你所在赛道的教程导航：
-
-- 快应用 / 手表应用：[快应用教程导航](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/quickapp/quickapp_guide_index.md)（含模拟器与开发板部署）。
-- AI 硬件产品创新：[AI 硬件赛道教程导航](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/ai_hardware/ai_hardware_guide_index.md)（环境搭建、编译烧录、Skill 开发）。
-- 新硬件适配：[新硬件适配赛道教程导航](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/hardware_porting/hardware_porting_guide_index.md)（BSP 移植、最小 NSH 基线）。
-
-子目录已通过 manifest 中的 `<linkfile>` 软链进 openvela 编译树，因此构建在 openvela 工作区**根目录**（即你这个仓的上一级）进行。openvela 使用 `build.sh` 作为统一入口，接收一个 **board config 路径**作为参数：
-
-```bash
-# 进入 openvela 工作区根目录（你的仓的上一级）
-cd ..
-
-# 通用语法：第一个参数是 board config 路径，第二个参数可以是 menuconfig / distclean 等
-./build.sh <board-config-path> [menuconfig|distclean] [-j8]
-```
-
-> 具体的 board config 路径、目标产物、模拟器/真机部署方式请以你所在赛道的教程导航为准。本仓 `app/` `quickapp/` `board/` 三个示例骨架对应的 Kconfig 选项可通过 `menuconfig` 启用。
-
----
-
-## 五、第四步：提交作品
-
-1. **fork** 你的专属仓 → 开发 → `git commit` 并推送 → 向专属仓发起 **Pull Request**，可**自行 review 并合入**（无需等组委会）。
-2. **AI Coding 日志**：与 AI 工具的对话会自动记录到本机 staging（不会自动上传），需你**主动导出/打包**选定会话到仓内 `logs/` 目录后一并提交。详见[《AI Coding 日志归集与提交手册》](https://github.com/open-vela/docs/blob/dev-ai-contest-2026/zh-cn/contest_2026/ai_coding_log_guide.md)。
-3. 若需改动 **nuttx 等公共仓库**，不在本仓改，而是 fork 对应公共仓、以 PR 提交到 `dev-ai-contest-2026` 分支，由组委会 review 后合入。
-
-> ⏰ **提交作品截止：9 月 20 日**。截止后统一收回 push 权限，仍可查看 / clone。
->
-> 获奖后再按要求将作品 PR 至 openvela 上游对应仓库（走标准 PR + CI 流程）。
-
-### 关于 PR 与 CLA
-
-- 本仓所有改动通过 **Pull Request** 合入（分支保护强制，可自行合入自己的 PR）。
-- 首次贡献需在[**官网签署 CLA**](https://openvela.com/#/community/cla)；PR 上会自动跑 `cla/signature` 检查，在官网签署成功后，在 PR 评论 `/check-cla` 复检即可通过。
-
----
-
-## 六、提交前：把本 README 改成你的作品说明
-
-本文件目前是组委会给的**使用说明书**。**作品提交前，请把它替换成你自己作品的说明**，方便评委快速了解你做了什么、怎么跑起来。建议至少包含以下内容：
-
-```markdown
-# <你的作品名>
-
-## 一、作品简介
-<一句话/一段话说明这个作品是什么、解决什么问题、亮点在哪>
-
-## 二、选题方向
-<快应用 / 手表应用创新 ｜ AI 硬件产品创新 ｜ 新硬件适配 ｜ 自定方向，并简述理由>
-
-## 三、目录结构
-<列出你这个仓里各目录/文件的作用，例如：>
-- `app/xxx/`        — <说明>
-- `board/xxx/`      — <说明>
-- `quickapp/xxx/`   — <说明>
-- `logs/`           — AI Coding 日志
-- `docs/` 或其他    — <说明>
-
-## 四、运行方式
-<拉取工程后，如何编译、烧录/部署、运行的完整步骤；最好能让评委照着一步步复现>
-
-## 五、AI Coding 使用说明
-<说明本作品如何借助 AI 辅助开发：
-- 在需求拆解 / 方案设计 / 编码 / 调试 / 文档等环节如何与 AI 协作；
-- AI 对开发效率或质量带来的实际帮助。
-完整对话日志见 logs/ 目录>
-```
-
-> 提示：将会根据「作品本身 + 你的 README 说明 + `logs/` 里的 AI Coding 日志」来理解和评估你的作品，README 写清楚很重要。
-
----
-
-## 附：仓库命名规范
-
-`contest2026_<编号>_<队伍名>` — 编号三位零填充；队名 slug（全小写、英文/拼音、连字符）。例：`contest2026_062_PharosTech`。
-（仓库由组委会统一创建，**每队仅一个仓**，无需自行命名。）
+2026-08-02 在 Debian 13 / `aarch64-none-elf-gcc 13.4.0` 环境，以 `-j4` 对本分支执行干净构建。最终结果与驱动符号数量以本次 README/配置提交后的 CI 或服务器复测为准。
