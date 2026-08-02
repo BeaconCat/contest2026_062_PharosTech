@@ -54,6 +54,7 @@
 #include <stdint.h>
 
 #include <nuttx/analog/adc.h>
+#include <nuttx/analog/ioctl.h>
 #include <nuttx/arch.h>
 #include <nuttx/clk/clk.h>
 #include <nuttx/irq.h>
