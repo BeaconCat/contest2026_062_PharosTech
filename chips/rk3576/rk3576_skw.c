@@ -827,5 +827,202 @@ static void skw_handle_loopcheck(const uint8_t *pl, int len)
     }
 }
 
+/****************************************************************************
+ * Name: skw_handle_wifi_cmd
+ *
+ * Description:
+ *   Dispatch a channel-6 packet: an skw_msg (8-byte header) followed by
+ *   payload.  A CMD_ACK matching the outstanding command's id+seq wakes
+ *   the command waiter; asynchronous scan and connection events are
+ *   handled separately by the state machines below.
+ *
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: skw_handle_event
+ *
+ * Description:
+ *   Handle a WiFi event (skw_msg type=EVENT).  SCAN_REPORT carries an
+ *   skw_mgmt_hdr {chan, band, s16 signal, u16 mgmt_len, u16 resv} followed
+ *   by a full 802.11 beacon/probe-resp frame; extract BSSID (addr3), the
+ *   SSID IE (tag 0), channel and RSSI into the scan cache.  SCAN_CMPL ends
+ *   the scan.
+ *
+ ****************************************************************************/
+
+static void skw_handle_event(uint8_t id, const uint8_t *ev, int len)
+{
+  if (id == SKW_EVENT_SCAN_CMPL)
+    {
+      g_skw_scan_done = true;
+      return;
+    }
+
+  if (id == SKW_EVENT_ASOCC || id == SKW_EVENT_JOIN_CMPL)
+    {
+      g_skw_conn_evt = SKW_CONN_ASSOC_OK;
+      return;
+    }
+
+  if (id == SKW_EVENT_DISCONNECT || id == SKW_EVENT_DEAUTH ||
+      id == SKW_EVENT_DISASOC)
+    {
+      g_skw_conn_evt = SKW_CONN_ASSOC_FAIL;
+      return;
+    }
+
+  /* RX_MGMT: the CP forwards a received 802.11 mgmt frame.  Auth-resp and
+   * assoc-resp arrive here (there is no separate ASOCC event).  Payload =
+   * skw_mgmt_hdr {chan, band, s16 signal, u16 mgmt_len, u16 resv} + frame.
+   * Assoc-resp (subtype 0x10) status_code at frame offset 26; 0 = success.
+   */
+
+  if (id == SKW_EVENT_RX_MGMT && len >= 8 + 28)
+    {
+      const uint8_t *mgmt = ev + 8;
+      uint8_t subtype = mgmt[0] & 0xf0;
+
+      if (subtype == 0x10)                        /* assoc-response */
+        {
+          uint16_t status = mgmt[26] | (mgmt[27] << 8);
+
+          syslog(LOG_INFO, "SKW: assoc-resp status=%u\n", status);
+          g_skw_conn_evt = (status == 0) ? SKW_CONN_ASSOC_OK :
+                                           SKW_CONN_ASSOC_FAIL;
+        }
+      else if (subtype == 0xc0 || subtype == 0xa0) /* deauth/disassoc */
+        {
+          g_skw_conn_evt = SKW_CONN_ASSOC_FAIL;
+        }
+
+      return;
+    }
+
+  if (id == SKW_EVENT_SCAN_REPORT && len >= 8 + 24)
+    {
+      uint8_t chan = ev[0];
+      int16_t signal = (int16_t)(ev[2] | (ev[3] << 8));
+      uint16_t mgmt_len = ev[4] | (ev[5] << 8);
+      const uint8_t *mgmt = ev + 8;
+      int ie_off;
+      int mlen = len - 8;
+      struct skw_bss_s *bss;
+      int i;
+
+      if ((int)mgmt_len < mlen)
+        {
+          mlen = mgmt_len;
+        }
+
+      if (mlen < 36 || g_skw_scan_n >= SKW_MAX_SCAN)
+        {
+          return;
+        }
+
+      /* 802.11 mgmt: fc(2) dur(2) a1(6) a2(6) a3=BSSID(6) seq(2) +
+       * beacon body: timestamp(8) beacon_int(2) capab(2) then IEs @36.
+       */
+
+      bss = &g_skw_scan[g_skw_scan_n];
+      memset(bss, 0, sizeof(*bss));
+      memcpy(bss->bssid, mgmt + 16, 6);
+      bss->channel = chan;
+      bss->band    = ev[1];  /* band from skw_mgmt_hdr */
+      bss->rssi = signal;
+
+      /* Beacon/probe-resp body: timestamp(8) beacon_int(2) capability(2)
+       * at offset 34, IEs from offset 36.
+       */
+
+      bss->beacon_int = mgmt[32] | (mgmt[33] << 8);
+      bss->capability = mgmt[34] | (mgmt[35] << 8);
+      bss->ie_len = (mlen - 36 > (int)sizeof(bss->ie)) ?
+                    sizeof(bss->ie) : (mlen - 36);
+      memcpy(bss->ie, mgmt + 36, bss->ie_len);
+
+      for (ie_off = 36; ie_off + 2 <= mlen; )
+        {
+          uint8_t tag = mgmt[ie_off];
+          uint8_t taglen = mgmt[ie_off + 1];
+
+          if (ie_off + 2 + taglen > mlen)
+            {
+              break;
+            }
+
+          if (tag == 0)                 /* SSID */
+            {
+              int n = taglen > 32 ? 32 : taglen;
+
+              memcpy(bss->ssid, mgmt + ie_off + 2, n);
+              bss->ssid_len = n;
+            }
+
+          ie_off += 2 + taglen;
+        }
+
+      /* De-dup by BSSID. */
+
+      for (i = 0; i < g_skw_scan_n; i++)
+        {
+          if (memcmp(g_skw_scan[i].bssid, bss->bssid, 6) == 0)
+            {
+              return;
+            }
+        }
+
+      g_skw_scan_n++;
+    }
+}
+
+static void skw_handle_wifi_cmd(const uint8_t *pl, int len)
+{
+  const uint8_t *msg;
+  int mlen;
+  uint8_t type;
+  uint8_t id;
+  uint16_t seq;
+
+  /* Skip the 12-byte inner link header; the skw_msg follows. */
+
+  if (len <= SKW_LINK_HDR + 8)
+    {
+      return;
+    }
+
+  msg  = pl + SKW_LINK_HDR;
+  mlen = len - SKW_LINK_HDR;
+  type = (msg[0] >> 4) & 0xf;
+  id   = msg[1];
+  seq  = msg[2] | (msg[3] << 8);
+
+  if (type == SKW_MSG_EVENT)
+    {
+      skw_handle_event(id, msg + 8, mlen - 8);
+      return;
+    }
+
+  if (type == SKW_MSG_CMD_ACK && g_skw_cmd.waiting &&
+      id == g_skw_cmd.id && seq == g_skw_cmd.seq)
+    {
+      /* ACK: skw_msg(8) + status(u16) + return data. */
+
+      g_skw_cmd.status   = (mlen >= 10) ? (msg[8] | (msg[9] << 8)) : -1;
+      g_skw_cmd.resp_len = (mlen > 10) ? (mlen - 10) : 0;
+      if (g_skw_cmd.resp_len > (int)sizeof(g_skw_cmd.resp))
+        {
+          g_skw_cmd.resp_len = sizeof(g_skw_cmd.resp);
+        }
+
+      if (g_skw_cmd.resp_len > 0)
+        {
+          memcpy(g_skw_cmd.resp, msg + 10, g_skw_cmd.resp_len);
+        }
+
+      g_skw_cmd.waiting = false;
+      nxsem_post(&g_skw_cmd.done);
+    }
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
