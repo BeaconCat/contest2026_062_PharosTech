@@ -321,5 +321,29 @@ static int rk3576_skw_net_txavail(FAR struct net_driver_s *dev)
   return OK;
 }
 
+/****************************************************************************
+ * Name: rk3576_skw_net_addmac / rk3576_skw_net_rmmac
+ ****************************************************************************/
+
+#if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
+static int rk3576_skw_net_addmac(FAR struct net_driver_s *dev,
+                                 FAR const uint8_t *mac)
+{
+  return OK;
+}
+
+#ifdef CONFIG_NET_MCASTGROUP
+static int rk3576_skw_net_rmmac(FAR struct net_driver_s *dev,
+                                FAR const uint8_t *mac)
+{
+  return OK;
+}
+#endif
+#endif
+
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
 
 #endif /* CONFIG_NET && CONFIG_RK3576_SKW */
