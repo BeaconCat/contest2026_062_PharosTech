@@ -863,5 +863,165 @@ static void wpa_handle_msg1(struct rk3576_wpa_s *w, const uint8_t *kd,
   }
 }
 
+/****************************************************************************
+ * Name: wpa_handle_msg3
+ ****************************************************************************/
+
+static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
+                            int kdlen)
+{
+  int datalen;
+  int ret;
+
+  if (kdlen < KD_FIXED_LEN)
+    {
+      return;
+    }
+
+  if (!wpa_check_mic(w, kd, kdlen))
+    {
+      wlerr("WPA: msg3 MIC check failed\n");
+      w->state = WPA_STATE_FAILED;
+      w->result = -EBADMSG;
+      return;
+    }
+
+  if (wpa_replay_compare(kd + KD_OFF_REPLAY, w->replay) <= 0)
+    {
+      wlwarn("WPA: stale msg3 replay counter\n");
+      return;
+    }
+
+  memcpy(w->replay, kd + KD_OFF_REPLAY, 8);
+
+  datalen = (kd[KD_OFF_DATALEN] << 8) | kd[KD_OFF_DATALEN + 1];
+  if (datalen > 0 && KD_OFF_DATA + datalen <= kdlen)
+    {
+      ret = wpa_extract_gtk(w, kd + KD_OFF_DATA, datalen);
+      if (ret < 0)
+        {
+          wlwarn("WPA: no GTK in msg3 (%d); pairwise-only\n", ret);
+        }
+    }
+
+  /* Send msg4 first (acknowledge), then install the keys. */
+
+  if (wpa_send_msg4(w) < 0)
+    {
+      w->state = WPA_STATE_FAILED;
+      w->result = -EIO;
+      return;
+    }
+
+  /* The pairwise key's TX PN starts fresh at 1 (independent of the AP's
+   * RSC in msg3, which is the group key's receive counter).  The reference
+   * driver seeds pn[0] = 1 for CCMP.
+   */
+
+  {
+    uint8_t ptk_pn[6] =
+    {
+      1, 0, 0, 0, 0, 0
+    };
+
+    ret = rk3576_skw_add_key(SKW_KEY_PTK, SKW_CIPHER_CCMP, w->aa, 0,
+                             w->ptk + WPA_KCK_LEN + WPA_KEK_LEN, WPA_TK_LEN,
+                             ptk_pn);
+  }
+  if (ret >= 0 && w->gtk_len > 0)
+    {
+      /* The GTK is a receive key: its replay baseline is the AP's current
+       * group packet number, carried as the RSC in msg3.  Installing pn = 1
+       * would make the CP reject the AP's next broadcast (PN 1 <= 1) as a
+       * replay, so seed the CCMP replay counter from the RSC instead.
+       */
+
+      /* Group keys install against the broadcast address, matching the
+       * reference driver's addr == NULL branch (mac_addr = ff:..:ff).
+       */
+
+      uint8_t bcast[6] =
+      {
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+      };
+
+      ret = rk3576_skw_add_key(SKW_KEY_GTK, SKW_CIPHER_CCMP, bcast,
+                               w->gtk_id, w->gtk, w->gtk_len,
+                               kd + KD_OFF_RSC);
+    }
+
+  /* Golden post-key sequence (matches the reference driver's authorized
+   * transition): GET_STA + SET_MC_ADDR gate the CP into forwarding data
+   * frames to the host.  Without them the CP queues only the EAPOL frames.
+   */
+
+  if (ret >= 0)
+    {
+      uint8_t bssid[6];
+      uint8_t mc[21] =
+      {
+        0x03, 0x00,                        /* count = 3 */
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, /* broadcast */
+        0x01, 0x00, 0x5e, 0x00, 0x00, 0x01, /* 224.0.0.1 */
+        0x01, 0x00, 0x5e, 0x00, 0x00, 0xfb  /* 224.0.0.251 */
+      };
+
+    /* skw_setip_param: ip_type(1) + addr; IPv6 = 16 bytes.  The reference
+     * driver sends SET_IP with the interface's IPv6 link-local address at
+     * the COMPLETED transition (before DHCP), which appears to arm the CP
+     * to forward data frames to the host.
+     */
+
+      uint8_t mac[6];
+      uint8_t setip[17] =
+      {
+        0x01,                              /* SKW_IP_IPV6 */
+        0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+      };
+
+      rk3576_skw_get_bssid(bssid);
+      rk3576_skw_get_mac(mac);
+
+    /* Form the IPv6 interface identifier from the station MAC (modified
+     * EUI-64) instead of embedding a board-specific address.
+     */
+
+      setip[9]  = mac[0] ^ 0x02;
+      setip[10] = mac[1];
+      setip[11] = mac[2];
+      setip[12] = 0xff;
+      setip[13] = 0xfe;
+      setip[14] = mac[3];
+      setip[15] = mac[4];
+      setip[16] = mac[5];
+
+      ret = rk3576_skw_send_control(SKW_CMD_GET_STA, bssid, sizeof(bssid));
+      if (ret >= 0)
+        {
+          ret = rk3576_skw_send_control(SKW_CMD_SET_MC_ADDR, mc,
+                                        sizeof(mc));
+        }
+
+      if (ret >= 0)
+        {
+          ret = rk3576_skw_send_control(SKW_CMD_SET_IP, setip,
+                                        sizeof(setip));
+        }
+    }
+
+  w->state = WPA_STATE_DONE;
+  w->result = ret >= 0 ? OK : ret;
+  wlinfo("WPA: msg3 rx, msg4 sent, keys installed (%d)\n", w->result);
+}
+
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: rk3576_skw_wpa_eapol_input
+ ****************************************************************************/
+
 
 #endif /* CONFIG_RK3576_SKW */
