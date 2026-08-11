@@ -635,5 +635,99 @@ static int skw_cmd53_write(uint32_t func, uint32_t reg, bool incr,
   return (rint & SKW_INT_DATAERR) ? -EIO : 0;
 }
 
+/****************************************************************************
+ * Name: skw_dt_stream
+ *
+ * Description:
+ *   Download an image to CP memory over the DT window: latch the base
+ *   address once, then stream 512-byte incrementing byte-mode writes with
+ *   an exact final chunk.  Retries a chunk on transient CRC via CCCR abort.
+ *
+ ****************************************************************************/
+
+static int skw_dt_stream(uint32_t cpaddr, const uint8_t *buf, int len)
+{
+  int off = 0;
+
+  skw_dt_latch(cpaddr);
+
+  while (off < len)
+    {
+      int chunk = (len - off > 512) ? 512 : (len - off);
+      int try;
+      int ret;
+
+      ret = skw_cmd53_write(1, SKW_DT_WINDOW, true, buf + off, chunk);
+      for (try = 0; ret < 0 && try < 4; try++)
+        {
+          skw_cmd52(true, 0, 0x06, 0x01, NULL);   /* I/O abort */
+          up_mdelay(2);
+          skw_dt_latch(cpaddr + off);
+          ret = skw_cmd53_write(1, SKW_DT_WINDOW, true, buf + off, chunk);
+        }
+
+      if (ret < 0)
+        {
+          wlerr("ERROR: DT stream failed at +%d\n", off);
+          return ret;
+        }
+
+      off += chunk;
+    }
+
+  return 0;
+}
+
+/****************************************************************************
+ * Name: skw_voltage_switch
+ *
+ * Description:
+ *   Perform the SD 1.8 V signaling switch: CMD11 with the DW-MSHC voltage-
+ *   switch command bit, wait the volt-switch interrupt, gate the clock,
+ *   set the host UHS 1.8 V flag, restart, and wait for the card to release
+ *   the lines (second volt-switch interrupt).
+ *
+ ****************************************************************************/
+
+static void skw_voltage_switch(void)
+{
+  uint32_t resp;
+  int k;
+
+  skw_cmd(SKW_CMDW_CMD11, 0, &resp);
+
+  for (k = 0; k < 100000; k++)
+    {
+      if (skw_rd(SKW_RINTSTS) & SKW_INT_VOLTSW)
+        {
+          break;
+        }
+
+      up_udelay(5);
+    }
+
+  skw_wr(SKW_RINTSTS, SKW_INT_VOLTSW);
+
+  skw_wr(SKW_CLKENA, 0x00000000);
+  skw_ciu_update(SKW_CLK_UPD_VOLT);
+  skw_wr(SKW_MSHC_BASE + 0x074, skw_rd(SKW_MSHC_BASE + 0x074) | 1);
+  up_mdelay(10);
+  skw_wr(SKW_CLKENA, 0x00000001);
+  skw_ciu_update(SKW_CLK_UPD_VOLT);
+
+  for (k = 0; k < 200000; k++)
+    {
+      if (skw_rd(SKW_RINTSTS) & SKW_INT_VOLTSW)
+        {
+          break;
+        }
+
+      up_udelay(5);
+    }
+
+  skw_wr(SKW_RINTSTS, SKW_INT_VOLTSW);
+  up_mdelay(5);
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
