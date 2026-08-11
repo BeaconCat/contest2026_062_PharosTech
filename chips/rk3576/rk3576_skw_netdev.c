@@ -143,5 +143,29 @@ static int rk3576_skw_net_transmit(FAR struct rk3576_skw_net_s *priv)
   return OK;
 }
 
+/****************************************************************************
+ * Name: rk3576_skw_net_txpoll
+ ****************************************************************************/
+
+static int rk3576_skw_net_txpoll(FAR struct net_driver_s *dev)
+{
+  FAR struct rk3576_skw_net_s *priv =
+    (FAR struct rk3576_skw_net_s *)dev->d_private;
+
+  return rk3576_skw_net_transmit(priv);
+}
+
+/****************************************************************************
+ * Name: rk3576_skw_net_reply
+ ****************************************************************************/
+
+static void rk3576_skw_net_reply(FAR struct rk3576_skw_net_s *priv)
+{
+  if (priv->dev.d_len > 0)
+    {
+      rk3576_skw_net_transmit(priv);
+    }
+}
+
 
 #endif /* CONFIG_NET && CONFIG_RK3576_SKW */
