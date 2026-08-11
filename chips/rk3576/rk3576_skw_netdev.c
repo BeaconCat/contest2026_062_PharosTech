@@ -394,5 +394,36 @@ void rk3576_skw_net_input(FAR const uint8_t *frame, int len)
     }
 }
 
+/****************************************************************************
+ * Name: rk3576_skw_netdev_register
+ *
+ * Description:
+ *   Allocate and register the SKW WiFi network interface.  Call once after
+ *   the driver init has read the STA MAC at GET_INFO.
+ *
+ ****************************************************************************/
+
+int rk3576_skw_netdev_register(void)
+{
+  FAR struct rk3576_skw_net_s *priv = &g_skw_net;
+
+  memset(priv, 0, sizeof(*priv));
+
+  priv->dev.d_ifup    = rk3576_skw_net_ifup;
+  priv->dev.d_ifdown  = rk3576_skw_net_ifdown;
+  priv->dev.d_txavail = rk3576_skw_net_txavail;
+#if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
+  priv->dev.d_addmac  = rk3576_skw_net_addmac;
+#ifdef CONFIG_NET_MCASTGROUP
+  priv->dev.d_rmmac   = rk3576_skw_net_rmmac;
+#endif
+#endif
+  priv->dev.d_private = priv;
+  priv->dev.d_buf     = g_skw_net_txbuf;
+
+  rk3576_skw_get_mac(priv->dev.d_mac.ether.ether_addr_octet);
+
+  return netdev_register(&priv->dev, NET_LL_ETHERNET);
+}
 
 #endif /* CONFIG_NET && CONFIG_RK3576_SKW */
