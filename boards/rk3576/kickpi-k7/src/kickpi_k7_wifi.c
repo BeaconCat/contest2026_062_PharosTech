@@ -208,5 +208,27 @@ static int kickpi_k7_wifi_enable_32k(void)
   return -EIO;
 }
 
+/****************************************************************************
+ * Name: kickpi_k7_wifi_power
+ *
+ * Description:
+ *   Core-driver power callback: drive WL_REG_ON (GPIO1_C6, active-low PDN).
+ *   on=false asserts reset (low); on=true releases (high).
+ ****************************************************************************/
+
+static void kickpi_k7_wifi_power(bool on)
+{
+  rk3576_gpio_write(WIFI_WL_REG_ON, on);
+}
+
+/****************************************************************************
+ * Private Data (board integration record)
+ ****************************************************************************/
+
+static struct rk3576_skw_board_s g_kickpi_k7_wifi_board =
+{
+  .power = kickpi_k7_wifi_power,
+};
+
 
 #endif /* CONFIG_KICKPI_K7_WIFI */
