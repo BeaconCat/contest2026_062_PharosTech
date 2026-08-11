@@ -15,6 +15,26 @@ config KICKPI_K7_WIFI
 		Configure the KICKPI-K7 pin environment, 32.768 kHz sleep clock,
 		power sequence and firmware images for the on-board SV6621.
 
+config KICKPI_K7_WIFI_IRAM
+	string "SV6621 IRAM firmware image"
+	default "SWT6621S_IRAM_SDIO.bin"
+	depends on KICKPI_K7_WIFI
+
+config KICKPI_K7_WIFI_DRAM
+	string "SV6621 DRAM firmware image"
+	default "SWT6621S_DRAM_SDIO.bin"
+	depends on KICKPI_K7_WIFI
+
+config KICKPI_K7_WIFI_NV
+	string "SV6621 NV configuration image"
+	default "SWT6621S_NV_SDIO_ALONE.bin"
+	depends on KICKPI_K7_WIFI
+
+config KICKPI_K7_WIFI_CALIB
+	string "SV6621 RF calibration image"
+	default "SWT6621S_SEEKWAVE_R00001.bin"
+	depends on KICKPI_K7_WIFI
+
 config KICKPI_K7_AUDIO
 	bool "On-board ES8388 audio (SAI1 + I2C3)"
 	default n
