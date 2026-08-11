@@ -123,6 +123,8 @@ struct rk3576_sdmmc_dev_s
 
   uintptr_t base; /* Controller register base address */
   int irq;        /* Controller interrupt number */
+  uint32_t clkin; /* Controller input clock frequency */
+  bool nonremovable;
 
   /* Event wait support */
 
