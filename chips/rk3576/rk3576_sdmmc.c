@@ -401,13 +401,13 @@ static void rk3576_sdmmc_setclock(struct rk3576_sdmmc_dev_s *priv,
   /* 2) Compute divider: div = ceil(clkin / (2*freq)), 0 means bypass (=clkin)
    */
 
-  if (freq >= RK3576_SDMMC_CLKIN)
+  if (freq >= priv->clkin)
     {
       div = 0;
     }
   else
     {
-      div = (RK3576_SDMMC_CLKIN + (2 * freq) - 1) / (2 * freq);
+      div = (priv->clkin + (2 * freq) - 1) / (2 * freq);
       if (div > 0xff)
         {
           div = 0xff;
