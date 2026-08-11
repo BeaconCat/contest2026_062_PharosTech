@@ -108,6 +108,16 @@ config RK3576_SKW
 		protocol, WPA2-PSK authentication and NuttX network interface for
 		the SeekWave SV6621/SWT6621-S combo.
 
+config RK3576_SKW_RXPRIO
+	int "SeekWave receive thread priority"
+	default 100
+	depends on RK3576_SKW
+
+config RK3576_SKW_RXSTACK
+	int "SeekWave receive thread stack size"
+	default 4096
+	depends on RK3576_SKW
+
 config RK3576_PWM
 	bool "PWM (Rockchip PWM v4)"
 	default n
