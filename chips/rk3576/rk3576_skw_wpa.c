@@ -332,5 +332,78 @@ static int wpa_hmac_sha1(const uint8_t *key, int keylen,
   return ret == 0 ? OK : -EIO;
 }
 
+/****************************************************************************
+ * Name: wpa_pbkdf2_sha1
+ *
+ * Description:
+ *   PBKDF2-HMAC-SHA1 (RFC 2898) producing a 32-byte PMK.  Fixed to the
+ *   WPA2 profile: 4096 iterations, dklen 32.
+ *
+ ****************************************************************************/
+
+static int wpa_pbkdf2_sha1(const char *pass, const uint8_t *salt,
+                           int saltlen, uint8_t pmk[WPA_PMK_LEN])
+{
+  uint8_t u[20];
+  uint8_t t[20];
+  uint8_t block[64];
+  int passlen = strlen(pass);
+  int blk;
+  int i;
+  int j;
+
+  for (blk = 1; blk <= 2; blk++)              /* 2 blocks -> 40 bytes */
+    {
+      int off = saltlen;
+
+      if (saltlen > (int)sizeof(block) - 4)
+        {
+          return -E2BIG;
+        }
+
+      memcpy(block, salt, saltlen);
+      block[off + 0] = (blk >> 24) & 0xff;
+      block[off + 1] = (blk >> 16) & 0xff;
+      block[off + 2] = (blk >> 8) & 0xff;
+      block[off + 3] = blk & 0xff;
+
+      if (wpa_hmac_sha1((const uint8_t *)pass, passlen,
+                        block, off + 4, NULL, 0, u) < 0)
+        {
+          return -EIO;
+        }
+
+      memcpy(t, u, 20);
+
+      for (i = 1; i < 4096; i++)
+        {
+          if (wpa_hmac_sha1((const uint8_t *)pass, passlen,
+                            u, 20, NULL, 0, u) < 0)
+            {
+              return -EIO;
+            }
+
+          for (j = 0; j < 20; j++)
+            {
+              t[j] ^= u[j];
+            }
+
+          /* Yield every 64 rounds: on a UP core this loop otherwise
+           * starves the SDIO rx thread and the CP declares the host
+           * dead (loopcheck pings go unserviced).
+           */
+
+          if ((i & 63) == 0)
+            {
+              usleep(1000);
+            }
+        }
+
+      memcpy(pmk + (blk - 1) * 20, t, blk == 1 ? 20 : 12);
+    }
+
+  return OK;
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
