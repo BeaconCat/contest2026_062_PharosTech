@@ -167,5 +167,87 @@ static void rk3576_skw_net_reply(FAR struct rk3576_skw_net_s *priv)
     }
 }
 
+/****************************************************************************
+ * Name: rk3576_skw_net_rxwork
+ ****************************************************************************/
+
+static void rk3576_skw_net_rxwork(FAR void *arg)
+{
+  FAR struct rk3576_skw_net_s *priv = (FAR struct rk3576_skw_net_s *)arg;
+  irqstate_t flags;
+  uint8_t tail;
+
+  net_lock();
+
+  for (; ; )
+    {
+      flags = spin_lock_irqsave(&g_skw_net_lock);
+      if (priv->rxq_tail == priv->rxq_head)
+        {
+          spin_unlock_irqrestore(&g_skw_net_lock, flags);
+          break;
+        }
+
+      tail = priv->rxq_tail;
+      spin_unlock_irqrestore(&g_skw_net_lock, flags);
+
+      if (!priv->bifup)
+        {
+          flags = spin_lock_irqsave(&g_skw_net_lock);
+          priv->rxq_tail = (tail + 1) % SKW_NET_RXQ_DEPTH;
+          spin_unlock_irqrestore(&g_skw_net_lock, flags);
+          continue;
+        }
+
+      priv->dev.d_buf = priv->rxq[tail];
+      priv->dev.d_len = priv->rxq_len[tail];
+
+#ifdef CONFIG_NET_PKT
+      pkt_input(&priv->dev);
+#endif
+
+#ifdef CONFIG_NET_IPv4
+      if (SKW_ETHBUF->type == HTONS(ETHTYPE_IP))
+        {
+          ninfo("IPv4 frame\n");
+          NETDEV_RXIPV4(&priv->dev);
+          ipv4_input(&priv->dev);
+          rk3576_skw_net_reply(priv);
+        }
+      else
+#endif
+#ifdef CONFIG_NET_IPv6
+      if (SKW_ETHBUF->type == HTONS(ETHTYPE_IP6))
+        {
+          ninfo("IPv6 frame\n");
+          NETDEV_RXIPV6(&priv->dev);
+          ipv6_input(&priv->dev);
+          rk3576_skw_net_reply(priv);
+        }
+      else
+#endif
+#ifdef CONFIG_NET_ARP
+      if (SKW_ETHBUF->type == HTONS(ETHTYPE_ARP))
+        {
+          NETDEV_RXARP(&priv->dev);
+          arp_input(&priv->dev);
+          rk3576_skw_net_reply(priv);
+        }
+      else
+#endif
+        {
+          NETDEV_RXDROPPED(&priv->dev);
+        }
+
+      flags = spin_lock_irqsave(&g_skw_net_lock);
+      priv->rxq_tail = (tail + 1) % SKW_NET_RXQ_DEPTH;
+      spin_unlock_irqrestore(&g_skw_net_lock, flags);
+    }
+
+  priv->dev.d_buf = g_skw_net_txbuf;
+
+  net_unlock();
+}
+
 
 #endif /* CONFIG_NET && CONFIG_RK3576_SKW */
