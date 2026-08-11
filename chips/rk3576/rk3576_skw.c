@@ -1903,5 +1903,230 @@ static int skw_wait_conn_evt(int timeout_ms)
   return -ETIMEDOUT;
 }
 
+/****************************************************************************
+ * Name: skw_connect
+ *
+ * Description:
+ *   Associate with a scanned BSS: JOIN (channel/bssid/capability + the
+ *   beacon IEs) -> AUTH (open) -> ASSOC (bssid + a minimal request IE),
+ *   waiting for the ASOCC event.  Open networks associate outright; RSN
+ *   networks reach ASSOC but need a host 4-way handshake for data (a
+ *   wpa_supplicant integration, not yet present).
+ *
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: skw_bss_is_rsn
+ *
+ * Description:
+ *   True if the BSS beacon advertised an RSN IE (tag 48) -> WPA2/WPA3.
+ *
+ ****************************************************************************/
+
+static bool skw_bss_is_rsn(const struct skw_bss_s *bss)
+{
+  int off;
+
+  for (off = 0; off + 2 <= bss->ie_len; )
+    {
+      uint8_t tag = bss->ie[off];
+      uint8_t taglen = bss->ie[off + 1];
+
+      if (tag == 48)
+        {
+          return true;
+        }
+
+      off += 2 + taglen;
+    }
+
+  return false;
+}
+
+static int skw_connect(const struct skw_bss_s *bss)
+{
+  uint8_t buf[320];
+  int n;
+  int evt;
+  int ret;
+
+  g_skw_conn_evt = -1;
+
+  /* The reference driver sends SET_MIB(DOT11_MODE_HE = false) before JOIN
+   * when the AP is not HE-capable, configuring the CP's PHY mode so it
+   * forwards the AP's (non-HE) data frames to the host.  TLV payload:
+   * plen(u16) + {type(u16), len(u16)} + value(u8).
+   */
+
+  {
+    uint8_t mib[7] =
+    {
+      0x07, 0x00,   /* plen = 7 */
+      0x10, 0x00,   /* type = 16 (SKW_MIB_DOT11_MODE_HE) */
+      0x01, 0x00,   /* len  = 1 */
+      0x00          /* value = false */
+    };
+
+    skw_send_cmd(SKW_CMD_SET_MIB, mib, sizeof(mib), NULL, NULL);
+  }
+
+  /* JOIN: skw_join_param + the beacon IEs in the tail.  Field offsets:
+   *   0 chan_num, 1 center_chn1, 2 center_chn2, 3 bandwidth, 4 band,
+   *   5 beacon_interval(u16), 7 capability(u16), 9 bssid_index,
+   *   10 max_bssid_indicator, 11 bssid[6], 17 roaming:1/reserved(u16),
+   *   19 bss_ie_offset(u16), 21 bss_ie_len(u32), 25 bss_ie[].
+   */
+
+  memset(buf, 0, sizeof(buf));
+  buf[0] = bss->channel;                        /* chan_num */
+  buf[1] = bss->channel;                        /* center_chn1 (20 MHz) */
+  buf[3] = 0;                                   /* bandwidth 20 MHz */
+  buf[4] = bss->band;                           /* band: 0=2.4 GHz, 1=5 GHz */
+  buf[5] = bss->beacon_int & 0xff;              /* beacon_interval u16 */
+  buf[6] = (bss->beacon_int >> 8) & 0xff;
+  buf[7] = bss->capability & 0xff;              /* capability u16 */
+  buf[8] = (bss->capability >> 8) & 0xff;
+  memcpy(buf + 11, bss->bssid, 6);              /* bssid */
+  memcpy(g_skw_bssid, bss->bssid, 6);
+
+  {
+    int fixed = 25;                             /* struct head length */
+    int ielen = bss->ie_len;
+
+    if (fixed + ielen > (int)sizeof(buf))
+      {
+        ielen = sizeof(buf) - fixed;
+      }
+
+    buf[19] = fixed & 0xff;                     /* bss_ie_offset u16 */
+    buf[20] = (fixed >> 8) & 0xff;
+    buf[21] = ielen & 0xff;                     /* bss_ie_len u32 */
+    buf[22] = (ielen >> 8) & 0xff;
+    memcpy(buf + fixed, bss->ie, ielen);
+    n = fixed + ielen;
+  }
+
+  {
+    uint8_t jresp[8];
+    int jrlen = sizeof(jresp);
+
+    ret = skw_send_cmd(SKW_CMD_JOIN, buf, n, jresp, &jrlen);
+    if (ret < 0)
+      {
+        wlerr("ERROR: JOIN failed: %d\n", ret);
+        return ret;
+      }
+
+    /* JOIN ACK returns skw_join_resp {peer_idx,lmac_id,inst,mcast_idx}. */
+
+    g_skw_peer_idx = (jrlen > 0) ? jresp[0] : 0;
+    g_skw_lmac = (jrlen > 1) ? (jresp[1] & 0x3) : 0;
+    g_skw_mcast = (jrlen > 3) ? jresp[3] : 0;
+    syslog(LOG_ERR, "SKW: JOIN resp len=%d %02x %02x %02x %02x "
+           "peer_idx=%d lmac=%d\n", jrlen,
+           jrlen > 0 ? jresp[0] : 0, jrlen > 1 ? jresp[1] : 0,
+           jrlen > 2 ? jresp[2] : 0, jrlen > 3 ? jresp[3] : 0,
+           g_skw_peer_idx, g_skw_lmac);
+  }
+
+  up_mdelay(50);
+
+  /* AUTH: open (algorithm 0), no key/auth data. */
+
+  memset(buf, 0, sizeof(buf));
+  buf[0] = SKW_AUTH_OPEN & 0xff;                /* auth_algorithm u16 */
+  ret = skw_send_cmd(SKW_CMD_AUTH, buf, 14, NULL, NULL);
+  if (ret < 0)
+    {
+      wlerr("ERROR: AUTH failed: %d\n", ret);
+      return ret;
+    }
+
+  up_mdelay(100);
+  g_skw_conn_evt = -1;
+
+  /* ASSOC: ht_capa + vht_capa (zeroed) + bssid + pre_bssid + req_ie.  The
+   * request IE = supported-rates (tag 1) and, for an RSN AP, an RSN IE
+   * (tag 48) advertising WPA2-PSK / CCMP so the AP starts the 4-way
+   * handshake (which the host supplicant completes -- W2).
+   */
+
+  memset(buf, 0, sizeof(buf));
+  {
+    /* struct: ieee80211_ht_cap(26) + ieee80211_vht_cap(12) + bssid(6) +
+     * pre_bssid(6) + req_ie_offset(2) + req_ie_len(2) + req_ie[].
+     */
+
+    /* ieee80211_ht_cap: cap_info(2) + ampdu(1) + mcs(16) + ext(2) +
+     * txbf(4) + asel(1).  2.4 GHz 20/40, SGI, SM-PS disabled, 1 stream
+     * (MCS0-7).  Advertising HT enables the AP's QoS data path.
+     */
+
+    static const uint8_t htcap[26] =
+    {
+      0x6e, 0x00,             /* cap_info: 40MHz, SM-PS off, SGI20/40 */
+      0x17,                   /* A-MPDU: 64k, 4us density */
+      0xff, 0x00, 0x00, 0x00, /* MCS rx_mask MCS0-7 */
+      0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00,       /* rx_highest + tx_params */
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00  /* ext + txbf + asel */
+    };
+
+    memcpy(buf, htcap, sizeof(htcap));
+
+    int off_bssid = 26 + 12;
+    int off_ieoff = off_bssid + 12;
+    int req_off   = off_ieoff + 4;
+    int ie = req_off;
+    static const uint8_t rates[] =
+      { 0x01, 0x08, 0x82, 0x84, 0x8b, 0x96, 0x24, 0x30, 0x48, 0x6c };
+
+    /* WPA2-PSK/CCMP RSN IE: group CCMP, 1 pairwise CCMP, 1 AKM PSK. */
+
+    static const uint8_t rsn_ie[] =
+      {
+        0x30, 0x14, 0x01, 0x00,               /* RSN, len 20, ver 1 */
+        0x00, 0x0f, 0xac, 0x04,               /* group cipher CCMP */
+        0x01, 0x00, 0x00, 0x0f, 0xac, 0x04,   /* 1 pairwise CCMP */
+        0x01, 0x00, 0x00, 0x0f, 0xac, 0x02,   /* 1 AKM PSK */
+        0x00, 0x00                            /* RSN capabilities */
+      };
+
+    memcpy(buf + off_bssid, bss->bssid, 6);
+
+    memcpy(buf + ie, rates, sizeof(rates));
+    ie += sizeof(rates);
+
+    if (skw_bss_is_rsn(bss))
+      {
+        memcpy(buf + ie, rsn_ie, sizeof(rsn_ie));
+        ie += sizeof(rsn_ie);
+      }
+
+    buf[off_ieoff]     = req_off & 0xff;
+    buf[off_ieoff + 1] = (req_off >> 8) & 0xff;
+    buf[off_ieoff + 2] = (ie - req_off) & 0xff;
+    buf[off_ieoff + 3] = ((ie - req_off) >> 8) & 0xff;
+    n = ie;
+  }
+
+  ret = skw_send_cmd(SKW_CMD_ASSOC, buf, n, NULL, NULL);
+  if (ret < 0)
+    {
+      wlerr("ERROR: ASSOC failed: %d\n", ret);
+      return ret;
+    }
+
+  /* Wait for the association result (assoc-resp via RX_MGMT). */
+
+  evt = skw_wait_conn_evt(3000);
+  syslog(LOG_INFO, "SKW: connect result = %d (%s)\n", evt,
+         evt == SKW_CONN_ASSOC_OK ? "ASSOCIATED" :
+         evt == SKW_CONN_ASSOC_FAIL ? "rejected" : "timeout");
+
+  return (evt == SKW_CONN_ASSOC_OK) ? OK : -EIO;
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
