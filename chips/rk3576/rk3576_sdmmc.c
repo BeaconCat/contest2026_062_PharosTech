@@ -263,7 +263,7 @@ static void rk3576_sdmmc_gotextcsd(struct sdio_dev_s *dev,
 /* IDMAC descriptor table: cache-line (64B) aligned, shared by CPU and DMA */
 
 static struct rk3576_sdmmc_idmac_desc_s
-    g_idmac_descs[RK3576_IDMAC_NDESC] aligned_data(64);
+    g_idmac_descs[RK3576_SDMMC_NHOSTS][RK3576_IDMAC_NDESC] aligned_data(64);
 #endif
 
 /* Single instance: RK3576 has only one SD card slot (SDMMC0). */
@@ -1760,7 +1760,7 @@ struct sdio_dev_s *rk3576_sdmmc_initialize(int slotno)
   DEBUGASSERT(slotno == 0);
 
 #ifdef CONFIG_SDIO_DMA
-  priv->descs = g_idmac_descs;
+  priv->descs = g_idmac_descs[slotno];
 #endif
 
   nxmutex_init(&priv->dev.mutex);
