@@ -61,8 +61,6 @@
 #include "rk3576_skw_internal.h"
 #include "rk3576_skw_wpa.h"
 
-#ifdef CONFIG_RK3576_SKW
-
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -2272,8 +2270,6 @@ int rk3576_skw_connect(const char *ssid)
 
   return -ENOENT;
 }
-
-#endif /* CONFIG_RK3576_SKW */
 
 /****************************************************************************
  * Name: rk3576_skw_get_mac / rk3576_skw_get_bssid
