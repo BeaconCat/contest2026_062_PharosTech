@@ -247,5 +247,42 @@ static int wpa_replay_compare(const uint8_t lhs[8], const uint8_t rhs[8])
   return 0;
 }
 
+/****************************************************************************
+ * Name: wpa_generate_nonce
+ ****************************************************************************/
+
+static int wpa_generate_nonce(uint8_t nonce[WPA_NONCE_LEN])
+{
+  size_t offset = 0;
+
+  while (offset < WPA_NONCE_LEN)
+    {
+      ssize_t nread = getrandom(nonce + offset, WPA_NONCE_LEN - offset, 0);
+
+      if (nread < 0)
+        {
+          if (errno == EINTR)
+            {
+              continue;
+            }
+
+          return -errno;
+        }
+
+      if (nread == 0)
+        {
+          return -EIO;
+        }
+
+      offset += nread;
+    }
+
+  return OK;
+}
+
+/****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
 
 #endif /* CONFIG_RK3576_SKW */
