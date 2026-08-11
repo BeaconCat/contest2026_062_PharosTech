@@ -1614,5 +1614,141 @@ static int skw_scan(void)
   return g_skw_scan_n;
 }
 
+/****************************************************************************
+ * Name: skw_nv_patch
+ *
+ * Description:
+ *   Copy the IRAM image and splice the NV common-config blob into its NV
+ *   slot ("TSVN" marker + 4).  Booting with default NV content leaves the
+ *   CP on wrong RF/common parameters.
+ *
+ ****************************************************************************/
+
+static uint8_t *skw_nv_patch(const uint8_t *iram, int iram_len)
+{
+  const uint8_t *nv = g_skw_board->nv;
+  uint32_t off;
+  uint32_t size;
+  uint8_t *copy;
+  int i;
+
+  if (nv == NULL || g_skw_board->nv_len < 36)
+    {
+      return NULL;
+    }
+
+  off  = nv[8] | (nv[9] << 8) | ((uint32_t)nv[10] << 16) |
+         ((uint32_t)nv[11] << 24);
+  size = nv[12] | (nv[13] << 8) | ((uint32_t)nv[14] << 16) |
+         ((uint32_t)nv[15] << 24);
+
+  if (off == 0 || size == 0 || (int)(off + size) > g_skw_board->nv_len)
+    {
+      return NULL;
+    }
+
+  copy = kmm_malloc(iram_len);
+  if (copy == NULL)
+    {
+      return NULL;
+    }
+
+  memcpy(copy, iram, iram_len);
+
+  for (i = 0; i + 4 <= iram_len && i < 0x200; i += 4)
+    {
+      if (memcmp(copy + i, "TSVN", 4) == 0)
+        {
+          syslog(LOG_ERR, "BR: NV patch @0x%x size %u\n",
+                 (unsigned)(i + 4), (unsigned)size);
+          memcpy(copy + i + 4, nv + off, size);
+          return copy;
+        }
+    }
+
+  kmm_free(copy);
+  return NULL;
+}
+
+/****************************************************************************
+ * Name: skw_download_and_boot
+ *
+ * Description:
+ *   Parse the IRAM head marker for the download addresses, program the DMA
+ *   type + sleep disable, stream both images to CP memory, and raise the
+ *   download-done signal.  Returns OK on a clean download.
+ *
+ ****************************************************************************/
+
+static int skw_download_and_boot(void)
+{
+  const uint8_t *iram = g_skw_board->iram;
+  int iram_len = g_skw_board->iram_len;
+  uint32_t iram_addr = 0;
+  uint32_t dram_addr = 0;
+  int off;
+  int ret;
+
+  /* Head marker "kees0616" in the first 0x200 bytes; the following two
+   * 32-bit LE words are the IRAM and DRAM download addresses.
+   */
+
+  for (off = 0; off + 16 <= 0x200 && off + 16 <= iram_len; off += 4)
+    {
+      if (memcmp(iram + off, "kees0616", 8) == 0)
+        {
+          const uint8_t *p = iram + off + 8;
+
+          iram_addr = p[0] | (p[1] << 8) | (p[2] << 16) |
+                      ((uint32_t)p[3] << 24);
+          dram_addr = p[4] | (p[5] << 8) | (p[6] << 16) |
+                      ((uint32_t)p[7] << 24);
+          break;
+        }
+    }
+
+  if (iram_addr != SKW_CP_IRAM || dram_addr != SKW_CP_DRAM)
+    {
+      wlerr("ERROR: bad fw head iram=0x%" PRIx32 " dram=0x%" PRIx32 "\n",
+            iram_addr, dram_addr);
+      return -EINVAL;
+    }
+
+  skw_cmd52(true, 0, SKW_REG_DMA_TYPE, 0x01, NULL);   /* ADMA */
+  skw_cmd52(true, 0, SKW_REG_SLP, 0x01, NULL);        /* sleep disabled */
+
+  /* Un-throttle every RX channel: the CP holds data for a port until its
+   * flow-control bit is clear.
+   */
+
+  skw_cmd52(true, 0, SKW_REG_RX_FTL0, 0x00, NULL);
+  skw_cmd52(true, 0, SKW_REG_RX_FTL1, 0x00, NULL);
+
+  ret = skw_dt_stream(dram_addr, g_skw_board->dram, g_skw_board->dram_len);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  {
+    uint8_t *patched = skw_nv_patch(iram, iram_len);
+
+    ret = skw_dt_stream(iram_addr, patched != NULL ? patched : iram,
+                        iram_len);
+    if (patched != NULL)
+      {
+        kmm_free(patched);
+      }
+  }
+
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  skw_cmd52(true, 0, SKW_REG_DL_DONE, 0x01, NULL);    /* boot the CP */
+  return OK;
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
