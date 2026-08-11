@@ -37,6 +37,11 @@ ifeq ($(CONFIG_NYABULA_CUSTOM_DRIVERS),y)
   CFLAGS += ${INCDIR_PREFIX}"$(BOARD_DIR)$(DELIM)..$(DELIM)drivers$(DELIM)include"
 endif
 
+ifeq ($(CONFIG_KICKPI_K7_WIFI),y)
+CSRCS += kickpi_k7_wifi.c
+CFLAGS += -Wa,-I$(abspath $(BOARD_DIR)/firmware)
+endif
+
 ifeq ($(CONFIG_KICKPI_K7_AUDIO),y)
 CSRCS += kickpi_k7_audio.c
 endif
