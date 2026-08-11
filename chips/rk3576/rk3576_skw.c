@@ -392,5 +392,104 @@ static void skw_set_clock(uint32_t src, uint32_t clkdiv)
   up_mdelay(2);
 }
 
+/****************************************************************************
+ * Name: skw_cmd
+ *
+ * Description:
+ *   Issue one raw command and wait for command-done or response-timeout.
+ *   Returns RINTSTS; the response word goes to *resp (may be NULL).  Waits
+ *   out the card's data-busy tail first (issuing into busy caused CRC
+ *   errors during bring-up).
+ *
+ ****************************************************************************/
+
+static uint32_t skw_cmd(uint32_t cmdw, uint32_t arg, uint32_t *resp)
+{
+  uint32_t rint;
+  int k;
+
+  for (k = 0; (skw_rd(SKW_STATUS) & (1u << 9)) && k < SKW_POLL_LIMIT; k++)
+    {
+      up_udelay(5);
+    }
+
+  skw_wr(SKW_RINTSTS, 0xffffffff);
+  skw_wr(SKW_CMDARG, arg);
+  skw_wr(SKW_CMD, cmdw);
+
+  for (k = 0; (skw_rd(SKW_CMD) & SKW_CMD_START) && k < SKW_POLL_LIMIT; k++);
+
+  for (k = 0; k < SKW_POLL_LIMIT; k++)
+    {
+      rint = skw_rd(SKW_RINTSTS);
+      if (rint & (SKW_INT_CMDDONE | SKW_INT_RTO))
+        {
+          break;
+        }
+
+      up_udelay(5);
+    }
+
+  if (resp != NULL)
+    {
+      *resp = skw_rd(SKW_RESP0);
+    }
+
+  return skw_rd(SKW_RINTSTS);
+}
+
+/****************************************************************************
+ * Name: skw_cmd52
+ *
+ * Description:
+ *   CMD52 IO_RW_DIRECT.  Read data (or NULL) returned in *out.  Returns OK
+ *   or a negated errno.
+ *
+ ****************************************************************************/
+
+static int skw_cmd52(bool write, uint32_t func, uint32_t reg,
+                     uint8_t in, uint8_t *out)
+{
+  uint32_t arg;
+  uint32_t resp = 0;
+  uint32_t rint;
+
+  arg = (write ? (1u << 31) : 0) | ((func & 7) << 28) |
+        (write ? (1u << 27) : 0) | ((reg & 0x1ffff) << 9) |
+        (write ? in : 0);
+
+  nxmutex_lock(&g_skw_buslock);
+  rint = skw_cmd(SKW_CMDW_CMD52, arg, &resp);
+  nxmutex_unlock(&g_skw_buslock);
+  if (rint & SKW_INT_RTO)
+    {
+      return -ETIMEDOUT;
+    }
+
+  if (out != NULL)
+    {
+      *out = resp & 0xff;
+    }
+
+  return ((resp >> 8) & 0xcb) ? -EIO : 0;
+}
+
+/****************************************************************************
+ * Name: skw_dt_latch
+ *
+ * Description:
+ *   Latch a 32-bit CP address into the func0 DT address registers
+ *   (0x15C..0x15F, little-endian).
+ *
+ ****************************************************************************/
+
+static void skw_dt_latch(uint32_t cpaddr)
+{
+  skw_cmd52(true, 0, SKW_FBR_ADDR + 0, cpaddr & 0xff, NULL);
+  skw_cmd52(true, 0, SKW_FBR_ADDR + 1, (cpaddr >> 8) & 0xff, NULL);
+  skw_cmd52(true, 0, SKW_FBR_ADDR + 2, (cpaddr >> 16) & 0xff, NULL);
+  skw_cmd52(true, 0, SKW_FBR_ADDR + 3, (cpaddr >> 24) & 0xff, NULL);
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
