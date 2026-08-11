@@ -1023,5 +1023,46 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
  * Name: rk3576_skw_wpa_eapol_input
  ****************************************************************************/
 
+static void wpa_process(const uint8_t *data, int len)
+{
+  struct rk3576_wpa_s *w = &g_wpa;
+  uint16_t ki;
+
+  if (len < KD_FIXED_LEN || data[1] != EAPOL_TYPE_KEY)
+    {
+      return;
+    }
+
+  ki = (data[KD_OFF_KEYINFO] << 8) | data[KD_OFF_KEYINFO + 1];
+
+  /* msg1: pairwise + ack, no MIC.  msg3: pairwise + ack + mic + install. */
+
+  if ((w->state == WPA_STATE_WAIT_MSG1 ||
+       w->state == WPA_STATE_WAIT_MSG3) &&
+      (ki & KI_MIC) == 0 && (ki & KI_ACK) != 0)
+    {
+      /* Fresh message 1 or a retransmit (the AP did not accept our
+       * message 2): restart the handshake state.
+       */
+
+      w->state = WPA_STATE_WAIT_MSG1;
+      wpa_handle_msg1(w, data, len);
+    }
+  else if (w->state == WPA_STATE_WAIT_MSG3 &&
+           (ki & KI_MIC) != 0 && (ki & KI_ACK) != 0)
+    {
+      wpa_handle_msg3(w, data, len);
+    }
+}
+
+/* EAPOL arrives on the rx thread; process on the connect() thread so
+ * msg2/msg4/ADD_KEY use the main-thread command path (waits for ACK,
+ * no deadlock, frame actually transmitted).
+ */
+
+static uint8_t g_wpa_rx[256];
+static int g_wpa_rxlen;
+static bool g_wpa_rxpending;
+
 
 #endif /* CONFIG_RK3576_SKW */
