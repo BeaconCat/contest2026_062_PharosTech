@@ -779,5 +779,89 @@ static int wpa_extract_gtk(struct rk3576_wpa_s *w, const uint8_t *enc,
   return -ENOENT;
 }
 
+/****************************************************************************
+ * Name: wpa_handle_msg1
+ ****************************************************************************/
+
+static void wpa_handle_msg1(struct rk3576_wpa_s *w, const uint8_t *kd,
+                            int kdlen)
+{
+  bool nonce_empty = true;
+  int i;
+
+  rk3576_skw_get_bssid(w->aa);
+
+  if (kdlen < KD_FIXED_LEN)
+    {
+      return;
+    }
+
+  /* SNonce is fixed for the whole handshake: a message 1 retransmit must
+   * reuse it (regenerating produces a fresh PTK the AP has not seen).
+   */
+
+  for (i = 0; i < WPA_NONCE_LEN; i++)
+    {
+      if (w->snonce[i] != 0)
+      {
+        nonce_empty = false;
+        break;
+      }
+    }
+
+  if (!nonce_empty)
+    {
+      int comparison = wpa_replay_compare(kd + KD_OFF_REPLAY, w->replay);
+
+      if (comparison < 0)
+        {
+          wlwarn("WPA: stale msg1 replay counter\n");
+          return;
+        }
+
+      if (comparison > 0)
+        {
+          wpa_clear(w->snonce, sizeof(w->snonce));
+          nonce_empty = true;
+        }
+    }
+
+  memcpy(w->replay, kd + KD_OFF_REPLAY, 8);
+  memcpy(w->anonce, kd + KD_OFF_NONCE, WPA_NONCE_LEN);
+
+  if (nonce_empty)
+    {
+      int ret = wpa_generate_nonce(w->snonce);
+
+      if (ret < 0)
+      {
+        w->state = WPA_STATE_FAILED;
+        w->result = ret;
+        return;
+      }
+    }
+
+  if (wpa_derive_ptk(w) < 0)
+    {
+      w->state = WPA_STATE_FAILED;
+      w->result = -EIO;
+      return;
+    }
+
+  {
+    int r2 = wpa_send_msg2(w);
+
+    if (r2 < 0)
+    {
+      w->state = WPA_STATE_FAILED;
+      w->result = -EIO;
+      return;
+    }
+
+    w->state = WPA_STATE_WAIT_MSG3;
+    wlinfo("WPA: msg1 rx, msg2 sent (PTK derived)\n");
+  }
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
