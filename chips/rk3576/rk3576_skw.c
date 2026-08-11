@@ -2440,3 +2440,46 @@ int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
   nxmutex_unlock(&g_skw_tx_lock);
   return ret;
 }
+
+/***************************************************************************
+ * Name: rk3576_skw_add_key
+ *
+ * Description:
+ *   Install a key into the CP via ADD_KEY(12).  Builds skw_key_params:
+ *   mac_addr[6], key_type, cipher_type, pn[6], key_id, key_len, key[].
+ *
+ ****************************************************************************/
+
+int rk3576_skw_add_key(uint8_t key_type, uint8_t cipher,
+                       const uint8_t *mac, uint8_t key_id,
+                       const uint8_t *key, int key_len, const uint8_t *pn)
+{
+  uint8_t buf[64];
+  int n = 0;
+
+  if (key_len < 0 || 16 + key_len > (int)sizeof(buf))
+    {
+      return -E2BIG;
+    }
+
+  memcpy(buf + n, mac, 6);
+  n += 6;
+  buf[n++] = key_type;
+  buf[n++] = cipher;
+  if (pn != NULL)
+    {
+      memcpy(buf + n, pn, 6);
+    }
+  else
+    {
+      memset(buf + n, 0, 6);
+    }
+
+  n += 6;
+  buf[n++] = key_id;
+  buf[n++] = (uint8_t)key_len;
+  memcpy(buf + n, key, key_len);
+  n += key_len;
+
+  return skw_send_cmd(SKW_CMD_ADD_KEY, buf, n, NULL, NULL);
+}
