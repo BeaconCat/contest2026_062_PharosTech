@@ -30,6 +30,11 @@
 #include <nuttx/config.h>
 #include <nuttx/sdio.h>
 
+/* Host indices accepted by rk3576_sdmmc_initialize(). */
+
+#define RK3576_SDMMC_SLOT 0
+#define RK3576_SDIO_SLOT  1
+
 /****************************************************************************
  * Public Types
  ****************************************************************************/
@@ -49,7 +54,7 @@ typedef CODE void (*rk3576_sdmmc_media_callback_t)(FAR void *arg,
  *   the mmcsd layer to mount.
  *
  * Input Parameters:
- *   slotno - Slot number (RK3576 has only one SD card slot, use 0).
+ *   slotno - RK3576_SDMMC_SLOT or RK3576_SDIO_SLOT.
  *
  * Returned Value:
  *   On success returns an sdio_dev_s pointer, on failure returns NULL.
