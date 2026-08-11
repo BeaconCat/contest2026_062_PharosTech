@@ -776,5 +776,56 @@ static void skw_tune_sdr104(void)
     }
 }
 
+/****************************************************************************
+ * Name: skw_handle_loopcheck
+ *
+ * Description:
+ *   Parse a loopcheck-channel packet for the CP ready tokens and advance
+ *   the service state / doorbell.
+ *
+ ****************************************************************************/
+
+static void skw_handle_loopcheck(const uint8_t *pl, int len)
+{
+  /* Print every loopcheck message: the CP announces firmware asserts
+   * here ("BSPASSERT ...file-line") and losing them hides the crash
+   * cause.
+   */
+
+  {
+    char txt[120];
+    int n = (len < (int)sizeof(txt) - 1) ? len : (int)sizeof(txt) - 1;
+    int i;
+
+    for (i = 0; i < n; i++)
+      {
+        txt[i] = (pl[i] >= 0x20 && pl[i] < 0x7f) ? pl[i] : 46;
+      }
+
+    txt[n] = 0;
+    syslog(LOG_ERR, "SKW: cp> %s\n", txt);
+  }
+
+  if (memmem(pl, len, "trunk_W", 7) != NULL &&
+      !(g_skw_service & RK3576_SKW_STATE_BSP))
+    {
+      g_skw_service |= RK3576_SKW_STATE_BSP;
+
+      /* WIFI_START doorbell: 1 << ((service 0 << 1) | cmd 0). */
+
+      skw_cmd52(true, 0, SKW_REG_AP2CP_IRQ, 0x01, NULL);
+    }
+
+  if (memmem(pl, len, "WIFIREADY", 9) != NULL)
+    {
+      g_skw_service |= RK3576_SKW_STATE_WIFI;
+    }
+
+  if (memmem(pl, len, "BTREADY", 7) != NULL)
+    {
+      g_skw_service |= RK3576_SKW_STATE_BT;
+    }
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
