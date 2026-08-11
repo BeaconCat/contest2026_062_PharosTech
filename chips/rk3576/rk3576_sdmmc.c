@@ -1749,6 +1749,54 @@ static void rk3576_sdmmc_blocksetup(struct sdio_dev_s *dev,
  * Public Functions
  ***************************************************************************/
 
+#ifdef CONFIG_RK3576_SDIO
+static int rk3576_sdmmc_enable_sdio_clock(struct rk3576_sdmmc_dev_s *priv)
+{
+  FAR struct clk_s *hclk;
+  FAR struct clk_s *cclk;
+  int ret;
+
+  hclk = clk_get("hclk_sdio");
+  cclk = clk_get("cclk_src_sdio");
+  if (hclk == NULL || cclk == NULL)
+    {
+      return -ENODEV;
+    }
+
+  ret = clk_set_rate(cclk, RK3576_SDIO_CLKIN);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = clk_enable(hclk);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = clk_enable(cclk);
+  if (ret < 0)
+    {
+      clk_disable(hclk);
+      return ret;
+    }
+
+  priv->clkin = clk_get_rate(cclk);
+
+  putreg32((1u << (RK3576_CRU_SDIO_RESET_BIT + 16)) |
+               (1u << RK3576_CRU_SDIO_RESET_BIT),
+           RK3576_CRU_ADDR +
+               RK3576_CRU_SOFTRST_CON(RK3576_CRU_SDIO_RESET_CON));
+  up_udelay(20);
+  putreg32(1u << (RK3576_CRU_SDIO_RESET_BIT + 16),
+           RK3576_CRU_ADDR +
+               RK3576_CRU_SOFTRST_CON(RK3576_CRU_SDIO_RESET_CON));
+  up_udelay(20);
+  return OK;
+}
+#endif
+
 /***************************************************************************
  * Name: rk3576_sdmmc_initialize
  *
