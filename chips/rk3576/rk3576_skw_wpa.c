@@ -503,5 +503,77 @@ static int wpa_derive_ptk(struct rk3576_wpa_s *w)
                  seed, sizeof(seed), w->ptk, WPA_PTK_LEN);
 }
 
+/****************************************************************************
+ * Name: wpa_aes_unwrap
+ *
+ * Description:
+ *   NIST AES Key Wrap decrypt (RFC 3394), used to recover the GTK KDE
+ *   from the encrypted key data of msg3.  n = number of 64-bit blocks in
+ *   the plaintext (cipherlen/8 - 1).
+ *
+ ****************************************************************************/
+
+static int wpa_aes_unwrap(const uint8_t *kek, const uint8_t *cipher,
+                          int cipherlen, uint8_t *plain)
+{
+  mbedtls_aes_context aes;
+  uint8_t a[8];
+  uint8_t b[16];
+  int n = cipherlen / 8 - 1;
+  int i;
+  int j;
+  int ret;
+
+  if (cipherlen < 24 || (cipherlen % 8) != 0)
+    {
+      return -EINVAL;
+    }
+
+  mbedtls_aes_init(&aes);
+  ret = mbedtls_aes_setkey_dec(&aes, kek, 128);
+  if (ret != 0)
+    {
+      mbedtls_aes_free(&aes);
+      return -EIO;
+    }
+
+  memcpy(a, cipher, 8);
+  memcpy(plain, cipher + 8, n * 8);
+
+  for (j = 5; j >= 0; j--)
+    {
+      for (i = n; i >= 1; i--)
+        {
+          uint64_t t = (uint64_t)n * j + i;
+          int k;
+
+          memcpy(b, a, 8);
+          for (k = 0; k < 8; k++)
+            {
+              b[7 - k] ^= (uint8_t)(t >> (8 * k));
+            }
+
+          memcpy(b + 8, plain + (i - 1) * 8, 8);
+          mbedtls_aes_crypt_ecb(&aes, MBEDTLS_AES_DECRYPT, b, b);
+          memcpy(a, b, 8);
+          memcpy(plain + (i - 1) * 8, b + 8, 8);
+        }
+    }
+
+  mbedtls_aes_free(&aes);
+
+  /* Verify the default integrity check register (A6A6A6A6A6A6A6A6). */
+
+  for (i = 0; i < 8; i++)
+    {
+      if (a[i] != 0xa6)
+        {
+          return -EBADMSG;
+        }
+    }
+
+  return OK;
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
