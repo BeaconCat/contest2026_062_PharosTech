@@ -1064,5 +1064,26 @@ static uint8_t g_wpa_rx[256];
 static int g_wpa_rxlen;
 static bool g_wpa_rxpending;
 
+void rk3576_skw_wpa_eapol_input(const uint8_t *data, int len)
+{
+  irqstate_t flags;
+
+  if (g_wpa.state == WPA_STATE_IDLE || len <= 0 ||
+      len > (int)sizeof(g_wpa_rx))
+    {
+      return;
+    }
+
+  flags = spin_lock_irqsave(&g_wpa_rxlock);
+  memcpy(g_wpa_rx, data, len);
+  g_wpa_rxlen = len;
+  g_wpa_rxpending = true;
+  spin_unlock_irqrestore(&g_wpa_rxlock, flags);
+}
+
+/****************************************************************************
+ * Name: rk3576_skw_wpa_connect
+ ****************************************************************************/
+
 
 #endif /* CONFIG_RK3576_SKW */
