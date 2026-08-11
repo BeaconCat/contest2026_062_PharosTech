@@ -1412,5 +1412,207 @@ static int skw_send_cmd(uint8_t id, const uint8_t *payload, int plen,
   return ret;
 }
 
+/****************************************************************************
+ * Name: skw_wifi_bringup_cmds
+ *
+ * Description:
+ *   Post-WIFIREADY command bring-up: sync the command/event version, read
+ *   the chip info (MAC address / capabilities).  Calibration + OPEN_DEV
+ *   land with the netdev interface-up path (P2/P3).
+ *
+ ****************************************************************************/
+
+static int skw_wifi_bringup_cmds(void)
+{
+  uint8_t resp[128];
+  int resp_len;
+  int ret;
+
+  /* Silence the CP BSP debug log (channel 9): it otherwise floods the
+   * SDIO RX path and buries command ACKs.  Switch = 1 (disable), then the
+   * AP->CP doorbell bit5.
+   */
+
+  skw_cmd52(true, 0, SKW_REG_CPLOG_SW, 0x01, NULL);
+  skw_cmd52(true, 0, SKW_REG_AP2CP_IRQ, 1u << 5, NULL);
+
+  /* SYN_VERSION: a 4-byte host cmd/event version pair (0 = don't care). */
+
+  {
+    uint8_t ver[4] = { 0, 0, 0, 0 };
+
+    ret = skw_send_cmd(SKW_CMD_SYN_VERSION, ver, sizeof(ver), NULL, NULL);
+    if (ret < 0)
+      {
+        wlerr("ERROR: SYN_VERSION failed: %d\n", ret);
+        return ret;
+      }
+  }
+
+  /* GET_INFO: returns fw version + capabilities + the efuse MAC.  The MAC
+   * sits at a fixed offset in the return payload; capture the first valid
+   * 6-byte address (bytes with the group bit clear on byte 0).
+   */
+
+  resp_len = sizeof(resp);
+  ret = skw_send_cmd(SKW_CMD_GET_INFO, NULL, 0, resp, &resp_len);
+  if (ret < 0)
+    {
+      wlerr("ERROR: GET_INFO failed: %d\n", ret);
+      return ret;
+    }
+
+  /* The efuse MAC in GET_INFO is all-zero on this module (no efuse burn,
+   * same as the vendor stack).  Assign a stable locally-administered
+   * address (FE:FD:FC + low bytes of the fw info) so OPEN_DEV's valid-
+   * address check passes.
+   */
+
+  g_skw_mac[0] = 0xfe;
+  g_skw_mac[1] = 0xfd;
+  g_skw_mac[2] = 0xfc;
+  g_skw_mac[3] = (resp_len > 0) ? resp[0] : 0x01;
+  g_skw_mac[4] = (resp_len > 1) ? resp[1] : 0x02;
+  g_skw_mac[5] = 0x03;
+
+  syslog(LOG_INFO,
+         "SKW: GET_INFO ok (%d bytes) MAC %02x:%02x:%02x:%02x:%02x:%02x\n",
+         resp_len, g_skw_mac[0], g_skw_mac[1], g_skw_mac[2],
+         g_skw_mac[3], g_skw_mac[4], g_skw_mac[5]);
+
+  /* RF calibration download (PHY_BB_CFG): 512-byte chunks with a
+   * seq/end/len header.  Without it the CP runs default RF parameters:
+   * weak or empty scans and firmware asserts on RF-heavy operations.
+   */
+
+  if (g_skw_board->calib != NULL && g_skw_board->calib_len > 0)
+    {
+      const uint8_t *cd = g_skw_board->calib;
+      int remain = g_skw_board->calib_len;
+      uint8_t chunk[4 + 512];
+      int seq = 0;
+
+      while (remain > 0)
+        {
+          int len = (remain < 512) ? remain : 512;
+
+          chunk[0] = (uint8_t)seq;
+          chunk[1] = (remain == len) ? 1 : 0;
+          chunk[2] = len & 0xff;
+          chunk[3] = (len >> 8) & 0xff;
+          memcpy(chunk + 4, cd, len);
+
+          ret = skw_send_cmd(SKW_CMD_PHY_BB_CFG, chunk, 4 + len,
+                             NULL, NULL);
+          if (ret < 0)
+            {
+              wlerr("ERROR: PHY_BB_CFG seq %d failed: %d\n", seq, ret);
+              break;
+            }
+
+          cd += len;
+          remain -= len;
+          seq++;
+        }
+
+      syslog(LOG_ERR, "SKW: calib download %s (%d bytes)\n",
+             ret == 0 ? "ok" : "FAILED", g_skw_board->calib_len);
+    }
+
+  /* OPEN_DEV: bring up the station interface (mode + flags + MAC). */
+
+  {
+    uint8_t op[10];
+
+    op[0] = SKW_STA_MODE & 0xff;   /* u16 mode = STA */
+    op[1] = 0;
+    op[2] = 0;                     /* u16 flags = 0 */
+    op[3] = 0;
+    memcpy(op + 4, g_skw_mac, 6);
+
+    ret = skw_send_cmd(SKW_CMD_OPEN_DEV, op, sizeof(op), NULL, NULL);
+    if (ret < 0)
+      {
+        wlerr("ERROR: OPEN_DEV failed: %d\n", ret);
+        return ret;
+      }
+
+    syslog(LOG_INFO, "SKW: OPEN_DEV ok (STA)\n");
+  }
+
+  return OK;
+}
+
+/****************************************************************************
+ * Name: skw_scan
+ *
+ * Description:
+ *   Active scan on all channels (wildcard SSID) and collect the SCAN_REPORT
+ *   results.  Returns the number of BSSes found.
+ *
+ ****************************************************************************/
+
+static int skw_scan(void)
+{
+  /* skw_scan_param (32-byte fixed head) + 2.4 GHz (ch 1-13, band 0) and
+   * 5 GHz non-DFS channels (band 1) in the variable tail.
+   * skw_scan_chan_info = {chan_num, band, scan_flags} = 3 bytes each.
+   */
+
+  static const uint8_t g_5g_chans[] =
+  {
+    36, 40, 44, 48,              /* UNII-1          */
+    52, 56, 60, 64,              /* UNII-2 no DFS   */
+    149, 153, 157, 161, 165      /* UNII-3          */
+  };
+
+  enum { N_2G = 13, N_5G = sizeof(g_5g_chans), N_CH = N_2G + N_5G };
+
+  uint8_t sp[32 + N_CH * 3];
+  int ret;
+  int wait;
+  int ch;
+
+  memset(sp, 0, sizeof(sp));
+  sp[8]  = N_CH;                    /* nr_chan (u32 LE) */
+  sp[12] = 32;                      /* chan_offset = end of fixed head */
+
+  for (ch = 0; ch < N_2G; ch++)
+    {
+      sp[32 + ch * 3 + 0] = ch + 1; /* chan_num 1..13   */
+      sp[32 + ch * 3 + 1] = 0;      /* band 2.4 GHz    */
+      sp[32 + ch * 3 + 2] = 0;      /* scan_flags      */
+    }
+
+  for (ch = 0; ch < N_5G; ch++)
+    {
+      sp[32 + (N_2G + ch) * 3 + 0] = g_5g_chans[ch]; /* chan_num */
+      sp[32 + (N_2G + ch) * 3 + 1] = 1;              /* band 5 GHz */
+      sp[32 + (N_2G + ch) * 3 + 2] = 0;              /* scan_flags */
+    }
+
+  g_skw_scan_n = 0;
+  g_skw_scan_done = false;
+  g_skw_scanning = true;
+
+  ret = skw_send_cmd(SKW_CMD_START_SCAN, sp, sizeof(sp), NULL, NULL);
+  if (ret < 0)
+    {
+      g_skw_scanning = false;
+      wlerr("ERROR: START_SCAN failed: %d\n", ret);
+      return ret;
+    }
+
+  /* Reports arrive as events on the rx thread; wait up to 5 s or CMPL. */
+
+  for (wait = 0; wait < 500 && !g_skw_scan_done; wait++)
+    {
+      up_mdelay(10);
+    }
+
+  g_skw_scanning = false;
+  return g_skw_scan_n;
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
