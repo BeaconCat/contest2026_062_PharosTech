@@ -729,5 +729,52 @@ static void skw_voltage_switch(void)
   up_mdelay(5);
 }
 
+/****************************************************************************
+ * Name: skw_tune_sdr104
+ *
+ * Description:
+ *   Select 4-bit + SDR104 on the card and host, raise the clock to 198
+ *   MHz, freeze the sample/drive phase at 180 deg (the on-board sweep
+ *   found the full band passing at this rate), and run one CMD19 tuning
+ *   block read to satisfy the card.
+ *
+ ****************************************************************************/
+
+static void skw_tune_sdr104(void)
+{
+  uint32_t resp;
+  uint8_t v;
+  int got = 0;
+  int k;
+
+  skw_cmd52(false, 0, 0x07, 0, &v);
+  skw_cmd52(true, 0, 0x07, 0x02, NULL);         /* card 4-bit */
+  skw_wr(SKW_CTYPE, 0x00000001);                /* host 4-bit */
+  skw_cmd52(false, 0, 0x13, 0, &v);
+  skw_cmd52(true, 0, 0x13, 0x07, NULL);         /* EHS + SDR104 */
+
+  skw_set_clock(SKW_SDIO_SRC_396M, 0);          /* 198 MHz */
+  skw_wr(SKW_TIMING0, SKW_TCON_180);
+  skw_wr(SKW_TIMING1, SKW_TCON_180);
+
+  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 1));
+  for (k = 0; (skw_rd(SKW_CTRL) & (1u << 1)) && k < 100000; k++);
+  skw_wr(SKW_BLKSIZ, 64);
+  skw_wr(SKW_BYTCNT, 64);
+  skw_cmd(SKW_CMDW_CMD19, 0, &resp);
+  for (k = 0; k < 200000 && got < 16; k++)
+    {
+      uint32_t fc = (skw_rd(SKW_STATUS) >> 17) & 0x1fff;
+
+      while (fc-- > 0 && got < 16)
+        {
+          (void)skw_rd(SKW_FIFO);
+          got++;
+        }
+
+      up_udelay(2);
+    }
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
