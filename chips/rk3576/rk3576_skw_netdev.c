@@ -249,5 +249,24 @@ static void rk3576_skw_net_rxwork(FAR void *arg)
   net_unlock();
 }
 
+/****************************************************************************
+ * Name: rk3576_skw_net_txwork
+ ****************************************************************************/
+
+static void rk3576_skw_net_txwork(FAR void *arg)
+{
+  FAR struct rk3576_skw_net_s *priv = (FAR struct rk3576_skw_net_s *)arg;
+
+  net_lock();
+
+  if (priv->bifup)
+    {
+      priv->dev.d_buf = g_skw_net_txbuf;
+      devif_poll(&priv->dev, rk3576_skw_net_txpoll);
+    }
+
+  net_unlock();
+}
+
 
 #endif /* CONFIG_NET && CONFIG_RK3576_SKW */
