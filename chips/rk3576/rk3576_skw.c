@@ -1412,5 +1412,496 @@ static int skw_send_cmd(uint8_t id, const uint8_t *payload, int plen,
   return ret;
 }
 
+/****************************************************************************
+ * Name: skw_wifi_bringup_cmds
+ *
+ * Description:
+ *   Post-WIFIREADY command bring-up: sync the command/event version, read
+ *   the chip info (MAC address / capabilities).  Calibration + OPEN_DEV
+ *   land with the netdev interface-up path (P2/P3).
+ *
+ ****************************************************************************/
+
+static int skw_wifi_bringup_cmds(void)
+{
+  uint8_t resp[128];
+  int resp_len;
+  int ret;
+
+  /* Silence the CP BSP debug log (channel 9): it otherwise floods the
+   * SDIO RX path and buries command ACKs.  Switch = 1 (disable), then the
+   * AP->CP doorbell bit5.
+   */
+
+  skw_cmd52(true, 0, SKW_REG_CPLOG_SW, 0x01, NULL);
+  skw_cmd52(true, 0, SKW_REG_AP2CP_IRQ, 1u << 5, NULL);
+
+  /* SYN_VERSION: a 4-byte host cmd/event version pair (0 = don't care). */
+
+  {
+    uint8_t ver[4] = { 0, 0, 0, 0 };
+
+    ret = skw_send_cmd(SKW_CMD_SYN_VERSION, ver, sizeof(ver), NULL, NULL);
+    if (ret < 0)
+      {
+        wlerr("ERROR: SYN_VERSION failed: %d\n", ret);
+        return ret;
+      }
+  }
+
+  /* GET_INFO: returns fw version + capabilities + the efuse MAC.  The MAC
+   * sits at a fixed offset in the return payload; capture the first valid
+   * 6-byte address (bytes with the group bit clear on byte 0).
+   */
+
+  resp_len = sizeof(resp);
+  ret = skw_send_cmd(SKW_CMD_GET_INFO, NULL, 0, resp, &resp_len);
+  if (ret < 0)
+    {
+      wlerr("ERROR: GET_INFO failed: %d\n", ret);
+      return ret;
+    }
+
+  /* The efuse MAC in GET_INFO is all-zero on this module (no efuse burn,
+   * same as the vendor stack).  Assign a stable locally-administered
+   * address (FE:FD:FC + low bytes of the fw info) so OPEN_DEV's valid-
+   * address check passes.
+   */
+
+  g_skw_mac[0] = 0xfe;
+  g_skw_mac[1] = 0xfd;
+  g_skw_mac[2] = 0xfc;
+  g_skw_mac[3] = (resp_len > 0) ? resp[0] : 0x01;
+  g_skw_mac[4] = (resp_len > 1) ? resp[1] : 0x02;
+  g_skw_mac[5] = 0x03;
+
+  syslog(LOG_INFO,
+         "SKW: GET_INFO ok (%d bytes) MAC %02x:%02x:%02x:%02x:%02x:%02x\n",
+         resp_len, g_skw_mac[0], g_skw_mac[1], g_skw_mac[2],
+         g_skw_mac[3], g_skw_mac[4], g_skw_mac[5]);
+
+  /* RF calibration download (PHY_BB_CFG): 512-byte chunks with a
+   * seq/end/len header.  Without it the CP runs default RF parameters:
+   * weak or empty scans and firmware asserts on RF-heavy operations.
+   */
+
+  if (g_skw_board->calib != NULL && g_skw_board->calib_len > 0)
+    {
+      const uint8_t *cd = g_skw_board->calib;
+      int remain = g_skw_board->calib_len;
+      uint8_t chunk[4 + 512];
+      int seq = 0;
+
+      while (remain > 0)
+        {
+          int len = (remain < 512) ? remain : 512;
+
+          chunk[0] = (uint8_t)seq;
+          chunk[1] = (remain == len) ? 1 : 0;
+          chunk[2] = len & 0xff;
+          chunk[3] = (len >> 8) & 0xff;
+          memcpy(chunk + 4, cd, len);
+
+          ret = skw_send_cmd(SKW_CMD_PHY_BB_CFG, chunk, 4 + len,
+                             NULL, NULL);
+          if (ret < 0)
+            {
+              wlerr("ERROR: PHY_BB_CFG seq %d failed: %d\n", seq, ret);
+              break;
+            }
+
+          cd += len;
+          remain -= len;
+          seq++;
+        }
+
+      syslog(LOG_ERR, "SKW: calib download %s (%d bytes)\n",
+             ret == 0 ? "ok" : "FAILED", g_skw_board->calib_len);
+    }
+
+  /* OPEN_DEV: bring up the station interface (mode + flags + MAC). */
+
+  {
+    uint8_t op[10];
+
+    op[0] = SKW_STA_MODE & 0xff;   /* u16 mode = STA */
+    op[1] = 0;
+    op[2] = 0;                     /* u16 flags = 0 */
+    op[3] = 0;
+    memcpy(op + 4, g_skw_mac, 6);
+
+    ret = skw_send_cmd(SKW_CMD_OPEN_DEV, op, sizeof(op), NULL, NULL);
+    if (ret < 0)
+      {
+        wlerr("ERROR: OPEN_DEV failed: %d\n", ret);
+        return ret;
+      }
+
+    syslog(LOG_INFO, "SKW: OPEN_DEV ok (STA)\n");
+  }
+
+  return OK;
+}
+
+/****************************************************************************
+ * Name: skw_scan
+ *
+ * Description:
+ *   Active scan on all channels (wildcard SSID) and collect the SCAN_REPORT
+ *   results.  Returns the number of BSSes found.
+ *
+ ****************************************************************************/
+
+static int skw_scan(void)
+{
+  /* skw_scan_param (32-byte fixed head) + 2.4 GHz (ch 1-13, band 0) and
+   * 5 GHz non-DFS channels (band 1) in the variable tail.
+   * skw_scan_chan_info = {chan_num, band, scan_flags} = 3 bytes each.
+   */
+
+  static const uint8_t g_5g_chans[] =
+  {
+    36, 40, 44, 48,              /* UNII-1          */
+    52, 56, 60, 64,              /* UNII-2 no DFS   */
+    149, 153, 157, 161, 165      /* UNII-3          */
+  };
+
+  enum { N_2G = 13, N_5G = sizeof(g_5g_chans), N_CH = N_2G + N_5G };
+
+  uint8_t sp[32 + N_CH * 3];
+  int ret;
+  int wait;
+  int ch;
+
+  memset(sp, 0, sizeof(sp));
+  sp[8]  = N_CH;                    /* nr_chan (u32 LE) */
+  sp[12] = 32;                      /* chan_offset = end of fixed head */
+
+  for (ch = 0; ch < N_2G; ch++)
+    {
+      sp[32 + ch * 3 + 0] = ch + 1; /* chan_num 1..13   */
+      sp[32 + ch * 3 + 1] = 0;      /* band 2.4 GHz    */
+      sp[32 + ch * 3 + 2] = 0;      /* scan_flags      */
+    }
+
+  for (ch = 0; ch < N_5G; ch++)
+    {
+      sp[32 + (N_2G + ch) * 3 + 0] = g_5g_chans[ch]; /* chan_num */
+      sp[32 + (N_2G + ch) * 3 + 1] = 1;              /* band 5 GHz */
+      sp[32 + (N_2G + ch) * 3 + 2] = 0;              /* scan_flags */
+    }
+
+  g_skw_scan_n = 0;
+  g_skw_scan_done = false;
+  g_skw_scanning = true;
+
+  ret = skw_send_cmd(SKW_CMD_START_SCAN, sp, sizeof(sp), NULL, NULL);
+  if (ret < 0)
+    {
+      g_skw_scanning = false;
+      wlerr("ERROR: START_SCAN failed: %d\n", ret);
+      return ret;
+    }
+
+  /* Reports arrive as events on the rx thread; wait up to 5 s or CMPL. */
+
+  for (wait = 0; wait < 500 && !g_skw_scan_done; wait++)
+    {
+      up_mdelay(10);
+    }
+
+  g_skw_scanning = false;
+  return g_skw_scan_n;
+}
+
+/****************************************************************************
+ * Name: skw_nv_patch
+ *
+ * Description:
+ *   Copy the IRAM image and splice the NV common-config blob into its NV
+ *   slot ("TSVN" marker + 4).  Booting with default NV content leaves the
+ *   CP on wrong RF/common parameters.
+ *
+ ****************************************************************************/
+
+static uint8_t *skw_nv_patch(const uint8_t *iram, int iram_len)
+{
+  const uint8_t *nv = g_skw_board->nv;
+  uint32_t off;
+  uint32_t size;
+  uint8_t *copy;
+  int i;
+
+  if (nv == NULL || g_skw_board->nv_len < 36)
+    {
+      return NULL;
+    }
+
+  off  = nv[8] | (nv[9] << 8) | ((uint32_t)nv[10] << 16) |
+         ((uint32_t)nv[11] << 24);
+  size = nv[12] | (nv[13] << 8) | ((uint32_t)nv[14] << 16) |
+         ((uint32_t)nv[15] << 24);
+
+  if (off == 0 || size == 0 || (int)(off + size) > g_skw_board->nv_len)
+    {
+      return NULL;
+    }
+
+  copy = kmm_malloc(iram_len);
+  if (copy == NULL)
+    {
+      return NULL;
+    }
+
+  memcpy(copy, iram, iram_len);
+
+  for (i = 0; i + 4 <= iram_len && i < 0x200; i += 4)
+    {
+      if (memcmp(copy + i, "TSVN", 4) == 0)
+        {
+          syslog(LOG_ERR, "BR: NV patch @0x%x size %u\n",
+                 (unsigned)(i + 4), (unsigned)size);
+          memcpy(copy + i + 4, nv + off, size);
+          return copy;
+        }
+    }
+
+  kmm_free(copy);
+  return NULL;
+}
+
+/****************************************************************************
+ * Name: skw_download_and_boot
+ *
+ * Description:
+ *   Parse the IRAM head marker for the download addresses, program the DMA
+ *   type + sleep disable, stream both images to CP memory, and raise the
+ *   download-done signal.  Returns OK on a clean download.
+ *
+ ****************************************************************************/
+
+static int skw_download_and_boot(void)
+{
+  const uint8_t *iram = g_skw_board->iram;
+  int iram_len = g_skw_board->iram_len;
+  uint32_t iram_addr = 0;
+  uint32_t dram_addr = 0;
+  int off;
+  int ret;
+
+  /* Head marker "kees0616" in the first 0x200 bytes; the following two
+   * 32-bit LE words are the IRAM and DRAM download addresses.
+   */
+
+  for (off = 0; off + 16 <= 0x200 && off + 16 <= iram_len; off += 4)
+    {
+      if (memcmp(iram + off, "kees0616", 8) == 0)
+        {
+          const uint8_t *p = iram + off + 8;
+
+          iram_addr = p[0] | (p[1] << 8) | (p[2] << 16) |
+                      ((uint32_t)p[3] << 24);
+          dram_addr = p[4] | (p[5] << 8) | (p[6] << 16) |
+                      ((uint32_t)p[7] << 24);
+          break;
+        }
+    }
+
+  if (iram_addr != SKW_CP_IRAM || dram_addr != SKW_CP_DRAM)
+    {
+      wlerr("ERROR: bad fw head iram=0x%" PRIx32 " dram=0x%" PRIx32 "\n",
+            iram_addr, dram_addr);
+      return -EINVAL;
+    }
+
+  skw_cmd52(true, 0, SKW_REG_DMA_TYPE, 0x01, NULL);   /* ADMA */
+  skw_cmd52(true, 0, SKW_REG_SLP, 0x01, NULL);        /* sleep disabled */
+
+  /* Un-throttle every RX channel: the CP holds data for a port until its
+   * flow-control bit is clear.
+   */
+
+  skw_cmd52(true, 0, SKW_REG_RX_FTL0, 0x00, NULL);
+  skw_cmd52(true, 0, SKW_REG_RX_FTL1, 0x00, NULL);
+
+  ret = skw_dt_stream(dram_addr, g_skw_board->dram, g_skw_board->dram_len);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  {
+    uint8_t *patched = skw_nv_patch(iram, iram_len);
+
+    ret = skw_dt_stream(iram_addr, patched != NULL ? patched : iram,
+                        iram_len);
+    if (patched != NULL)
+      {
+        kmm_free(patched);
+      }
+  }
+
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  skw_cmd52(true, 0, SKW_REG_DL_DONE, 0x01, NULL);    /* boot the CP */
+  return OK;
+}
+
+/****************************************************************************
+ * Name: skw_bringup
+ *
+ * Description:
+ *   Full power/enumeration/download/boot sequence up to the download-done
+ *   signal.  The host controller must already be initialized and its clock
+ *   configured to the ~800 kHz ID rate; the board power callback controls
+ *   WL_REG_ON + companion pins.
+ *
+ ****************************************************************************/
+
+static int skw_bringup(void)
+{
+  uint32_t resp = 0;
+  uint32_t rint;
+  uint32_t rca;
+  uint8_t id[16];
+  uint8_t v;
+  int k;
+
+  /* Power sequence: assert module reset, gate the clock, a long quiet
+   * power-down, release reset into a quiet bus, 200 ms settle, then start
+   * the ID-mode clock (~800 kHz).
+   */
+
+  g_skw_board->power(false);
+  SDIO_CLOCK(g_skw_dev, CLOCK_SDIO_DISABLED);
+  up_mdelay(1000);
+
+  skw_wr(SKW_CLKENA, 0x00000000);
+  skw_ciu_update(SKW_CLK_UPDATE);
+  skw_wr(SKW_CLKDIV, 0x00000000);
+  skw_wr(SKW_TIMING0, 0x0ffe0002);
+  skw_wr(SKW_CRU_SDIO_SEL, (0x3fffu << 16) | 0x2f9d);
+
+  g_skw_board->power(true);
+  up_mdelay(200);
+  skw_wr(SKW_CLKENA, 0x00000001);
+  skw_ciu_update(SKW_CLK_UPDATE);
+  up_mdelay(10);
+
+  /* Neutralize the host driver ISR for the raw command phase: mask every
+   * source and close the controller interrupt gate (it races our polled
+   * RINTSTS handling).
+   */
+
+  /* Enable SDIO card-interrupt detection (INTMASK bit16) so the DW-MSHC
+   * latches RINTSTS[16] when the CP asserts DAT1 to signal queued data.
+   * CTRL.INT_ENABLE stays off: we poll RINTSTS rather than take a GIC IRQ.
+   */
+
+  skw_wr(SKW_INTMASK, 0x00000000);   /* all masked: no GIC IRQ line, RINTSTS still latches for polling */
+  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 4));   /* INT_ENABLE on (golden CTRL=0x10): detect CP DAT1 SDIO interrupt */
+
+  /* CMD5 with S18R (request 1.8 V), then the voltage switch if granted. */
+
+  rint = skw_cmd(SKW_CMDW_CMD5, 0x01300000, &resp);
+  if (rint & SKW_INT_RTO)
+    {
+      wlerr("ERROR: CMD5 no response\n");
+      return -ENODEV;
+    }
+
+  if (resp & (1u << 24))
+    {
+      skw_voltage_switch();
+    }
+
+  /* CMD3 (get RCA) + CMD7 (select). */
+
+  rint = skw_cmd(SKW_CMDW_CMD3, 0, &resp);
+  rca = resp >> 16;
+  if (rint & SKW_INT_RTO)
+    {
+      return -EIO;
+    }
+
+  rint = skw_cmd(SKW_CMDW_CMD7, rca << 16, &resp);
+  if (rint & SKW_INT_RTO)
+    {
+      return -EIO;
+    }
+
+  /* CCCR: bus interface control (async int), IEN, 4-bit + SDR104 tune. */
+
+  skw_cmd52(true, 0, 0x16, 0x03, NULL);
+  skw_cmd52(true, 0, 0x04, 0x03, NULL);
+  skw_tune_sdr104();
+
+  /* FBR1 block size = 512, enable function 1, wait ready. */
+
+  skw_cmd52(true, 0, 0x110, 0x00, NULL);
+  skw_cmd52(true, 0, 0x111, 0x02, NULL);
+  skw_cmd52(true, 0, 0x02, 0x02, NULL);
+  for (k = 0; k < 100; k++)
+    {
+      v = 0;
+      skw_cmd52(false, 0, 0x03, 0, &v);
+      if (v & 0x02)
+        {
+          break;
+        }
+
+      up_mdelay(10);
+    }
+
+  if (!(v & 0x02))
+    {
+      wlerr("ERROR: func1 not ready\n");
+      return -EIO;
+    }
+
+  /* DT chip-id sanity: "SV6160LITE". */
+
+  skw_dt_latch(SKW_CP_CHIPID);
+  memset(id, 0, sizeof(id));
+  skw_cmd53_read(1, SKW_DT_WINDOW, true, id, 16);
+  if (memcmp(id, "SV6160LITE", 10) != 0)
+    {
+      wlerr("ERROR: chip-id mismatch\n");
+      return -ENODEV;
+    }
+
+  wlinfo("SV6160LITE detected, downloading firmware\n");
+  return skw_download_and_boot();
+}
+
+/****************************************************************************
+ * Name: skw_wait_conn_evt
+ *
+ * Description:
+ *   Wait up to timeout_ms for a connection event; returns the event id or
+ *   -ETIMEDOUT.
+ *
+ ****************************************************************************/
+
+static int skw_wait_conn_evt(int timeout_ms)
+{
+  int t;
+
+  for (t = 0; t < timeout_ms / 10; t++)
+    {
+      if (g_skw_conn_evt >= 0)
+        {
+          return g_skw_conn_evt;
+        }
+
+      up_mdelay(10);
+    }
+
+  return -ETIMEDOUT;
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
