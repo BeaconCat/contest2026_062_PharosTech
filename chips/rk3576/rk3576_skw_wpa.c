@@ -284,5 +284,53 @@ static int wpa_generate_nonce(uint8_t nonce[WPA_NONCE_LEN])
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: wpa_hmac_sha1
+ *
+ * Description:
+ *   HMAC-SHA1 over up to two concatenated input segments.
+ *
+ ****************************************************************************/
+
+static int wpa_hmac_sha1(const uint8_t *key, int keylen,
+                         const uint8_t *a, int alen,
+                         const uint8_t *b, int blen,
+                         uint8_t out[20])
+{
+  const mbedtls_md_info_t *md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA1);
+  mbedtls_md_context_t ctx;
+  int ret;
+
+  if (md == NULL)
+    {
+      return -ENOTSUP;
+    }
+
+  mbedtls_md_init(&ctx);
+  ret = mbedtls_md_setup(&ctx, md, 1);
+  if (ret == 0)
+    {
+      ret = mbedtls_md_hmac_starts(&ctx, key, keylen);
+    }
+
+  if (ret == 0 && alen > 0)
+    {
+      ret = mbedtls_md_hmac_update(&ctx, a, alen);
+    }
+
+  if (ret == 0 && blen > 0)
+    {
+      ret = mbedtls_md_hmac_update(&ctx, b, blen);
+    }
+
+  if (ret == 0)
+    {
+      ret = mbedtls_md_hmac_finish(&ctx, out);
+    }
+
+  mbedtls_md_free(&ctx);
+  return ret == 0 ? OK : -EIO;
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
