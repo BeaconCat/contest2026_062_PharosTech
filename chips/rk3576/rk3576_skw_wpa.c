@@ -1085,5 +1085,131 @@ void rk3576_skw_wpa_eapol_input(const uint8_t *data, int len)
  * Name: rk3576_skw_wpa_connect
  ****************************************************************************/
 
+int rk3576_skw_wpa_connect(const char *ssid, const char *passphrase)
+{
+  struct rk3576_wpa_s *w = &g_wpa;
+  size_t passphrase_len;
+  size_t ssid_len;
+  int result;
+  int ret;
+
+  if (ssid == NULL || passphrase == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ssid_len = strnlen(ssid, WPA_SSID_MAX_LEN + 1);
+  passphrase_len = strnlen(passphrase, WPA_PASSPHRASE_MAX + 1);
+  if (ssid_len == 0 || ssid_len > WPA_SSID_MAX_LEN ||
+      passphrase_len < WPA_PASSPHRASE_MIN ||
+      passphrase_len > WPA_PASSPHRASE_MAX)
+    {
+      return -EINVAL;
+    }
+
+  memset(w, 0, sizeof(*w));
+
+  {
+    irqstate_t flags = spin_lock_irqsave(&g_wpa_rxlock);
+
+    g_wpa_rxlen = 0;
+    g_wpa_rxpending = false;
+    spin_unlock_irqrestore(&g_wpa_rxlock, flags);
+  }
+
+  /* PMK from the passphrase + SSID salt (this is the slow part). */
+
+  ret = wpa_pbkdf2_sha1(passphrase, (const uint8_t *)ssid, ssid_len,
+                        w->pmk);
+  if (ret < 0)
+    {
+      wlerr("WPA: PBKDF2 failed: %d\n", ret);
+      result = ret;
+      goto out;
+    }
+
+  rk3576_skw_get_mac(w->spa);
+
+  /* Arm the EAPOL RX path before association: the AP sends message 1
+   * right after assoc-resp, racing the connect return.  The authenticator
+   * address is captured lazily on message 1 (the JOIN recorded it).
+   */
+
+  /* L2 association (JOIN/AUTH/ASSOC) advertising the RSN IE.  Arm the
+   * EAPOL path only AFTER association completes: processing message 1 on
+   * the rx thread during association corrupts the shared command slot the
+   * main thread uses for the ASSOC ACK.  The AP retransmits message 1, so
+   * a dropped first copy is harmless.
+   */
+
+  ret = rk3576_skw_connect(ssid);
+  if (ret < 0)
+    {
+      result = ret;
+      goto out;
+    }
+
+  rk3576_skw_get_bssid(w->aa);
+  w->state = WPA_STATE_WAIT_MSG1;
+
+  /* Wait for the 4-way handshake to complete (driven by EAPOL RX). */
+
+  {
+    int waited;
+
+    for (waited = 0; waited < 8000; waited += 10)
+      {
+        irqstate_t flags;
+        uint8_t local[256];
+        int llen = 0;
+
+        flags = spin_lock_irqsave(&g_wpa_rxlock);
+        if (g_wpa_rxpending)
+          {
+            llen = g_wpa_rxlen;
+            if (llen > (int)sizeof(local))
+              {
+                llen = sizeof(local);
+              }
+
+            memcpy(local, g_wpa_rx, llen);
+            g_wpa_rxpending = false;
+          }
+
+        spin_unlock_irqrestore(&g_wpa_rxlock, flags);
+
+        if (llen > 0)
+          {
+            wpa_process(local, llen);
+            wpa_clear(local, sizeof(local));
+          }
+
+        if (w->state == WPA_STATE_DONE || w->state == WPA_STATE_FAILED)
+          {
+            break;
+          }
+
+        up_mdelay(10);
+      }
+  }
+
+  if (w->state != WPA_STATE_DONE)
+    {
+      w->state = WPA_STATE_FAILED;
+      result = w->result < 0 ? w->result : -ETIMEDOUT;
+      goto out;
+    }
+
+  result = w->result;
+
+out:
+  wpa_clear(w->pmk, sizeof(w->pmk));
+  wpa_clear(w->ptk, sizeof(w->ptk));
+  wpa_clear(w->anonce, sizeof(w->anonce));
+  wpa_clear(w->snonce, sizeof(w->snonce));
+  wpa_clear(w->gtk, sizeof(w->gtk));
+  w->state = WPA_STATE_IDLE;
+  return result;
+}
 
 #endif /* CONFIG_RK3576_SKW */
