@@ -2297,3 +2297,146 @@ int rk3576_skw_send_control(uint8_t id, const uint8_t *payload, int length)
 {
   return skw_send_cmd(id, payload, length, NULL, NULL);
 }
+
+/***************************************************************************
+ * Name: rk3576_skw_data_tx
+ *
+ * Description:
+ *   Transmit a bare Ethernet frame on the data channel (7).  Builds the
+ *   channel-7 packet: outer header + skw_tx_desc_hdr(6) + skw_tx_desc_conf
+ *   (2) + Ethernet frame + trailing eof terminator.  Best-effort TX credit
+ *   handling (read 0x184, write consumed to 0x168); the CP ignores credit
+ *   when SKW_FLAG_FW_IGNORE_CRED is set.
+ *
+ ****************************************************************************/
+
+int rk3576_skw_data_tx(const uint8_t *eth, int ethlen)
+{
+  int inner = 6 + 2 + ethlen;                  /* desc_hdr + conf + frame */
+  int pkt_len = 4 + inner + 4;                 /* outer hdr + inner + eof */
+  int padded = (pkt_len + 511) & ~511;
+
+  uint32_t hdr;
+  uint32_t eof;
+  uint16_t w0;
+  uint16_t w1;
+  uint8_t credit = 0;
+  int ret;
+
+  if (ethlen < 14 || padded > (int)sizeof(g_skw_txbuf))
+    {
+      return -E2BIG;
+    }
+
+  ret = nxmutex_lock(&g_skw_tx_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  /* Best-effort credit check (func0 SIG registers). */
+
+  skw_cmd52(false, 0, 0x184, 0, &credit);
+
+  memset(g_skw_txbuf, 0, padded);
+
+  hdr = SKW_HDR(SKW_CH_WIFI_DATA, inner);
+  g_skw_txbuf[0] = hdr & 0xff;
+  g_skw_txbuf[1] = (hdr >> 8) & 0xff;
+  g_skw_txbuf[2] = (hdr >> 16) & 0xff;
+  g_skw_txbuf[3] = (hdr >> 24) & 0xff;
+
+  /* skw_tx_desc_hdr word0: padding_gap:2 inst:2 tid:4 peer_lut:5
+   * frame_type:1 encry_dis:1 rate:1.  STA data: peer_lut = peer_idx,
+   * everything else 0 (frame_type SKW_ETHER_FRAME, encry enabled).
+   */
+
+  {
+    uint8_t lut = (eth[0] & 0x01) ? g_skw_mcast : g_skw_peer_idx;
+    w0 = ((uint16_t)(lut & 0x1f)) << 8;
+  }
+
+  /* encry_dis stays 0 (matches the reference driver): the CP sends the
+   * frame in the clear until the pairwise key is installed.
+   */
+
+  g_skw_txbuf[4] = w0 & 0xff;
+  g_skw_txbuf[5] = (w0 >> 8) & 0xff;
+
+  /* word1: msdu_len:12 lmac_id:2 rsv:2 */
+
+  w1 = (ethlen & 0x0fff) | ((uint16_t)(g_skw_lmac & 0x3) << 12);
+  g_skw_txbuf[6] = w1 & 0xff;
+  g_skw_txbuf[7] = (w1 >> 8) & 0xff;
+
+  /* word2: eth_type.  The reference driver stores eth->h_proto verbatim
+   * (network byte order), so copy the frame's EtherType bytes as-is.
+   */
+
+  g_skw_txbuf[8] = eth[12];
+  g_skw_txbuf[9] = eth[13];
+
+  /* skw_tx_desc_conf (2B): checksum offload off. */
+
+  g_skw_txbuf[10] = 0;
+  g_skw_txbuf[11] = 0;
+
+  memcpy(g_skw_txbuf + 12, eth, ethlen);
+
+  /* Match the reference driver TX filter: only EAPOL and DHCP (UDP ports
+   * 67/68) use the command engine (cmd15); all other data frames use the
+   * ch7 credit-gated data path.
+   */
+
+  {
+    uint16_t et = ((uint16_t)eth[12] << 8) | eth[13];
+    bool filter = (et == 0x888e);
+
+    if (filter)
+      {
+        /* Pre-auth EAPOL goes on the command engine (cmd15): the CP uses
+         * eth_type=0x888e in the descriptor to egress it unencrypted.
+         * Copy the descriptor and frame to the stack before releasing the
+         * shared data buffer.
+         */
+
+        {
+          uint8_t eapbuf[256];
+          int cp = inner < (int)sizeof(eapbuf) ?
+                   inner : (int)sizeof(eapbuf);
+
+          memcpy(eapbuf, g_skw_txbuf + 4, cp);
+          nxmutex_unlock(&g_skw_tx_lock);
+          return skw_send_cmd(SKW_CMD_TX_DATA_FRAME, eapbuf, cp,
+                              NULL, NULL);
+        }
+      }
+  }
+
+  eof = SKW_HDR_EOF_TERM;
+  g_skw_txbuf[4 + inner + 0] = eof & 0xff;
+  g_skw_txbuf[4 + inner + 1] = (eof >> 8) & 0xff;
+  g_skw_txbuf[4 + inner + 2] = (eof >> 16) & 0xff;
+  g_skw_txbuf[4 + inner + 3] = (eof >> 24) & 0xff;
+
+  /* Return one consumed credit to the CP (best-effort). */
+
+  if (credit > 0)
+    {
+      skw_cmd52(true, 0, 0x168, 1, NULL);
+    }
+
+  ret = skw_cmd53_write(1, SKW_PK_WINDOW, false, g_skw_txbuf, padded);
+
+  /* Ring the AP->CP doorbell so the CP services the queued data
+   * frame (same mechanism the command path uses).
+   */
+
+  if (ret >= 0)
+    {
+      ret = skw_cmd52(true, 0, SKW_REG_AP2CP_IRQ, 0x01, NULL);
+    }
+
+  nxmutex_unlock(&g_skw_tx_lock);
+  return ret;
+}
