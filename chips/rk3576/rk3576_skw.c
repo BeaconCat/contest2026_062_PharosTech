@@ -2128,5 +2128,149 @@ static int skw_connect(const struct skw_bss_s *bss)
   return (evt == SKW_CONN_ASSOC_OK) ? OK : -EIO;
 }
 
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+int rk3576_skw_initialize(const struct rk3576_skw_board_s *board)
+{
+  int ret;
+
+  DEBUGASSERT(board != NULL && board->power != NULL);
+  DEBUGASSERT(board->iram != NULL && board->dram != NULL);
+
+  /* Idempotent: a second call (e.g. re-running the test command) must not
+   * power-cycle the chip or spawn a second rx thread on top of the live
+   * one -- that double-drives the SDIO bus and hangs the board.
+   */
+
+  if (g_skw_run)
+    {
+      return (g_skw_service & RK3576_SKW_STATE_WIFI) ? OK : -EBUSY;
+    }
+
+  g_skw_board = board;
+
+  g_skw_dev = rk3576_sdmmc_initialize(RK3576_SDIO_SLOT);
+  if (g_skw_dev == NULL)
+    {
+      wlerr("ERROR: SDIO host init failed\n");
+      return -ENODEV;
+    }
+
+  ret = skw_bringup();
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  nxsem_init(&g_skw_cmd.done, 0, 0);
+
+  g_skw_run = true;
+  ret = kthread_create("skw_rx", CONFIG_RK3576_SKW_RXPRIO,
+                       CONFIG_RK3576_SKW_RXSTACK, skw_rx_thread, NULL);
+  if (ret < 0)
+    {
+      g_skw_run = false;
+      wlerr("ERROR: rx thread create failed: %d\n", ret);
+      return ret;
+    }
+
+  /* Wait up to 2 s for the WiFi service to come ready. */
+
+  for (ret = 0; ret < 200; ret++)
+    {
+      if (g_skw_service & RK3576_SKW_STATE_WIFI)
+        {
+          break;
+        }
+
+      up_mdelay(10);
+    }
+
+  if (!(g_skw_service & RK3576_SKW_STATE_WIFI))
+    {
+      wlwarn("WARNING: WiFi service not ready (state=0x%" PRIx32 ")\n",
+             g_skw_service);
+      return -ETIMEDOUT;
+    }
+
+  /* WiFi service up: run the post-ready command bring-up. */
+
+  ret = skw_wifi_bringup_cmds();
+  return ret;
+}
+
+uint32_t rk3576_skw_state(void)
+{
+  return g_skw_service;
+}
+
+int rk3576_skw_scan(struct rk3576_skw_bss_s *list, int max)
+{
+  int n;
+  int i;
+
+  if (!(g_skw_service & RK3576_SKW_STATE_WIFI))
+    {
+      return -ENODEV;
+    }
+
+  n = skw_scan();
+  if (n < 0)
+    {
+      return n;
+    }
+
+  if (list != NULL)
+    {
+      int cnt = (n < max) ? n : max;
+
+      for (i = 0; i < cnt; i++)
+        {
+          memcpy(list[i].bssid, g_skw_scan[i].bssid, 6);
+          memcpy(list[i].ssid, g_skw_scan[i].ssid, 33);
+          list[i].ssid_len = g_skw_scan[i].ssid_len;
+          list[i].channel  = g_skw_scan[i].channel;
+          list[i].band     = g_skw_scan[i].band;
+          list[i].rssi     = g_skw_scan[i].rssi;
+        }
+    }
+
+  return n;
+}
+
+int rk3576_skw_connect(const char *ssid)
+{
+  int i;
+  int pass;
+
+  if (!(g_skw_service & RK3576_SKW_STATE_WIFI) || ssid == NULL)
+    {
+      return -ENODEV;
+    }
+
+  /* Look up the target; scan once if it is not cached yet. */
+
+  for (pass = 0; pass < 2; pass++)
+    {
+      for (i = 0; i < g_skw_scan_n; i++)
+        {
+          if (g_skw_scan[i].ssid_len == (int)strlen(ssid) &&
+              memcmp(g_skw_scan[i].ssid, ssid,
+                     g_skw_scan[i].ssid_len) == 0)
+            {
+              return skw_connect(&g_skw_scan[i]);
+            }
+        }
+
+      if (pass == 0)
+        {
+          skw_scan();
+        }
+    }
+
+  return -ENOENT;
+}
 
 #endif /* CONFIG_RK3576_SKW */
