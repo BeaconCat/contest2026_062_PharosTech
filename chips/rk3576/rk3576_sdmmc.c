@@ -899,7 +899,8 @@ static sdio_statset_t rk3576_sdmmc_status(struct sdio_dev_s *dev)
   struct rk3576_sdmmc_dev_s *priv = (struct rk3576_sdmmc_dev_s *)dev;
   sdio_statset_t status = 0;
 
-  if ((rk3576_sdmmc_getreg(priv, RK3576_SDMMC_CDETECT) &
+  if (priv->nonremovable ||
+      (rk3576_sdmmc_getreg(priv, RK3576_SDMMC_CDETECT) &
        SDMMC_CDETECT_NOCARD) == 0)
     {
       status |= SDIO_STATUS_PRESENT; /* bit0=0 => card present */
