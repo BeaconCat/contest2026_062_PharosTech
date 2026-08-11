@@ -303,5 +303,23 @@ static int rk3576_skw_net_ifdown(FAR struct net_driver_s *dev)
   return OK;
 }
 
+/****************************************************************************
+ * Name: rk3576_skw_net_txavail
+ ****************************************************************************/
+
+static int rk3576_skw_net_txavail(FAR struct net_driver_s *dev)
+{
+  FAR struct rk3576_skw_net_s *priv =
+    (FAR struct rk3576_skw_net_s *)dev->d_private;
+
+  if (work_available(&priv->pollwork))
+    {
+      work_queue(SKW_NETWORK, &priv->pollwork,
+                 rk3576_skw_net_txwork, priv, 0);
+    }
+
+  return OK;
+}
+
 
 #endif /* CONFIG_NET && CONFIG_RK3576_SKW */
