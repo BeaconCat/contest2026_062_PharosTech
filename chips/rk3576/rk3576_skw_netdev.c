@@ -345,5 +345,54 @@ static int rk3576_skw_net_rmmac(FAR struct net_driver_s *dev,
  * Public Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: rk3576_skw_net_input
+ *
+ * Description:
+ *   Called from the SKW receive thread (skw_data_rx) for every non-EAPOL
+ *   Ethernet frame.  Stages the frame and defers processing to LPWORK: the
+ *   caller holds the SDIO bus and must not run the network stack.
+ *
+ ****************************************************************************/
+
+void rk3576_skw_net_input(FAR const uint8_t *frame, int len)
+{
+  irqstate_t flags;
+  uint8_t next;
+
+  if (len < ETH_HDRLEN || len > SKW_NET_BUFSIZE)
+    {
+      return;
+    }
+
+  flags = spin_lock_irqsave(&g_skw_net_lock);
+
+  if (!g_skw_net.bifup)
+    {
+      spin_unlock_irqrestore(&g_skw_net_lock, flags);
+      return;
+    }
+
+  next = (g_skw_net.rxq_head + 1) % SKW_NET_RXQ_DEPTH;
+  if (next == g_skw_net.rxq_tail)
+    {
+      spin_unlock_irqrestore(&g_skw_net_lock, flags);
+      NETDEV_RXDROPPED(&g_skw_net.dev);
+      return;
+    }
+
+  memcpy(g_skw_net.rxq[g_skw_net.rxq_head], frame, len);
+  g_skw_net.rxq_len[g_skw_net.rxq_head] = (uint16_t)len;
+  g_skw_net.rxq_head = next;
+
+  spin_unlock_irqrestore(&g_skw_net_lock, flags);
+
+  if (work_available(&g_skw_net.rxwork))
+    {
+      work_queue(SKW_NETWORK, &g_skw_net.rxwork,
+                 rk3576_skw_net_rxwork, &g_skw_net, 0);
+    }
+}
+
 
 #endif /* CONFIG_NET && CONFIG_RK3576_SKW */
