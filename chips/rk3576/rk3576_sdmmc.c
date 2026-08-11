@@ -266,50 +266,59 @@ static struct rk3576_sdmmc_idmac_desc_s
     g_idmac_descs[RK3576_SDMMC_NHOSTS][RK3576_IDMAC_NDESC] aligned_data(64);
 #endif
 
-/* Single instance: RK3576 has only one SD card slot (SDMMC0). */
+/* The SD-card and on-board SDIO controllers share the same DW-MSHC IP. */
 
-static struct rk3576_sdmmc_dev_s g_sdmmcdev =
+static const struct sdio_dev_s g_rk3576_sdmmc_ops =
 {
-  .dev =
-  {
-    .reset           = rk3576_sdmmc_reset,
-    .capabilities    = rk3576_sdmmc_capabilities,
-    .status          = rk3576_sdmmc_status,
-    .widebus         = rk3576_sdmmc_widebus,
-    .clock           = rk3576_sdmmc_clock,
-    .attach          = rk3576_sdmmc_attach,
-    .sendcmd         = rk3576_sdmmc_sendcmd,
-    .recvsetup       = rk3576_sdmmc_recvsetup,
-    .sendsetup       = rk3576_sdmmc_sendsetup,
-    .cancel          = rk3576_sdmmc_cancel,
-    .waitresponse    = rk3576_sdmmc_waitresponse,
-    .recv_r1         = rk3576_sdmmc_recvshort,
-    .recv_r2         = rk3576_sdmmc_recvlong,
-    .recv_r3         = rk3576_sdmmc_recvshort,
-    .recv_r4         = rk3576_sdmmc_recvshort,
-    .recv_r5         = rk3576_sdmmc_recvshort,
-    .recv_r6         = rk3576_sdmmc_recvshort,
-    .recv_r7         = rk3576_sdmmc_recvshort,
-    .waitenable      = rk3576_sdmmc_waitenable,
-    .eventwait       = rk3576_sdmmc_eventwait,
-    .callbackenable  = rk3576_sdmmc_callbackenable,
+  .reset           = rk3576_sdmmc_reset,
+  .capabilities    = rk3576_sdmmc_capabilities,
+  .status          = rk3576_sdmmc_status,
+  .widebus         = rk3576_sdmmc_widebus,
+  .clock           = rk3576_sdmmc_clock,
+  .attach          = rk3576_sdmmc_attach,
+  .sendcmd         = rk3576_sdmmc_sendcmd,
+  .recvsetup       = rk3576_sdmmc_recvsetup,
+  .sendsetup       = rk3576_sdmmc_sendsetup,
+  .cancel          = rk3576_sdmmc_cancel,
+  .waitresponse    = rk3576_sdmmc_waitresponse,
+  .recv_r1         = rk3576_sdmmc_recvshort,
+  .recv_r2         = rk3576_sdmmc_recvlong,
+  .recv_r3         = rk3576_sdmmc_recvshort,
+  .recv_r4         = rk3576_sdmmc_recvshort,
+  .recv_r5         = rk3576_sdmmc_recvshort,
+  .recv_r6         = rk3576_sdmmc_recvshort,
+  .recv_r7         = rk3576_sdmmc_recvshort,
+  .waitenable      = rk3576_sdmmc_waitenable,
+  .eventwait       = rk3576_sdmmc_eventwait,
+  .callbackenable  = rk3576_sdmmc_callbackenable,
 #if defined(CONFIG_SCHED_WORKQUEUE) && defined(CONFIG_SCHED_HPWORK)
-    .registercallback = rk3576_sdmmc_registercallback,
+  .registercallback = rk3576_sdmmc_registercallback,
 #endif
-    .gotextcsd       = rk3576_sdmmc_gotextcsd,
+  .gotextcsd       = rk3576_sdmmc_gotextcsd,
 #ifdef CONFIG_SDIO_DMA
 #ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
-    .dmapreflight    = rk3576_sdmmc_dmapreflight,
+  .dmapreflight    = rk3576_sdmmc_dmapreflight,
 #endif
-    .dmarecvsetup    = rk3576_sdmmc_dmarecvsetup,
-    .dmasendsetup    = rk3576_sdmmc_dmasendsetup,
+  .dmarecvsetup    = rk3576_sdmmc_dmarecvsetup,
+  .dmasendsetup    = rk3576_sdmmc_dmasendsetup,
 #endif
 #ifdef CONFIG_SDIO_BLOCKSETUP
-    .blocksetup      = rk3576_sdmmc_blocksetup,
+  .blocksetup      = rk3576_sdmmc_blocksetup,
 #endif
-  },
-  .base = RK3576_SDMMC_ADDR,
-  .irq  = RK3576_IRQ_SDMMC,
+};
+
+static struct rk3576_sdmmc_dev_s g_sdmmc_hosts[RK3576_SDMMC_NHOSTS];
+
+static const struct
+{
+  uintptr_t base;
+  int irq;
+  uint32_t clkin;
+  bool nonremovable;
+} g_sdmmc_config[RK3576_SDMMC_NHOSTS] =
+{
+  { RK3576_SDMMC_ADDR, RK3576_IRQ_SDMMC, RK3576_SDMMC_CLKIN, false },
+  { RK3576_SDIO_ADDR, RK3576_IRQ_SDIO, RK3576_SDIO_CLKIN, true },
 };
 
 /***************************************************************************
@@ -1755,9 +1764,15 @@ static void rk3576_sdmmc_blocksetup(struct sdio_dev_s *dev,
 
 struct sdio_dev_s *rk3576_sdmmc_initialize(int slotno)
 {
-  struct rk3576_sdmmc_dev_s *priv = &g_sdmmcdev;
+  struct rk3576_sdmmc_dev_s *priv = &g_sdmmc_hosts[slotno];
 
   DEBUGASSERT(slotno == 0);
+
+  priv->dev = g_rk3576_sdmmc_ops;
+  priv->base = g_sdmmc_config[slotno].base;
+  priv->irq = g_sdmmc_config[slotno].irq;
+  priv->clkin = g_sdmmc_config[slotno].clkin;
+  priv->nonremovable = g_sdmmc_config[slotno].nonremovable;
 
 #ifdef CONFIG_SDIO_DMA
   priv->descs = g_idmac_descs[slotno];
