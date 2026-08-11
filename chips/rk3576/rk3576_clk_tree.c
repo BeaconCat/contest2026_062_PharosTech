@@ -1328,6 +1328,65 @@ static void rk3576_clk_register_sai(void)
 #undef RK3576_CLK_REGISTER_SAI_ONE
 
 /****************************************************************************
+ * Name: rk3576_clk_register_sdio
+ *
+ * Description:
+ *   Register the SDIO card-clock source and AHB bus gate.  CLKSEL_CON104
+ *   contains a two-bit parent selector and a six-bit divider; GATE_CON42
+ *   controls the downstream card and bus clocks.
+ ****************************************************************************/
+
+#ifdef CONFIG_RK3576_SDIO
+static void rk3576_clk_register_sdio(void)
+{
+  static const char *g_sdio_parents[] =
+  {
+    "clk_gpll",
+    "clk_cpll",
+    "xin_osc0",
+    "xin_osc0",
+  };
+  const unsigned long cru = RK3576_CRU_ADDR;
+  const unsigned long sel =
+      cru + RK3576_CRU_CLKSEL_CON(RK3576_CRU_SDIO_CLKSEL_CON);
+  FAR struct clk_s *mux;
+
+  mux = clk_register_mux("cclk_src_sdio_sel", g_sdio_parents,
+                         nitems(g_sdio_parents),
+                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC |
+                             CLK_PARENT_NAME_IS_STATIC,
+                         sel, RK3576_CRU_SDIO_SEL_SHIFT,
+                         RK3576_CRU_SDIO_SEL_WIDTH,
+                         CLK_MUX_HIWORD_MASK);
+  if (mux == NULL)
+    {
+      _err("CLK: failed to register cclk_src_sdio_sel\n");
+      return;
+    }
+
+  clk_register_divider("cclk_src_sdio_div", "cclk_src_sdio_sel",
+                       CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC |
+                           CLK_PARENT_NAME_IS_STATIC,
+                       sel, RK3576_CRU_SDIO_DIV_SHIFT,
+                       RK3576_CRU_SDIO_DIV_WIDTH,
+                       CLK_DIVIDER_HIWORD_MASK |
+                           CLK_DIVIDER_ROUND_CLOSEST);
+
+  clk_register_gate("cclk_src_sdio", "cclk_src_sdio_div",
+                    CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC |
+                        CLK_PARENT_NAME_IS_STATIC,
+                    cru + RK3576_CRU_GATE_CON(RK3576_CRU_SDIO_GATE_CON),
+                    RK3576_CRU_SDIO_CCLK_GATE,
+                    CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
+
+  clk_register_gate("hclk_sdio", NULL, CLK_NAME_IS_STATIC,
+                    cru + RK3576_CRU_GATE_CON(RK3576_CRU_SDIO_GATE_CON),
+                    RK3576_CRU_SDIO_HCLK_GATE,
+                    CLK_GATE_HIWORD_MASK | CLK_GATE_SET_TO_DISABLE);
+}
+#endif /* CONFIG_RK3576_SDIO */
+
+/****************************************************************************
  * Name: rk3576_clk_register_dmac
  *
  * Description:
@@ -1405,4 +1464,5 @@ void rk3576_clk_tree_initialize(void)
 #ifdef CONFIG_RK3576_DMA
   rk3576_clk_register_dmac();
 #endif
+
 }
