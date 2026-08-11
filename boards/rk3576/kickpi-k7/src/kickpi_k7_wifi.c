@@ -230,5 +230,113 @@ static struct rk3576_skw_board_s g_kickpi_k7_wifi_board =
   .power = kickpi_k7_wifi_power,
 };
 
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: kickpi_k7_wifi_initialize
+ *
+ * Description:
+ *   Set up the SV6621 pin environment and hand off to the SeekWave core
+ *   driver.  Muxes the SDIO bus at full drive, parks the BT-side companion
+ *   pins the combo boot ROM samples (BT_RST low, BT_WAKE high, UART4 lines
+ *   idle-high), enables the 32 kHz sleep clock, and brings up WiFi.
+ ****************************************************************************/
+
+int kickpi_k7_wifi_initialize(void)
+{
+  static bool initialized;
+  static int init_result;
+  struct rk3576_skw_board_s *board = &g_kickpi_k7_wifi_board;
+  int ret;
+  int i;
+
+  /* The pinmux / 32 kHz / I2C bring-up must run once: re-running it on a
+   * live system races the running driver and hangs the I2C poll.
+   */
+
+  if (initialized)
+    {
+      return init_result;
+    }
+
+  /* SDIO bus mux (GPIO1, func 2, pull-up) + max drive strength. */
+
+  for (i = 0; i < (int)(sizeof(g_wifi_sdio_pins) /
+                        sizeof(g_wifi_sdio_pins[0])); i++)
+    {
+      rk3576_config_gpio(g_wifi_sdio_pins[i]);
+    }
+
+  putreg32((0xffu << 16) | 0xffu, WIFI_IOC_DRV0);
+  putreg32((0xffu << 16) | 0xffu, WIFI_IOC_DRV1);
+  putreg32((0xffu << 16) | 0xffu, WIFI_IOC_DRV2);
+  putreg32((0xffu << 16) | 0xffu, WIFI_IOC_DRV3);
+
+  /* Companion pin environment the SV6160lite boot ROM samples: BT reset
+   * de-asserted low, BT wake high, UART4 lines idle-high.  (Ground truth
+   * from a full-boot GPIO trace of the working vendor stack.)
+   */
+
+  rk3576_config_gpio(WIFI_BT_RST);
+  rk3576_gpio_write(WIFI_BT_RST, false);
+  rk3576_config_gpio(GPIO_PORT1 | GPIO_PIN_D4 | GPIO_OUTPUT);
+  rk3576_gpio_write(GPIO_PORT1 | GPIO_PIN_D4 | GPIO_OUTPUT, true);
+  rk3576_config_gpio(GPIO_PORT1 | GPIO_PIN_C2 | GPIO_OUTPUT);
+  rk3576_gpio_write(GPIO_PORT1 | GPIO_PIN_C2 | GPIO_OUTPUT, true);
+  rk3576_config_gpio(GPIO_PORT1 | GPIO_PIN_C3 | GPIO_OUTPUT);
+  rk3576_gpio_write(GPIO_PORT1 | GPIO_PIN_C3 | GPIO_OUTPUT, true);
+  rk3576_config_gpio(GPIO_PORT1 | GPIO_PIN_C4 | GPIO_OUTPUT);
+  rk3576_gpio_write(GPIO_PORT1 | GPIO_PIN_C4 | GPIO_OUTPUT, true);
+  rk3576_config_gpio(GPIO_PORT1 | GPIO_PIN_C5 | GPIO_OUTPUT);
+  rk3576_gpio_write(GPIO_PORT1 | GPIO_PIN_C5 | GPIO_OUTPUT, true);
+  rk3576_config_gpio(WIFI_WL_REG_ON);
+
+  ret = kickpi_k7_wifi_enable_32k();
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  board->iram      = g_skw_iram_start;
+  board->iram_len  = (int)(g_skw_iram_end - g_skw_iram_start);
+  board->nv        = g_skw_nv_start;
+  board->nv_len    = (int)(g_skw_nv_end - g_skw_nv_start);
+  board->calib     = g_skw_calib_start;
+  board->calib_len = (int)(g_skw_calib_end - g_skw_calib_start);
+  board->dram      = g_skw_dram_start;
+  board->dram_len  = (int)(g_skw_dram_end - g_skw_dram_start);
+
+  ret = rk3576_skw_initialize(board);
+  if (ret < 0)
+    {
+      /* A non-zero service state means the receive thread is already live;
+       * cache the error rather than rerunning board setup underneath it.
+       */
+
+      if (rk3576_skw_state() != 0)
+        {
+          init_result = ret;
+          initialized = true;
+        }
+
+      return ret;
+    }
+
+#ifdef CONFIG_NET
+  ret = rk3576_skw_netdev_register();
+#endif
+
+  /* The core is live after rk3576_skw_initialize() succeeds.  Record the
+   * final result even if netdev registration fails so a second call cannot
+   * rerun the power and I2C sequences underneath the receive thread.
+   */
+
+  init_result = ret;
+  initialized = true;
+
+  return ret;
+}
 
 #endif /* CONFIG_KICKPI_K7_WIFI */
