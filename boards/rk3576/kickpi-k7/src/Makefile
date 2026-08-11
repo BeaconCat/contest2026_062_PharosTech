@@ -26,6 +26,11 @@ CSRCS = kickpi_k7_boardinit.c
 CSRCS += kickpi_k7_appinit.c
 CSRCS += kickpi_k7_reset.c
 
+ifeq ($(CONFIG_KICKPI_K7_WIFI),y)
+CSRCS += kickpi_k7_wifi.c
+CFLAGS += -Wa,-I$(abspath $(BOARD_DIR)/firmware)
+endif
+
 ifeq ($(CONFIG_KICKPI_K7_AUDIO),y)
 CSRCS += kickpi_k7_audio.c
 endif
