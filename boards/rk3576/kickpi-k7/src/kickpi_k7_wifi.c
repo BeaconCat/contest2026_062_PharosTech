@@ -123,5 +123,90 @@ static const gpio_pinset_t g_wifi_sdio_pins[] =
   WIFI_SDIO_PIN(GPIO_PIN_C1),   /* CLK */
 };
 
+/****************************************************************************
+ * Private Function Prototypes
+ ****************************************************************************/
+
+static int kickpi_k7_wifi_enable_32k(void);
+static void kickpi_k7_wifi_power(bool on);
+
+/****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: kickpi_k7_wifi_enable_32k
+ *
+ * Description:
+ *   Enable the hym8563 RTC 32.768 kHz CLKOUT (register 0x0D = 0xC4), the
+ *   combo's low-power sleep clock.  The RTC is on I2C2 at 7-bit 0x51; the
+ *   reg-pointer write and read are issued as separate transfers so the
+ *   driver's merged-transaction path (needed by other devices) does not
+ *   corrupt the hym8563 read.
+ ****************************************************************************/
+
+static int kickpi_k7_wifi_enable_32k(void)
+{
+  struct i2c_master_s *i2c;
+  uint8_t wbuf[2] = { 0x0d, 0xc4 };
+  uint8_t reg     = 0x0d;
+  uint8_t rback   = 0;
+  int attempt;
+
+  struct i2c_msg_s wmsg =
+  {
+    .frequency = 400000, .addr = 0x51, .flags = 0,
+    .buffer = wbuf, .length = 2
+  };
+  struct i2c_msg_s pmsg =
+  {
+    .frequency = 400000, .addr = 0x51, .flags = 0,
+    .buffer = &reg, .length = 1
+  };
+  struct i2c_msg_s dmsg =
+  {
+    .frequency = 400000, .addr = 0x51, .flags = I2C_M_READ,
+    .buffer = &rback, .length = 1
+  };
+
+  rk3576_config_gpio(GPIO_PORT0 | GPIO_PIN_B7 | GPIO_ALT | GPIO_AF9 |
+                     GPIO_PULLUP);              /* I2C2 SCL */
+  rk3576_config_gpio(GPIO_PORT0 | GPIO_PIN_C0 | GPIO_ALT | GPIO_AF9 |
+                     GPIO_PULLUP);              /* I2C2 SDA */
+
+  /* rk3576_i2c_initialize ungates the controller clock via the CRU
+   * driver, so no explicit gate call is needed here.
+   */
+
+  i2c = rk3576_i2c_initialize(2);
+  if (i2c == NULL)
+    {
+      wlwarn("WARNING: i2c2 init failed, 32k not enabled\n");
+      return -ENODEV;
+    }
+
+  for (attempt = 0; attempt < 6; attempt++)
+    {
+      int wr = I2C_TRANSFER(i2c, &wmsg, 1);
+      int pr;
+      int rd;
+
+      up_mdelay(3);
+      pr = I2C_TRANSFER(i2c, &pmsg, 1);
+      rd = I2C_TRANSFER(i2c, &dmsg, 1);
+      if (wr == OK && pr == OK && rd == OK && rback == 0xc4)
+        {
+          up_mdelay(150);
+          return OK;
+        }
+
+      up_mdelay(5);
+    }
+
+  wlwarn("WARNING: hym8563 CLKOUT setup failed, readback=0x%02x\n",
+         rback);
+  return -EIO;
+}
+
 
 #endif /* CONFIG_KICKPI_K7_WIFI */
