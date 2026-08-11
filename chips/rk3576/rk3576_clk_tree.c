@@ -1580,6 +1580,10 @@ void rk3576_clk_tree_initialize(void)
   rk3576_clk_register_dmac();
 #endif
 
+#ifdef CONFIG_RK3576_SDIO
+  rk3576_clk_register_sdio();
+#endif
+
 #ifdef CONFIG_RK3576_FSPI
   rk3576_clk_register_fspi();
 #endif
