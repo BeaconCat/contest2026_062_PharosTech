@@ -113,5 +113,15 @@ extern const uint8_t g_skw_nv_end[];
 extern const uint8_t g_skw_calib_start[];
 extern const uint8_t g_skw_calib_end[];
 
+static const gpio_pinset_t g_wifi_sdio_pins[] =
+{
+  WIFI_SDIO_PIN(GPIO_PIN_B4),   /* D0 */
+  WIFI_SDIO_PIN(GPIO_PIN_B5),   /* D1 */
+  WIFI_SDIO_PIN(GPIO_PIN_B6),   /* D2 */
+  WIFI_SDIO_PIN(GPIO_PIN_B7),   /* D3 */
+  WIFI_SDIO_PIN(GPIO_PIN_C0),   /* CMD */
+  WIFI_SDIO_PIN(GPIO_PIN_C1),   /* CLK */
+};
+
 
 #endif /* CONFIG_KICKPI_K7_WIFI */
