@@ -711,5 +711,73 @@ static bool wpa_check_mic(struct rk3576_wpa_s *w, const uint8_t *kd,
   return memcmp(calc, rx_mic, WPA_MIC_LEN) == 0;
 }
 
+/****************************************************************************
+ * Name: wpa_extract_gtk
+ *
+ * Description:
+ *   Recover the GTK from the (AES-key-wrapped) key data of msg3 and locate
+ *   the GTK KDE (OUI 00-0F-AC, data type 1).
+ *
+ ****************************************************************************/
+
+static int wpa_extract_gtk(struct rk3576_wpa_s *w, const uint8_t *enc,
+                           int enclen)
+{
+  uint8_t plain[256];
+  int plainlen = enclen - 8;
+  int p = 0;
+
+  if (enclen < 24 || plainlen > (int)sizeof(plain))
+    {
+      return -EINVAL;
+    }
+
+  if (wpa_aes_unwrap(w->ptk + WPA_KCK_LEN, enc, enclen, plain) < 0)
+    {
+      return -EBADMSG;
+    }
+
+  /* Walk KDEs: dd len 00-0F-AC <type> <data>.  GTK KDE type = 1. */
+
+  while (p + 2 <= plainlen)
+    {
+      int elen = plain[p + 1];
+
+      /* AES key-unwrap zero-pads the tail with 0xdd 0x00...; a zero-length
+       * element (or one that overruns) marks the end.  The key data leads
+       * with the RSN IE (0x30) and other KDEs before the GTK KDE, so skip
+       * non-matching elements rather than stopping at the first one.
+       */
+
+      if (elen == 0 || p + 2 + elen > plainlen)
+        {
+          break;
+        }
+
+      if (plain[p] == 0xdd && elen >= 6 && plain[p + 2] == 0x00 &&
+          plain[p + 3] == 0x0f && plain[p + 4] == 0xac &&
+          plain[p + 5] == 0x01)
+        {
+          /* GTK KDE: keyid(1, low 2 bits) + reserved(1) + GTK[] */
+
+          int gtklen = elen - 6;
+
+          if (gtklen <= 0 || gtklen > WPA_GTK_MAX)
+            {
+              return -EINVAL;
+            }
+
+          w->gtk_id = plain[p + 6] & 0x03;
+          w->gtk_len = gtklen;
+          memcpy(w->gtk, plain + p + 8, gtklen);
+          return OK;
+        }
+
+      p += 2 + elen;
+    }
+
+  return -ENOENT;
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
