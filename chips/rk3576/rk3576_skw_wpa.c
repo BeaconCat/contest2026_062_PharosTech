@@ -228,5 +228,24 @@ static void wpa_clear(void *buffer, size_t length)
     }
 }
 
+/****************************************************************************
+ * Name: wpa_replay_compare
+ ****************************************************************************/
+
+static int wpa_replay_compare(const uint8_t lhs[8], const uint8_t rhs[8])
+{
+  int i;
+
+  for (i = 0; i < 8; i++)
+    {
+      if (lhs[i] != rhs[i])
+        {
+          return lhs[i] < rhs[i] ? -1 : 1;
+        }
+    }
+
+  return 0;
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
