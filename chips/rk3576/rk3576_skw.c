@@ -1024,5 +1024,169 @@ static void skw_handle_wifi_cmd(const uint8_t *pl, int len)
     }
 }
 
+/****************************************************************************
+ * Name: skw_data_rx
+ *
+ * Description:
+ *   Handle a channel-7 (data) receive packet.  The CP delivers 802.3
+ *   frames behind an RX descriptor; EAPOL frames (EtherType 0x888e) are
+ *   routed to the host WPA supplicant, other frames are dropped until the
+ *   netdev data plane is wired up.  The descriptor length is located by
+ *   scanning for the EAPOL EtherType.
+ *
+ ****************************************************************************/
+
+static void skw_data_rx(const uint8_t *pl, int len)
+{
+  int i;
+
+  /* The CP prepends an RX descriptor of variable length, so locate the
+   * 802.3 frame by its EtherType.  EAPOL (0x888e) is matched first in its
+   * own pass so a MAC byte that happens to equal an IP/ARP EtherType can
+   * never mis-route a 4-way handshake frame away from the supplicant.
+   */
+
+  for (i = 12; i + 2 <= len; i++)
+    {
+      if (pl[i] == 0x88 && pl[i + 1] == 0x8e)
+        {
+          const uint8_t *eth = pl + (i - 12);
+          int ethlen = len - (i - 12);
+
+          if (ethlen > 14)
+            {
+              rk3576_skw_wpa_eapol_input(eth + 14, ethlen - 14);
+            }
+
+          return;
+        }
+    }
+
+#ifdef CONFIG_NET
+  /* Not EAPOL: dispatch IPv4/ARP/IPv6 data frames to the netdev. */
+
+  for (i = 12; i + 2 <= len; i++)
+    {
+      uint16_t et = (pl[i] << 8) | pl[i + 1];
+
+      if (et == 0x0800 || et == 0x0806 || et == 0x86dd)
+        {
+          const uint8_t *eth = pl + (i - 12);
+          int ethlen = len - (i - 12);
+
+          if (ethlen > 14)
+            {
+              rk3576_skw_net_input(eth, ethlen);
+            }
+
+          return;
+        }
+    }
+#endif
+}
+
+/****************************************************************************
+ * Name: skw_rx_burst
+ *
+ * Description:
+ *   Read one RX burst from the packet window and walk its packets.  The
+ *   burst length is 0x600*buf_num + 512 (buf_num from the previous burst's
+ *   trailing rx_nsize); packets advance by the fixed 0x600 stride.  The
+ *   trailing bytes carry rx_nsize (last -4) and valid_len (last -8).
+ *   Returns rx_nsize (bytes still queued in the CP), or <0 on error.
+ *
+ ****************************************************************************/
+
+static int skw_rx_burst(int buf_num)
+{
+  int readlen;
+  uint32_t rx_nsize;
+  int off;
+  int ret;
+
+  if (buf_num < 1)
+    {
+      buf_num = 1;
+    }
+  else if (buf_num > 8)
+    {
+      buf_num = 8;
+    }
+
+  readlen = SKW_PAC_SIZE * buf_num + SKW_NSIZE_OFF;
+
+  ret = skw_cmd53_read(1, SKW_PK_WINDOW, false, g_skw_rxbuf, readlen);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  /* Walk packets on the 0x600 stride. */
+
+  for (off = 0; off + 4 <= SKW_PAC_SIZE * buf_num; off += SKW_PAC_SIZE)
+    {
+      const uint8_t *p = g_skw_rxbuf + off;
+      uint32_t hdr = p[0] | (p[1] << 8) | (p[2] << 16) |
+                     ((uint32_t)p[3] << 24);
+      uint32_t ch = SKW_HDR_CH(hdr);
+      int plen = SKW_HDR_LEN(hdr);
+
+      if (plen == 0 || ch >= 12 || off + 4 + plen > readlen)
+        {
+          break;
+        }
+
+#ifdef CONFIG_RK3576_SKW_DEBUG
+      if (ch == SKW_CH_WIFI_CMD || ch == SKW_CH_WIFI_DATA)
+        {
+          syslog(LOG_ERR, "SKW: rx ch=%" PRIu32 " len=%d off=%d hdr=%08"
+                 PRIx32 "\n", ch, plen, off, hdr);
+          syslog(LOG_ERR, "SKW:   %02x %02x %02x %02x %02x %02x %02x %02x "
+                 "%02x %02x %02x %02x %02x %02x %02x %02x\n",
+                 p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11],
+                 p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19]);
+          syslog(LOG_ERR, "SKW:   %02x %02x %02x %02x %02x %02x %02x %02x "
+                 "%02x %02x %02x %02x %02x %02x %02x %02x\n",
+                 p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27],
+                 p[28], p[29], p[30], p[31], p[32], p[33], p[34], p[35]);
+        }
+#endif
+
+      switch (ch)
+        {
+          case SKW_CH_LOOPCHECK:
+            skw_handle_loopcheck(p + 4, plen);
+            break;
+
+          case SKW_CH_WIFI_CMD:
+            skw_handle_wifi_cmd(p + 4, plen);
+            break;
+
+          case SKW_CH_WIFI_DATA:
+            skw_data_rx(p + 4, plen);
+            break;
+
+          case SKW_CH_WIFI_DATA1:
+            skw_data_rx(p + 4, plen);
+            break;
+
+          default:
+            break;
+        }
+
+      if (SKW_HDR_EOF(hdr))
+        {
+          break;
+        }
+    }
+
+  rx_nsize = g_skw_rxbuf[readlen - 4] |
+             (g_skw_rxbuf[readlen - 3] << 8) |
+             (g_skw_rxbuf[readlen - 2] << 16) |
+             ((uint32_t)g_skw_rxbuf[readlen - 1] << 24);
+
+  return (int)rx_nsize;
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
