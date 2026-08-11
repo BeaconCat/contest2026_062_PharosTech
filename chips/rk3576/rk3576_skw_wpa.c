@@ -575,5 +575,108 @@ static int wpa_aes_unwrap(const uint8_t *kek, const uint8_t *cipher,
   return OK;
 }
 
+/****************************************************************************
+ * Name: wpa_tx_eapol
+ *
+ * Description:
+ *   Wrap an 802.1X EAPOL-Key payload in an Ethernet header (STA->AP,
+ *   EtherType 0x888e) and hand it to the SKW core channel-7 transmit.
+ *   If domic is set, compute the HMAC-SHA1-128 MIC over the frame (MIC
+ *   field pre-zeroed) with KCK and patch it in before sending.
+ *
+ ****************************************************************************/
+
+static int wpa_tx_eapol(struct rk3576_wpa_s *w, uint8_t *kd, int kdlen,
+                        bool domic)
+{
+  uint8_t frame[14 + KD_OFF_DATA + sizeof(g_wpa_rsn_ie) + 64];
+  int flen = 14 + kdlen;
+
+  if (flen > (int)sizeof(frame))
+    {
+      return -E2BIG;
+    }
+
+  memcpy(frame, w->aa, ETH_ALEN);            /* dst = AP */
+  memcpy(frame + 6, w->spa, ETH_ALEN);       /* src = STA */
+  frame[12] = (ETHERTYPE_EAPOL >> 8) & 0xff;
+  frame[13] = ETHERTYPE_EAPOL & 0xff;
+  memcpy(frame + 14, kd, kdlen);
+
+  if (domic)
+    {
+      uint8_t mic[20];
+
+      memset(frame + 14 + KD_OFF_MIC, 0, WPA_MIC_LEN);
+      if (wpa_hmac_sha1(w->ptk, WPA_KCK_LEN, frame + 14, kdlen,
+                        NULL, 0, mic) < 0)
+        {
+          return -EIO;
+        }
+
+      memcpy(frame + 14 + KD_OFF_MIC, mic, WPA_MIC_LEN);
+    }
+
+  int txr = rk3576_skw_data_tx(frame, flen);
+
+  return txr;
+}
+
+/****************************************************************************
+ * Name: wpa_send_msg2
+ ****************************************************************************/
+
+static int wpa_send_msg2(struct rk3576_wpa_s *w)
+{
+  uint8_t kd[KD_OFF_DATA + sizeof(g_wpa_rsn_ie)];
+  int datalen = sizeof(g_wpa_rsn_ie);
+  int kdlen = KD_OFF_DATA + datalen;
+  uint16_t ki = KI_VERSION_SHA1 | KI_PAIRWISE | KI_MIC;
+
+  memset(kd, 0, sizeof(kd));
+  kd[0] = 1;                                 /* 802.1X version (msg2=1) */
+  kd[1] = EAPOL_TYPE_KEY;
+  kd[2] = ((kdlen - EAPOL_HDR_LEN) >> 8) & 0xff;
+  kd[3] = (kdlen - EAPOL_HDR_LEN) & 0xff;
+  kd[KD_OFF_DESCTYPE] = KEY_DESC_RSN;
+  kd[KD_OFF_KEYINFO] = (ki >> 8) & 0xff;
+  kd[KD_OFF_KEYINFO + 1] = ki & 0xff;
+  kd[KD_OFF_KEYLEN] = 0;
+  kd[KD_OFF_KEYLEN + 1] = 0;                  /* msg2 key length must be 0 */
+  memcpy(kd + KD_OFF_REPLAY, w->replay, 8);
+  memcpy(kd + KD_OFF_NONCE, w->snonce, WPA_NONCE_LEN);
+  kd[KD_OFF_DATALEN] = (datalen >> 8) & 0xff;
+  kd[KD_OFF_DATALEN + 1] = datalen & 0xff;
+  memcpy(kd + KD_OFF_DATA, g_wpa_rsn_ie, datalen);
+
+  return wpa_tx_eapol(w, kd, kdlen, true);
+}
+
+/****************************************************************************
+ * Name: wpa_send_msg4
+ ****************************************************************************/
+
+static int wpa_send_msg4(struct rk3576_wpa_s *w)
+{
+  uint8_t kd[KD_OFF_DATA];
+  uint16_t ki = KI_VERSION_SHA1 | KI_PAIRWISE | KI_MIC | KI_SECURE;
+
+  memset(kd, 0, sizeof(kd));
+  kd[0] = 2;
+  kd[1] = EAPOL_TYPE_KEY;
+  kd[2] = ((KD_OFF_DATA - EAPOL_HDR_LEN) >> 8) & 0xff;
+  kd[3] = (KD_OFF_DATA - EAPOL_HDR_LEN) & 0xff;
+  kd[KD_OFF_DESCTYPE] = KEY_DESC_RSN;
+  kd[KD_OFF_KEYINFO] = (ki >> 8) & 0xff;
+  kd[KD_OFF_KEYINFO + 1] = ki & 0xff;
+  kd[KD_OFF_KEYLEN] = 0;
+  kd[KD_OFF_KEYLEN + 1] = WPA_TK_LEN;
+  memcpy(kd + KD_OFF_REPLAY, w->replay, 8);
+  kd[KD_OFF_DATALEN] = 0;
+  kd[KD_OFF_DATALEN + 1] = 0;
+
+  return wpa_tx_eapol(w, kd, KD_OFF_DATA, true);
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
