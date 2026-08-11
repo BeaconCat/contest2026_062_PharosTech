@@ -44,6 +44,7 @@
 
 #include <nuttx/arch.h>
 #include <nuttx/cache.h>
+#include <nuttx/clk/clk.h>
 #include <nuttx/clock.h>
 #include <nuttx/irq.h>
 #include <nuttx/mmcsd.h>
@@ -58,10 +59,11 @@
 #include "arm64_internal.h"
 #include "chip.h"
 #include "hardware/rk3576_memorymap.h"
+#include "hardware/rk3576_cru.h"
 #include "hardware/rk3576_sdmmc.h"
 #include "rk3576_sdmmc.h"
 
-#ifdef CONFIG_RK3576_SDMMC
+#if defined(CONFIG_RK3576_SDMMC) || defined(CONFIG_RK3576_SDIO)
 
 /***************************************************************************
  * Pre-processor Definitions
@@ -73,6 +75,8 @@
  */
 
 #define RK3576_SDMMC_CLKIN 50000000
+#define RK3576_SDIO_CLKIN  49500000
+#define RK3576_SDMMC_NHOSTS 2
 
 /* Target card clock for each stage */
 
@@ -1795,4 +1799,4 @@ int rk3576_sdmmc_register_media_callback(
   return OK;
 }
 
-#endif /* CONFIG_RK3576_SDMMC */
+#endif /* CONFIG_RK3576_SDMMC || CONFIG_RK3576_SDIO */
