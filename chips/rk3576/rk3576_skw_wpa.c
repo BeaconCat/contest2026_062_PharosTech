@@ -678,5 +678,38 @@ static int wpa_send_msg4(struct rk3576_wpa_s *w)
   return wpa_tx_eapol(w, kd, KD_OFF_DATA, true);
 }
 
+/****************************************************************************
+ * Name: wpa_check_mic
+ *
+ * Description:
+ *   Verify the MIC on a received EAPOL-Key frame: save the MIC, zero the
+ *   field, recompute HMAC-SHA1-128 with KCK, compare.
+ *
+ ****************************************************************************/
+
+static bool wpa_check_mic(struct rk3576_wpa_s *w, const uint8_t *kd,
+                          int kdlen)
+{
+  uint8_t tmp[256];
+  uint8_t rx_mic[WPA_MIC_LEN];
+  uint8_t calc[20];
+
+  if (kdlen > (int)sizeof(tmp))
+    {
+      return false;
+    }
+
+  memcpy(tmp, kd, kdlen);
+  memcpy(rx_mic, tmp + KD_OFF_MIC, WPA_MIC_LEN);
+  memset(tmp + KD_OFF_MIC, 0, WPA_MIC_LEN);
+
+  if (wpa_hmac_sha1(w->ptk, WPA_KCK_LEN, tmp, kdlen, NULL, 0, calc) < 0)
+    {
+      return false;
+    }
+
+  return memcmp(calc, rx_mic, WPA_MIC_LEN) == 0;
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
