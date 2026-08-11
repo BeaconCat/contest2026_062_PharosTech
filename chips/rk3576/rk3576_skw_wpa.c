@@ -405,5 +405,103 @@ static int wpa_pbkdf2_sha1(const char *pass, const uint8_t *salt,
   return OK;
 }
 
+/****************************************************************************
+ * Name: wpa_prf
+ *
+ * Description:
+ *   IEEE 802.11 PRF over HMAC-SHA1 producing bits bytes of output.  The
+ *   data block is (label, 0x00, seed, counter).
+ *
+ ****************************************************************************/
+
+static int wpa_prf(const uint8_t *key, int keylen, const char *label,
+                   const uint8_t *seed, int seedlen,
+                   uint8_t *out, int outlen)
+{
+  uint8_t buf[128];
+  uint8_t digest[20];
+  int labellen = strlen(label);
+  int pos = 0;
+  uint8_t counter = 0;
+  int blocklen;
+
+  if (labellen + 1 + seedlen + 1 > (int)sizeof(buf))
+    {
+      return -E2BIG;
+    }
+
+  memcpy(buf, label, labellen);
+  buf[labellen] = 0x00;
+  memcpy(buf + labellen + 1, seed, seedlen);
+  blocklen = labellen + 1 + seedlen + 1;
+
+  while (pos < outlen)
+    {
+      int chunk;
+
+      buf[blocklen - 1] = counter;
+      if (wpa_hmac_sha1(key, keylen, buf, blocklen, NULL, 0, digest) < 0)
+        {
+          return -EIO;
+        }
+
+      chunk = (outlen - pos) < 20 ? (outlen - pos) : 20;
+      memcpy(out + pos, digest, chunk);
+      pos += chunk;
+      counter++;
+    }
+
+  return OK;
+}
+
+/****************************************************************************
+ * Name: wpa_derive_ptk
+ *
+ * Description:
+ *   PTK = PRF-384(PMK, "Pairwise key expansion",
+ *                 min(AA,SPA) || max(AA,SPA) ||
+ *                 min(ANonce,SNonce) || max(ANonce,SNonce)).
+ *
+ ****************************************************************************/
+
+static int wpa_derive_ptk(struct rk3576_wpa_s *w)
+{
+  uint8_t seed[2 * ETH_ALEN + 2 * WPA_NONCE_LEN];
+  const uint8_t *a1;
+  const uint8_t *a2;
+  const uint8_t *n1;
+  const uint8_t *n2;
+
+  if (memcmp(w->aa, w->spa, ETH_ALEN) < 0)
+    {
+      a1 = w->aa;
+      a2 = w->spa;
+    }
+  else
+    {
+      a1 = w->spa;
+      a2 = w->aa;
+    }
+
+  if (memcmp(w->anonce, w->snonce, WPA_NONCE_LEN) < 0)
+    {
+      n1 = w->anonce;
+      n2 = w->snonce;
+    }
+  else
+    {
+      n1 = w->snonce;
+      n2 = w->anonce;
+    }
+
+  memcpy(seed, a1, ETH_ALEN);
+  memcpy(seed + ETH_ALEN, a2, ETH_ALEN);
+  memcpy(seed + 2 * ETH_ALEN, n1, WPA_NONCE_LEN);
+  memcpy(seed + 2 * ETH_ALEN + WPA_NONCE_LEN, n2, WPA_NONCE_LEN);
+
+  return wpa_prf(w->pmk, WPA_PMK_LEN, "Pairwise key expansion",
+                 seed, sizeof(seed), w->ptk, WPA_PTK_LEN);
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
