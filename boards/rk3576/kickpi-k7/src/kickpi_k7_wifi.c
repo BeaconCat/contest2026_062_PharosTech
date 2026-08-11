@@ -72,5 +72,46 @@
  * Private Data
  ****************************************************************************/
 
+/* CP firmware images, linked into .rodata from the extracted SeekWave
+ * blobs (redistributed with the product; copyright SeekWave, loaded only).
+ */
+
+__asm__(
+  "  .section .rodata, \"a\"\n"
+  "  .align 4\n"
+  "  .global g_skw_iram_start\n"
+  "g_skw_iram_start:\n"
+  "  .incbin \"" CONFIG_KICKPI_K7_WIFI_IRAM "\"\n"
+  "  .global g_skw_iram_end\n"
+  "g_skw_iram_end:\n"
+  "  .align 4\n"
+  "  .global g_skw_dram_start\n"
+  "g_skw_dram_start:\n"
+  "  .incbin \"" CONFIG_KICKPI_K7_WIFI_DRAM "\"\n"
+  "  .global g_skw_dram_end\n"
+  "g_skw_dram_end:\n"
+  "  .align 4\n"
+  "  .global g_skw_nv_start\n"
+  "g_skw_nv_start:\n"
+  "  .incbin \"" CONFIG_KICKPI_K7_WIFI_NV "\"\n"
+  "  .global g_skw_nv_end\n"
+  "g_skw_nv_end:\n"
+  "  .align 4\n"
+  "  .global g_skw_calib_start\n"
+  "g_skw_calib_start:\n"
+  "  .incbin \"" CONFIG_KICKPI_K7_WIFI_CALIB "\"\n"
+  "  .global g_skw_calib_end\n"
+  "g_skw_calib_end:\n"
+  "  .previous\n");
+
+extern const uint8_t g_skw_iram_start[];
+extern const uint8_t g_skw_iram_end[];
+extern const uint8_t g_skw_dram_start[];
+extern const uint8_t g_skw_dram_end[];
+extern const uint8_t g_skw_nv_start[];
+extern const uint8_t g_skw_nv_end[];
+extern const uint8_t g_skw_calib_start[];
+extern const uint8_t g_skw_calib_end[];
+
 
 #endif /* CONFIG_KICKPI_K7_WIFI */
