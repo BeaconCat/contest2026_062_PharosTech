@@ -2274,3 +2274,26 @@ int rk3576_skw_connect(const char *ssid)
 }
 
 #endif /* CONFIG_RK3576_SKW */
+
+/****************************************************************************
+ * Name: rk3576_skw_get_mac / rk3576_skw_get_bssid
+ ****************************************************************************/
+
+void rk3576_skw_get_mac(uint8_t mac[6])
+{
+  memcpy(mac, g_skw_mac, 6);
+}
+
+void rk3576_skw_get_bssid(uint8_t bssid[6])
+{
+  memcpy(bssid, g_skw_bssid, 6);
+}
+
+/****************************************************************************
+ * Name: rk3576_skw_send_control
+ ****************************************************************************/
+
+int rk3576_skw_send_control(uint8_t id, const uint8_t *payload, int length)
+{
+  return skw_send_cmd(id, payload, length, NULL, NULL);
+}
