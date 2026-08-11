@@ -268,5 +268,40 @@ static void rk3576_skw_net_txwork(FAR void *arg)
   net_unlock();
 }
 
+/****************************************************************************
+ * Name: rk3576_skw_net_ifup
+ ****************************************************************************/
+
+static int rk3576_skw_net_ifup(FAR struct net_driver_s *dev)
+{
+  FAR struct rk3576_skw_net_s *priv =
+    (FAR struct rk3576_skw_net_s *)dev->d_private;
+  irqstate_t flags;
+
+  flags = spin_lock_irqsave(&g_skw_net_lock);
+  priv->bifup = true;
+  spin_unlock_irqrestore(&g_skw_net_lock, flags);
+  netdev_carrier_on(&priv->dev);
+  return OK;
+}
+
+/****************************************************************************
+ * Name: rk3576_skw_net_ifdown
+ ****************************************************************************/
+
+static int rk3576_skw_net_ifdown(FAR struct net_driver_s *dev)
+{
+  FAR struct rk3576_skw_net_s *priv =
+    (FAR struct rk3576_skw_net_s *)dev->d_private;
+  irqstate_t flags;
+
+  flags = spin_lock_irqsave(&g_skw_net_lock);
+  priv->bifup = false;
+  priv->rxq_tail = priv->rxq_head;
+  spin_unlock_irqrestore(&g_skw_net_lock, flags);
+
+  return OK;
+}
+
 
 #endif /* CONFIG_NET && CONFIG_RK3576_SKW */
