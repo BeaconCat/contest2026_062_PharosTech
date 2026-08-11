@@ -31,7 +31,7 @@ ifeq ($(CONFIG_ARCH_EARLY_PRINT),y)
 CHIP_ASRCS  = rk3576_lowputc.S
 endif
 
-ifeq ($(CONFIG_RK3576_SDMMC),y)
+ifneq ($(filter y,$(CONFIG_RK3576_SDMMC) $(CONFIG_RK3576_SDIO)),)
 CHIP_CSRCS += rk3576_sdmmc.c
 endif
 
