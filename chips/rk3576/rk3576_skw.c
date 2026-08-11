@@ -491,5 +491,149 @@ static void skw_dt_latch(uint32_t cpaddr)
   skw_cmd52(true, 0, SKW_FBR_ADDR + 3, (cpaddr >> 24) & 0xff, NULL);
 }
 
+/****************************************************************************
+ * Name: skw_cmd53_read / skw_cmd53_write
+ *
+ * Description:
+ *   CMD53 IO_RW_EXTENDED PIO transfers via the DW-MSHC FIFO.  incr picks
+ *   incrementing vs fixed addressing; block mode is used for 512-byte
+ *   multiples (byte mode otherwise, with BLKSIZ = byte count).
+ *
+ ****************************************************************************/
+
+static int skw_cmd53_read(uint32_t func, uint32_t reg, bool incr,
+                          uint8_t *buf, int len)
+{
+  uint32_t arg;
+  uint32_t rint;
+  int words = (len + 3) / 4;
+  int got = 0;
+  int k;
+  bool blk = (len >= 512 && (len % 512) == 0);
+
+  nxmutex_lock(&g_skw_buslock);
+  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 1));   /* FIFO reset */
+  for (k = 0; (skw_rd(SKW_CTRL) & (1u << 1)) && k < 100000; k++);
+
+  skw_wr(SKW_BLKSIZ, blk ? 512 : (uint32_t)len);
+  skw_wr(SKW_BYTCNT, len);
+
+  arg = ((func & 7) << 28) | (incr ? (1u << 26) : 0) |
+        ((reg & 0x1ffff) << 9) |
+        (blk ? ((1u << 27) | ((uint32_t)(len / 512) & 0x1ff))
+             : ((uint32_t)len & 0x1ff));
+
+  rint = skw_cmd(SKW_CMDW_CMD53RD, arg, NULL);
+  if (rint & SKW_INT_RTO)
+    {
+      return -ETIMEDOUT;
+    }
+
+  for (k = 0; k < 400000 && got < words; k++)
+    {
+      uint32_t status = skw_rd(SKW_STATUS);
+      uint32_t fifo_count = (status >> 17) & 0x1fff;
+
+      while (fifo_count-- > 0 && got < words)
+        {
+          uint32_t w = skw_rd(SKW_FIFO);
+          int b;
+
+          for (b = 0; b < 4 && got * 4 + b < len; b++)
+            {
+              buf[got * 4 + b] = (w >> (8 * b)) & 0xff;
+            }
+
+          got++;
+        }
+
+      up_udelay(5);
+    }
+
+  rint = skw_rd(SKW_RINTSTS);
+  nxmutex_unlock(&g_skw_buslock);
+
+  /* A burst shorter than the request ends in DRTO with the received
+   * bytes valid: deliver them (packet headers self-terminate).
+   */
+
+  if (got != words && got > 0 && (rint & (1u << 9)) != 0)
+    {
+      return 0;
+    }
+
+  return (rint & SKW_INT_DATAERR) ? -EIO : (got == words ? 0 : -EIO);
+}
+
+static int skw_cmd53_write(uint32_t func, uint32_t reg, bool incr,
+                           const uint8_t *buf, int len)
+{
+  uint32_t arg;
+  uint32_t rint;
+  int words = (len + 3) / 4;
+  int fed = 0;
+  int k;
+  bool blk = (len > 512 && (len % 512) == 0);
+
+  nxmutex_lock(&g_skw_buslock);
+  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 1));
+  for (k = 0; (skw_rd(SKW_CTRL) & (1u << 1)) && k < 100000; k++);
+
+  skw_wr(SKW_BLKSIZ, blk ? 512 : (uint32_t)len);
+  skw_wr(SKW_BYTCNT, len);
+
+  arg = (1u << 31) | ((func & 7) << 28) | (incr ? (1u << 26) : 0) |
+        ((reg & 0x1ffff) << 9) |
+        (blk ? ((1u << 27) | ((uint32_t)(len / 512) & 0x1ff))
+             : ((uint32_t)len & 0x1ff));
+
+  for (k = 0; (skw_rd(SKW_STATUS) & (1u << 9)) && k < SKW_POLL_LIMIT; k++)
+    {
+      up_udelay(5);
+    }
+
+  skw_wr(SKW_RINTSTS, 0xffffffff);
+  skw_wr(SKW_CMDARG, arg);
+  skw_wr(SKW_CMD, SKW_CMDW_CMD53WR);
+  for (k = 0; (skw_rd(SKW_CMD) & SKW_CMD_START) && k < SKW_POLL_LIMIT; k++);
+
+  for (k = 0; k < 2000000 && fed < words; k++)
+    {
+      if (!(skw_rd(SKW_STATUS) & (1u << 3)))    /* FIFO not full */
+        {
+          uint32_t w = 0;
+          int b;
+
+          for (b = 0; b < 4 && fed * 4 + b < len; b++)
+            {
+              w |= ((uint32_t)buf[fed * 4 + b]) << (8 * b);
+            }
+
+          skw_wr(SKW_FIFO, w);
+          fed++;
+        }
+    }
+
+  for (k = 0; k < 400000; k++)
+    {
+      rint = skw_rd(SKW_RINTSTS);
+      if (rint & (SKW_INT_DTO | SKW_INT_RTO))
+        {
+          break;
+        }
+
+      up_udelay(5);
+    }
+
+  rint = skw_rd(SKW_RINTSTS);
+  nxmutex_unlock(&g_skw_buslock);
+  if ((rint & SKW_INT_RTO) || fed < words)
+    {
+      return -ETIMEDOUT;
+    }
+
+  return (rint & SKW_INT_DATAERR) ? -EIO : 0;
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
