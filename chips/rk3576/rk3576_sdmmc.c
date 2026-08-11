@@ -1813,10 +1813,21 @@ static int rk3576_sdmmc_enable_sdio_clock(struct rk3576_sdmmc_dev_s *priv)
 
 struct sdio_dev_s *rk3576_sdmmc_initialize(int slotno)
 {
-  struct rk3576_sdmmc_dev_s *priv = &g_sdmmc_hosts[slotno];
+  struct rk3576_sdmmc_dev_s *priv;
 
-  DEBUGASSERT(slotno == 0);
+  if (slotno < 0 || slotno >= RK3576_SDMMC_NHOSTS)
+    {
+      return NULL;
+    }
 
+#ifndef CONFIG_RK3576_SDIO
+  if (slotno == RK3576_SDIO_SLOT)
+    {
+      return NULL;
+    }
+#endif
+
+  priv = &g_sdmmc_hosts[slotno];
   priv->dev = g_rk3576_sdmmc_ops;
   priv->base = g_sdmmc_config[slotno].base;
   priv->irq = g_sdmmc_config[slotno].irq;
