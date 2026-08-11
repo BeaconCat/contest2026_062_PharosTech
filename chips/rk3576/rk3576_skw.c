@@ -1188,5 +1188,229 @@ static int skw_rx_burst(int buf_num)
   return (int)rx_nsize;
 }
 
+/****************************************************************************
+ * Name: skw_rx_thread
+ *
+ * Description:
+ *   Poll the CP interrupt line, drain queued packets, and demux by channel.
+ *   (A true inband-IRQ hookup replaces the poll once the netdev data path
+ *   needs the latency.)
+ *
+ ****************************************************************************/
+
+static int skw_rx_thread(int argc, char **argv)
+{
+  int buf_num = 1;
+
+  while (g_skw_run)
+    {
+      uint8_t intx = 0;
+      int nsize;
+      int drained;
+
+      skw_cmd52(false, 0, SKW_REG_INTX, 0, &intx);
+
+      /* Service the DW-MSHC SDIO card interrupt (DAT1): the CP latches it
+       * when it has queued data; clearing it acks the controller so the CP
+       * re-presents the packet window.  Leaving it latched makes the CP
+       * treat its interrupt as unserviced and withhold data frames.
+       */
+
+      {
+        uint32_t _ri = skw_rd(SKW_RINTSTS);
+        if (_ri & SKW_INT_SDIO)
+          {
+            skw_wr(SKW_RINTSTS, SKW_INT_SDIO);
+          }
+      }
+
+      int _fi_changed = 0;
+      {
+        uint8_t _fi = 0;
+        skw_cmd52(false, 0, SKW_REG_CP2AP_FIFO, 0, &_fi);
+        if (_fi != g_skw_fifo_last)
+          {
+            g_skw_fifo_last = _fi;
+            _fi_changed = 1;
+          }
+      }
+
+      /* Only touch the packet window when the CP signals new RX data via
+       * CP2AP_FIFO_IND (0x181), or while a command ACK is outstanding.
+       * Blindly polling an empty window otherwise desyncs the CP's
+       * presentation so it withholds data frames.
+       */
+
+      {
+        static uint32_t idle_cnt;
+
+        if (!_fi_changed && !g_skw_cmd.waiting)
+          {
+            idle_cnt++;
+            if ((idle_cnt & 7) != 0)          /* ~1 in 8 idle polls reads */
+              {
+                up_mdelay(g_skw_scanning ? 2 : 5);
+                continue;
+              }
+          }
+      }
+
+      /* Drain queued packets in a bounded burst, then always yield.  The
+       * hard cap + mandatory sleep prevent a runaway spin (a stuck FIFO
+       * indication or a persistent read error otherwise pins the CPU and
+       * starves the console).
+       */
+
+      for (drained = 0; drained < 16 && g_skw_run; drained++)
+        {
+          nsize = skw_rx_burst(buf_num);
+          if (nsize <= 0)
+            {
+              uint8_t ext = 0;
+
+              /* Empty window: read the extended interrupt status to
+               * re-arm the CP so it re-presents any queued data frames
+               * (the reference driver does this on every zero-size read).
+               */
+
+              skw_cmd52(false, 0, SKW_REG_INT_EXT, 0, &ext);
+              buf_num = 1;
+              break;
+            }
+
+          /* rx_nsize is the packet COUNT still queued in the CP (v2
+           * set_packet_num semantics), not a byte count.
+           */
+
+          buf_num = (nsize >= 8) ? 8 : nsize;
+        }
+
+      /* Poll cadence: brisk while a scan/command is active, relaxed idle. */
+
+      up_mdelay(g_skw_scanning ? 5 : 20);
+    }
+
+  return 0;
+}
+
+/****************************************************************************
+ * Name: skw_send_cmd
+ *
+ * Description:
+ *   Send a WiFi command on channel 6 and wait for its ACK (matched by
+ *   id + seq, 2 s timeout).  Returns the ACK status (>=0) or a negated
+ *   errno; the ACK return payload is copied to resp/resp_len if given.
+ *
+ ****************************************************************************/
+
+static int skw_send_cmd(uint8_t id, const uint8_t *payload, int plen,
+                        uint8_t *resp, int *resp_len)
+{
+  int msg_len = 8 + plen;
+  int msg_pad = (msg_len + 3) & ~3;             /* word-align the payload */
+  int pkt_len = 4 + msg_pad + 4;                /* hdr + payload + eof term */
+  int padded = (pkt_len + 511) & ~511;
+  uint32_t hdr;
+  uint32_t eof;
+  int ret;
+
+  if (msg_len > SKW_CMD_MAXLEN || padded > (int)sizeof(g_skw_cmdbuf))
+    {
+      return -E2BIG;
+    }
+
+  ret = nxmutex_lock(&g_skw_cmd_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  g_skw_cmd.seq++;
+  g_skw_cmd.id = id;
+  g_skw_cmd.status = -1;
+  g_skw_cmd.resp_len = 0;
+  g_skw_cmd.waiting = true;
+
+  memset(g_skw_cmdbuf, 0, padded);
+
+  /* Channel-6 data header (eof=0), then the skw_msg + payload, then a
+   * trailing eof-only terminator header (matches setup_sdio2_packet).
+   */
+
+  hdr = SKW_HDR(SKW_CH_WIFI_CMD, msg_len);
+  g_skw_cmdbuf[0] = hdr & 0xff;
+  g_skw_cmdbuf[1] = (hdr >> 8) & 0xff;
+  g_skw_cmdbuf[2] = (hdr >> 16) & 0xff;
+  g_skw_cmdbuf[3] = (hdr >> 24) & 0xff;
+
+  /* skw_msg: inst_id:4|type:4, id, seq(u16), total_len(u16), resv[2]. */
+
+  g_skw_cmdbuf[4] = (SKW_MSG_CMD << 4) | 0;      /* inst 0, type CMD */
+  g_skw_cmdbuf[5] = id;
+  g_skw_cmdbuf[6] = g_skw_cmd.seq & 0xff;
+  g_skw_cmdbuf[7] = (g_skw_cmd.seq >> 8) & 0xff;
+  g_skw_cmdbuf[8] = msg_len & 0xff;
+  g_skw_cmdbuf[9] = (msg_len >> 8) & 0xff;
+
+  if (plen > 0)
+    {
+      memcpy(g_skw_cmdbuf + 12, payload, plen);
+    }
+
+  eof = SKW_HDR_EOF_TERM;
+  g_skw_cmdbuf[4 + msg_pad + 0] = eof & 0xff;
+  g_skw_cmdbuf[4 + msg_pad + 1] = (eof >> 8) & 0xff;
+  g_skw_cmdbuf[4 + msg_pad + 2] = (eof >> 16) & 0xff;
+  g_skw_cmdbuf[4 + msg_pad + 3] = (eof >> 24) & 0xff;
+
+  ret = nxmutex_lock(&g_skw_tx_lock);
+  if (ret >= 0)
+    {
+      ret = skw_cmd53_write(1, SKW_PK_WINDOW, false, g_skw_cmdbuf,
+                            padded);
+      if (ret >= 0)
+        {
+          /* Ring the AP->CP doorbell so the CP services the command. */
+
+          ret = skw_cmd52(true, 0, SKW_REG_AP2CP_IRQ, 0x01, NULL);
+        }
+
+      nxmutex_unlock(&g_skw_tx_lock);
+    }
+#ifdef CONFIG_RK3576_SKW_DEBUG
+  syslog(LOG_ERR, "SKW: tx cmd id=%u seq=%u msglen=%d padded=%d wr=%d\n",
+         id, g_skw_cmd.seq, msg_len, padded, ret);
+#endif
+  if (ret < 0)
+    {
+      g_skw_cmd.waiting = false;
+      nxmutex_unlock(&g_skw_cmd_lock);
+      return ret;
+    }
+
+  ret = nxsem_tickwait(&g_skw_cmd.done,
+                       MSEC2TICK(SKW_CMD_TIMEOUT_MS));
+  if (ret < 0)
+    {
+      g_skw_cmd.waiting = false;
+      wlerr("ERROR: cmd %u ACK timeout\n", id);
+      nxmutex_unlock(&g_skw_cmd_lock);
+      return -ETIMEDOUT;
+    }
+
+  if (resp != NULL && resp_len != NULL)
+    {
+      int n = g_skw_cmd.resp_len < *resp_len ?
+              g_skw_cmd.resp_len : *resp_len;
+
+      memcpy(resp, g_skw_cmd.resp, n);
+      *resp_len = n;
+    }
+
+  ret = g_skw_cmd.status;
+  nxmutex_unlock(&g_skw_cmd_lock);
+  return ret;
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
