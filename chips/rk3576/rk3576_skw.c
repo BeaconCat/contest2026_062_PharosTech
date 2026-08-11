@@ -1750,5 +1750,158 @@ static int skw_download_and_boot(void)
   return OK;
 }
 
+/****************************************************************************
+ * Name: skw_bringup
+ *
+ * Description:
+ *   Full power/enumeration/download/boot sequence up to the download-done
+ *   signal.  The host controller must already be initialized and its clock
+ *   configured to the ~800 kHz ID rate; the board power callback controls
+ *   WL_REG_ON + companion pins.
+ *
+ ****************************************************************************/
+
+static int skw_bringup(void)
+{
+  uint32_t resp = 0;
+  uint32_t rint;
+  uint32_t rca;
+  uint8_t id[16];
+  uint8_t v;
+  int k;
+
+  /* Power sequence: assert module reset, gate the clock, a long quiet
+   * power-down, release reset into a quiet bus, 200 ms settle, then start
+   * the ID-mode clock (~800 kHz).
+   */
+
+  g_skw_board->power(false);
+  SDIO_CLOCK(g_skw_dev, CLOCK_SDIO_DISABLED);
+  up_mdelay(1000);
+
+  skw_wr(SKW_CLKENA, 0x00000000);
+  skw_ciu_update(SKW_CLK_UPDATE);
+  skw_wr(SKW_CLKDIV, 0x00000000);
+  skw_wr(SKW_TIMING0, 0x0ffe0002);
+  skw_wr(SKW_CRU_SDIO_SEL, (0x3fffu << 16) | 0x2f9d);
+
+  g_skw_board->power(true);
+  up_mdelay(200);
+  skw_wr(SKW_CLKENA, 0x00000001);
+  skw_ciu_update(SKW_CLK_UPDATE);
+  up_mdelay(10);
+
+  /* Neutralize the host driver ISR for the raw command phase: mask every
+   * source and close the controller interrupt gate (it races our polled
+   * RINTSTS handling).
+   */
+
+  /* Enable SDIO card-interrupt detection (INTMASK bit16) so the DW-MSHC
+   * latches RINTSTS[16] when the CP asserts DAT1 to signal queued data.
+   * CTRL.INT_ENABLE stays off: we poll RINTSTS rather than take a GIC IRQ.
+   */
+
+  skw_wr(SKW_INTMASK, 0x00000000);   /* all masked: no GIC IRQ line, RINTSTS still latches for polling */
+  skw_wr(SKW_CTRL, skw_rd(SKW_CTRL) | (1u << 4));   /* INT_ENABLE on (golden CTRL=0x10): detect CP DAT1 SDIO interrupt */
+
+  /* CMD5 with S18R (request 1.8 V), then the voltage switch if granted. */
+
+  rint = skw_cmd(SKW_CMDW_CMD5, 0x01300000, &resp);
+  if (rint & SKW_INT_RTO)
+    {
+      wlerr("ERROR: CMD5 no response\n");
+      return -ENODEV;
+    }
+
+  if (resp & (1u << 24))
+    {
+      skw_voltage_switch();
+    }
+
+  /* CMD3 (get RCA) + CMD7 (select). */
+
+  rint = skw_cmd(SKW_CMDW_CMD3, 0, &resp);
+  rca = resp >> 16;
+  if (rint & SKW_INT_RTO)
+    {
+      return -EIO;
+    }
+
+  rint = skw_cmd(SKW_CMDW_CMD7, rca << 16, &resp);
+  if (rint & SKW_INT_RTO)
+    {
+      return -EIO;
+    }
+
+  /* CCCR: bus interface control (async int), IEN, 4-bit + SDR104 tune. */
+
+  skw_cmd52(true, 0, 0x16, 0x03, NULL);
+  skw_cmd52(true, 0, 0x04, 0x03, NULL);
+  skw_tune_sdr104();
+
+  /* FBR1 block size = 512, enable function 1, wait ready. */
+
+  skw_cmd52(true, 0, 0x110, 0x00, NULL);
+  skw_cmd52(true, 0, 0x111, 0x02, NULL);
+  skw_cmd52(true, 0, 0x02, 0x02, NULL);
+  for (k = 0; k < 100; k++)
+    {
+      v = 0;
+      skw_cmd52(false, 0, 0x03, 0, &v);
+      if (v & 0x02)
+        {
+          break;
+        }
+
+      up_mdelay(10);
+    }
+
+  if (!(v & 0x02))
+    {
+      wlerr("ERROR: func1 not ready\n");
+      return -EIO;
+    }
+
+  /* DT chip-id sanity: "SV6160LITE". */
+
+  skw_dt_latch(SKW_CP_CHIPID);
+  memset(id, 0, sizeof(id));
+  skw_cmd53_read(1, SKW_DT_WINDOW, true, id, 16);
+  if (memcmp(id, "SV6160LITE", 10) != 0)
+    {
+      wlerr("ERROR: chip-id mismatch\n");
+      return -ENODEV;
+    }
+
+  wlinfo("SV6160LITE detected, downloading firmware\n");
+  return skw_download_and_boot();
+}
+
+/****************************************************************************
+ * Name: skw_wait_conn_evt
+ *
+ * Description:
+ *   Wait up to timeout_ms for a connection event; returns the event id or
+ *   -ETIMEDOUT.
+ *
+ ****************************************************************************/
+
+static int skw_wait_conn_evt(int timeout_ms)
+{
+  int t;
+
+  for (t = 0; t < timeout_ms / 10; t++)
+    {
+      if (g_skw_conn_evt >= 0)
+        {
+          return g_skw_conn_evt;
+        }
+
+      up_mdelay(10);
+    }
+
+  return -ETIMEDOUT;
+}
+
 
 #endif /* CONFIG_RK3576_SKW */
