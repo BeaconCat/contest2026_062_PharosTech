@@ -92,6 +92,22 @@ config RK3576_SDIO
 		on-board WiFi/BT combo.  The SD-card and SDIO instances share the
 		same host implementation but retain independent state and IRQs.
 
+config RK3576_SKW
+	bool "SeekWave SV6621 WiFi/BT SDIO"
+	default n
+	depends on RK3576_SDIO && RK3576_I2C
+	depends on NET
+	select CRYPTO
+	select CRYPTO_MBEDTLS
+	select CRYPTO_RANDOM_POOL
+	select DEV_URANDOM
+	select SCHED_HPWORK
+	select SCHED_LPWORK
+	---help---
+		Enable the native SDIO transport, firmware loader, FullMAC control
+		protocol, WPA2-PSK authentication and NuttX network interface for
+		the SeekWave SV6621/SWT6621-S combo.
+
 config RK3576_PWM
 	bool "PWM (Rockchip PWM v4)"
 	default n
