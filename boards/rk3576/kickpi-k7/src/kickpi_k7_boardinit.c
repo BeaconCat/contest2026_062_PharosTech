@@ -206,8 +206,7 @@ void board_late_initialize(void)
     int ret = kickpi_k7_wifi_initialize();
     if (ret < 0)
       {
-        syslog(LOG_ERR, "ERROR: kickpi_k7_wifi_initialize failed: %d\n",
-               ret);
+        syslog(LOG_ERR, "ERROR: kickpi_k7_wifi_initialize failed: %d\n", ret);
       }
   }
 #endif
