@@ -2166,8 +2166,7 @@ static void rk3576_clk_register_sai(void)
 #ifdef CONFIG_RK3576_SDIO
 static void rk3576_clk_register_sdio(void)
 {
-  static const char *g_sdio_parents[] =
-  {
+  static const char *g_sdio_parents[] = {
     "clk_gpll",
     "clk_cpll",
     "xin_osc0",
@@ -2178,26 +2177,22 @@ static void rk3576_clk_register_sdio(void)
       cru + RK3576_CRU_CLKSEL_CON(RK3576_CRU_SDIO_CLKSEL_CON);
   FAR struct clk_s *mux;
 
-  mux = clk_register_mux("cclk_src_sdio_sel", g_sdio_parents,
-                         nitems(g_sdio_parents),
-                         CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC |
-                             CLK_PARENT_NAME_IS_STATIC,
-                         sel, RK3576_CRU_SDIO_SEL_SHIFT,
-                         RK3576_CRU_SDIO_SEL_WIDTH,
-                         CLK_MUX_HIWORD_MASK);
+  mux = clk_register_mux(
+      "cclk_src_sdio_sel", g_sdio_parents, nitems(g_sdio_parents),
+      CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC | CLK_PARENT_NAME_IS_STATIC,
+      sel, RK3576_CRU_SDIO_SEL_SHIFT, RK3576_CRU_SDIO_SEL_WIDTH,
+      CLK_MUX_HIWORD_MASK);
   if (mux == NULL)
     {
       _err("CLK: failed to register cclk_src_sdio_sel\n");
       return;
     }
 
-  clk_register_divider("cclk_src_sdio_div", "cclk_src_sdio_sel",
-                       CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC |
-                           CLK_PARENT_NAME_IS_STATIC,
-                       sel, RK3576_CRU_SDIO_DIV_SHIFT,
-                       RK3576_CRU_SDIO_DIV_WIDTH,
-                       CLK_DIVIDER_HIWORD_MASK |
-                           CLK_DIVIDER_ROUND_CLOSEST);
+  clk_register_divider(
+      "cclk_src_sdio_div", "cclk_src_sdio_sel",
+      CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC | CLK_PARENT_NAME_IS_STATIC,
+      sel, RK3576_CRU_SDIO_DIV_SHIFT, RK3576_CRU_SDIO_DIV_WIDTH,
+      CLK_DIVIDER_HIWORD_MASK | CLK_DIVIDER_ROUND_CLOSEST);
 
   clk_register_gate("cclk_src_sdio", "cclk_src_sdio_div",
                     CLK_SET_RATE_PARENT | CLK_NAME_IS_STATIC |
