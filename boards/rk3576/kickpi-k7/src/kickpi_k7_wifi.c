@@ -32,22 +32,22 @@
  * Included Files
  ****************************************************************************/
 
+#include <debug.h>
+#include <errno.h>
 #include <nuttx/config.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <errno.h>
-#include <debug.h>
 
 #include <nuttx/arch.h>
 #include <nuttx/i2c/i2c_master.h>
 
 #include "arm64_internal.h"
 
+#include "kickpi_k7.h"
 #include "rk3576_gpio.h"
 #include "rk3576_i2c.h"
-#include "rk3576_skw.h"
-#include "rk3576_skw_internal.h"
-#include "kickpi_k7.h"
+#include "rk3576_sv6621_transport.h"
+#include "sv6621.h"
 
 #ifdef CONFIG_KICKPI_K7_WIFI
 
@@ -58,15 +58,15 @@
 #define WIFI_SDIO_PIN(pin) \
   (GPIO_PORT1 | (pin) | GPIO_ALT | GPIO_AF2 | GPIO_PULLUP)
 
-#define WIFI_WL_REG_ON  (GPIO_PORT1 | GPIO_PIN_C6 | GPIO_OUTPUT)
-#define WIFI_BT_RST     (GPIO_PORT1 | GPIO_PIN_C7 | GPIO_OUTPUT)
+#define WIFI_WL_REG_ON (GPIO_PORT1 | GPIO_PIN_C6 | GPIO_OUTPUT)
+#define WIFI_BT_RST    (GPIO_PORT1 | GPIO_PIN_C7 | GPIO_OUTPUT)
 
 /* IOC drive-strength registers for the SDIO bus pins (max drive). */
 
-#define WIFI_IOC_DRV0   0x26046210
-#define WIFI_IOC_DRV1   0x26046214
-#define WIFI_IOC_DRV2   0x26046218
-#define WIFI_IOC_DRV3   0x2604621c
+#define WIFI_IOC_DRV0 0x26046210
+#define WIFI_IOC_DRV1 0x26046214
+#define WIFI_IOC_DRV2 0x26046218
+#define WIFI_IOC_DRV3 0x2604621c
 
 /****************************************************************************
  * Private Data
@@ -76,51 +76,49 @@
  * blobs (redistributed with the product; copyright SeekWave, loaded only).
  */
 
-__asm__(
-  "  .section .rodata, \"a\"\n"
-  "  .align 4\n"
-  "  .global g_skw_iram_start\n"
-  "g_skw_iram_start:\n"
-  "  .incbin \"" CONFIG_KICKPI_K7_WIFI_IRAM "\"\n"
-  "  .global g_skw_iram_end\n"
-  "g_skw_iram_end:\n"
-  "  .align 4\n"
-  "  .global g_skw_dram_start\n"
-  "g_skw_dram_start:\n"
-  "  .incbin \"" CONFIG_KICKPI_K7_WIFI_DRAM "\"\n"
-  "  .global g_skw_dram_end\n"
-  "g_skw_dram_end:\n"
-  "  .align 4\n"
-  "  .global g_skw_nv_start\n"
-  "g_skw_nv_start:\n"
-  "  .incbin \"" CONFIG_KICKPI_K7_WIFI_NV "\"\n"
-  "  .global g_skw_nv_end\n"
-  "g_skw_nv_end:\n"
-  "  .align 4\n"
-  "  .global g_skw_calib_start\n"
-  "g_skw_calib_start:\n"
-  "  .incbin \"" CONFIG_KICKPI_K7_WIFI_CALIB "\"\n"
-  "  .global g_skw_calib_end\n"
-  "g_skw_calib_end:\n"
-  "  .previous\n");
+__asm__("  .section .rodata, \"a\"\n"
+        "  .align 4\n"
+        "  .global g_sv6621_iram_start\n"
+        "g_sv6621_iram_start:\n"
+        "  .incbin \"" CONFIG_KICKPI_K7_WIFI_IRAM "\"\n"
+        "  .global g_sv6621_iram_end\n"
+        "g_sv6621_iram_end:\n"
+        "  .align 4\n"
+        "  .global g_sv6621_dram_start\n"
+        "g_sv6621_dram_start:\n"
+        "  .incbin \"" CONFIG_KICKPI_K7_WIFI_DRAM "\"\n"
+        "  .global g_sv6621_dram_end\n"
+        "g_sv6621_dram_end:\n"
+        "  .align 4\n"
+        "  .global g_sv6621_nv_start\n"
+        "g_sv6621_nv_start:\n"
+        "  .incbin \"" CONFIG_KICKPI_K7_WIFI_NV "\"\n"
+        "  .global g_sv6621_nv_end\n"
+        "g_sv6621_nv_end:\n"
+        "  .align 4\n"
+        "  .global g_sv6621_calib_start\n"
+        "g_sv6621_calib_start:\n"
+        "  .incbin \"" CONFIG_KICKPI_K7_WIFI_CALIB "\"\n"
+        "  .global g_sv6621_calib_end\n"
+        "g_sv6621_calib_end:\n"
+        "  .previous\n");
 
-extern const uint8_t g_skw_iram_start[];
-extern const uint8_t g_skw_iram_end[];
-extern const uint8_t g_skw_dram_start[];
-extern const uint8_t g_skw_dram_end[];
-extern const uint8_t g_skw_nv_start[];
-extern const uint8_t g_skw_nv_end[];
-extern const uint8_t g_skw_calib_start[];
-extern const uint8_t g_skw_calib_end[];
+extern const uint8_t g_sv6621_iram_start[];
+extern const uint8_t g_sv6621_iram_end[];
+extern const uint8_t g_sv6621_dram_start[];
+extern const uint8_t g_sv6621_dram_end[];
+extern const uint8_t g_sv6621_nv_start[];
+extern const uint8_t g_sv6621_nv_end[];
+extern const uint8_t g_sv6621_calib_start[];
+extern const uint8_t g_sv6621_calib_end[];
 
-static const gpio_pinset_t g_wifi_sdio_pins[] =
-{
-  WIFI_SDIO_PIN(GPIO_PIN_B4),   /* D0 */
-  WIFI_SDIO_PIN(GPIO_PIN_B5),   /* D1 */
-  WIFI_SDIO_PIN(GPIO_PIN_B6),   /* D2 */
-  WIFI_SDIO_PIN(GPIO_PIN_B7),   /* D3 */
-  WIFI_SDIO_PIN(GPIO_PIN_C0),   /* CMD */
-  WIFI_SDIO_PIN(GPIO_PIN_C1),   /* CLK */
+static const gpio_pinset_t g_wifi_sdio_pins[] = {
+  WIFI_SDIO_PIN(GPIO_PIN_B4), /* D0 */
+  WIFI_SDIO_PIN(GPIO_PIN_B5), /* D1 */
+  WIFI_SDIO_PIN(GPIO_PIN_B6), /* D2 */
+  WIFI_SDIO_PIN(GPIO_PIN_B7), /* D3 */
+  WIFI_SDIO_PIN(GPIO_PIN_C0), /* CMD */
+  WIFI_SDIO_PIN(GPIO_PIN_C1), /* CLK */
 };
 
 /****************************************************************************
@@ -128,7 +126,7 @@ static const gpio_pinset_t g_wifi_sdio_pins[] =
  ****************************************************************************/
 
 static int kickpi_k7_wifi_enable_32k(void);
-static void kickpi_k7_wifi_power(bool on);
+static void kickpi_k7_wifi_power(FAR void *arg, bool on);
 
 /****************************************************************************
  * Private Functions
@@ -149,30 +147,26 @@ static int kickpi_k7_wifi_enable_32k(void)
 {
   struct i2c_master_s *i2c;
   uint8_t wbuf[2] = { 0x0d, 0xc4 };
-  uint8_t reg     = 0x0d;
-  uint8_t rback   = 0;
+  uint8_t reg = 0x0d;
+  uint8_t rback = 0;
   int attempt;
 
-  struct i2c_msg_s wmsg =
-  {
-    .frequency = 400000, .addr = 0x51, .flags = 0,
-    .buffer = wbuf, .length = 2
+  struct i2c_msg_s wmsg = {
+    .frequency = 400000, .addr = 0x51, .flags = 0, .buffer = wbuf, .length = 2
   };
-  struct i2c_msg_s pmsg =
-  {
-    .frequency = 400000, .addr = 0x51, .flags = 0,
-    .buffer = &reg, .length = 1
+  struct i2c_msg_s pmsg = {
+    .frequency = 400000, .addr = 0x51, .flags = 0, .buffer = &reg, .length = 1
   };
-  struct i2c_msg_s dmsg =
-  {
-    .frequency = 400000, .addr = 0x51, .flags = I2C_M_READ,
-    .buffer = &rback, .length = 1
-  };
+  struct i2c_msg_s dmsg = { .frequency = 400000,
+                            .addr = 0x51,
+                            .flags = I2C_M_READ,
+                            .buffer = &rback,
+                            .length = 1 };
 
   rk3576_config_gpio(GPIO_PORT0 | GPIO_PIN_B7 | GPIO_ALT | GPIO_AF9 |
-                     GPIO_PULLUP);              /* I2C2 SCL */
+                     GPIO_PULLUP); /* I2C2 SCL */
   rk3576_config_gpio(GPIO_PORT0 | GPIO_PIN_C0 | GPIO_ALT | GPIO_AF9 |
-                     GPIO_PULLUP);              /* I2C2 SDA */
+                     GPIO_PULLUP); /* I2C2 SDA */
 
   /* rk3576_i2c_initialize ungates the controller clock via the CRU
    * driver, so no explicit gate call is needed here.
@@ -203,8 +197,7 @@ static int kickpi_k7_wifi_enable_32k(void)
       up_mdelay(5);
     }
 
-  wlwarn("WARNING: hym8563 CLKOUT setup failed, readback=0x%02x\n",
-         rback);
+  wlwarn("WARNING: hym8563 CLKOUT setup failed, readback=0x%02x\n", rback);
   return -EIO;
 }
 
@@ -216,8 +209,9 @@ static int kickpi_k7_wifi_enable_32k(void)
  *   on=false asserts reset (low); on=true releases (high).
  ****************************************************************************/
 
-static void kickpi_k7_wifi_power(bool on)
+static void kickpi_k7_wifi_power(FAR void *arg, bool on)
 {
+  (void)arg;
   rk3576_gpio_write(WIFI_WL_REG_ON, on);
 }
 
@@ -225,8 +219,8 @@ static void kickpi_k7_wifi_power(bool on)
  * Private Data (board integration record)
  ****************************************************************************/
 
-static struct rk3576_skw_board_s g_kickpi_k7_wifi_board =
-{
+static struct sv6621_config_s g_kickpi_k7_wifi_config = {
+  .transport = NULL,
   .power = kickpi_k7_wifi_power,
 };
 
@@ -248,7 +242,7 @@ int kickpi_k7_wifi_initialize(void)
 {
   static bool initialized;
   static int init_result;
-  struct rk3576_skw_board_s *board = &g_kickpi_k7_wifi_board;
+  FAR struct sv6621_config_s *config = &g_kickpi_k7_wifi_config;
   int ret;
   int i;
 
@@ -263,8 +257,8 @@ int kickpi_k7_wifi_initialize(void)
 
   /* SDIO bus mux (GPIO1, func 2, pull-up) + max drive strength. */
 
-  for (i = 0; i < (int)(sizeof(g_wifi_sdio_pins) /
-                        sizeof(g_wifi_sdio_pins[0])); i++)
+  for (i = 0;
+       i < (int)(sizeof(g_wifi_sdio_pins) / sizeof(g_wifi_sdio_pins[0])); i++)
     {
       rk3576_config_gpio(g_wifi_sdio_pins[i]);
     }
@@ -299,23 +293,24 @@ int kickpi_k7_wifi_initialize(void)
       return ret;
     }
 
-  board->iram      = g_skw_iram_start;
-  board->iram_len  = (int)(g_skw_iram_end - g_skw_iram_start);
-  board->nv        = g_skw_nv_start;
-  board->nv_len    = (int)(g_skw_nv_end - g_skw_nv_start);
-  board->calib     = g_skw_calib_start;
-  board->calib_len = (int)(g_skw_calib_end - g_skw_calib_start);
-  board->dram      = g_skw_dram_start;
-  board->dram_len  = (int)(g_skw_dram_end - g_skw_dram_start);
+  config->transport = rk3576_sv6621_transport();
+  config->iram = g_sv6621_iram_start;
+  config->iram_len = (int)(g_sv6621_iram_end - g_sv6621_iram_start);
+  config->nv = g_sv6621_nv_start;
+  config->nv_len = (int)(g_sv6621_nv_end - g_sv6621_nv_start);
+  config->calib = g_sv6621_calib_start;
+  config->calib_len = (int)(g_sv6621_calib_end - g_sv6621_calib_start);
+  config->dram = g_sv6621_dram_start;
+  config->dram_len = (int)(g_sv6621_dram_end - g_sv6621_dram_start);
 
-  ret = rk3576_skw_initialize(board);
+  ret = sv6621_initialize(config);
   if (ret < 0)
     {
       /* A non-zero service state means the receive thread is already live;
        * cache the error rather than rerunning board setup underneath it.
        */
 
-      if (rk3576_skw_state() != 0)
+      if (sv6621_state() != 0)
         {
           init_result = ret;
           initialized = true;
@@ -324,14 +319,7 @@ int kickpi_k7_wifi_initialize(void)
       return ret;
     }
 
-#ifdef CONFIG_NET
-  ret = rk3576_skw_netdev_register();
-#endif
-
-  /* The core is live after rk3576_skw_initialize() succeeds.  Record the
-   * final result even if netdev registration fails so a second call cannot
-   * rerun the power and I2C sequences underneath the receive thread.
-   */
+  /* The core is live after sv6621_initialize() succeeds. */
 
   init_result = ret;
   initialized = true;

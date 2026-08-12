@@ -11,5 +11,5 @@ SeekWave combo:
 The files were obtained from the KICKPI-K7 vendor system image supplied for
 this board. Copyright and firmware rights remain with SeekWave and the board
 vendor. They are stored verbatim and are only streamed to the SV6621 during
-`rk3576_skw_initialize()`; they are not linked into or derived from the
+`sv6621_initialize()`; they are not linked into or derived from the
 Apache-licensed driver source.

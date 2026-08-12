@@ -13,8 +13,12 @@ if(CONFIG_RK3576_SDMMC OR CONFIG_RK3576_SDIO)
   list(APPEND SRCS rk3576_sdmmc.c)
 endif()
 
-if(CONFIG_RK3576_SKW)
-  list(APPEND SRCS rk3576_skw.c rk3576_skw_netdev.c rk3576_skw_wpa.c)
+if(CONFIG_RK3576_SV6621_TRANSPORT)
+  list(APPEND SRCS rk3576_sv6621_transport.c)
+endif()
+
+if(CONFIG_SV6621)
+  list(APPEND SRCS sv6621.c sv6621_netdev.c sv6621_wpa.c)
 endif()
 
 if(CONFIG_RK3576_I2C)
