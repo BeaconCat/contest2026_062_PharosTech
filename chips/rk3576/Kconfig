@@ -92,10 +92,9 @@ config RK3576_SDIO
 		on-board WiFi/BT combo.  The SD-card and SDIO instances share the
 		same host implementation but retain independent state and IRQs.
 
-config RK3576_SKW
+config SV6621
 	bool "SeekWave SV6621 WiFi/BT SDIO"
 	default n
-	depends on RK3576_SDIO && RK3576_I2C
 	depends on NET
 	select CRYPTO
 	select CRYPTO_MBEDTLS
@@ -104,19 +103,29 @@ config RK3576_SKW
 	select SCHED_HPWORK
 	select SCHED_LPWORK
 	---help---
-		Enable the native SDIO transport, firmware loader, FullMAC control
+		Enable the transport-independent firmware loader, FullMAC control
 		protocol, WPA2-PSK authentication and NuttX network interface for
-		the SeekWave SV6621/SWT6621-S combo.
+		the SeekWave SV6621/SWT6621-S combo.  A platform transport adapter
+		must also be selected.
 
-config RK3576_SKW_RXPRIO
+config RK3576_SV6621_TRANSPORT
+	bool
+	default n
+	depends on RK3576_SDIO
+	---help---
+		Provide the RK3576 DW-MSHC transport operations used by the generic
+		SV6621 core.  Board logic selects this adapter for the on-board
+		module; the core itself contains no RK3576 register knowledge.
+
+config SV6621_RXPRIO
 	int "SeekWave receive thread priority"
 	default 100
-	depends on RK3576_SKW
+	depends on SV6621
 
-config RK3576_SKW_RXSTACK
+config SV6621_RXSTACK
 	int "SeekWave receive thread stack size"
 	default 4096
-	depends on RK3576_SKW
+	depends on SV6621
 
 config RK3576_PWM
 	bool "PWM (Rockchip PWM v4)"
