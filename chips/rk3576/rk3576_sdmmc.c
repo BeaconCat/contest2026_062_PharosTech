@@ -58,8 +58,8 @@
 #include "arm64_arch.h"
 #include "arm64_internal.h"
 #include "chip.h"
-#include "hardware/rk3576_memorymap.h"
 #include "hardware/rk3576_cru.h"
+#include "hardware/rk3576_memorymap.h"
 #include "hardware/rk3576_sdmmc.h"
 #include "rk3576_sdmmc.h"
 
@@ -74,8 +74,8 @@
  * CLKDIV divider, the actual frequency follows the loader.
  */
 
-#define RK3576_SDMMC_CLKIN 50000000
-#define RK3576_SDIO_CLKIN  49500000
+#define RK3576_SDMMC_CLKIN  50000000
+#define RK3576_SDIO_CLKIN   49500000
 #define RK3576_SDMMC_NHOSTS 2
 
 /* Target card clock for each stage */
@@ -268,42 +268,41 @@ static struct rk3576_sdmmc_idmac_desc_s
 
 /* The SD-card and on-board SDIO controllers share the same DW-MSHC IP. */
 
-static const struct sdio_dev_s g_rk3576_sdmmc_ops =
-{
-  .reset           = rk3576_sdmmc_reset,
-  .capabilities    = rk3576_sdmmc_capabilities,
-  .status          = rk3576_sdmmc_status,
-  .widebus         = rk3576_sdmmc_widebus,
-  .clock           = rk3576_sdmmc_clock,
-  .attach          = rk3576_sdmmc_attach,
-  .sendcmd         = rk3576_sdmmc_sendcmd,
-  .recvsetup       = rk3576_sdmmc_recvsetup,
-  .sendsetup       = rk3576_sdmmc_sendsetup,
-  .cancel          = rk3576_sdmmc_cancel,
-  .waitresponse    = rk3576_sdmmc_waitresponse,
-  .recv_r1         = rk3576_sdmmc_recvshort,
-  .recv_r2         = rk3576_sdmmc_recvlong,
-  .recv_r3         = rk3576_sdmmc_recvshort,
-  .recv_r4         = rk3576_sdmmc_recvshort,
-  .recv_r5         = rk3576_sdmmc_recvshort,
-  .recv_r6         = rk3576_sdmmc_recvshort,
-  .recv_r7         = rk3576_sdmmc_recvshort,
-  .waitenable      = rk3576_sdmmc_waitenable,
-  .eventwait       = rk3576_sdmmc_eventwait,
-  .callbackenable  = rk3576_sdmmc_callbackenable,
+static const struct sdio_dev_s g_rk3576_sdmmc_ops = {
+  .reset = rk3576_sdmmc_reset,
+  .capabilities = rk3576_sdmmc_capabilities,
+  .status = rk3576_sdmmc_status,
+  .widebus = rk3576_sdmmc_widebus,
+  .clock = rk3576_sdmmc_clock,
+  .attach = rk3576_sdmmc_attach,
+  .sendcmd = rk3576_sdmmc_sendcmd,
+  .recvsetup = rk3576_sdmmc_recvsetup,
+  .sendsetup = rk3576_sdmmc_sendsetup,
+  .cancel = rk3576_sdmmc_cancel,
+  .waitresponse = rk3576_sdmmc_waitresponse,
+  .recv_r1 = rk3576_sdmmc_recvshort,
+  .recv_r2 = rk3576_sdmmc_recvlong,
+  .recv_r3 = rk3576_sdmmc_recvshort,
+  .recv_r4 = rk3576_sdmmc_recvshort,
+  .recv_r5 = rk3576_sdmmc_recvshort,
+  .recv_r6 = rk3576_sdmmc_recvshort,
+  .recv_r7 = rk3576_sdmmc_recvshort,
+  .waitenable = rk3576_sdmmc_waitenable,
+  .eventwait = rk3576_sdmmc_eventwait,
+  .callbackenable = rk3576_sdmmc_callbackenable,
 #if defined(CONFIG_SCHED_WORKQUEUE) && defined(CONFIG_SCHED_HPWORK)
   .registercallback = rk3576_sdmmc_registercallback,
 #endif
-  .gotextcsd       = rk3576_sdmmc_gotextcsd,
+  .gotextcsd = rk3576_sdmmc_gotextcsd,
 #ifdef CONFIG_SDIO_DMA
 #ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
-  .dmapreflight    = rk3576_sdmmc_dmapreflight,
+  .dmapreflight = rk3576_sdmmc_dmapreflight,
 #endif
-  .dmarecvsetup    = rk3576_sdmmc_dmarecvsetup,
-  .dmasendsetup    = rk3576_sdmmc_dmasendsetup,
+  .dmarecvsetup = rk3576_sdmmc_dmarecvsetup,
+  .dmasendsetup = rk3576_sdmmc_dmasendsetup,
 #endif
 #ifdef CONFIG_SDIO_BLOCKSETUP
-  .blocksetup      = rk3576_sdmmc_blocksetup,
+  .blocksetup = rk3576_sdmmc_blocksetup,
 #endif
 };
 
@@ -315,8 +314,7 @@ static const struct
   int irq;
   uint32_t clkin;
   bool nonremovable;
-} g_sdmmc_config[RK3576_SDMMC_NHOSTS] =
-{
+} g_sdmmc_config[RK3576_SDMMC_NHOSTS] = {
   { RK3576_SDMMC_ADDR, RK3576_IRQ_SDMMC, RK3576_SDMMC_CLKIN, false },
   { RK3576_SDIO_ADDR, RK3576_IRQ_SDIO, RK3576_SDIO_CLKIN, true },
 };
@@ -899,9 +897,8 @@ static sdio_statset_t rk3576_sdmmc_status(struct sdio_dev_s *dev)
   struct rk3576_sdmmc_dev_s *priv = (struct rk3576_sdmmc_dev_s *)dev;
   sdio_statset_t status = 0;
 
-  if (priv->nonremovable ||
-      (rk3576_sdmmc_getreg(priv, RK3576_SDMMC_CDETECT) &
-       SDMMC_CDETECT_NOCARD) == 0)
+  if (priv->nonremovable || (rk3576_sdmmc_getreg(priv, RK3576_SDMMC_CDETECT) &
+                             SDMMC_CDETECT_NOCARD) == 0)
     {
       status |= SDIO_STATUS_PRESENT; /* bit0=0 => card present */
     }
