@@ -35,8 +35,12 @@ ifneq ($(filter y,$(CONFIG_RK3576_SDMMC) $(CONFIG_RK3576_SDIO)),)
 CHIP_CSRCS += rk3576_sdmmc.c
 endif
 
-ifeq ($(CONFIG_RK3576_SKW),y)
-CHIP_CSRCS += rk3576_skw.c rk3576_skw_netdev.c rk3576_skw_wpa.c
+ifeq ($(CONFIG_RK3576_SV6621_TRANSPORT),y)
+CHIP_CSRCS += rk3576_sv6621_transport.c
+endif
+
+ifeq ($(CONFIG_SV6621),y)
+CHIP_CSRCS += sv6621.c sv6621_netdev.c sv6621_wpa.c
 endif
 
 ifeq ($(CONFIG_RK3576_I2C),y)
