@@ -1,5 +1,5 @@
 /****************************************************************************
- * chips/rk3576/rk3576_skw_wpa.h
+ * chips/rk3576/sv6621_wpa.h
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -20,8 +20,8 @@
  *
  ****************************************************************************/
 
-#ifndef __VENDOR_ROCKCHIP_CHIPS_RK3576_RK3576_SKW_WPA_H
-#define __VENDOR_ROCKCHIP_CHIPS_RK3576_RK3576_SKW_WPA_H
+#ifndef __VENDOR_ROCKCHIP_CHIPS_RK3576_SV6621_WPA_H
+#define __VENDOR_ROCKCHIP_CHIPS_RK3576_SV6621_WPA_H
 
 /****************************************************************************
  * Included Files
@@ -39,14 +39,13 @@
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C"
-{
+extern "C" {
 #else
 #define EXTERN extern
 #endif
 
 /****************************************************************************
- * Name: rk3576_skw_wpa_connect
+ * Name: sv6621_wpa_connect
  *
  * Description:
  *   Associate with a WPA2-PSK (CCMP) network and run the host-side EAPOL
@@ -64,10 +63,10 @@ extern "C"
  *
  ****************************************************************************/
 
-int rk3576_skw_wpa_connect(FAR const char *ssid, FAR const char *passphrase);
+int sv6621_wpa_connect(FAR const char *ssid, FAR const char *passphrase);
 
 /****************************************************************************
- * Name: rk3576_skw_wpa_eapol_input
+ * Name: sv6621_wpa_eapol_input
  *
  * Description:
  *   Feed a received EAPOL frame (EtherType 0x888e payload, starting at the
@@ -76,7 +75,7 @@ int rk3576_skw_wpa_connect(FAR const char *ssid, FAR const char *passphrase);
  *
  ****************************************************************************/
 
-void rk3576_skw_wpa_eapol_input(FAR const uint8_t *data, int len);
+void sv6621_wpa_eapol_input(FAR const uint8_t *data, int len);
 
 #undef EXTERN
 #ifdef __cplusplus
@@ -84,4 +83,4 @@ void rk3576_skw_wpa_eapol_input(FAR const uint8_t *data, int len);
 #endif
 
 #endif /* __ASSEMBLY__ */
-#endif /* __VENDOR_ROCKCHIP_CHIPS_RK3576_RK3576_SKW_WPA_H */
+#endif /* __VENDOR_ROCKCHIP_CHIPS_RK3576_SV6621_WPA_H */

@@ -1,5 +1,5 @@
 /****************************************************************************
- * chips/rk3576/rk3576_skw_wpa.c
+ * chips/rk3576/sv6621_wpa.c
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -41,26 +41,26 @@
 
 #include <nuttx/config.h>
 
-#include <stdint.h>
+#include <debug.h>
+#include <errno.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 #include <unistd.h>
-#include <errno.h>
-#include <debug.h>
 
 #include <nuttx/arch.h>
 #include <nuttx/clock.h>
 #include <nuttx/spinlock.h>
 #include <sys/random.h>
 
-#include <mbedtls/md.h>
 #include <mbedtls/aes.h>
+#include <mbedtls/md.h>
 
-#include "rk3576_skw.h"
-#include "rk3576_skw_internal.h"
-#include "rk3576_skw_wpa.h"
+#include "sv6621.h"
+#include "sv6621_internal.h"
+#include "sv6621_wpa.h"
 
-#ifdef CONFIG_RK3576_SKW
+#ifdef CONFIG_SV6621
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -68,75 +68,74 @@
 
 /* EAPOL-Key frame geometry (IEEE 802.1X-2004 + key descriptor). */
 
-#define EAPOL_HDR_LEN        4             /* version, type, length(2) */
-#define EAPOL_TYPE_KEY       3
-#define KEY_DESC_RSN         2             /* key descriptor type */
+#define EAPOL_HDR_LEN  4 /* version, type, length(2) */
+#define EAPOL_TYPE_KEY 3
+#define KEY_DESC_RSN   2 /* key descriptor type */
 
 /* Key-descriptor field offsets within the 802.1X payload. */
 
-#define KD_OFF_DESCTYPE      4             /* 1 byte  */
-#define KD_OFF_KEYINFO       5             /* 2 bytes, big-endian */
-#define KD_OFF_KEYLEN        7             /* 2 bytes */
-#define KD_OFF_REPLAY        9             /* 8 bytes */
-#define KD_OFF_NONCE         17            /* 32 bytes */
-#define KD_OFF_IV            49            /* 16 bytes */
-#define KD_OFF_RSC           65            /* 8 bytes */
-#define KD_OFF_RESERVED      73            /* 8 bytes */
-#define KD_OFF_MIC           81            /* 16 bytes */
-#define KD_OFF_DATALEN       97            /* 2 bytes */
-#define KD_OFF_DATA          99
-#define KD_FIXED_LEN         99            /* through key_data_length */
+#define KD_OFF_DESCTYPE 4  /* 1 byte  */
+#define KD_OFF_KEYINFO  5  /* 2 bytes, big-endian */
+#define KD_OFF_KEYLEN   7  /* 2 bytes */
+#define KD_OFF_REPLAY   9  /* 8 bytes */
+#define KD_OFF_NONCE    17 /* 32 bytes */
+#define KD_OFF_IV       49 /* 16 bytes */
+#define KD_OFF_RSC      65 /* 8 bytes */
+#define KD_OFF_RESERVED 73 /* 8 bytes */
+#define KD_OFF_MIC      81 /* 16 bytes */
+#define KD_OFF_DATALEN  97 /* 2 bytes */
+#define KD_OFF_DATA     99
+#define KD_FIXED_LEN    99 /* through key_data_length */
 
 /* key_info bit fields (big-endian 16-bit). */
 
-#define KI_VERSION_MASK      0x0007
-#define KI_VERSION_SHA1      0x0002        /* HMAC-SHA1 MIC + AES key wrap */
-#define KI_PAIRWISE          0x0008
-#define KI_INSTALL           0x0040
-#define KI_ACK               0x0080
-#define KI_MIC               0x0100
-#define KI_SECURE            0x0200
-#define KI_ERROR             0x0400
-#define KI_REQUEST           0x0800
-#define KI_ENCRYPTED         0x1000
+#define KI_VERSION_MASK 0x0007
+#define KI_VERSION_SHA1 0x0002 /* HMAC-SHA1 MIC + AES key wrap */
+#define KI_PAIRWISE     0x0008
+#define KI_INSTALL      0x0040
+#define KI_ACK          0x0080
+#define KI_MIC          0x0100
+#define KI_SECURE       0x0200
+#define KI_ERROR        0x0400
+#define KI_REQUEST      0x0800
+#define KI_ENCRYPTED    0x1000
 
-#define WPA_NONCE_LEN        32
-#define WPA_MIC_LEN          16
-#define WPA_KCK_LEN          16
-#define WPA_KEK_LEN          16
-#define WPA_TK_LEN           16            /* CCMP */
-#define WPA_PTK_LEN          (WPA_KCK_LEN + WPA_KEK_LEN + WPA_TK_LEN)
-#define WPA_PMK_LEN          32
-#define WPA_GTK_MAX          32
+#define WPA_NONCE_LEN   32
+#define WPA_MIC_LEN     16
+#define WPA_KCK_LEN     16
+#define WPA_KEK_LEN     16
+#define WPA_TK_LEN      16 /* CCMP */
+#define WPA_PTK_LEN     (WPA_KCK_LEN + WPA_KEK_LEN + WPA_TK_LEN)
+#define WPA_PMK_LEN     32
+#define WPA_GTK_MAX     32
 
-#define ETH_ALEN             6
-#define ETHERTYPE_EAPOL      0x888e
+#define ETH_ALEN        6
+#define ETHERTYPE_EAPOL 0x888e
 
-/* skw_key_params.key_type (skw_cfg80211.h). */
+/* sv6621_key_params.key_type (sv6621_cfg80211.h). */
 
-#define SKW_KEY_PTK          0
-#define SKW_KEY_GTK          1
+#define SKW_KEY_PTK 0
+#define SKW_KEY_GTK 1
 
-/* skw_key_params.cipher_type: CCMP. */
+/* sv6621_key_params.cipher_type: CCMP. */
 
-#define SKW_CIPHER_CCMP      8            /* CP internal enum, not IEEE suite */
+#define SKW_CIPHER_CCMP 8 /* CP internal enum, not IEEE suite */
 
 /* Commands needed when the station transitions to an authorized state. */
 
-#define SKW_CMD_SET_IP       16
-#define SKW_CMD_GET_STA      23
-#define SKW_CMD_SET_MC_ADDR  26
+#define SKW_CMD_SET_IP      16
+#define SKW_CMD_GET_STA     23
+#define SKW_CMD_SET_MC_ADDR 26
 
-#define WPA_SSID_MAX_LEN     32
-#define WPA_PASSPHRASE_MIN   8
-#define WPA_PASSPHRASE_MAX   63
+#define WPA_SSID_MAX_LEN    32
+#define WPA_PASSPHRASE_MIN  8
+#define WPA_PASSPHRASE_MAX  63
 
 /* RSN information element the supplicant advertises in msg2 (WPA2-PSK,
  * CCMP pairwise + group, PSK AKM) -- matches the association request.
  */
 
-static const uint8_t g_wpa_rsn_ie[] =
-{
+static const uint8_t g_wpa_rsn_ie[] = {
   0x30, 0x14, 0x01, 0x00,             /* RSN, len 20, version 1 */
   0x00, 0x0f, 0xac, 0x04,             /* group cipher: CCMP */
   0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, /* 1 pairwise: CCMP */
@@ -144,37 +143,37 @@ static const uint8_t g_wpa_rsn_ie[] =
   0x00, 0x00                          /* RSN capabilities */
 };
 
-#define WPA_STATE_IDLE       0            /* supplicant not running */
-#define WPA_STATE_WAIT_MSG1  1            /* armed, waiting for msg1 */
-#define WPA_STATE_WAIT_MSG3  2            /* got msg1, sent msg2 */
-#define WPA_STATE_DONE       3            /* handshake complete */
-#define WPA_STATE_FAILED     4
+#define WPA_STATE_IDLE      0 /* supplicant not running */
+#define WPA_STATE_WAIT_MSG1 1 /* armed, waiting for msg1 */
+#define WPA_STATE_WAIT_MSG3 2 /* got msg1, sent msg2 */
+#define WPA_STATE_DONE      3 /* handshake complete */
+#define WPA_STATE_FAILED    4
 
 /****************************************************************************
  * Private Types
  ****************************************************************************/
 
-struct rk3576_wpa_s
+struct sv6621_wpa_s
 {
-  uint8_t  pmk[WPA_PMK_LEN];
-  uint8_t  ptk[WPA_PTK_LEN];             /* KCK|KEK|TK */
-  uint8_t  anonce[WPA_NONCE_LEN];
-  uint8_t  snonce[WPA_NONCE_LEN];
-  uint8_t  aa[ETH_ALEN];                 /* authenticator (AP) address */
-  uint8_t  spa[ETH_ALEN];                /* supplicant (STA) address */
-  uint8_t  replay[8];                    /* last seen replay counter */
-  uint8_t  gtk[WPA_GTK_MAX];
-  int      gtk_len;
-  uint8_t  gtk_id;
-  int      state;
-  int      result;
+  uint8_t pmk[WPA_PMK_LEN];
+  uint8_t ptk[WPA_PTK_LEN]; /* KCK|KEK|TK */
+  uint8_t anonce[WPA_NONCE_LEN];
+  uint8_t snonce[WPA_NONCE_LEN];
+  uint8_t aa[ETH_ALEN];  /* authenticator (AP) address */
+  uint8_t spa[ETH_ALEN]; /* supplicant (STA) address */
+  uint8_t replay[8];     /* last seen replay counter */
+  uint8_t gtk[WPA_GTK_MAX];
+  int gtk_len;
+  uint8_t gtk_id;
+  int state;
+  int result;
 };
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static struct rk3576_wpa_s g_wpa;
+static struct sv6621_wpa_s g_wpa;
 static spinlock_t g_wpa_rxlock = SP_UNLOCKED;
 
 /****************************************************************************
@@ -191,22 +190,22 @@ static int wpa_hmac_sha1(const uint8_t *key, int key_length,
 static int wpa_pbkdf2_sha1(const char *passphrase, const uint8_t *salt,
                            int salt_length, uint8_t pmk[WPA_PMK_LEN]);
 static int wpa_prf(const uint8_t *key, int key_length, const char *label,
-                   const uint8_t *seed, int seed_length,
-                   uint8_t *output, int output_length);
-static int wpa_derive_ptk(struct rk3576_wpa_s *wpa);
+                   const uint8_t *seed, int seed_length, uint8_t *output,
+                   int output_length);
+static int wpa_derive_ptk(struct sv6621_wpa_s *wpa);
 static int wpa_aes_unwrap(const uint8_t *kek, const uint8_t *cipher,
                           int cipher_length, uint8_t *plain);
-static int wpa_tx_eapol(struct rk3576_wpa_s *wpa, uint8_t *descriptor,
+static int wpa_tx_eapol(struct sv6621_wpa_s *wpa, uint8_t *descriptor,
                         int descriptor_length, bool include_mic);
-static int wpa_send_msg2(struct rk3576_wpa_s *wpa);
-static int wpa_send_msg4(struct rk3576_wpa_s *wpa);
-static bool wpa_check_mic(struct rk3576_wpa_s *wpa,
-                          const uint8_t *descriptor, int length);
-static int wpa_extract_gtk(struct rk3576_wpa_s *wpa,
-                           const uint8_t *encrypted, int length);
-static void wpa_handle_msg1(struct rk3576_wpa_s *wpa,
+static int wpa_send_msg2(struct sv6621_wpa_s *wpa);
+static int wpa_send_msg4(struct sv6621_wpa_s *wpa);
+static bool wpa_check_mic(struct sv6621_wpa_s *wpa, const uint8_t *descriptor,
+                          int length);
+static int wpa_extract_gtk(struct sv6621_wpa_s *wpa, const uint8_t *encrypted,
+                           int length);
+static void wpa_handle_msg1(struct sv6621_wpa_s *wpa,
                             const uint8_t *descriptor, int length);
-static void wpa_handle_msg3(struct rk3576_wpa_s *wpa,
+static void wpa_handle_msg3(struct sv6621_wpa_s *wpa,
                             const uint8_t *descriptor, int length);
 static void wpa_process(const uint8_t *data, int length);
 
@@ -292,10 +291,8 @@ static int wpa_generate_nonce(uint8_t nonce[WPA_NONCE_LEN])
  *
  ****************************************************************************/
 
-static int wpa_hmac_sha1(const uint8_t *key, int keylen,
-                         const uint8_t *a, int alen,
-                         const uint8_t *b, int blen,
-                         uint8_t out[20])
+static int wpa_hmac_sha1(const uint8_t *key, int keylen, const uint8_t *a,
+                         int alen, const uint8_t *b, int blen, uint8_t out[20])
 {
   const mbedtls_md_info_t *md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA1);
   mbedtls_md_context_t ctx;
@@ -341,8 +338,8 @@ static int wpa_hmac_sha1(const uint8_t *key, int keylen,
  *
  ****************************************************************************/
 
-static int wpa_pbkdf2_sha1(const char *pass, const uint8_t *salt,
-                           int saltlen, uint8_t pmk[WPA_PMK_LEN])
+static int wpa_pbkdf2_sha1(const char *pass, const uint8_t *salt, int saltlen,
+                           uint8_t pmk[WPA_PMK_LEN])
 {
   uint8_t u[20];
   uint8_t t[20];
@@ -352,7 +349,7 @@ static int wpa_pbkdf2_sha1(const char *pass, const uint8_t *salt,
   int i;
   int j;
 
-  for (blk = 1; blk <= 2; blk++)              /* 2 blocks -> 40 bytes */
+  for (blk = 1; blk <= 2; blk++) /* 2 blocks -> 40 bytes */
     {
       int off = saltlen;
 
@@ -367,8 +364,8 @@ static int wpa_pbkdf2_sha1(const char *pass, const uint8_t *salt,
       block[off + 2] = (blk >> 8) & 0xff;
       block[off + 3] = blk & 0xff;
 
-      if (wpa_hmac_sha1((const uint8_t *)pass, passlen,
-                        block, off + 4, NULL, 0, u) < 0)
+      if (wpa_hmac_sha1((const uint8_t *)pass, passlen, block, off + 4, NULL,
+                        0, u) < 0)
         {
           return -EIO;
         }
@@ -377,8 +374,8 @@ static int wpa_pbkdf2_sha1(const char *pass, const uint8_t *salt,
 
       for (i = 1; i < 4096; i++)
         {
-          if (wpa_hmac_sha1((const uint8_t *)pass, passlen,
-                            u, 20, NULL, 0, u) < 0)
+          if (wpa_hmac_sha1((const uint8_t *)pass, passlen, u, 20, NULL, 0,
+                            u) < 0)
             {
               return -EIO;
             }
@@ -415,8 +412,7 @@ static int wpa_pbkdf2_sha1(const char *pass, const uint8_t *salt,
  ****************************************************************************/
 
 static int wpa_prf(const uint8_t *key, int keylen, const char *label,
-                   const uint8_t *seed, int seedlen,
-                   uint8_t *out, int outlen)
+                   const uint8_t *seed, int seedlen, uint8_t *out, int outlen)
 {
   uint8_t buf[128];
   uint8_t digest[20];
@@ -464,7 +460,7 @@ static int wpa_prf(const uint8_t *key, int keylen, const char *label,
  *
  ****************************************************************************/
 
-static int wpa_derive_ptk(struct rk3576_wpa_s *w)
+static int wpa_derive_ptk(struct sv6621_wpa_s *w)
 {
   uint8_t seed[2 * ETH_ALEN + 2 * WPA_NONCE_LEN];
   const uint8_t *a1;
@@ -499,8 +495,8 @@ static int wpa_derive_ptk(struct rk3576_wpa_s *w)
   memcpy(seed + 2 * ETH_ALEN, n1, WPA_NONCE_LEN);
   memcpy(seed + 2 * ETH_ALEN + WPA_NONCE_LEN, n2, WPA_NONCE_LEN);
 
-  return wpa_prf(w->pmk, WPA_PMK_LEN, "Pairwise key expansion",
-                 seed, sizeof(seed), w->ptk, WPA_PTK_LEN);
+  return wpa_prf(w->pmk, WPA_PMK_LEN, "Pairwise key expansion", seed,
+                 sizeof(seed), w->ptk, WPA_PTK_LEN);
 }
 
 /****************************************************************************
@@ -586,7 +582,7 @@ static int wpa_aes_unwrap(const uint8_t *kek, const uint8_t *cipher,
  *
  ****************************************************************************/
 
-static int wpa_tx_eapol(struct rk3576_wpa_s *w, uint8_t *kd, int kdlen,
+static int wpa_tx_eapol(struct sv6621_wpa_s *w, uint8_t *kd, int kdlen,
                         bool domic)
 {
   uint8_t frame[14 + KD_OFF_DATA + sizeof(g_wpa_rsn_ie) + 64];
@@ -597,8 +593,8 @@ static int wpa_tx_eapol(struct rk3576_wpa_s *w, uint8_t *kd, int kdlen,
       return -E2BIG;
     }
 
-  memcpy(frame, w->aa, ETH_ALEN);            /* dst = AP */
-  memcpy(frame + 6, w->spa, ETH_ALEN);       /* src = STA */
+  memcpy(frame, w->aa, ETH_ALEN);      /* dst = AP */
+  memcpy(frame + 6, w->spa, ETH_ALEN); /* src = STA */
   frame[12] = (ETHERTYPE_EAPOL >> 8) & 0xff;
   frame[13] = ETHERTYPE_EAPOL & 0xff;
   memcpy(frame + 14, kd, kdlen);
@@ -608,8 +604,8 @@ static int wpa_tx_eapol(struct rk3576_wpa_s *w, uint8_t *kd, int kdlen,
       uint8_t mic[20];
 
       memset(frame + 14 + KD_OFF_MIC, 0, WPA_MIC_LEN);
-      if (wpa_hmac_sha1(w->ptk, WPA_KCK_LEN, frame + 14, kdlen,
-                        NULL, 0, mic) < 0)
+      if (wpa_hmac_sha1(w->ptk, WPA_KCK_LEN, frame + 14, kdlen, NULL, 0, mic) <
+          0)
         {
           return -EIO;
         }
@@ -617,7 +613,7 @@ static int wpa_tx_eapol(struct rk3576_wpa_s *w, uint8_t *kd, int kdlen,
       memcpy(frame + 14 + KD_OFF_MIC, mic, WPA_MIC_LEN);
     }
 
-  int txr = rk3576_skw_data_tx(frame, flen);
+  int txr = sv6621_data_tx(frame, flen);
 
   return txr;
 }
@@ -626,7 +622,7 @@ static int wpa_tx_eapol(struct rk3576_wpa_s *w, uint8_t *kd, int kdlen,
  * Name: wpa_send_msg2
  ****************************************************************************/
 
-static int wpa_send_msg2(struct rk3576_wpa_s *w)
+static int wpa_send_msg2(struct sv6621_wpa_s *w)
 {
   uint8_t kd[KD_OFF_DATA + sizeof(g_wpa_rsn_ie)];
   int datalen = sizeof(g_wpa_rsn_ie);
@@ -634,7 +630,7 @@ static int wpa_send_msg2(struct rk3576_wpa_s *w)
   uint16_t ki = KI_VERSION_SHA1 | KI_PAIRWISE | KI_MIC;
 
   memset(kd, 0, sizeof(kd));
-  kd[0] = 1;                                 /* 802.1X version (msg2=1) */
+  kd[0] = 1; /* 802.1X version (msg2=1) */
   kd[1] = EAPOL_TYPE_KEY;
   kd[2] = ((kdlen - EAPOL_HDR_LEN) >> 8) & 0xff;
   kd[3] = (kdlen - EAPOL_HDR_LEN) & 0xff;
@@ -642,7 +638,7 @@ static int wpa_send_msg2(struct rk3576_wpa_s *w)
   kd[KD_OFF_KEYINFO] = (ki >> 8) & 0xff;
   kd[KD_OFF_KEYINFO + 1] = ki & 0xff;
   kd[KD_OFF_KEYLEN] = 0;
-  kd[KD_OFF_KEYLEN + 1] = 0;                  /* msg2 key length must be 0 */
+  kd[KD_OFF_KEYLEN + 1] = 0; /* msg2 key length must be 0 */
   memcpy(kd + KD_OFF_REPLAY, w->replay, 8);
   memcpy(kd + KD_OFF_NONCE, w->snonce, WPA_NONCE_LEN);
   kd[KD_OFF_DATALEN] = (datalen >> 8) & 0xff;
@@ -656,7 +652,7 @@ static int wpa_send_msg2(struct rk3576_wpa_s *w)
  * Name: wpa_send_msg4
  ****************************************************************************/
 
-static int wpa_send_msg4(struct rk3576_wpa_s *w)
+static int wpa_send_msg4(struct sv6621_wpa_s *w)
 {
   uint8_t kd[KD_OFF_DATA];
   uint16_t ki = KI_VERSION_SHA1 | KI_PAIRWISE | KI_MIC | KI_SECURE;
@@ -687,8 +683,7 @@ static int wpa_send_msg4(struct rk3576_wpa_s *w)
  *
  ****************************************************************************/
 
-static bool wpa_check_mic(struct rk3576_wpa_s *w, const uint8_t *kd,
-                          int kdlen)
+static bool wpa_check_mic(struct sv6621_wpa_s *w, const uint8_t *kd, int kdlen)
 {
   uint8_t tmp[256];
   uint8_t rx_mic[WPA_MIC_LEN];
@@ -720,7 +715,7 @@ static bool wpa_check_mic(struct rk3576_wpa_s *w, const uint8_t *kd,
  *
  ****************************************************************************/
 
-static int wpa_extract_gtk(struct rk3576_wpa_s *w, const uint8_t *enc,
+static int wpa_extract_gtk(struct sv6621_wpa_s *w, const uint8_t *enc,
                            int enclen)
 {
   uint8_t plain[256];
@@ -755,8 +750,7 @@ static int wpa_extract_gtk(struct rk3576_wpa_s *w, const uint8_t *enc,
         }
 
       if (plain[p] == 0xdd && elen >= 6 && plain[p + 2] == 0x00 &&
-          plain[p + 3] == 0x0f && plain[p + 4] == 0xac &&
-          plain[p + 5] == 0x01)
+          plain[p + 3] == 0x0f && plain[p + 4] == 0xac && plain[p + 5] == 0x01)
         {
           /* GTK KDE: keyid(1, low 2 bits) + reserved(1) + GTK[] */
 
@@ -783,13 +777,13 @@ static int wpa_extract_gtk(struct rk3576_wpa_s *w, const uint8_t *enc,
  * Name: wpa_handle_msg1
  ****************************************************************************/
 
-static void wpa_handle_msg1(struct rk3576_wpa_s *w, const uint8_t *kd,
+static void wpa_handle_msg1(struct sv6621_wpa_s *w, const uint8_t *kd,
                             int kdlen)
 {
   bool nonce_empty = true;
   int i;
 
-  rk3576_skw_get_bssid(w->aa);
+  sv6621_get_bssid(w->aa);
 
   if (kdlen < KD_FIXED_LEN)
     {
@@ -803,10 +797,10 @@ static void wpa_handle_msg1(struct rk3576_wpa_s *w, const uint8_t *kd,
   for (i = 0; i < WPA_NONCE_LEN; i++)
     {
       if (w->snonce[i] != 0)
-      {
-        nonce_empty = false;
-        break;
-      }
+        {
+          nonce_empty = false;
+          break;
+        }
     }
 
   if (!nonce_empty)
@@ -834,11 +828,11 @@ static void wpa_handle_msg1(struct rk3576_wpa_s *w, const uint8_t *kd,
       int ret = wpa_generate_nonce(w->snonce);
 
       if (ret < 0)
-      {
-        w->state = WPA_STATE_FAILED;
-        w->result = ret;
-        return;
-      }
+        {
+          w->state = WPA_STATE_FAILED;
+          w->result = ret;
+          return;
+        }
     }
 
   if (wpa_derive_ptk(w) < 0)
@@ -852,11 +846,11 @@ static void wpa_handle_msg1(struct rk3576_wpa_s *w, const uint8_t *kd,
     int r2 = wpa_send_msg2(w);
 
     if (r2 < 0)
-    {
-      w->state = WPA_STATE_FAILED;
-      w->result = -EIO;
-      return;
-    }
+      {
+        w->state = WPA_STATE_FAILED;
+        w->result = -EIO;
+        return;
+      }
 
     w->state = WPA_STATE_WAIT_MSG3;
     wlinfo("WPA: msg1 rx, msg2 sent (PTK derived)\n");
@@ -867,7 +861,7 @@ static void wpa_handle_msg1(struct rk3576_wpa_s *w, const uint8_t *kd,
  * Name: wpa_handle_msg3
  ****************************************************************************/
 
-static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
+static void wpa_handle_msg3(struct sv6621_wpa_s *w, const uint8_t *kd,
                             int kdlen)
 {
   int datalen;
@@ -919,14 +913,11 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
    */
 
   {
-    uint8_t ptk_pn[6] =
-    {
-      1, 0, 0, 0, 0, 0
-    };
+    uint8_t ptk_pn[6] = { 1, 0, 0, 0, 0, 0 };
 
-    ret = rk3576_skw_add_key(SKW_KEY_PTK, SKW_CIPHER_CCMP, w->aa, 0,
-                             w->ptk + WPA_KCK_LEN + WPA_KEK_LEN, WPA_TK_LEN,
-                             ptk_pn);
+    ret =
+        sv6621_add_key(SKW_KEY_PTK, SKW_CIPHER_CCMP, w->aa, 0,
+                       w->ptk + WPA_KCK_LEN + WPA_KEK_LEN, WPA_TK_LEN, ptk_pn);
   }
   if (ret >= 0 && w->gtk_len > 0)
     {
@@ -940,14 +931,10 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
        * reference driver's addr == NULL branch (mac_addr = ff:..:ff).
        */
 
-      uint8_t bcast[6] =
-      {
-        0xff, 0xff, 0xff, 0xff, 0xff, 0xff
-      };
+      uint8_t bcast[6] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
-      ret = rk3576_skw_add_key(SKW_KEY_GTK, SKW_CIPHER_CCMP, bcast,
-                               w->gtk_id, w->gtk, w->gtk_len,
-                               kd + KD_OFF_RSC);
+      ret = sv6621_add_key(SKW_KEY_GTK, SKW_CIPHER_CCMP, bcast, w->gtk_id,
+                           w->gtk, w->gtk_len, kd + KD_OFF_RSC);
     }
 
   /* Golden post-key sequence (matches the reference driver's authorized
@@ -958,36 +945,32 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
   if (ret >= 0)
     {
       uint8_t bssid[6];
-      uint8_t mc[21] =
-      {
-        0x03, 0x00,                        /* count = 3 */
+      uint8_t mc[21] = {
+        0x03, 0x00,                         /* count = 3 */
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, /* broadcast */
         0x01, 0x00, 0x5e, 0x00, 0x00, 0x01, /* 224.0.0.1 */
         0x01, 0x00, 0x5e, 0x00, 0x00, 0xfb  /* 224.0.0.251 */
       };
 
-    /* skw_setip_param: ip_type(1) + addr; IPv6 = 16 bytes.  The reference
-     * driver sends SET_IP with the interface's IPv6 link-local address at
-     * the COMPLETED transition (before DHCP), which appears to arm the CP
-     * to forward data frames to the host.
-     */
+      /* sv6621_setip_param: ip_type(1) + addr; IPv6 = 16 bytes.  The reference
+       * driver sends SET_IP with the interface's IPv6 link-local address at
+       * the COMPLETED transition (before DHCP), which appears to arm the CP
+       * to forward data frames to the host.
+       */
 
       uint8_t mac[6];
-      uint8_t setip[17] =
-      {
-        0x01,                              /* SKW_IP_IPV6 */
-        0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-      };
+      uint8_t setip[17] = { 0x01, /* SKW_IP_IPV6 */
+                            0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
-      rk3576_skw_get_bssid(bssid);
-      rk3576_skw_get_mac(mac);
+      sv6621_get_bssid(bssid);
+      sv6621_get_mac(mac);
 
-    /* Form the IPv6 interface identifier from the station MAC (modified
-     * EUI-64) instead of embedding a board-specific address.
-     */
+      /* Form the IPv6 interface identifier from the station MAC (modified
+       * EUI-64) instead of embedding a board-specific address.
+       */
 
-      setip[9]  = mac[0] ^ 0x02;
+      setip[9] = mac[0] ^ 0x02;
       setip[10] = mac[1];
       setip[11] = mac[2];
       setip[12] = 0xff;
@@ -996,17 +979,15 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
       setip[15] = mac[4];
       setip[16] = mac[5];
 
-      ret = rk3576_skw_send_control(SKW_CMD_GET_STA, bssid, sizeof(bssid));
+      ret = sv6621_send_control(SKW_CMD_GET_STA, bssid, sizeof(bssid));
       if (ret >= 0)
         {
-          ret = rk3576_skw_send_control(SKW_CMD_SET_MC_ADDR, mc,
-                                        sizeof(mc));
+          ret = sv6621_send_control(SKW_CMD_SET_MC_ADDR, mc, sizeof(mc));
         }
 
       if (ret >= 0)
         {
-          ret = rk3576_skw_send_control(SKW_CMD_SET_IP, setip,
-                                        sizeof(setip));
+          ret = sv6621_send_control(SKW_CMD_SET_IP, setip, sizeof(setip));
         }
     }
 
@@ -1020,12 +1001,12 @@ static void wpa_handle_msg3(struct rk3576_wpa_s *w, const uint8_t *kd,
  ****************************************************************************/
 
 /****************************************************************************
- * Name: rk3576_skw_wpa_eapol_input
+ * Name: sv6621_wpa_eapol_input
  ****************************************************************************/
 
 static void wpa_process(const uint8_t *data, int len)
 {
-  struct rk3576_wpa_s *w = &g_wpa;
+  struct sv6621_wpa_s *w = &g_wpa;
   uint16_t ki;
 
   if (len < KD_FIXED_LEN || data[1] != EAPOL_TYPE_KEY)
@@ -1037,8 +1018,7 @@ static void wpa_process(const uint8_t *data, int len)
 
   /* msg1: pairwise + ack, no MIC.  msg3: pairwise + ack + mic + install. */
 
-  if ((w->state == WPA_STATE_WAIT_MSG1 ||
-       w->state == WPA_STATE_WAIT_MSG3) &&
+  if ((w->state == WPA_STATE_WAIT_MSG1 || w->state == WPA_STATE_WAIT_MSG3) &&
       (ki & KI_MIC) == 0 && (ki & KI_ACK) != 0)
     {
       /* Fresh message 1 or a retransmit (the AP did not accept our
@@ -1048,8 +1028,8 @@ static void wpa_process(const uint8_t *data, int len)
       w->state = WPA_STATE_WAIT_MSG1;
       wpa_handle_msg1(w, data, len);
     }
-  else if (w->state == WPA_STATE_WAIT_MSG3 &&
-           (ki & KI_MIC) != 0 && (ki & KI_ACK) != 0)
+  else if (w->state == WPA_STATE_WAIT_MSG3 && (ki & KI_MIC) != 0 &&
+           (ki & KI_ACK) != 0)
     {
       wpa_handle_msg3(w, data, len);
     }
@@ -1064,12 +1044,11 @@ static uint8_t g_wpa_rx[256];
 static int g_wpa_rxlen;
 static bool g_wpa_rxpending;
 
-void rk3576_skw_wpa_eapol_input(const uint8_t *data, int len)
+void sv6621_wpa_eapol_input(const uint8_t *data, int len)
 {
   irqstate_t flags;
 
-  if (g_wpa.state == WPA_STATE_IDLE || len <= 0 ||
-      len > (int)sizeof(g_wpa_rx))
+  if (g_wpa.state == WPA_STATE_IDLE || len <= 0 || len > (int)sizeof(g_wpa_rx))
     {
       return;
     }
@@ -1082,12 +1061,12 @@ void rk3576_skw_wpa_eapol_input(const uint8_t *data, int len)
 }
 
 /****************************************************************************
- * Name: rk3576_skw_wpa_connect
+ * Name: sv6621_wpa_connect
  ****************************************************************************/
 
-int rk3576_skw_wpa_connect(const char *ssid, const char *passphrase)
+int sv6621_wpa_connect(const char *ssid, const char *passphrase)
 {
-  struct rk3576_wpa_s *w = &g_wpa;
+  struct sv6621_wpa_s *w = &g_wpa;
   size_t passphrase_len;
   size_t ssid_len;
   int result;
@@ -1119,8 +1098,7 @@ int rk3576_skw_wpa_connect(const char *ssid, const char *passphrase)
 
   /* PMK from the passphrase + SSID salt (this is the slow part). */
 
-  ret = wpa_pbkdf2_sha1(passphrase, (const uint8_t *)ssid, ssid_len,
-                        w->pmk);
+  ret = wpa_pbkdf2_sha1(passphrase, (const uint8_t *)ssid, ssid_len, w->pmk);
   if (ret < 0)
     {
       wlerr("WPA: PBKDF2 failed: %d\n", ret);
@@ -1128,7 +1106,7 @@ int rk3576_skw_wpa_connect(const char *ssid, const char *passphrase)
       goto out;
     }
 
-  rk3576_skw_get_mac(w->spa);
+  sv6621_get_mac(w->spa);
 
   /* Arm the EAPOL RX path before association: the AP sends message 1
    * right after assoc-resp, racing the connect return.  The authenticator
@@ -1142,14 +1120,14 @@ int rk3576_skw_wpa_connect(const char *ssid, const char *passphrase)
    * a dropped first copy is harmless.
    */
 
-  ret = rk3576_skw_connect(ssid);
+  ret = sv6621_connect(ssid);
   if (ret < 0)
     {
       result = ret;
       goto out;
     }
 
-  rk3576_skw_get_bssid(w->aa);
+  sv6621_get_bssid(w->aa);
   w->state = WPA_STATE_WAIT_MSG1;
 
   /* Wait for the 4-way handshake to complete (driven by EAPOL RX). */
@@ -1212,4 +1190,4 @@ out:
   return result;
 }
 
-#endif /* CONFIG_RK3576_SKW */
+#endif /* CONFIG_SV6621 */
