@@ -43,6 +43,7 @@ if(CONFIG_SV6621)
        ${SV6621_DIR}/sv6621_tx.c
        ${SV6621_DIR}/sv6621_wifi.c)
   list(APPEND SRCS ${SV6621_DIR}/sv6621_wpa_crypto.c)
+  list(APPEND SRCS ${SV6621_DIR}/sv6621_wpa_eapol.c)
 endif()
 
 if(CONFIG_RK3576_I2C)
