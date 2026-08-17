@@ -750,7 +750,7 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
   size_t received = 0;
   int index;
   int ret;
-  bool block = length >= RK3576_SV6621_BLOCK_SIZE &&
+  bool block = !increment && length >= RK3576_SV6621_BLOCK_SIZE &&
                (length % RK3576_SV6621_BLOCK_SIZE) == 0;
 
   if (!priv->opened || buffer == NULL || length == 0 ||
@@ -860,7 +860,7 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
   size_t sent = 0;
   int index;
   int ret;
-  bool block = length >= RK3576_SV6621_BLOCK_SIZE &&
+  bool block = !increment && length >= RK3576_SV6621_BLOCK_SIZE &&
                (length % RK3576_SV6621_BLOCK_SIZE) == 0;
 
   if (!priv->opened || buffer == NULL || length == 0 ||
