@@ -8,3 +8,7 @@
 .depend
 .built
 Make.dep
+
+# Python generator caches
+__pycache__/
+*.py[cod]
