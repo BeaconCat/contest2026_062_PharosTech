@@ -275,6 +275,11 @@ static void sv6621_core_station_worker(FAR void *arg)
   sv6621_network_set_link(&dev->network, connected && link_ready,
                           link_ready ? &context : NULL);
 #endif
+  if (!connected)
+    {
+      sv6621_wpa_cancel(&dev->wpa, -ECONNRESET);
+    }
+
   if (connected)
     {
       sv6621_core_report(dev, SV6621_EVENT_CONNECTED, &status,
