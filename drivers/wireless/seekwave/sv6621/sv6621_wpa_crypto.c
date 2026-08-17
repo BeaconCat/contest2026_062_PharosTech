@@ -27,6 +27,7 @@
 #include <nuttx/config.h>
 
 #include <errno.h>
+#include <sched.h>
 #include <string.h>
 
 #include <mbedtls/md.h>
@@ -217,6 +218,11 @@ int sv6621_wpa_derive_pmk(FAR const uint8_t *passphrase,
           for (index = 0; index < sizeof(accumulator); index++)
             {
               accumulator[index] ^= digest[index];
+            }
+
+          if ((round & 63) == 0)
+            {
+              sched_yield();
             }
         }
 
