@@ -240,7 +240,7 @@ static void sv6621_core_recovery_worker(FAR void *arg)
   sv6621_station_reset(&dev->station, error);
   sv6621_command_cancel(&dev->command, error);
   sv6621_data_reset_credits(&dev->data);
-  sv6621_data_set_tx_blocked(&dev->data, false);
+  sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
   sv6621_rx_stop(&dev->rx);
   dev->suspended = false;
   dev->station_open = false;
@@ -790,7 +790,7 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
     }
 
   sv6621_data_reset_credits(&dev->data);
-  ret = sv6621_data_set_tx_blocked(&dev->data, false);
+  ret = sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
   if (ret < 0)
     {
       goto fail;
@@ -1015,7 +1015,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 
   sv6621_command_cancel(&dev->command, -ESHUTDOWN);
   sv6621_data_reset_credits(&dev->data);
-  sv6621_data_set_tx_blocked(&dev->data, false);
+  sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
   sv6621_rx_stop(&dev->rx);
   dev->suspended = false;
   if (dev->transport_open)
@@ -1422,7 +1422,8 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
     }
 #endif
 
-  ret = sv6621_data_set_tx_blocked(&dev->data, true);
+  ret = sv6621_data_set_tx_block(&dev->data, SV6621_DATA_TX_BLOCK_SLEEP,
+                                 true);
   if (ret < 0)
     {
       goto unlock_lifecycle;
@@ -1431,7 +1432,8 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
   ret = sv6621_rx_suspend(&dev->rx);
   if (ret < 0)
     {
-      sv6621_data_set_tx_blocked(&dev->data, false);
+      sv6621_data_set_tx_block(&dev->data, SV6621_DATA_TX_BLOCK_SLEEP,
+                               false);
       goto unlock_lifecycle;
     }
 
@@ -1440,7 +1442,8 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
   if (ret < 0)
     {
       sv6621_rx_resume(&dev->rx);
-      sv6621_data_set_tx_blocked(&dev->data, false);
+      sv6621_data_set_tx_block(&dev->data, SV6621_DATA_TX_BLOCK_SLEEP,
+                               false);
       goto unlock_lifecycle;
     }
 
@@ -1517,7 +1520,8 @@ int sv6621_resume(FAR struct sv6621_dev_s *dev)
       goto unlock_lifecycle;
     }
 
-  ret = sv6621_data_set_tx_blocked(&dev->data, false);
+  ret = sv6621_data_set_tx_block(&dev->data, SV6621_DATA_TX_BLOCK_SLEEP,
+                                 false);
   if (ret < 0)
     {
       recover = true;
