@@ -753,7 +753,6 @@ int sv6621_command_receive(FAR struct sv6621_command_engine_s *engine,
         break;
 
       case SV6621_MESSAGE_EVENT:
-      case SV6621_MESSAGE_EVENT_LOCAL:
         ret = sv6621_command_dispatch_event(engine, &header, payload,
                                             payload_length);
         break;
