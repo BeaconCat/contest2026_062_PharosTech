@@ -391,6 +391,30 @@ void sv6621_data_reset_credits(FAR struct sv6621_data_s *data)
 }
 
 /****************************************************************************
+ * Name: sv6621_data_set_tx_blocked
+ ****************************************************************************/
+
+int sv6621_data_set_tx_blocked(FAR struct sv6621_data_s *data, bool blocked)
+{
+  int ret;
+
+  if (data == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&data->tx_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  data->tx_blocked = blocked;
+  nxmutex_unlock(&data->tx_lock);
+  return 0;
+}
+
+/****************************************************************************
  * Name: sv6621_data_send
  ****************************************************************************/
 
@@ -414,6 +438,12 @@ int sv6621_data_send(FAR struct sv6621_data_s *data,
   if (ret < 0)
     {
       return ret;
+    }
+
+  if (data->tx_blocked)
+    {
+      ret = -EAGAIN;
+      goto unlock;
     }
 
   ret = sv6621_data_encode_tx(context, frame, frame_length, payload,
