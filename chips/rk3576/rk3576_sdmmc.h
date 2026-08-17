@@ -41,6 +41,7 @@
 
 typedef CODE void (*rk3576_sdmmc_media_callback_t)(FAR void *arg,
                                                    bool inserted);
+typedef CODE void (*rk3576_sdmmc_sdio_callback_t)(FAR void *arg);
 
 /****************************************************************************
  * Public Function Prototypes
@@ -79,5 +80,27 @@ FAR struct sdio_dev_s *rk3576_sdmmc_initialize(int slotno);
 int rk3576_sdmmc_register_media_callback(
     FAR struct sdio_dev_s *dev, rk3576_sdmmc_media_callback_t callback,
     FAR void *arg);
+
+/****************************************************************************
+ * Name: rk3576_sdmmc_register_sdio_callback
+ *
+ * Description:
+ *   Register an interrupt-context callback for an SDIO function interrupt.
+ *   This callback is only supported by the non-removable SDIO host.
+ ****************************************************************************/
+
+int rk3576_sdmmc_register_sdio_callback(
+    FAR struct sdio_dev_s *dev, rk3576_sdmmc_sdio_callback_t callback,
+    FAR void *arg);
+
+/****************************************************************************
+ * Name: rk3576_sdmmc_enable_sdio_interrupt
+ *
+ * Description:
+ *   Enable or disable SDIO function interrupt delivery at the host.
+ ****************************************************************************/
+
+int rk3576_sdmmc_enable_sdio_interrupt(FAR struct sdio_dev_s *dev,
+                                       bool enable);
 
 #endif /* __ARCH_ARM64_SRC_RK3576_RK3576_SDMMC_H */

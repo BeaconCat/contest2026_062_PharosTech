@@ -42,7 +42,7 @@ endif
 ifeq ($(CONFIG_SV6621),y)
 SV6621_SRCDIR = ../../../../vendor/rockchip/drivers/wireless/seekwave/sv6621
 VPATH += :$(SV6621_SRCDIR)
-CHIP_CSRCS += sv6621.c sv6621_netdev.c sv6621_wpa.c
+INCLUDES += $(INCDIR_PREFIX)$(SV6621_SRCDIR)/include
 CHIP_CSRCS += sv6621_command.c sv6621_connection.c sv6621_core.c
 CHIP_CSRCS += sv6621_data.c
 CHIP_CSRCS += sv6621_firmware.c

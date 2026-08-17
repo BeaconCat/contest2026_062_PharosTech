@@ -55,6 +55,34 @@
 struct sv6621_dev_s;
 struct sv6621_transport_s;
 
+typedef void (*sv6621_transport_irq_t)(FAR void *arg);
+
+struct sv6621_transport_ops_s
+{
+  int (*open)(FAR struct sv6621_transport_s *transport);
+  void (*close)(FAR struct sv6621_transport_s *transport);
+  int (*read_byte)(FAR struct sv6621_transport_s *transport, uint8_t function,
+                   uint32_t address, FAR uint8_t *value);
+  int (*write_byte)(FAR struct sv6621_transport_s *transport,
+                    uint8_t function, uint32_t address, uint8_t value);
+  int (*read)(FAR struct sv6621_transport_s *transport, uint8_t function,
+              uint32_t address, bool increment, FAR void *buffer,
+              size_t length);
+  int (*write)(FAR struct sv6621_transport_s *transport, uint8_t function,
+               uint32_t address, bool increment, FAR const void *buffer,
+               size_t length);
+  int (*attach_irq)(FAR struct sv6621_transport_s *transport,
+                    sv6621_transport_irq_t handler, FAR void *arg);
+  int (*enable_irq)(FAR struct sv6621_transport_s *transport, bool enable);
+  int (*recover)(FAR struct sv6621_transport_s *transport);
+};
+
+struct sv6621_transport_s
+{
+  FAR const struct sv6621_transport_ops_s *ops;
+  FAR void *priv;
+};
+
 enum sv6621_state_e
 {
   SV6621_STATE_OFF = 0,

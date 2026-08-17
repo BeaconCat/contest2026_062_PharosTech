@@ -5,6 +5,13 @@ if(CONFIG_KICKPI_K7_AUDIO)
   list(APPEND SRCS kickpi_k7_audio.c)
 endif()
 
+if(CONFIG_KICKPI_K7_WIFI)
+  list(APPEND SRCS kickpi_k7_wifi.c)
+  target_include_directories(
+    board PRIVATE
+    ${NUTTX_BOARD_DIR}/../../../drivers/wireless/seekwave/sv6621/include)
+endif()
+
 if(CONFIG_KICKPI_K7_STORAGE_AUTOMOUNT)
   list(APPEND SRCS kickpi_k7_storage.c)
 endif()
