@@ -38,6 +38,7 @@ if(CONFIG_SV6621)
        ${SV6621_DIR}/sv6621_security.c
        ${SV6621_DIR}/sv6621_service.c
        ${SV6621_DIR}/sv6621_station.c
+       ${SV6621_DIR}/sv6621_stats.c
        ${SV6621_DIR}/sv6621_transport.c
        ${SV6621_DIR}/sv6621_tx.c
        ${SV6621_DIR}/sv6621_wifi.c)
