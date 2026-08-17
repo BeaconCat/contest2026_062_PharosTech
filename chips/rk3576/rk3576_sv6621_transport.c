@@ -685,6 +685,12 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
        index++)
     ;
 
+  if (index == 100000)
+    {
+      nxmutex_unlock(&priv->lock);
+      return -ETIMEDOUT;
+    }
+
   putreg32(block ? RK3576_SV6621_BLOCK_SIZE : (uint32_t)length,
            RK3576_SV6621_BLKSIZ);
   putreg32(length, RK3576_SV6621_BYTCNT);
@@ -766,6 +772,12 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
        (getreg32(RK3576_SV6621_CTRL) & (1u << 1)) != 0 && index < 100000;
        index++)
     ;
+
+  if (index == 100000)
+    {
+      nxmutex_unlock(&priv->lock);
+      return -ETIMEDOUT;
+    }
 
   putreg32(block ? RK3576_SV6621_BLOCK_SIZE : (uint32_t)length,
            RK3576_SV6621_BLKSIZ);
