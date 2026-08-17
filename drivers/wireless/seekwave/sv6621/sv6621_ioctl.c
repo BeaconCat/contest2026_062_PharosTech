@@ -200,23 +200,35 @@ static int sv6621_ioctl_bssid(FAR struct sv6621_ioctl_s *ioctl,
 static int sv6621_ioctl_essid(FAR struct sv6621_ioctl_s *ioctl,
                               FAR struct iwreq *request, bool set)
 {
+  struct sv6621_status_s status;
   size_t length;
   int ret;
 
   if (!set)
     {
-      if (request->u.essid.pointer == NULL ||
-          request->u.essid.length < ioctl->connection.ssid_length)
+      ret = sv6621_get_status(ioctl->owner, &status);
+      if (ret < 0)
         {
-          request->u.essid.length = ioctl->connection.ssid_length;
+          return ret;
+        }
+
+      if (!status.connected)
+        {
+          request->u.essid.length = 0;
+          request->u.essid.flags = IW_ESSID_OFF;
+          return 0;
+        }
+
+      if (request->u.essid.pointer == NULL ||
+          request->u.essid.length < status.ssid_length)
+        {
+          request->u.essid.length = status.ssid_length;
           return -E2BIG;
         }
 
-      memcpy(request->u.essid.pointer, ioctl->connection.ssid,
-             ioctl->connection.ssid_length);
-      request->u.essid.length = ioctl->connection.ssid_length;
-      request->u.essid.flags = ioctl->connection.ssid_length == 0 ?
-                               IW_ESSID_OFF : IW_ESSID_ON;
+      memcpy(request->u.essid.pointer, status.ssid, status.ssid_length);
+      request->u.essid.length = status.ssid_length;
+      request->u.essid.flags = IW_ESSID_ON;
       return 0;
     }
 

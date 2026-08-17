@@ -253,8 +253,11 @@ struct sv6621_link_stats_s
 struct sv6621_status_s
 {
   enum sv6621_state_e state;
+  bool connected;
   uint8_t mac[SV6621_MAC_LENGTH];
   uint8_t bssid[SV6621_MAC_LENGTH];
+  uint8_t ssid[SV6621_SSID_MAX_LENGTH];
+  uint8_t ssid_length;
   uint8_t channel;
   enum sv6621_band_e band;
   int16_t signal_dbm;
