@@ -61,6 +61,8 @@
 #define SV6621_WPA_KEY_REQUEST          0x0800
 #define SV6621_WPA_KEY_SECURE           0x0200
 #define SV6621_WPA_EAPOL_MAX_SIZE       512
+#define SV6621_WPA_IE_VENDOR             221
+#define SV6621_WPA_GTK_KDE_HEADER_SIZE   6
 
 /****************************************************************************
  * Private Data
@@ -70,6 +72,10 @@ static const uint8_t g_sv6621_wpa_rsn_psk_ccmp[] = {
   0x30, 0x14, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04,
   0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00,
   0x00, 0x0f, 0xac, 0x02, 0x00, 0x00
+};
+
+static const uint8_t g_sv6621_wpa_gtk_selector[] = {
+  0x00, 0x0f, 0xac, 0x01
 };
 
 /****************************************************************************
@@ -321,4 +327,62 @@ int sv6621_wpa_eapol_verify_mic(
 
   memset(expected, 0, sizeof(expected));
   return difference == 0 ? 0 : -EKEYREJECTED;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_eapol_extract_gtk
+ ****************************************************************************/
+
+int sv6621_wpa_eapol_extract_gtk(
+    FAR const uint8_t *key_data, size_t key_data_length,
+    FAR uint8_t *key_index, FAR uint8_t *gtk, size_t capacity,
+    FAR size_t *gtk_length)
+{
+  size_t offset = 0;
+
+  if (key_data == NULL || key_index == NULL || gtk == NULL ||
+      gtk_length == NULL)
+    {
+      return -EINVAL;
+    }
+
+  while (offset + 2 <= key_data_length)
+    {
+      uint8_t id = key_data[offset];
+      size_t length = key_data[offset + 1];
+      FAR const uint8_t *value = key_data + offset + 2;
+      size_t key_length;
+
+      if (length == 0)
+        {
+          break;
+        }
+
+      if (length > key_data_length - offset - 2)
+        {
+          return -EPROTO;
+        }
+
+      if (id == SV6621_WPA_IE_VENDOR &&
+          length >= SV6621_WPA_GTK_KDE_HEADER_SIZE &&
+          memcmp(value, g_sv6621_wpa_gtk_selector,
+                 sizeof(g_sv6621_wpa_gtk_selector)) == 0)
+        {
+          key_length = length - SV6621_WPA_GTK_KDE_HEADER_SIZE;
+          if (key_length == 0 || key_length > SV6621_WPA_GTK_MAX_SIZE ||
+              key_length > capacity)
+            {
+              return -E2BIG;
+            }
+
+          *key_index = value[4] & 0x03;
+          memcpy(gtk, value + SV6621_WPA_GTK_KDE_HEADER_SIZE, key_length);
+          *gtk_length = key_length;
+          return 0;
+        }
+
+      offset += length + 2;
+    }
+
+  return -ENOENT;
 }

@@ -37,6 +37,7 @@
 
 #define SV6621_SECURITY_INSTANCE           0
 #define SV6621_SECURITY_COMMAND_ADD_KEY     12
+#define SV6621_SECURITY_COMMAND_DEL_KEY     13
 #define SV6621_SECURITY_COMMAND_TX_DATA      15
 #define SV6621_SECURITY_COMMAND_TIMEOUT_MS  5000
 #define SV6621_SECURITY_PACKET_NUMBER_SIZE  6
@@ -92,6 +93,37 @@ int sv6621_security_add_key(
 
   return sv6621_command_execute(
       command, SV6621_SECURITY_INSTANCE, SV6621_SECURITY_COMMAND_ADD_KEY,
+      payload, sizeof(payload), NULL, NULL,
+      SV6621_SECURITY_COMMAND_TIMEOUT_MS);
+}
+
+/****************************************************************************
+ * Name: sv6621_security_delete_key
+ ****************************************************************************/
+
+int sv6621_security_delete_key(
+    FAR struct sv6621_command_engine_s *command,
+    enum sv6621_security_key_type_e type,
+    enum sv6621_security_cipher_e cipher,
+    FAR const uint8_t address[SV6621_MAC_LENGTH], uint8_t key_index)
+{
+  uint8_t payload[SV6621_SECURITY_KEY_PAYLOAD_SIZE];
+
+  if (command == NULL || address == NULL || key_index > 6 ||
+      type > SV6621_SECURITY_KEY_BEACON_INTEGRITY_GROUP ||
+      cipher != SV6621_SECURITY_CIPHER_CCMP)
+    {
+      return -EINVAL;
+    }
+
+  memset(payload, 0, sizeof(payload));
+  memcpy(payload, address, SV6621_MAC_LENGTH);
+  payload[SV6621_SECURITY_KEY_TYPE_OFFSET] = type;
+  payload[SV6621_SECURITY_CIPHER_OFFSET] = cipher;
+  payload[SV6621_SECURITY_KEY_INDEX_OFFSET] = key_index;
+
+  return sv6621_command_execute(
+      command, SV6621_SECURITY_INSTANCE, SV6621_SECURITY_COMMAND_DEL_KEY,
       payload, sizeof(payload), NULL, NULL,
       SV6621_SECURITY_COMMAND_TIMEOUT_MS);
 }
