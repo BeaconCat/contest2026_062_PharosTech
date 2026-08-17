@@ -81,10 +81,14 @@
 #define RK3576_SV6621_INT_CMDDONE  (1u << 2)
 #define RK3576_SV6621_INT_DTO      (1u << 3)
 #define RK3576_SV6621_INT_RTO      (1u << 8)
-#define RK3576_SV6621_INT_VOLTSW   (1u << 12)
-#define RK3576_SV6621_INT_RESPERR  0x00000142
+#define RK3576_SV6621_INT_DRTO     (1u << 9)
+#define RK3576_SV6621_INT_HTO      (1u << 10)
+#define RK3576_SV6621_INT_VOLTSW   (1u << 10)
 #define RK3576_SV6621_INT_CMDERR   0x00001142
 #define RK3576_SV6621_INT_DATAERR  0x0000ae80
+#define RK3576_SV6621_INT_TIMEOUT \
+  (RK3576_SV6621_INT_RTO | RK3576_SV6621_INT_DRTO | \
+   RK3576_SV6621_INT_HTO)
 
 #define RK3576_SV6621_CLK_UPDATE   0x80202000
 #define RK3576_SV6621_CLK_UPD_VOLT 0x90202000
@@ -402,7 +406,7 @@ static int rk3576_sv6621_voltage_switch(void)
   int index;
 
   status = rk3576_sv6621_command(RK3576_SV6621_CMD11, 0, &response);
-  if ((status & RK3576_SV6621_INT_RESPERR) != 0)
+  if ((status & RK3576_SV6621_INT_CMDERR) != 0)
     {
       return (status & RK3576_SV6621_INT_RTO) != 0 ? -ETIMEDOUT : -EIO;
     }
@@ -524,7 +528,7 @@ static int rk3576_sv6621_tune_sdr104(void)
   if ((status & (RK3576_SV6621_INT_CMDERR |
                  RK3576_SV6621_INT_DATAERR)) != 0)
     {
-      return (status & RK3576_SV6621_INT_RTO) != 0 ? -ETIMEDOUT : -EIO;
+      return (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
     }
 
   for (index = 0; index < 200000 && received < 16; index++)
@@ -556,7 +560,12 @@ static int rk3576_sv6621_tune_sdr104(void)
       return -ETIMEDOUT;
     }
 
-  return (status & RK3576_SV6621_INT_DATAERR) != 0 ? -EIO : 0;
+  if ((status & RK3576_SV6621_INT_DATAERR) != 0)
+    {
+      return (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
+    }
+
+  return 0;
 }
 
 /****************************************************************************
@@ -572,7 +581,6 @@ static int rk3576_sv6621_open_failed(
   priv->irq_enabled = false;
   priv->opened = false;
   priv->prepared = false;
-  priv->sdio = NULL;
   return error;
 }
 
@@ -586,11 +594,18 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
       return -EBUSY;
     }
 
-  priv->sdio = rk3576_sdmmc_initialize(RK3576_SDIO_SLOT);
   if (priv->sdio == NULL)
     {
-      wlerr("ERROR: RK3576 SDIO host initialization failed\n");
-      return -ENODEV;
+      priv->sdio = rk3576_sdmmc_initialize(RK3576_SDIO_SLOT);
+      if (priv->sdio == NULL)
+        {
+          wlerr("ERROR: RK3576 SDIO host initialization failed\n");
+          return -ENODEV;
+        }
+    }
+  else
+    {
+      SDIO_RESET(priv->sdio);
     }
 
   SDIO_CLOCK(priv->sdio, CLOCK_SDIO_DISABLED);
@@ -719,8 +734,14 @@ static int rk3576_sv6621_enumerate(
       return rk3576_sv6621_open_failed(priv, ret);
     }
 
-  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_INTERRUPT, 0,
-                             NULL);
+  /* Keep the card-side interrupt path enabled while changing the bus
+   * timing.  The verified SV6621 enumeration trace enables IEN before
+   * entering SDR104; the host callback remains masked until attach_irq.
+   */
+
+  ret = rk3576_sv6621_direct(
+      true, 0, RK3576_SV6621_CCCR_INTERRUPT,
+      RK3576_SV6621_INTERRUPT_MASTER | RK3576_SV6621_FUNCTION1_BIT, NULL);
   if (ret < 0)
     {
       return rk3576_sv6621_open_failed(priv, ret);
@@ -904,7 +925,7 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
   if ((status & (RK3576_SV6621_INT_CMDERR |
                  RK3576_SV6621_INT_DATAERR)) != 0)
     {
-      ret = (status & RK3576_SV6621_INT_RTO) != 0 ? -ETIMEDOUT : -EIO;
+      ret = (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
     }
   else if (index == 400000 ||
            (status & RK3576_SV6621_INT_RTO) != 0 || received < words)
@@ -1044,7 +1065,7 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
   if ((status & (RK3576_SV6621_INT_CMDERR |
                  RK3576_SV6621_INT_DATAERR)) != 0)
     {
-      ret = (status & RK3576_SV6621_INT_RTO) != 0 ? -ETIMEDOUT : -EIO;
+      ret = (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
     }
   else if (index == 400000 ||
            (status & RK3576_SV6621_INT_RTO) != 0 || sent < words)
@@ -1084,7 +1105,6 @@ static void rk3576_sv6621_close(FAR struct sv6621_transport_s *transport)
   priv->irq_enabled = false;
   priv->opened = false;
   priv->prepared = false;
-  priv->sdio = NULL;
 }
 
 static void rk3576_sv6621_host_interrupt(FAR void *arg)
