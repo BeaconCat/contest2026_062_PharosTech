@@ -47,7 +47,10 @@
  ****************************************************************************/
 
 static void sv6621_network_rx_worker(FAR void *arg);
+static void sv6621_network_tx_worker(FAR void *arg);
 static void sv6621_network_reply(FAR struct sv6621_network_s *network);
+static int sv6621_network_transmit(FAR struct sv6621_network_s *network);
+static int sv6621_network_tx_poll(FAR struct net_driver_s *dev);
 static int sv6621_network_ifup(FAR struct net_driver_s *dev);
 static int sv6621_network_ifdown(FAR struct net_driver_s *dev);
 static int sv6621_network_txavail(FAR struct net_driver_s *dev);
@@ -68,9 +71,50 @@ static void sv6621_network_reply(FAR struct sv6621_network_s *network)
 {
   if (network->dev.d_len > 0)
     {
-      NETDEV_TXERRORS(&network->dev);
-      network->dev.d_len = 0;
+      sv6621_network_transmit(network);
     }
+}
+
+static int sv6621_network_transmit(FAR struct sv6621_network_s *network)
+{
+  int ret;
+
+  if (!network->link_up)
+    {
+      return -ENETDOWN;
+    }
+
+  ret = sv6621_data_send(network->data, &network->tx_context,
+                          network->dev.d_buf, network->dev.d_len);
+  if (ret < 0)
+    {
+      NETDEV_TXERRORS(&network->dev);
+      return ret;
+    }
+
+  NETDEV_TXPACKETS(&network->dev);
+  return 0;
+}
+
+static int sv6621_network_tx_poll(FAR struct net_driver_s *dev)
+{
+  FAR struct sv6621_network_s *network = dev->d_private;
+
+  return sv6621_network_transmit(network);
+}
+
+static void sv6621_network_tx_worker(FAR void *arg)
+{
+  FAR struct sv6621_network_s *network = arg;
+
+  net_lock();
+  if (network->interface_up && network->link_up)
+    {
+      network->dev.d_buf = network->tx_frame;
+      devif_poll(&network->dev, sv6621_network_tx_poll);
+    }
+
+  net_unlock();
 }
 
 static void sv6621_network_rx_worker(FAR void *arg)
@@ -165,6 +209,14 @@ static int sv6621_network_ifdown(FAR struct net_driver_s *dev)
 
 static int sv6621_network_txavail(FAR struct net_driver_s *dev)
 {
+  FAR struct sv6621_network_s *network = dev->d_private;
+
+  if (work_available(&network->tx_work))
+    {
+      work_queue(LPWORK, &network->tx_work, sv6621_network_tx_worker, network,
+                 0);
+    }
+
   return 0;
 }
 
@@ -189,16 +241,18 @@ static int sv6621_network_rmmac(FAR struct net_driver_s *dev,
  ****************************************************************************/
 
 int sv6621_network_init(FAR struct sv6621_network_s *network,
+                        FAR struct sv6621_data_s *data,
                         FAR const uint8_t mac[SV6621_MAC_LENGTH])
 {
   int ret;
 
-  if (network == NULL || mac == NULL)
+  if (network == NULL || data == NULL || mac == NULL)
     {
       return -EINVAL;
     }
 
   memset(network, 0, sizeof(*network));
+  network->data = data;
   network->dev.d_ifup = sv6621_network_ifup;
   network->dev.d_ifdown = sv6621_network_ifdown;
   network->dev.d_txavail = sv6621_network_txavail;
@@ -227,8 +281,40 @@ void sv6621_network_deinit(FAR struct sv6621_network_s *network)
   if (network != NULL && network->registered)
     {
       work_cancel(LPWORK, &network->rx_work);
+      work_cancel(LPWORK, &network->tx_work);
       netdev_unregister(&network->dev);
       network->registered = false;
+    }
+}
+
+void sv6621_network_set_link(
+    FAR struct sv6621_network_s *network, bool link_up,
+    FAR const struct sv6621_data_tx_context_s *context)
+{
+  irqstate_t flags;
+
+  if (network == NULL || !network->registered ||
+      (link_up && context == NULL))
+    {
+      return;
+    }
+
+  flags = spin_lock_irqsave(&network->lock);
+  if (context != NULL)
+    {
+      network->tx_context = *context;
+    }
+
+  network->link_up = link_up;
+  spin_unlock_irqrestore(&network->lock, flags);
+
+  if (link_up)
+    {
+      netdev_carrier_on(&network->dev);
+    }
+  else
+    {
+      netdev_carrier_off(&network->dev);
     }
 }
 
