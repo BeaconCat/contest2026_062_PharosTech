@@ -78,7 +78,8 @@ struct nyabula_eye_renderer_s;
  * Public Function Prototypes
  ****************************************************************************/
 
-struct nyabula_eye_renderer_s *nyabula_eye_renderer_create(lv_obj_t *parent);
+struct nyabula_eye_renderer_s *
+nyabula_eye_renderer_create(lv_obj_t *left_parent, lv_obj_t *right_parent);
 void nyabula_eye_renderer_destroy(struct nyabula_eye_renderer_s *renderer);
 void nyabula_eye_renderer_render(
     struct nyabula_eye_renderer_s *renderer,

@@ -30,16 +30,18 @@
 #include "generated/nyabula_eye_icons.h"
 #include "generated/fonts/nyabula_eye_fonts.h"
 
-#define W           720
+#define W           360
 #define H           360
 #define R           178.0f
-#define GAP         360.0f
 #define CY          180.0f
 #define PI          3.14159265358979323846f
 #define FIBERS      48
 #define ZCOUNT      16
-#define ICON_CACHE_COUNT 40
 #define FONT_CACHE_COUNT 32
+#define TEXT_CACHE_COUNT 32
+#define TEXT_CACHE_BYTES 96
+#define BASE_CACHE_COUNT 2
+#define HEART_SAMPLES 96
 #define LID_SAMPLES 400
 #define LID_OFFSET  200
 
@@ -82,18 +84,6 @@ struct z_s
   bool active;
 };
 
-struct icon_cache_s
-{
-  const struct nyabula_eye_icon_s *asset;
-  uint8_t *coverage;
-  uint32_t last_used;
-  int size_key;
-  int left;
-  int top;
-  int width;
-  int height;
-};
-
 enum font_family_e
 {
   FONT_FAMILY_TITLE = 0,
@@ -108,27 +98,97 @@ struct font_cache_s
   uint8_t family;
 };
 
-struct nyabula_eye_renderer_s
+struct text_cache_s
+{
+  const lv_font_t *font;
+  uint32_t age;
+  int width;
+  char text[TEXT_CACHE_BYTES];
+  bool valid;
+};
+
+struct fiber_s
+{
+  float cosine;
+  float sine;
+  float inner_radius;
+  float outer_radius;
+};
+
+struct base_cache_s
 {
   lv_obj_t *canvas;
-  lv_draw_buf_t *buffer[2];
+  lv_draw_buf_t *buffer;
+  uint32_t iris_rgb;
+  uint32_t age;
+  int16_t gaze_x;
+  int16_t gaze_y;
+  uint16_t iris_radius;
+  uint16_t scale_y;
+  uint16_t glow;
+  bool valid;
+};
+
+struct page_state_s
+{
+  lv_area_t dirty;
+  uint32_t iris_rgb;
+  int16_t gaze_x;
+  int16_t gaze_y;
+  uint16_t iris_radius;
+  uint16_t scale_y;
+  uint16_t glow;
+  bool valid;
+};
+
+struct nyabula_eye_renderer_s
+{
+  lv_obj_t *canvas[NYABULA_EYE_COUNT];
+  lv_obj_t *mask_canvas;
+  lv_draw_buf_t *buffer[NYABULA_EYE_COUNT][2];
+  lv_draw_buf_t *mask_buffer;
+  struct base_cache_s base_cache[BASE_CACHE_COUNT];
+  struct page_state_s page_state[NYABULA_EYE_COUNT][2];
+  lv_image_dsc_t mask_image;
   lv_draw_buf_t *draw;
-  lv_draw_buf_t *glyph;
+  lv_layer_t layer;
+  lv_vector_dsc_t *vector;
+  lv_vector_path_t *path;
+  lv_layer_t cache_layer;
+  lv_vector_dsc_t *cache_vector;
+  lv_vector_path_t *cache_path;
+  lv_layer_t mask_layer;
+  lv_vector_dsc_t *mask_vector;
+  lv_vector_path_t *mask_path;
+  lv_fpoint_t icon_points[2048];
+  bool icon_moves[2048];
+  lv_fpoint_t heart_points[HEART_SAMPLES];
+  struct fiber_s fibers[FIBERS];
   struct z_s z[ZCOUNT];
-  struct icon_cache_s icon_cache[ICON_CACHE_COUNT];
-  uint32_t icon_cache_clock;
+  struct text_cache_s text_cache[TEXT_CACHE_COUNT];
 #if defined(CONFIG_CONTEST2026_062_NYABULA_DYNAMIC_FONTS) && LV_USE_FREETYPE
   struct font_cache_s font_cache[FONT_CACHE_COUNT];
 #endif
   uint32_t random;
+  uint32_t base_cache_clock;
+  uint32_t text_cache_clock;
   uint32_t perf_start;
   uint32_t render_total;
+  uint32_t build_total;
+  uint32_t raster_total;
+  uint32_t copy_total;
+  uint32_t flush_total;
   uint32_t frames;
-  uint8_t index;
+  uint32_t shared_frames;
+  uint32_t reused_eyes;
+  uint32_t base_cache_hits;
+  uint32_t base_cache_builds;
+  uint8_t index[NYABULA_EYE_COUNT];
+  struct nyabula_eye_frame_s last_frame[NYABULA_EYE_COUNT];
+  bool last_frame_valid[NYABULA_EYE_COUNT];
+  bool mask_ready;
   float znext;
   float last_time;
-  const struct eye_s *clip_eye;
-  bool clip_lids;
 #if defined(CONFIG_CONTEST2026_062_NYABULA_DYNAMIC_FONTS) && LV_USE_FREETYPE
   lv_font_t *font_title_20;
   lv_font_t *font_title_28;
@@ -144,6 +204,7 @@ struct nyabula_eye_renderer_s
 };
 
 static bool in_lids(const struct eye_s *e, float sx, float sy);
+static void iris(struct nyabula_eye_renderer_s *r, const struct eye_s *e);
 
 #if defined(CONFIG_CONTEST2026_062_NYABULA_DYNAMIC_FONTS) && LV_USE_FREETYPE
 static lv_font_t *renderer_create_font(const char *filename, uint32_t size);
@@ -261,6 +322,53 @@ static float clampf(float value, float low, float high)
   return value < low ? low : value > high ? high : value;
 }
 
+static lv_opa_t vector_opa(float opacity)
+{
+  return (lv_opa_t)lroundf(clampf(opacity, 0.0f, 1.0f) * LV_OPA_COVER);
+}
+
+static void vector_identity(struct nyabula_eye_renderer_s *r)
+{
+  lv_vector_dsc_identity(r->vector);
+}
+
+static void vector_eye_transform(struct nyabula_eye_renderer_s *r,
+                                 const struct eye_s *e)
+{
+  lv_matrix_t matrix;
+
+  lv_matrix_identity(&matrix);
+  matrix.m[0][0] = e->t.cs;
+  matrix.m[0][1] = -e->t.sy * e->t.sn;
+  matrix.m[0][2] = e->t.cx;
+  matrix.m[1][0] = e->t.sn;
+  matrix.m[1][1] = e->t.sy * e->t.cs;
+  matrix.m[1][2] = e->t.cy;
+  lv_vector_dsc_set_transform(r->vector, &matrix);
+}
+
+static void vector_fill(struct nyabula_eye_renderer_s *r, uint32_t color,
+                        float opacity)
+{
+  lv_vector_dsc_set_fill_color(r->vector, lv_color_hex(color));
+  lv_vector_dsc_set_fill_opa(r->vector, vector_opa(opacity));
+  lv_vector_dsc_set_stroke_opa(r->vector, LV_OPA_TRANSP);
+  lv_vector_dsc_add_path(r->vector, r->path);
+}
+
+static void vector_stroke(struct nyabula_eye_renderer_s *r, uint32_t color,
+                          float opacity, float width)
+{
+  lv_vector_dsc_set_fill_opa(r->vector, LV_OPA_TRANSP);
+  lv_vector_dsc_set_stroke_color(r->vector, lv_color_hex(color));
+  lv_vector_dsc_set_stroke_opa(r->vector, vector_opa(opacity));
+  lv_vector_dsc_set_stroke_width(r->vector, width);
+  lv_vector_dsc_set_stroke_cap(r->vector, LV_VECTOR_STROKE_CAP_ROUND);
+  lv_vector_dsc_set_stroke_join(r->vector, LV_VECTOR_STROKE_JOIN_ROUND);
+  lv_vector_dsc_set_stroke_dash(r->vector, NULL, 0);
+  lv_vector_dsc_add_path(r->vector, r->path);
+}
+
 static uint8_t channel(uint32_t color, int shift, float scale)
 {
   return (uint8_t)clampf(((color >> shift) & 255u) * scale, 0.0f, 255.0f);
@@ -270,66 +378,6 @@ static uint32_t shade(uint32_t color, float scale)
 {
   return ((uint32_t)channel(color, 16, scale) << 16) |
          ((uint32_t)channel(color, 8, scale) << 8) | channel(color, 0, scale);
-}
-
-static uint32_t mix(uint32_t a, uint32_t b, float amount)
-{
-  uint32_t out = 0;
-  int shift;
-
-  amount = clampf(amount, 0.0f, 1.0f);
-  for (shift = 0; shift <= 16; shift += 8)
-    {
-      float av = (a >> shift) & 255u;
-      float bv = (b >> shift) & 255u;
-      out |= (uint32_t)(av + (bv - av) * amount) << shift;
-    }
-
-  return out;
-}
-
-static uint32_t iris_color(uint32_t color, float radius)
-{
-  if (radius < 0.55f)
-    {
-      return mix(shade(color, 1.25f), color, radius / 0.55f);
-    }
-
-  if (radius < 0.85f)
-    {
-      return mix(color, shade(color, 0.55f), (radius - 0.55f) / 0.30f);
-    }
-
-  return mix(shade(color, 0.55f), shade(color, 0.30f),
-             (radius - 0.85f) / 0.15f);
-}
-
-static void pixel(struct nyabula_eye_renderer_s *r, int x, int y,
-                  uint32_t color, float opacity)
-{
-  lv_color32_t *p;
-  uint32_t stride;
-  float inverse;
-
-  if ((unsigned int)x >= W || (unsigned int)y >= H || opacity <= 0.0f)
-    {
-      return;
-    }
-
-  if (r->clip_lids && r->clip_eye != NULL &&
-      !in_lids(r->clip_eye, x + 0.5f, y + 0.5f))
-    {
-      return;
-    }
-
-  stride = r->draw->header.stride / sizeof(lv_color32_t);
-  p = &((lv_color32_t *)r->draw->data)[y * stride + x];
-  opacity = clampf(opacity, 0.0f, 1.0f);
-  inverse = 1.0f - opacity;
-  p->red = p->red * inverse + ((color >> 16) & 255u) * opacity;
-  p->green = p->green * inverse + ((color >> 8) & 255u) * opacity;
-  p->blue = p->blue * inverse + (color & 255u) * opacity;
-  p->alpha = 255;
 }
 
 static void to_screen(const struct transform_s *t, float x, float y, float *sx,
@@ -349,18 +397,29 @@ static void to_local(const struct transform_s *t, float x, float y, float *lx,
   *ly = (-dx * t->sn + dy * t->cs) / t->sy;
 }
 
-static bool in_screen(const struct eye_s *e, float x, float y)
-{
-  float dx = x - e->t.cx;
-  float dy = y - e->t.cy;
-  return dx * dx + dy * dy <= R * R;
-}
-
-static int text_width(const lv_font_t *font, const char *text)
+static int text_width(struct nyabula_eye_renderer_s *r, const lv_font_t *font,
+                      const char *text)
 {
   lv_font_glyph_dsc_t descriptor;
   uint32_t offset = 0;
+  size_t length = strlen(text);
   int width = 0;
+  int index;
+
+  if (length < TEXT_CACHE_BYTES)
+    {
+      for (index = 0; index < TEXT_CACHE_COUNT; index++)
+        {
+          struct text_cache_s *entry = &r->text_cache[index];
+
+          if (entry->valid && entry->font == font &&
+              strcmp(entry->text, text) == 0)
+            {
+              entry->age = ++r->text_cache_clock;
+              return entry->width;
+            }
+        }
+    }
 
   while (text[offset] != '\0')
     {
@@ -375,6 +434,31 @@ static int text_width(const lv_font_t *font, const char *text)
         }
     }
 
+  if (length < TEXT_CACHE_BYTES)
+    {
+      struct text_cache_s *entry = &r->text_cache[0];
+
+      for (index = 0; index < TEXT_CACHE_COUNT; index++)
+        {
+          if (!r->text_cache[index].valid)
+            {
+              entry = &r->text_cache[index];
+              break;
+            }
+
+          if (r->text_cache[index].age < entry->age)
+            {
+              entry = &r->text_cache[index];
+            }
+        }
+
+      entry->font = font;
+      entry->width = width;
+      entry->age = ++r->text_cache_clock;
+      entry->valid = true;
+      memcpy(entry->text, text, length + 1);
+    }
+
   return width;
 }
 
@@ -383,61 +467,41 @@ static void text_center_at(struct nyabula_eye_renderer_s *r,
                            const char *text, float center_x, float center_y,
                            uint32_t color, float opacity)
 {
-  lv_font_glyph_dsc_t descriptor;
-  uint32_t offset = 0;
-  float pen_x;
-  float top;
+  lv_draw_label_dsc_t descriptor;
+  lv_area_t area;
+  int width;
 
   font = renderer_font(r, font);
-  pen_x = -text_width(font, text) * 0.5f;
-  top = center_y - font->line_height * 0.5f;
+  width = text_width(r, font, text);
+  area.x1 = lroundf(e->t.cx + center_x - width * 0.5f);
+  area.y1 = lroundf(e->t.cy + center_y - font->line_height * 0.5f);
+  area.x2 = area.x1 + width + 1;
+  area.y2 = area.y1 + font->line_height + 1;
 
-  while (text[offset] != '\0')
+  lv_draw_label_dsc_init(&descriptor);
+  descriptor.text = text;
+  descriptor.font = font;
+  descriptor.color = lv_color_hex(color);
+  descriptor.opa = vector_opa(opacity);
+  descriptor.align = LV_TEXT_ALIGN_CENTER;
+  lv_draw_label(&r->layer, &descriptor, &area);
+}
+
+static float eye_globe_radius(void)
+{
+  return R - 2.0f;
+}
+
+static void clamp_to_eye_globe(float *x, float *y, float inset)
+{
+  float limit = fmaxf(0.0f, eye_globe_radius() - inset);
+  float length_squared = *x * *x + *y * *y;
+
+  if (length_squared > limit * limit && length_squared > 0.0f)
     {
-      uint32_t next_offset;
-      uint32_t codepoint = utf8_next(text, &offset);
-      uint32_t next;
-      const lv_draw_buf_t *bitmap;
-      uint32_t stride;
-      int glyph_x;
-      int glyph_y;
-
-      next_offset = offset;
-      next = text[next_offset] == '\0' ? 0 : utf8_next(text, &next_offset);
-      if (!lv_font_get_glyph_dsc(font, &descriptor, codepoint, next))
-        {
-          continue;
-        }
-
-      bitmap = descriptor.box_w == 0 || descriptor.box_h == 0
-                   ? NULL
-                   : lv_font_get_glyph_bitmap(&descriptor, r->glyph);
-      if (bitmap != NULL)
-        {
-          float origin_x = pen_x + descriptor.ofs_x;
-          float origin_y = top + font->line_height - font->base_line -
-                           descriptor.box_h - descriptor.ofs_y;
-          stride = lv_draw_buf_width_to_stride(descriptor.box_w,
-                                               LV_COLOR_FORMAT_A8);
-          for (glyph_y = 0; glyph_y < descriptor.box_h; glyph_y++)
-            {
-              const uint8_t *row =
-                  (const uint8_t *)bitmap->data + glyph_y * stride;
-              for (glyph_x = 0; glyph_x < descriptor.box_w; glyph_x++)
-                {
-                  float alpha = row[glyph_x] / 255.0f * opacity;
-                  if (alpha > 0.0f)
-                    {
-                       pixel(r, roundf(e->t.cx + center_x + origin_x + glyph_x),
-                            roundf(e->t.cy + origin_y + glyph_y), color,
-                            alpha);
-                    }
-                }
-            }
-        }
-
-      lv_font_glyph_release_draw_data(&descriptor);
-      pen_x += descriptor.adv_w;
+      float scale = limit / sqrtf(length_squared);
+      *x *= scale;
+      *y *= scale;
     }
 }
 
@@ -507,23 +571,14 @@ static void disk(struct nyabula_eye_renderer_s *r, const struct eye_s *e,
                  float x, float y, float radius, uint32_t color, float opacity,
                  bool lid_clip)
 {
-  int px;
-  int py;
-  for (py = floorf(y - radius - 1); py <= ceilf(y + radius + 1); py++)
-    {
-      for (px = floorf(x - radius - 1); px <= ceilf(x + radius + 1); px++)
-        {
-          float dx = px + 0.5f - x;
-          float dy = py + 0.5f - y;
-          float d = sqrtf(dx * dx + dy * dy);
-          if (d <= radius + 0.5f && in_screen(e, px + 0.5f, py + 0.5f) &&
-              (!lid_clip || in_lids(e, px + 0.5f, py + 0.5f)))
-            {
-              pixel(r, px, py, color,
-                    opacity * clampf(radius + 0.5f - d, 0.0f, 1.0f));
-            }
-        }
-    }
+  lv_fpoint_t center = {x, y};
+
+  (void)e;
+  (void)lid_clip;
+  lv_vector_path_clear(r->path);
+  lv_vector_path_append_circle(r->path, &center, radius, radius);
+  vector_identity(r);
+  vector_fill(r, color, opacity);
 }
 
 static void line(struct nyabula_eye_renderer_s *r, const struct eye_s *e,
@@ -534,156 +589,428 @@ static void line(struct nyabula_eye_renderer_s *r, const struct eye_s *e,
   float sy1;
   float sx2;
   float sy2;
-  int steps;
-  int i;
+  lv_fpoint_t start;
+  lv_fpoint_t end;
 
-  to_screen(&e->t, x1, y1, &sx1, &sy1);
-  to_screen(&e->t, x2, y2, &sx2, &sy2);
-  steps = ceilf(fmaxf(fabsf(sx2 - sx1), fabsf(sy2 - sy1)) * 1.25f);
-  steps = steps < 1 ? 1 : steps;
-  for (i = 0; i <= steps; i++)
+  lv_vector_path_clear(r->path);
+  if (lid_clip)
     {
-      float amount = (float)i / steps;
-      disk(r, e, sx1 + (sx2 - sx1) * amount, sy1 + (sy2 - sy1) * amount,
-           width * 0.5f, color, opacity, lid_clip);
+      bool drawing = false;
+      int index;
+
+      for (index = 0; index <= 32; index++)
+        {
+          float amount = index / 32.0f;
+          float x = x1 + (x2 - x1) * amount;
+          float y = y1 + (y2 - y1) * amount;
+          bool visible;
+
+          to_screen(&e->t, x, y, &sx1, &sy1);
+          visible = in_lids(e, sx1, sy1);
+          start = (lv_fpoint_t){sx1, sy1};
+          if (visible && !drawing)
+            {
+              lv_vector_path_move_to(r->path, &start);
+            }
+          else if (visible)
+            {
+              lv_vector_path_line_to(r->path, &start);
+            }
+
+          drawing = visible;
+        }
     }
+  else
+    {
+      to_screen(&e->t, x1, y1, &sx1, &sy1);
+      to_screen(&e->t, x2, y2, &sx2, &sy2);
+      start = (lv_fpoint_t){sx1, sy1};
+      end = (lv_fpoint_t){sx2, sy2};
+      lv_vector_path_move_to(r->path, &start);
+      lv_vector_path_line_to(r->path, &end);
+    }
+
+  vector_identity(r);
+  vector_stroke(r, color, opacity, width);
 }
 
 static void arc(struct nyabula_eye_renderer_s *r, const struct eye_s *e,
                 float cx, float cy, float radius, float start, float sweep,
                 float width, uint32_t color, float opacity)
 {
-  int steps = fmaxf(2.0f, ceilf(fabsf(sweep) * radius));
-  int i;
-  for (i = 0; i < steps; i++)
-    {
-      float a = start + sweep * (float)i / steps;
-      float b = start + sweep * (float)(i + 1) / steps;
-      line(r, e, cx + cosf(a) * radius, cy + sinf(a) * radius,
-           cx + cosf(b) * radius, cy + sinf(b) * radius, width, color, opacity,
-           false);
-    }
+  lv_fpoint_t center = {cx, cy};
+
+  lv_vector_path_clear(r->path);
+  lv_vector_path_append_arc(r->path, &center, radius,
+                            start * 180.0f / PI,
+                            sweep * 180.0f / PI, false);
+  vector_eye_transform(r, e);
+  vector_stroke(r, color, opacity, width);
 }
 
 static void base(struct nyabula_eye_renderer_s *r, const struct eye_s *e)
 {
-  int x;
-  int y;
-  for (y = e->t.cy - R; y <= e->t.cy + R; y++)
-    {
-      for (x = e->t.cx - R; x <= e->t.cx + R; x++)
-        {
-          float lx;
-          float ly;
-          float dx = x + 0.5f - e->t.cx;
-          float dy = y + 0.5f - e->t.cy;
-          float screen_radius = sqrtf(dx * dx + dy * dy);
-          float iradius;
-          if (screen_radius > R)
-            {
-              continue;
-            }
+  lv_gradient_stop_t glow_stops[2];
+  lv_gradient_stop_t iris_stops[4];
+  lv_fpoint_t center;
+  float globe_radius = eye_globe_radius();
 
-          to_local(&e->t, x + 0.5f, y + 0.5f, &lx, &ly);
-          pixel(r, x, y, e->f->iris_rgb,
-                e->f->glow * 0.175f *
-                    (1.0f - clampf((hypotf(lx, ly) - R * 0.4f) / (R * 1.5f),
-                                   0.0f, 1.0f)));
-          iradius = hypotf(lx - e->gx * 0.5f, ly - e->gy * 0.5f) / e->ir;
-          if (iradius <= 1.0f)
+  memset(glow_stops, 0, sizeof(glow_stops));
+  glow_stops[0].color = lv_color_hex(e->f->iris_rgb);
+  glow_stops[0].opa = vector_opa(e->f->glow * 0.175f);
+  glow_stops[0].frac = 0;
+  glow_stops[1].color = lv_color_hex(e->f->iris_rgb);
+  glow_stops[1].opa = LV_OPA_TRANSP;
+  glow_stops[1].frac = 255;
+
+  center = (lv_fpoint_t){0.0f, 0.0f};
+  lv_vector_path_clear(r->path);
+  lv_vector_path_append_circle(r->path, &center, R, R);
+  vector_eye_transform(r, e);
+  lv_vector_dsc_set_stroke_opa(r->vector, LV_OPA_TRANSP);
+  lv_vector_dsc_set_fill_opa(r->vector, LV_OPA_COVER);
+  lv_vector_dsc_set_fill_radial_gradient(r->vector, 0.0f, 0.0f, R);
+  lv_vector_dsc_set_fill_gradient_color_stops(r->vector, glow_stops, 2);
+  lv_vector_dsc_set_fill_gradient_spread(r->vector,
+                                         LV_VECTOR_GRADIENT_SPREAD_PAD);
+  lv_vector_dsc_add_path(r->vector, r->path);
+
+  memset(iris_stops, 0, sizeof(iris_stops));
+  iris_stops[0].color = lv_color_hex(shade(e->f->iris_rgb, 1.25f));
+  iris_stops[0].opa = LV_OPA_COVER;
+  iris_stops[0].frac = 0;
+  iris_stops[1].color = lv_color_hex(e->f->iris_rgb);
+  iris_stops[1].opa = LV_OPA_COVER;
+  iris_stops[1].frac = 140;
+  iris_stops[2].color = lv_color_hex(shade(e->f->iris_rgb, 0.55f));
+  iris_stops[2].opa = LV_OPA_COVER;
+  iris_stops[2].frac = 217;
+  iris_stops[3].color = lv_color_hex(shade(e->f->iris_rgb, 0.30f));
+  iris_stops[3].opa = LV_OPA_COVER;
+  iris_stops[3].frac = 255;
+
+  /* The globe stays fixed. Gaze changes the projected lighting and the
+   * internal features; translating this circle would make a flat iris disc
+   * slide beyond the physical eye rim. */
+
+  center = (lv_fpoint_t){0.0f, 0.0f};
+  lv_vector_path_clear(r->path);
+  lv_vector_path_append_circle(r->path, &center, globe_radius, globe_radius);
+  vector_eye_transform(r, e);
+  lv_vector_dsc_set_fill_opa(r->vector, LV_OPA_COVER);
+  lv_vector_dsc_set_fill_radial_gradient(r->vector, 0.0f, 0.0f,
+                                         globe_radius);
+  lv_vector_dsc_set_fill_gradient_color_stops(r->vector, iris_stops, 4);
+  lv_vector_dsc_set_fill_gradient_spread(r->vector,
+                                         LV_VECTOR_GRADIENT_SPREAD_PAD);
+  lv_vector_dsc_add_path(r->vector, r->path);
+}
+
+static lv_draw_buf_t *base_cache_get(struct nyabula_eye_renderer_s *r,
+                                     const struct eye_s *e)
+{
+  struct base_cache_s *entry = NULL;
+  lv_vector_dsc_t *main_vector;
+  lv_vector_path_t *main_path;
+  uint16_t glow;
+  int16_t gaze_x;
+  int16_t gaze_y;
+  uint16_t iris_radius;
+  uint16_t scale_y;
+  int index;
+
+  if (fabsf(e->t.sn) > 0.0001f || fabsf(e->t.cs - 1.0f) > 0.0001f)
+    {
+      return NULL;
+    }
+
+  glow = (uint16_t)lroundf(clampf(e->f->glow, 0.0f, 1.0f) * 4095.0f);
+  gaze_x = (int16_t)lroundf(e->gx * 16.0f);
+  gaze_y = (int16_t)lroundf(e->gy * 16.0f);
+  iris_radius = (uint16_t)lroundf(e->ir * 16.0f);
+  scale_y = (uint16_t)lroundf(clampf(e->t.sy, 0.0f, 1.0f) * 4095.0f);
+  for (index = 0; index < BASE_CACHE_COUNT; index++)
+    {
+      struct base_cache_s *candidate = &r->base_cache[index];
+
+      if (candidate->valid && candidate->iris_rgb == e->f->iris_rgb &&
+          candidate->glow == glow && candidate->gaze_x == gaze_x &&
+          candidate->gaze_y == gaze_y &&
+          candidate->iris_radius == iris_radius &&
+          candidate->scale_y == scale_y)
+        {
+          candidate->age = ++r->base_cache_clock;
+          r->base_cache_hits++;
+          return candidate->buffer;
+        }
+
+      if (entry == NULL || !candidate->valid || candidate->age < entry->age)
+        {
+          entry = candidate;
+          if (!candidate->valid)
             {
-              pixel(r, x, y, iris_color(e->f->iris_rgb, iradius), 1.0f);
+              break;
             }
         }
     }
+
+  if (entry == NULL || entry->canvas == NULL || entry->buffer == NULL)
+    {
+      return NULL;
+    }
+
+  main_vector = r->vector;
+  main_path = r->path;
+  lv_canvas_fill_bg(entry->canvas, lv_color_black(), LV_OPA_COVER);
+  lv_canvas_init_layer(entry->canvas, &r->cache_layer);
+  if (r->cache_vector == NULL)
+    {
+      r->cache_vector = lv_vector_dsc_create(&r->cache_layer);
+    }
+
+  if (r->cache_path == NULL)
+    {
+      r->cache_path = lv_vector_path_create(LV_VECTOR_PATH_QUALITY_HIGH);
+    }
+
+  r->vector = r->cache_vector;
+  r->path = r->cache_path;
+  if (r->vector == NULL || r->path == NULL)
+    {
+      lv_canvas_finish_layer(entry->canvas, &r->cache_layer);
+      r->vector = main_vector;
+      r->path = main_path;
+      return NULL;
+    }
+
+  base(r, e);
+  iris(r, e);
+  arc(r, e, 0.0f, 0.0f, R - 0.8f, 0.0f, PI * 2.0f, 2.0f,
+      0x3c4655, 0.45f);
+  lv_draw_vector(r->vector);
+  lv_canvas_finish_layer(entry->canvas, &r->cache_layer);
+  lv_draw_buf_flush_cache(entry->buffer, NULL);
+  r->vector = main_vector;
+  r->path = main_path;
+  entry->iris_rgb = e->f->iris_rgb;
+  entry->glow = glow;
+  entry->gaze_x = gaze_x;
+  entry->gaze_y = gaze_y;
+  entry->iris_radius = iris_radius;
+  entry->scale_y = scale_y;
+  entry->age = ++r->base_cache_clock;
+  entry->valid = true;
+  r->base_cache_builds++;
+  return entry->buffer;
+}
+
+static bool page_base_matches(const struct page_state_s *state,
+                              const struct eye_s *e)
+{
+  return state->valid && state->iris_rgb == e->f->iris_rgb &&
+         state->glow ==
+             (uint16_t)lroundf(clampf(e->f->glow, 0.0f, 1.0f) * 4095.0f) &&
+         state->gaze_x == (int16_t)lroundf(e->gx * 16.0f) &&
+         state->gaze_y == (int16_t)lroundf(e->gy * 16.0f) &&
+         state->iris_radius == (uint16_t)lroundf(e->ir * 16.0f) &&
+         state->scale_y ==
+             (uint16_t)lroundf(clampf(e->t.sy, 0.0f, 1.0f) * 4095.0f);
+}
+
+static void page_remember_base(struct page_state_s *state,
+                               const struct eye_s *e)
+{
+  state->iris_rgb = e->f->iris_rgb;
+  state->glow =
+      (uint16_t)lroundf(clampf(e->f->glow, 0.0f, 1.0f) * 4095.0f);
+  state->gaze_x = (int16_t)lroundf(e->gx * 16.0f);
+  state->gaze_y = (int16_t)lroundf(e->gy * 16.0f);
+  state->iris_radius = (uint16_t)lroundf(e->ir * 16.0f);
+  state->scale_y =
+      (uint16_t)lroundf(clampf(e->t.sy, 0.0f, 1.0f) * 4095.0f);
+  state->valid = true;
+}
+
+static void page_remember_dynamic_area(struct page_state_s *state,
+                                       const struct eye_s *e, bool simple)
+{
+  float rx;
+  float ry;
+  float px;
+  float py;
+  float left;
+  float top;
+  float right;
+  float bottom;
+  float radius;
+
+  if (!simple)
+    {
+      state->dirty = (lv_area_t){0, 0, W - 1, H - 1};
+      return;
+    }
+
+  rx = e->ir * e->f->pupil_width * 0.80f;
+  ry = e->ir * e->f->pupil_height * 0.84f;
+  px = e->gx;
+  py = e->gy;
+  clamp_to_eye_globe(&px, &py, fmaxf(rx, ry) + 1.0f);
+  left = px - rx;
+  right = px + rx;
+  top = py - ry;
+  bottom = py + ry;
+
+  radius = e->ir * 0.13f;
+  left = fminf(left, -e->ir * 0.33f + e->gx * 0.55f - radius);
+  right = fmaxf(right, -e->ir * 0.33f + e->gx * 0.55f + radius);
+  top = fminf(top, -e->ir * 0.38f + e->gy * 0.55f - radius);
+  bottom = fmaxf(bottom, -e->ir * 0.38f + e->gy * 0.55f + radius);
+
+  radius = e->ir * 0.05f;
+  left = fminf(left, e->ir * 0.30f + e->gx * 0.60f - radius);
+  right = fmaxf(right, e->ir * 0.30f + e->gx * 0.60f + radius);
+  top = fminf(top, e->ir * 0.24f + e->gy * 0.60f - radius);
+  bottom = fmaxf(bottom, e->ir * 0.24f + e->gy * 0.60f + radius);
+
+  state->dirty.x1 = (int32_t)floorf(e->t.cx + left - 4.0f);
+  state->dirty.x2 = (int32_t)ceilf(e->t.cx + right + 4.0f);
+  state->dirty.y1 =
+      (int32_t)floorf(e->t.cy + top * e->t.sy - 4.0f);
+  state->dirty.y2 =
+      (int32_t)ceilf(e->t.cy + bottom * e->t.sy + 4.0f);
+  state->dirty.x1 = state->dirty.x1 < 0 ? 0 : state->dirty.x1;
+  state->dirty.y1 = state->dirty.y1 < 0 ? 0 : state->dirty.y1;
+  state->dirty.x2 = state->dirty.x2 >= W ? W - 1 : state->dirty.x2;
+  state->dirty.y2 = state->dirty.y2 >= H ? H - 1 : state->dirty.y2;
+}
+
+static lv_area_t page_dirty_union(const struct page_state_s *first,
+                                  const struct page_state_s *second)
+{
+  lv_area_t area;
+
+  area.x1 = first->dirty.x1 < second->dirty.x1 ? first->dirty.x1
+                                                : second->dirty.x1;
+  area.y1 = first->dirty.y1 < second->dirty.y1 ? first->dirty.y1
+                                                : second->dirty.y1;
+  area.x2 = first->dirty.x2 > second->dirty.x2 ? first->dirty.x2
+                                                : second->dirty.x2;
+  area.y2 = first->dirty.y2 > second->dirty.y2 ? first->dirty.y2
+                                                : second->dirty.y2;
+  return area;
 }
 
 static void iris(struct nyabula_eye_renderer_s *r, const struct eye_s *e)
 {
+  uint32_t color = shade(e->f->iris_rgb, 1.6f);
   int i;
+
   for (i = 0; i < FIBERS; i++)
     {
-      float a = (float)i / FIBERS * PI * 2.0f + sinf(i * 7.0f) * 0.1f;
-      float r1 = e->ir * (0.28f + (float)((i * 37) % 13) / 13.0f * 0.15f);
-      float r2 = e->ir * (0.82f + (float)((i * 53) % 7) / 7.0f * 0.14f);
-      line(r, e, e->gx + cosf(a) * r1, e->gy + sinf(a) * r1,
-           e->gx * 0.3f + cosf(a) * r2, e->gy * 0.3f + sinf(a) * r2, 1.0f,
-           shade(e->f->iris_rgb, 1.6f), 0.16f, false);
+      const struct fiber_s *fiber = &r->fibers[i];
+      float r1 = e->ir * fiber->inner_radius;
+      float r2 = e->ir * fiber->outer_radius;
+      float x1 = e->gx + fiber->cosine * r1;
+      float y1 = e->gy + fiber->sine * r1;
+      float x2 = e->gx * 0.3f + fiber->cosine * r2;
+      float y2 = e->gy * 0.3f + fiber->sine * r2;
+
+      clamp_to_eye_globe(&x1, &y1, 1.0f);
+      clamp_to_eye_globe(&x2, &y2, 1.0f);
+      line(r, e, x1, y1, x2, y2, 1.0f, color, 0.16f, false);
     }
+}
+
+static void ellipse_path(struct nyabula_eye_renderer_s *r, float cx, float cy,
+                         float rx, float ry, float rotation)
+{
+  const float kappa = 0.5522847498307936f;
+  static const float cosine[5] = {1.0f, 0.0f, -1.0f, 0.0f, 1.0f};
+  static const float sine[5] = {0.0f, 1.0f, 0.0f, -1.0f, 0.0f};
+  float sn = rotation == 0.0f ? 0.0f : sinf(rotation);
+  float cs = rotation == 0.0f ? 1.0f : cosf(rotation);
+  lv_fpoint_t axis_x = {rx * cs, rx * sn};
+  lv_fpoint_t axis_y = {-ry * sn, ry * cs};
+  lv_fpoint_t p0 = {cx + axis_x.x, cy + axis_x.y};
+  lv_fpoint_t c1;
+  lv_fpoint_t c2;
+  lv_fpoint_t p;
+  int segment;
+
+  lv_vector_path_clear(r->path);
+  lv_vector_path_move_to(r->path, &p0);
+  for (segment = 0; segment < 4; segment++)
+    {
+      float ca0 = cosine[segment];
+      float sa0 = sine[segment];
+      float ca1 = cosine[segment + 1];
+      float sa1 = sine[segment + 1];
+      lv_fpoint_t start = {cx + axis_x.x * ca0 + axis_y.x * sa0,
+                           cy + axis_x.y * ca0 + axis_y.y * sa0};
+
+      c1 = (lv_fpoint_t){start.x +
+                             kappa * (-axis_x.x * sa0 + axis_y.x * ca0),
+                         start.y +
+                             kappa * (-axis_x.y * sa0 + axis_y.y * ca0)};
+      p = (lv_fpoint_t){cx + axis_x.x * ca1 + axis_y.x * sa1,
+                        cy + axis_x.y * ca1 + axis_y.y * sa1};
+      c2 = (lv_fpoint_t){p.x -
+                             kappa * (-axis_x.x * sa1 + axis_y.x * ca1),
+                         p.y -
+                             kappa * (-axis_x.y * sa1 + axis_y.y * ca1)};
+      lv_vector_path_cubic_to(r->path, &c1, &c2, &p);
+    }
+
+  lv_vector_path_close(r->path);
 }
 
 static void ellipse(struct nyabula_eye_renderer_s *r, const struct eye_s *e,
                     float cx, float cy, float rx, float ry, float rotation,
                     uint32_t color, float opacity)
 {
-  float center_x;
-  float center_y;
-  float ux;
-  float uy;
-  float vx;
-  float vy;
-  float extent_x;
-  float extent_y;
-  int max_x;
-  int max_y;
-  int min_x;
-  int min_y;
-  int x;
-  int y;
-  float sn = sinf(rotation);
-  float cs = cosf(rotation);
-
-  to_screen(&e->t, cx, cy, &center_x, &center_y);
-  ux = rx * (cs * e->t.cs - sn * e->t.sy * e->t.sn);
-  uy = rx * (cs * e->t.sn + sn * e->t.sy * e->t.cs);
-  vx = ry * (-sn * e->t.cs - cs * e->t.sy * e->t.sn);
-  vy = ry * (-sn * e->t.sn + cs * e->t.sy * e->t.cs);
-  extent_x = sqrtf(ux * ux + vx * vx) + 1.0f;
-  extent_y = sqrtf(uy * uy + vy * vy) + 1.0f;
-  min_x = (int)floorf(center_x - extent_x);
-  max_x = (int)ceilf(center_x + extent_x);
-  min_y = (int)floorf(center_y - extent_y);
-  max_y = (int)ceilf(center_y + extent_y);
-
-  for (y = min_y; y <= max_y; y++)
-    {
-      for (x = min_x; x <= max_x; x++)
-        {
-          float lx;
-          float ly;
-          float dx;
-          float dy;
-          float tx;
-          float ty;
-          if (!in_screen(e, x + 0.5f, y + 0.5f))
-            {
-              continue;
-            }
-
-          to_local(&e->t, x + 0.5f, y + 0.5f, &lx, &ly);
-          dx = lx - cx;
-          dy = ly - cy;
-          tx = dx * cs + dy * sn;
-          ty = -dx * sn + dy * cs;
-          if (tx * tx / (rx * rx) + ty * ty / (ry * ry) <= 1.0f)
-            {
-              pixel(r, x, y, color, opacity);
-            }
-        }
-    }
+  ellipse_path(r, cx, cy, rx, ry, rotation);
+  vector_eye_transform(r, e);
+  vector_fill(r, color, opacity);
 }
 
 static void pupil(struct nyabula_eye_renderer_s *r, const struct eye_s *e)
 {
   float rx = e->ir * e->f->pupil_width * 0.80f;
   float ry = e->ir * e->f->pupil_height * 0.84f;
+  float px = e->gx;
+  float py = e->gy;
+  lv_gradient_stop_t stops[3];
+
+  /* Keep the complete antialiased outline inside the fixed globe without
+   * changing the pupil dimensions defined by the Web Demo. */
+
+  clamp_to_eye_globe(&px, &py, fmaxf(rx, ry) + 1.0f);
   if (rx > 0.01f && ry > 0.01f)
     {
-      ellipse(r, e, e->gx, e->gy, rx, ry, 0.0f, 0x05070a, 1.0f);
-      ellipse(r, e, e->gx, e->gy, rx, ry, 0.0f, shade(e->f->iris_rgb, 1.7f),
-              0.12f);
-      ellipse(r, e, e->gx, e->gy, rx * 0.96f, ry * 0.96f, 0.0f, 0x05070a,
-              1.0f);
+      memset(stops, 0, sizeof(stops));
+      stops[0].color = lv_color_hex(0x101216);
+      stops[0].opa = LV_OPA_COVER;
+      stops[0].frac = 0;
+      stops[1].color = lv_color_hex(0x05070a);
+      stops[1].opa = LV_OPA_COVER;
+      stops[1].frac = 204;
+      stops[2].color = lv_color_hex(0x000000);
+      stops[2].opa = LV_OPA_COVER;
+      stops[2].frac = 255;
+
+      ellipse_path(r, px, py, rx, ry, 0.0f);
+      vector_eye_transform(r, e);
+      lv_vector_dsc_set_fill_opa(r->vector, LV_OPA_COVER);
+      lv_vector_dsc_set_fill_radial_gradient(r->vector, px, py,
+                                             fmaxf(rx, ry));
+      lv_vector_dsc_set_fill_gradient_color_stops(r->vector, stops, 3);
+      lv_vector_dsc_set_fill_gradient_spread(r->vector,
+                                             LV_VECTOR_GRADIENT_SPREAD_PAD);
+      lv_vector_dsc_set_stroke_color(
+          r->vector, lv_color_hex(shade(e->f->iris_rgb, 1.7f)));
+      lv_vector_dsc_set_stroke_opa(r->vector, vector_opa(0.5f));
+      lv_vector_dsc_set_stroke_width(r->vector, e->ir * 0.02f);
+      lv_vector_dsc_add_path(r->vector, r->path);
     }
 }
 
@@ -691,282 +1018,205 @@ static void star(struct nyabula_eye_renderer_s *r, const struct eye_s *e,
                  float cx, float cy, float radius, float rotation,
                  uint32_t color, float opacity)
 {
-  float points[20];
-  int x;
-  int y;
   int i;
 
+  lv_vector_path_clear(r->path);
   for (i = 0; i < 10; i++)
     {
       float a = rotation + i * PI / 5.0f;
       float pr = (i & 1) ? radius * 0.45f : radius;
-      points[i * 2] = cx + cosf(a) * pr;
-      points[i * 2 + 1] = cy + sinf(a) * pr;
-    }
-
-  for (y = e->t.cy - R; y <= e->t.cy + R; y++)
-    {
-      for (x = e->t.cx - R; x <= e->t.cx + R; x++)
+      lv_fpoint_t point = {cx + cosf(a) * pr, cy + sinf(a) * pr};
+      if (i == 0)
         {
-          float lx;
-          float ly;
-          bool inside = false;
-          int previous = 9;
-          if (!in_screen(e, x + 0.5f, y + 0.5f))
-            {
-              continue;
-            }
-
-          to_local(&e->t, x + 0.5f, y + 0.5f, &lx, &ly);
-          for (i = 0; i < 10; i++)
-            {
-              float x1 = points[i * 2];
-              float y1 = points[i * 2 + 1];
-              float x2 = points[previous * 2];
-              float y2 = points[previous * 2 + 1];
-              if ((y1 > ly) != (y2 > ly) &&
-                  lx < (x2 - x1) * (ly - y1) / (y2 - y1) + x1)
-                {
-                  inside = !inside;
-                }
-
-              previous = i;
-            }
-
-          if (inside)
-            {
-              pixel(r, x, y, color, opacity);
-            }
+          lv_vector_path_move_to(r->path, &point);
+        }
+      else
+        {
+          lv_vector_path_line_to(r->path, &point);
         }
     }
+
+  lv_vector_path_close(r->path);
+  vector_eye_transform(r, e);
+  vector_fill(r, color, opacity);
 }
 
 static void heart(struct nyabula_eye_renderer_s *r, const struct eye_s *e,
                   float cx, float cy, float radius, uint32_t color,
                   float opacity)
 {
-  int x;
-  int y;
+  int sample;
 
-  for (y = e->t.cy - R; y <= e->t.cy + R; y++)
+  lv_vector_path_clear(r->path);
+  for (sample = 0; sample < HEART_SAMPLES; sample++)
     {
-      for (x = e->t.cx - R; x <= e->t.cx + R; x++)
+      lv_fpoint_t point = {cx + r->heart_points[sample].x * radius,
+                           cy + r->heart_points[sample].y * radius};
+      if (sample == 0)
         {
-          float lx;
-          float ly;
-          float nx;
-          float ny;
-          float q;
-          if (!in_screen(e, x + 0.5f, y + 0.5f))
-            {
-              continue;
-            }
-
-          to_local(&e->t, x + 0.5f, y + 0.5f, &lx, &ly);
-          nx = (lx - cx) / radius * 1.15f;
-          ny = -(ly - cy) / radius * 1.15f;
-          q = nx * nx + ny * ny - 1.0f;
-          if (q * q * q - nx * nx * ny * ny * ny <= 0.0f)
-            {
-              pixel(r, x, y, color, opacity);
-            }
+          lv_vector_path_move_to(r->path, &point);
         }
-    }
-}
-
-static bool icon_contains(const struct nyabula_eye_icon_s *icon, float x,
-                          float y)
-{
-  int winding = 0;
-  int contour;
-
-  for (contour = 0; contour < icon->contour_count; contour++)
-    {
-      int first = icon->contours[contour];
-      int limit = icon->contours[contour + 1];
-      int previous = limit - 1;
-      int index;
-
-      for (index = first; index < limit; index++)
+      else
         {
-          const struct nyabula_eye_icon_point_s *a = &icon->points[index];
-          const struct nyabula_eye_icon_point_s *b = &icon->points[previous];
-          float cross = (float)(a->x - b->x) * (y - b->y) -
-                        (x - b->x) * (float)(a->y - b->y);
-
-          if (b->y <= y && a->y > y && cross > 0.0f)
-            {
-              winding++;
-            }
-          else if (b->y > y && a->y <= y && cross < 0.0f)
-            {
-              winding--;
-            }
-
-          previous = index;
+          lv_vector_path_line_to(r->path, &point);
         }
     }
 
-  return winding != 0;
+  lv_vector_path_close(r->path);
+  vector_eye_transform(r, e);
+  vector_fill(r, color, opacity);
 }
 
-static struct icon_cache_s *icon_cache_get(
-    struct nyabula_eye_renderer_s *r,
-    const struct nyabula_eye_icon_s *asset, float size)
+static lv_fpoint_t icon_point(const struct nyabula_eye_icon_s *icon,
+                              float scale, int32_t x, int32_t y)
 {
-  struct icon_cache_s *entry = NULL;
-  uint32_t oldest = UINT32_MAX;
-  int size_key = lroundf(size * R);
+  float half_width = icon->width * 0.5f;
+  float half_height = icon->height * 0.5f;
+
+  return (lv_fpoint_t){(x - half_width) * scale,
+                       (y - half_height) * scale};
+}
+
+static void icon_append_path(struct nyabula_eye_renderer_s *r,
+                             const struct nyabula_eye_icon_s *icon,
+                             float size)
+{
+  float scale = R * size / icon->width;
   int index;
 
-  size = size_key / R;
-  r->icon_cache_clock++;
-
-  for (index = 0; index < ICON_CACHE_COUNT; index++)
+  lv_vector_path_clear(r->path);
+  for (index = 0; index < icon->command_count; index++)
     {
-      if (r->icon_cache[index].asset == asset &&
-          r->icon_cache[index].size_key == size_key)
-        {
-          r->icon_cache[index].last_used = r->icon_cache_clock;
-          return &r->icon_cache[index];
-        }
+      const struct nyabula_eye_icon_command_s *command =
+          &icon->commands[index];
+      lv_fpoint_t p1 = icon_point(icon, scale, command->x1, command->y1);
+      lv_fpoint_t p2 = icon_point(icon, scale, command->x2, command->y2);
+      lv_fpoint_t p3 = icon_point(icon, scale, command->x3, command->y3);
 
-      if (entry == NULL && r->icon_cache[index].asset == NULL)
+      switch (command->operation)
         {
-          entry = &r->icon_cache[index];
-        }
-      else if (entry == NULL || r->icon_cache[index].last_used < oldest)
-        {
-          oldest = r->icon_cache[index].last_used;
+          case NYABULA_EYE_ICON_MOVE:
+            lv_vector_path_move_to(r->path, &p1);
+            break;
+          case NYABULA_EYE_ICON_LINE:
+            lv_vector_path_line_to(r->path, &p1);
+            break;
+          case NYABULA_EYE_ICON_QUAD:
+            lv_vector_path_quad_to(r->path, &p1, &p2);
+            break;
+          case NYABULA_EYE_ICON_CUBIC:
+            lv_vector_path_cubic_to(r->path, &p1, &p2, &p3);
+            break;
+          case NYABULA_EYE_ICON_CLOSE:
+            lv_vector_path_close(r->path);
+            break;
+          default:
+            break;
         }
     }
-
-  if (entry == NULL)
-    {
-      for (index = 0; index < ICON_CACHE_COUNT; index++)
-        {
-          if (r->icon_cache[index].last_used == oldest)
-            {
-              entry = &r->icon_cache[index];
-              free(entry->coverage);
-              memset(entry, 0, sizeof(*entry));
-              break;
-            }
-        }
-    }
-
-  if (entry != NULL)
-    {
-      float scale = R * size / asset->width;
-      float half_width = asset->width * 0.5f;
-      float half_height = asset->height * 0.5f;
-      float extent_x = R * size * 0.5f;
-      float extent_y = extent_x * asset->height / asset->width;
-      int x;
-      int y;
-
-      entry->left = floorf(-extent_x) - 2;
-      entry->top = floorf(-extent_y) - 2;
-      entry->width = ceilf(extent_x) - entry->left + 3;
-      entry->height = ceilf(extent_y) - entry->top + 3;
-      entry->coverage = calloc((size_t)entry->width * entry->height, 1);
-      if (entry->coverage == NULL)
-        {
-          return NULL;
-        }
-
-      for (y = 0; y < entry->height; y++)
-        {
-          for (x = 0; x < entry->width; x++)
-            {
-              int sample_x;
-              int sample_y;
-              int inside = 0;
-
-              for (sample_y = 0; sample_y < 4; sample_y++)
-                {
-                  for (sample_x = 0; sample_x < 4; sample_x++)
-                    {
-                      float local_x = entry->left + x +
-                                      (sample_x + 0.5f) * 0.25f;
-                      float local_y = entry->top + y +
-                                      (sample_y + 0.5f) * 0.25f;
-                      float icon_x = local_x / scale + half_width;
-                      float icon_y = local_y / scale + half_height;
-
-                      inside += icon_contains(asset, icon_x, icon_y);
-                    }
-                }
-
-              entry->coverage[y * entry->width + x] =
-                  (uint8_t)((inside * 255 + 8) / 16);
-            }
-        }
-
-      entry->asset = asset;
-      entry->size_key = size_key;
-      entry->last_used = r->icon_cache_clock;
-    }
-
-  return entry;
 }
 
 static void icon_fill(struct nyabula_eye_renderer_s *r, const struct eye_s *e,
                       const struct nyabula_eye_icon_s *icon, float size,
                       uint32_t color, float opacity)
 {
-  float raster_size = strcmp(icon->name, "star") == 0
-                          ? 0.28f
-                      : strcmp(icon->name, "subwoofer") == 0
-                          ? 1.21f
-                      : strcmp(icon->name, "task_confirm") == 0
-                          ? 1.07f
-                          : size;
-  struct icon_cache_s *cache = icon_cache_get(r, icon, raster_size);
-  float sample_scale = raster_size / size;
-  int min_x = e->t.cx - R * size * 0.55f - 2;
-  int max_x = e->t.cx + R * size * 0.55f + 2;
-  int min_y = e->t.cy - R * size * 0.55f - 2;
-  int max_y = e->t.cy + R * size * 0.55f + 2;
-  int x;
-  int y;
+  icon_append_path(r, icon, size);
 
-  if (cache == NULL)
+  vector_eye_transform(r, e);
+  lv_vector_dsc_set_fill_rule(r->vector, LV_VECTOR_FILL_NONZERO);
+  vector_fill(r, color, opacity);
+}
+
+static lv_fpoint_t icon_curve_point(const lv_fpoint_t *start,
+                                    const lv_fpoint_t *control1,
+                                    const lv_fpoint_t *control2,
+                                    const lv_fpoint_t *end, float amount,
+                                    bool cubic_curve)
+{
+  float inverse = 1.0f - amount;
+  lv_fpoint_t point;
+
+  if (cubic_curve)
     {
-      return;
+      point.x = inverse * inverse * inverse * start->x +
+                3.0f * inverse * inverse * amount * control1->x +
+                3.0f * inverse * amount * amount * control2->x +
+                amount * amount * amount * end->x;
+      point.y = inverse * inverse * inverse * start->y +
+                3.0f * inverse * inverse * amount * control1->y +
+                3.0f * inverse * amount * amount * control2->y +
+                amount * amount * amount * end->y;
+    }
+  else
+    {
+      point.x = inverse * inverse * start->x +
+                2.0f * inverse * amount * control1->x +
+                amount * amount * end->x;
+      point.y = inverse * inverse * start->y +
+                2.0f * inverse * amount * control1->y +
+                amount * amount * end->y;
     }
 
-  for (y = min_y; y <= max_y; y++)
+  return point;
+}
+
+static int icon_flatten(const struct nyabula_eye_icon_s *icon, float size,
+                        lv_fpoint_t *points, bool *moves, int capacity)
+{
+  float scale = R * size / icon->width;
+  lv_fpoint_t current = {0.0f, 0.0f};
+  lv_fpoint_t origin = current;
+  int count = 0;
+  int index;
+
+  for (index = 0; index < icon->command_count && count < capacity; index++)
     {
-      for (x = min_x; x <= max_x; x++)
+      const struct nyabula_eye_icon_command_s *command =
+          &icon->commands[index];
+      lv_fpoint_t p1 = icon_point(icon, scale, command->x1, command->y1);
+      lv_fpoint_t p2 = icon_point(icon, scale, command->x2, command->y2);
+      lv_fpoint_t p3 = icon_point(icon, scale, command->x3, command->y3);
+      int step;
+
+      if (command->operation == NYABULA_EYE_ICON_MOVE)
         {
-          float local_x;
-          float local_y;
-          int mask_x;
-          int mask_y;
-          uint8_t coverage;
+          current = p1;
+          origin = p1;
+          points[count] = p1;
+          moves[count++] = true;
+        }
+      else if (command->operation == NYABULA_EYE_ICON_LINE)
+        {
+          current = p1;
+          points[count] = p1;
+          moves[count++] = false;
+        }
+      else if (command->operation == NYABULA_EYE_ICON_QUAD ||
+               command->operation == NYABULA_EYE_ICON_CUBIC)
+        {
+          lv_fpoint_t start = current;
+          bool cubic_curve =
+              command->operation == NYABULA_EYE_ICON_CUBIC;
+          lv_fpoint_t end = cubic_curve ? p3 : p2;
 
-          if (!in_screen(e, x + 0.5f, y + 0.5f))
+          for (step = 1; step <= 16 && count < capacity; step++)
             {
-              continue;
+              points[count] = icon_curve_point(&start, &p1, &p2, &end,
+                                               step / 16.0f, cubic_curve);
+              moves[count++] = false;
             }
 
-          to_local(&e->t, x + 0.5f, y + 0.5f, &local_x, &local_y);
-          mask_x = floorf(local_x * sample_scale) - cache->left;
-          mask_y = floorf(local_y * sample_scale) - cache->top;
-          if (mask_x < 0 || mask_x >= cache->width || mask_y < 0 ||
-              mask_y >= cache->height)
-            {
-              continue;
-            }
-
-          coverage = cache->coverage[mask_y * cache->width + mask_x];
-          if (coverage != 0)
-            {
-              pixel(r, x, y, color, opacity * coverage / 255.0f);
-            }
+          current = end;
+        }
+      else if (command->operation == NYABULA_EYE_ICON_CLOSE)
+        {
+          current = origin;
+          points[count] = origin;
+          moves[count++] = false;
         }
     }
+
+  return count;
 }
 
 static void icon_stroke(struct nyabula_eye_renderer_s *r,
@@ -974,48 +1224,62 @@ static void icon_stroke(struct nyabula_eye_renderer_s *r,
                         const struct nyabula_eye_icon_s *icon, float size,
                         uint32_t color, float opacity, float reveal)
 {
-  float scale = R * size / icon->width;
-  float half_width = icon->width * 0.5f;
-  float half_height = icon->height * 0.5f;
+  lv_fpoint_t *points = r->icon_points;
+  bool *moves = r->icon_moves;
   float total = 0.0f;
   float visible;
   float walked = 0.0f;
-  int contour;
+  int count;
+  int index;
 
-  for (contour = 0; contour < icon->contour_count; contour++)
+  if (reveal <= 0.0f || opacity <= 0.0f)
     {
-      int index;
-      for (index = icon->contours[contour] + 1;
-           index < icon->contours[contour + 1]; index++)
+      return;
+    }
+
+  if (reveal >= 0.9999f)
+    {
+      icon_append_path(r, icon, size);
+      vector_eye_transform(r, e);
+      vector_stroke(r, color, opacity, R * 0.028f);
+      return;
+    }
+
+  count = icon_flatten(icon, size, points, moves, 2048);
+  for (index = 1; index < count; index++)
+    {
+      if (!moves[index])
         {
-          float dx = icon->points[index].x - icon->points[index - 1].x;
-          float dy = icon->points[index].y - icon->points[index - 1].y;
-          total += hypotf(dx, dy);
+          total += hypotf(points[index].x - points[index - 1].x,
+                          points[index].y - points[index - 1].y);
         }
     }
 
   visible = total * clampf(reveal, 0.0f, 1.0f);
-  for (contour = 0; contour < icon->contour_count && walked < visible;
-       contour++)
+  lv_vector_path_clear(r->path);
+  for (index = 0; index < count && walked < visible; index++)
     {
-      int index;
-      for (index = icon->contours[contour] + 1;
-           index < icon->contours[contour + 1] && walked < visible; index++)
+      if (index == 0 || moves[index])
         {
-          const struct nyabula_eye_icon_point_s *a = &icon->points[index - 1];
-          const struct nyabula_eye_icon_point_s *b = &icon->points[index];
-          float dx = b->x - a->x;
-          float dy = b->y - a->y;
+          lv_vector_path_move_to(r->path, &points[index]);
+        }
+      else
+        {
+          float dx = points[index].x - points[index - 1].x;
+          float dy = points[index].y - points[index - 1].y;
           float length = hypotf(dx, dy);
-          float part = clampf((visible - walked) / length, 0.0f, 1.0f);
-          float x1 = (a->x - half_width) * scale;
-          float y1 = (a->y - half_height) * scale;
-          float x2 = (a->x + dx * part - half_width) * scale;
-          float y2 = (a->y + dy * part - half_height) * scale;
-          line(r, e, x1, y1, x2, y2, R * 0.028f, color, opacity, false);
+          float part = clampf((visible - walked) / fmaxf(length, 0.001f),
+                              0.0f, 1.0f);
+          lv_fpoint_t end = {points[index - 1].x + dx * part,
+                             points[index - 1].y + dy * part};
+
+          lv_vector_path_line_to(r->path, &end);
           walked += length;
         }
     }
+
+  vector_eye_transform(r, e);
+  vector_stroke(r, color, opacity, R * 0.028f);
 }
 
 static void icon(struct nyabula_eye_renderer_s *r, const struct eye_s *e,
@@ -1044,8 +1308,8 @@ static void icon_at(struct nyabula_eye_renderer_s *r, const struct eye_s *e,
                     float reveal)
 {
   struct eye_s placed = *e;
-  float cosine = cosf(rotation);
-  float sine = sinf(rotation);
+  float cosine = rotation == 0.0f ? 1.0f : cosf(rotation);
+  float sine = rotation == 0.0f ? 0.0f : sinf(rotation);
   float old_cosine = e->t.cs;
   float old_sine = e->t.sn;
 
@@ -1062,8 +1326,8 @@ static void icon_group_at(struct nyabula_eye_renderer_s *r,
 {
   const struct nyabula_eye_icon_s *asset = nyabula_eye_icon_find(name);
   struct eye_s placed = *e;
-  float cosine = cosf(rotation);
-  float sine = sinf(rotation);
+  float cosine = rotation == 0.0f ? 1.0f : cosf(rotation);
+  float sine = rotation == 0.0f ? 0.0f : sinf(rotation);
   float old_cosine = e->t.cs;
   float old_sine = e->t.sn;
   float fill = clampf((reveal - 0.46f) / 0.54f, 0.0f, 1.0f);
@@ -1094,33 +1358,14 @@ static void icon_outline(struct nyabula_eye_renderer_s *r,
                          float width, uint32_t color, float opacity)
 {
   const struct nyabula_eye_icon_s *asset = nyabula_eye_icon_find(name);
-  float scale;
-  float half_width;
-  float half_height;
-  int contour;
-
   if (asset == NULL)
     {
       return;
     }
 
-  scale = R * size / asset->width;
-  half_width = asset->width * 0.5f;
-  half_height = asset->height * 0.5f;
-  for (contour = 0; contour < asset->contour_count; contour++)
-    {
-      int index;
-      for (index = asset->contours[contour] + 1;
-           index < asset->contours[contour + 1]; index++)
-        {
-          const struct nyabula_eye_icon_point_s *a = &asset->points[index - 1];
-          const struct nyabula_eye_icon_point_s *b = &asset->points[index];
-          line(r, e, (a->x - half_width) * scale,
-               (a->y - half_height) * scale,
-               (b->x - half_width) * scale,
-               (b->y - half_height) * scale, width, color, opacity, false);
-        }
-    }
+  icon_append_path(r, asset, size);
+  vector_eye_transform(r, e);
+  vector_stroke(r, color, opacity, width);
 }
 
 static void filled_rect(struct nyabula_eye_renderer_s *r,
@@ -1128,19 +1373,19 @@ static void filled_rect(struct nyabula_eye_renderer_s *r,
                         float right, float bottom, uint32_t color,
                         float opacity)
 {
-  int x;
-  int y;
+  lv_fpoint_t point = {left, top};
 
-  for (y = floorf(e->t.cy + top); y <= ceilf(e->t.cy + bottom); y++)
-    {
-      for (x = floorf(e->t.cx + left); x <= ceilf(e->t.cx + right); x++)
-        {
-          if (in_screen(e, x + 0.5f, y + 0.5f))
-            {
-              pixel(r, x, y, color, opacity);
-            }
-        }
-    }
+  lv_vector_path_clear(r->path);
+  lv_vector_path_move_to(r->path, &point);
+  point = (lv_fpoint_t){right, top};
+  lv_vector_path_line_to(r->path, &point);
+  point = (lv_fpoint_t){right, bottom};
+  lv_vector_path_line_to(r->path, &point);
+  point = (lv_fpoint_t){left, bottom};
+  lv_vector_path_line_to(r->path, &point);
+  lv_vector_path_close(r->path);
+  vector_eye_transform(r, e);
+  vector_fill(r, color, opacity);
 }
 
 static const char *scene_text(const char *value, const char *fallback)
@@ -1305,76 +1550,54 @@ static void scene_append_cubic(struct scene_point_s *points, int *count,
     }
 }
 
-static bool scene_polygon_contains(const struct scene_point_s *points,
-                                   int count, float x, float y)
-{
-  bool inside = false;
-  int previous = count - 1;
-  int index;
-
-  for (index = 0; index < count; index++)
-    {
-      if ((points[index].y > y) != (points[previous].y > y) &&
-          x < (points[previous].x - points[index].x) *
-                      (y - points[index].y) /
-                      (points[previous].y - points[index].y) +
-                  points[index].x)
-        {
-          inside = !inside;
-        }
-
-      previous = index;
-    }
-
-  return inside;
-}
-
 static void scene_fill_polygon(struct nyabula_eye_renderer_s *r,
                                const struct eye_s *e,
                                const struct scene_point_s *points, int count,
                                uint32_t top_color, uint32_t bottom_color,
                                float opacity)
 {
-  float min_x = points[0].x;
-  float max_x = points[0].x;
   float min_y = points[0].y;
   float max_y = points[0].y;
   int index;
-  int x;
-  int y;
+  lv_gradient_stop_t stops[2];
 
   for (index = 1; index < count; index++)
     {
-      min_x = fminf(min_x, points[index].x);
-      max_x = fmaxf(max_x, points[index].x);
       min_y = fminf(min_y, points[index].y);
       max_y = fmaxf(max_y, points[index].y);
     }
 
-  for (y = floorf(e->t.cy + min_y); y <= ceilf(e->t.cy + max_y); y++)
+  lv_vector_path_clear(r->path);
+  for (index = 0; index < count; index++)
     {
-      for (x = floorf(e->t.cx + min_x); x <= ceilf(e->t.cx + max_x); x++)
+      lv_fpoint_t point = {points[index].x, points[index].y};
+      if (index == 0)
         {
-          float local_x;
-          float local_y;
-          float amount;
-
-          if (!in_screen(e, x + 0.5f, y + 0.5f))
-            {
-              continue;
-            }
-
-          to_local(&e->t, x + 0.5f, y + 0.5f, &local_x, &local_y);
-          if (!scene_polygon_contains(points, count, local_x, local_y))
-            {
-              continue;
-            }
-
-          amount = clampf((local_y - min_y) / fmaxf(max_y - min_y, 1.0f),
-                          0.0f, 1.0f);
-          pixel(r, x, y, mix(top_color, bottom_color, amount), opacity);
+          lv_vector_path_move_to(r->path, &point);
+        }
+      else
+        {
+          lv_vector_path_line_to(r->path, &point);
         }
     }
+
+  lv_vector_path_close(r->path);
+  memset(stops, 0, sizeof(stops));
+  stops[0].color = lv_color_hex(top_color);
+  stops[0].opa = vector_opa(opacity);
+  stops[0].frac = 0;
+  stops[1].color = lv_color_hex(bottom_color);
+  stops[1].opa = vector_opa(opacity);
+  stops[1].frac = 255;
+  vector_eye_transform(r, e);
+  lv_vector_dsc_set_stroke_opa(r->vector, LV_OPA_TRANSP);
+  lv_vector_dsc_set_fill_opa(r->vector, LV_OPA_COVER);
+  lv_vector_dsc_set_fill_linear_gradient(r->vector, 0.0f, min_y, 0.0f,
+                                         max_y);
+  lv_vector_dsc_set_fill_gradient_color_stops(r->vector, stops, 2);
+  lv_vector_dsc_set_fill_gradient_spread(r->vector,
+                                         LV_VECTOR_GRADIENT_SPREAD_PAD);
+  lv_vector_dsc_add_path(r->vector, r->path);
 }
 
 static void scene_stroke_points(struct nyabula_eye_renderer_s *r,
@@ -2971,48 +3194,64 @@ static void overlays(struct nyabula_eye_renderer_s *r, const struct eye_s *e)
     {
       float rotation = time * 4.0f * (e->id == NYABULA_EYE_LEFT ? 1 : -1);
       float a;
-      float lx = e->gx;
-      float ly = e->gy;
+      lv_fpoint_t point = {e->gx, e->gy};
+
+      lv_vector_path_clear(r->path);
+      lv_vector_path_move_to(r->path, &point);
       for (a = 0.15f; a < PI * 5.0f; a += 0.15f)
         {
           float radius = e->ir * 0.55f * a / (PI * 5.0f);
-          float x = e->gx + cosf(a + rotation) * radius;
-          float y = e->gy + sinf(a + rotation) * radius;
-          line(r, e, lx, ly, x, y, e->ir * 0.09f, 0x0a0c10, alpha, false);
-          lx = x;
-          ly = y;
+          point.x = e->gx + cosf(a + rotation) * radius;
+          point.y = e->gy + sinf(a + rotation) * radius;
+          lv_vector_path_line_to(r->path, &point);
         }
+
+      vector_eye_transform(r, e);
+      vector_stroke(r, 0x0a0c10, alpha, e->ir * 0.09f);
     }
   else if (e->f->expression == NYABULA_EYE_EXPRESSION_SAD)
     {
-      int x;
-      int y;
       float shimmer = alpha * (0.5f + 0.2f * sinf(time * 2.0f));
-      for (y = e->t.cy - R; y <= e->t.cy + R; y++)
-        {
-          for (x = e->t.cx - R; x <= e->t.cx + R; x++)
-            {
-              float lx;
-              float ly;
-              float dx;
-              float dy;
-              if (!in_screen(e, x + 0.5f, y + 0.5f))
-                {
-                  continue;
-                }
+      float start_y = e->gy + e->ir * 0.3f;
+      float end_y = e->gy + e->ir * 0.98f;
+      float angle = asinf(0.3f / 0.98f);
+      lv_gradient_stop_t stops[2];
+      int index;
 
-              to_local(&e->t, x + 0.5f, y + 0.5f, &lx, &ly);
-              dx = lx - e->gx;
-              dy = ly - e->gy;
-              if (hypotf(dx, dy) <= e->ir * 0.98f && dy > e->ir * 0.3f)
-                {
-                  pixel(r, x, y, 0xbee1ff,
-                        shimmer * 0.55f *
-                            clampf((dy - e->ir * 0.3f) / (e->ir * 0.7f), 0.0f,
-                                   1.0f));
-                }
+      lv_vector_path_clear(r->path);
+      for (index = 0; index <= 48; index++)
+        {
+          float a = angle + (PI - 2.0f * angle) * index / 48.0f;
+          lv_fpoint_t point = {
+              e->gx + cosf(a) * e->ir * 0.98f,
+              e->gy + sinf(a) * e->ir * 0.98f};
+          if (index == 0)
+            {
+              lv_vector_path_move_to(r->path, &point);
+            }
+          else
+            {
+              lv_vector_path_line_to(r->path, &point);
             }
         }
+
+      lv_vector_path_close(r->path);
+      memset(stops, 0, sizeof(stops));
+      stops[0].color = lv_color_hex(0xbee1ff);
+      stops[0].opa = LV_OPA_TRANSP;
+      stops[0].frac = 0;
+      stops[1].color = lv_color_hex(0xbee1ff);
+      stops[1].opa = vector_opa(shimmer * 0.55f);
+      stops[1].frac = 255;
+      vector_eye_transform(r, e);
+      lv_vector_dsc_set_stroke_opa(r->vector, LV_OPA_TRANSP);
+      lv_vector_dsc_set_fill_opa(r->vector, LV_OPA_COVER);
+      lv_vector_dsc_set_fill_linear_gradient(r->vector, 0.0f, start_y,
+                                             0.0f, end_y);
+      lv_vector_dsc_set_fill_gradient_color_stops(r->vector, stops, 2);
+      lv_vector_dsc_set_fill_gradient_spread(r->vector,
+                                             LV_VECTOR_GRADIENT_SPREAD_PAD);
+      lv_vector_dsc_add_path(r->vector, r->path);
     }
 }
 
@@ -3024,21 +3263,52 @@ static void highlights(struct nyabula_eye_renderer_s *r, const struct eye_s *e)
           e->ir * 0.05f, e->ir * 0.05f, 0.0f, 0xffffff, 0.45f);
 }
 
+static bool lids_are_open(const struct eye_s *e)
+{
+  return fabsf(e->lt) < 0.0001f && fabsf(e->lb) < 0.0001f &&
+         fabsf(e->slant) < 0.0001f && fabsf(e->curve) < 0.0001f;
+}
+
 static void lids(struct nyabula_eye_renderer_s *r, const struct eye_s *e)
 {
-  int x;
-  int y;
-  for (y = e->t.cy - R; y <= e->t.cy + R; y++)
-    {
-      for (x = e->t.cx - R; x <= e->t.cx + R; x++)
-        {
-          if (in_screen(e, x + 0.5f, y + 0.5f) &&
-              in_lids(e, x + 0.5f, y + 0.5f))
-            {
-              pixel(r, x, y, 0x000000, 1.0f);
-            }
-        }
-    }
+  float extent = e->ir * 1.04f;
+  float top = -extent + e->lt * extent * 2.0f;
+  float left = top - e->slant * extent * 0.35f;
+  float right = top + e->slant * extent * 0.35f;
+  float top_bulge = extent * 0.16f * clampf(e->lt * 2.0f, 0.0f, 1.0f);
+  float bottom = extent - e->lb * extent * 2.0f;
+  float bottom_bulge = -e->curve * extent * 0.55f -
+                       extent * 0.16f * clampf(e->lb * 2.0f, 0.0f, 1.0f);
+  lv_fpoint_t point;
+  lv_fpoint_t control1;
+  lv_fpoint_t control2;
+
+  lv_vector_path_clear(r->path);
+  point = (lv_fpoint_t){extent * 1.3f, right};
+  lv_vector_path_move_to(r->path, &point);
+  control1 = (lv_fpoint_t){extent * 0.4f, right + top_bulge};
+  control2 = (lv_fpoint_t){-extent * 0.4f, left + top_bulge};
+  point = (lv_fpoint_t){-extent * 1.3f, left};
+  lv_vector_path_cubic_to(r->path, &control1, &control2, &point);
+  point = (lv_fpoint_t){-R * 2.0f, -R * 2.0f};
+  lv_vector_path_line_to(r->path, &point);
+  point = (lv_fpoint_t){R * 2.0f, -R * 2.0f};
+  lv_vector_path_line_to(r->path, &point);
+  lv_vector_path_close(r->path);
+
+  point = (lv_fpoint_t){-extent * 1.3f, bottom};
+  lv_vector_path_move_to(r->path, &point);
+  control1 = (lv_fpoint_t){-extent * 0.45f, bottom + bottom_bulge};
+  control2 = (lv_fpoint_t){extent * 0.45f, bottom + bottom_bulge};
+  point = (lv_fpoint_t){extent * 1.3f, bottom};
+  lv_vector_path_cubic_to(r->path, &control1, &control2, &point);
+  point = (lv_fpoint_t){R * 2.0f, R * 2.0f};
+  lv_vector_path_line_to(r->path, &point);
+  point = (lv_fpoint_t){-R * 2.0f, R * 2.0f};
+  lv_vector_path_line_to(r->path, &point);
+  lv_vector_path_close(r->path);
+  vector_eye_transform(r, e);
+  vector_fill(r, 0x000000, 1.0f);
 }
 
 static float randomf(struct nyabula_eye_renderer_s *r)
@@ -3099,14 +3369,43 @@ static void update_z(struct nyabula_eye_renderer_s *r,
     }
 }
 
-static void draw_z(struct nyabula_eye_renderer_s *r, const struct eye_s *e)
+static void prepare_lid_clip(struct eye_s *e)
 {
+  float extent = e->ir * 1.04f;
+  float top = -extent + e->lt * extent * 2.0f;
+  float left = top - e->slant * extent * 0.35f;
+  float right = top + e->slant * extent * 0.35f;
+  float top_bulge = extent * 0.16f * clampf(e->lt * 2.0f, 0.0f, 1.0f);
+  float bottom = extent - e->lb * extent * 2.0f;
+  float bottom_bulge = -e->curve * extent * 0.55f -
+                       extent * 0.16f * clampf(e->lb * 2.0f, 0.0f, 1.0f);
+  int index;
+
+  for (index = 0; index < LID_SAMPLES; index++)
+    {
+      float x = index - LID_OFFSET;
+      e->top_y[index] = lid_y(x, extent, left, right, top_bulge, true);
+      e->bottom_y[index] =
+          lid_y(x, extent, bottom, bottom, bottom_bulge, false);
+    }
+}
+
+static void draw_z(struct nyabula_eye_renderer_s *r, struct eye_s *e)
+{
+  bool clip_ready = false;
   int i;
+
   for (i = 0; i < ZCOUNT; i++)
     {
       struct z_s *z = &r->z[i];
       if (z->active && z->eye == e->id)
         {
+          if (!clip_ready)
+            {
+              prepare_lid_clip(e);
+              clip_ready = true;
+            }
+
           float p = clampf((R * 1.1f - z->y) / (R * 2.2f), 0.0f, 1.0f);
           float a = sinf(p * PI) * 0.85f;
           float x = z->ox + sinf(z->life * 2.0f + z->phase) * z->sway;
@@ -3128,22 +3427,14 @@ static void prepare(struct eye_s *e, const struct nyabula_eye_frame_s *f,
   float rotation = f->expression == NYABULA_EYE_EXPRESSION_DIZZY
                        ? sinf(f->global_seconds * 3.0f + side) * 0.06f
                        : 0.0f;
-  float extent;
-  float top;
-  float left;
-  float right;
-  float top_bulge;
-  float bottom;
-  float bottom_bulge;
-  int index;
   memset(e, 0, sizeof(*e));
   e->f = f;
   e->id = id;
-  e->t.cx = W * 0.5f + side * GAP * 0.5f;
+  e->t.cx = W * 0.5f;
   e->t.cy = CY;
   e->t.sy = 1.0f - f->squint * 0.25f;
-  e->t.sn = sinf(rotation);
-  e->t.cs = cosf(rotation);
+  e->t.sn = rotation == 0.0f ? 0.0f : sinf(rotation);
+  e->t.cs = rotation == 0.0f ? 1.0f : cosf(rotation);
   e->ir = R * f->iris_scale;
   e->gx = f->gaze_x * R * 0.30f + side * f->derp * R * 0.24f;
   e->gy =
@@ -3152,32 +3443,15 @@ static void prepare(struct eye_s *e, const struct nyabula_eye_frame_s *f,
   e->lb = f->lid_bottom;
   e->slant = f->lid_slant * side * -1.0f;
   e->curve = f->bottom_curve;
-  extent = e->ir * 1.04f;
-  top = -extent + e->lt * extent * 2.0f;
-  left = top - e->slant * extent * 0.35f;
-  right = top + e->slant * extent * 0.35f;
-  top_bulge = extent * 0.16f * clampf(e->lt * 2.0f, 0.0f, 1.0f);
-  bottom = extent - e->lb * extent * 2.0f;
-  bottom_bulge = -e->curve * extent * 0.55f -
-                 extent * 0.16f * clampf(e->lb * 2.0f, 0.0f, 1.0f);
-  for (index = 0; index < LID_SAMPLES; index++)
-    {
-      float x = index - LID_OFFSET;
-      e->top_y[index] = lid_y(x, extent, left, right, top_bulge, true);
-      e->bottom_y[index] =
-          lid_y(x, extent, bottom, bottom, bottom_bulge, false);
-    }
 }
 
 static void prepare_scene(struct eye_s *e,
                           const struct nyabula_eye_frame_s *frame, int id)
 {
-  float side = id == NYABULA_EYE_LEFT ? -1.0f : 1.0f;
-
   memset(e, 0, sizeof(*e));
   e->f = frame;
   e->id = id;
-  e->t.cx = W * 0.5f + side * GAP * 0.5f;
+  e->t.cx = W * 0.5f;
   e->t.cy = CY;
   e->t.sy = 1.0f;
   e->t.cs = 1.0f;
@@ -3188,13 +3462,117 @@ static void prepare_scene_lids(struct eye_s *e,
                                const struct nyabula_eye_frame_s *frame,
                                int id, float lid)
 {
-  struct nyabula_eye_frame_s mask = *frame;
+  prepare(e, frame, id);
+  e->lt = e->lt + (0.86f - e->lt) * lid;
+  e->lb = e->lb + (0.14f - e->lb) * lid;
+  e->slant *= 1.0f - lid;
+  e->curve *= 1.0f - lid;
+}
 
-  mask.lid_top = mask.lid_top + (0.86f - mask.lid_top) * lid;
-  mask.lid_bottom = mask.lid_bottom + (0.14f - mask.lid_bottom) * lid;
-  mask.lid_slant *= 1.0f - lid;
-  mask.bottom_curve *= 1.0f - lid;
-  prepare(e, &mask, id);
+static float scene_lid_boundary(const float samples[LID_SAMPLES], float x)
+{
+  float sample = x + LID_OFFSET;
+  int index;
+
+  if (sample <= 0.0f)
+    {
+      return samples[0];
+    }
+
+  if (sample >= LID_SAMPLES - 1)
+    {
+      return samples[LID_SAMPLES - 1];
+    }
+
+  index = (int)sample;
+  return samples[index] +
+         (samples[index + 1] - samples[index]) * (sample - index);
+}
+
+static void apply_scene_lid_mask(lv_draw_buf_t *buffer, struct eye_s *eye)
+{
+  float half_pixel = 0.5f / fmaxf(fabsf(eye->t.sy), 0.001f);
+  uint32_t stride = buffer->header.stride;
+  int x;
+  int y;
+
+  prepare_lid_clip(eye);
+  lv_draw_buf_invalidate_cache(buffer, NULL);
+  for (y = 0; y < H; y++)
+    {
+      lv_color32_t *pixels = (lv_color32_t *)(buffer->data + y * stride);
+
+      for (x = 0; x < W; x++)
+        {
+          float local_x;
+          float local_y;
+          float top;
+          float bottom;
+          float coverage;
+          uint16_t mask;
+
+          if (pixels[x].alpha == LV_OPA_TRANSP)
+            {
+              continue;
+            }
+
+          to_local(&eye->t, x + 0.5f, y + 0.5f, &local_x, &local_y);
+          top = scene_lid_boundary(eye->top_y, local_x);
+          bottom = scene_lid_boundary(eye->bottom_y, local_x);
+          coverage = clampf((top - local_y + half_pixel) /
+                                (half_pixel * 2.0f),
+                            0.0f, 1.0f);
+          coverage += clampf((local_y - bottom + half_pixel) /
+                                 (half_pixel * 2.0f),
+                             0.0f, 1.0f);
+          mask = (uint16_t)lroundf(clampf(coverage, 0.0f, 1.0f) *
+                                   LV_OPA_COVER);
+          pixels[x].alpha =
+              (uint8_t)((pixels[x].alpha * mask + 127u) / LV_OPA_COVER);
+        }
+    }
+
+  lv_draw_buf_flush_cache(buffer, NULL);
+}
+
+static void render_scene_lid_mask(struct nyabula_eye_renderer_s *r,
+                                  const struct nyabula_eye_frame_s *frame,
+                                  const struct eye_s *scene_eye, int id)
+{
+  const struct nyabula_eye_scene_frame_s *scene = &frame->scene;
+  lv_vector_dsc_t *main_vector = r->vector;
+  lv_vector_path_t *main_path = r->path;
+  struct eye_s mask_eye;
+
+  lv_canvas_fill_bg(r->mask_canvas, lv_color_black(), LV_OPA_TRANSP);
+  lv_canvas_init_layer(r->mask_canvas, &r->mask_layer);
+  if (r->mask_vector == NULL)
+    {
+      r->mask_vector = lv_vector_dsc_create(&r->mask_layer);
+    }
+
+  if (r->mask_path == NULL)
+    {
+      r->mask_path = lv_vector_path_create(LV_VECTOR_PATH_QUALITY_HIGH);
+    }
+
+  r->vector = r->mask_vector;
+  r->path = r->mask_path;
+  prepare_scene_lids(&mask_eye, frame, id, scene->lid);
+  if (r->vector != NULL && r->path != NULL)
+    {
+      lv_vector_dsc_set_blend_mode(r->vector, LV_VECTOR_BLEND_SRC_OVER);
+      scene_draw_content(r, scene_eye, scene->scene, &scene->payload,
+                         scene->scene_seconds, scene->alpha, scene->reveal,
+                         true);
+      lv_draw_vector(r->vector);
+    }
+
+  lv_canvas_finish_layer(r->mask_canvas, &r->mask_layer);
+  apply_scene_lid_mask(r->mask_buffer, &mask_eye);
+  r->vector = main_vector;
+  r->path = main_path;
+  r->mask_ready = true;
 }
 
 static bool render_scene(struct nyabula_eye_renderer_s *r,
@@ -3212,15 +3590,7 @@ static bool render_scene(struct nyabula_eye_renderer_s *r,
   if (scene->style == NYABULA_EYE_SCENE_STYLE_MINIMAL && scene->lid < 0.999f &&
       scene->alpha < 0.999f)
     {
-      struct eye_s mask_eye;
-      prepare_scene_lids(&mask_eye, frame, id, scene->lid);
-      r->clip_eye = &mask_eye;
-      r->clip_lids = true;
-      scene_draw_content(r, &scene_eye, scene->scene, &scene->payload,
-                         scene->scene_seconds, scene->alpha, scene->reveal,
-                         true);
-      r->clip_lids = false;
-      r->clip_eye = NULL;
+      render_scene_lid_mask(r, frame, &scene_eye, id);
       return false;
     }
 
@@ -3254,19 +3624,176 @@ static bool render_scene(struct nyabula_eye_renderer_s *r,
   return true;
 }
 
+static bool frames_can_share_pixels(
+    const struct nyabula_eye_frame_s frames[NYABULA_EYE_COUNT])
+{
+  const struct nyabula_eye_frame_s *frame = &frames[NYABULA_EYE_LEFT];
+
+  if (memcmp(&frames[NYABULA_EYE_LEFT], &frames[NYABULA_EYE_RIGHT],
+             sizeof(frames[0])) != 0 ||
+      frame->scene.scene != NYABULA_EYE_SCENE_NONE ||
+      frame->scene.previous_scene != NYABULA_EYE_SCENE_NONE ||
+      fabsf(frame->lid_slant) > 0.0001f ||
+      fabsf(frame->derp) > 0.0001f)
+    {
+      return false;
+    }
+
+  return frame->expression != NYABULA_EYE_EXPRESSION_STAR &&
+         frame->expression != NYABULA_EYE_EXPRESSION_DIZZY &&
+         frame->expression != NYABULA_EYE_EXPRESSION_SLEEP;
+}
+
+static bool scene_eye_is_time_independent(
+    const struct nyabula_eye_scene_frame_s *scene, int id)
+{
+  const struct nyabula_eye_scene_payload_s *payload = &scene->payload;
+
+  switch (scene->scene)
+    {
+      case NYABULA_EYE_SCENE_BATTERY:
+      case NYABULA_EYE_SCENE_CALENDAR:
+      case NYABULA_EYE_SCENE_AUDIO:
+      case NYABULA_EYE_SCENE_IDENTITY:
+      case NYABULA_EYE_SCENE_DEVICES:
+      case NYABULA_EYE_SCENE_SYSTEM:
+      case NYABULA_EYE_SCENE_PRESENCE:
+        return true;
+      case NYABULA_EYE_SCENE_MUSIC:
+        return id == NYABULA_EYE_LEFT ? payload->position_ms != 0
+                                      : payload->music_view ==
+                                            NYABULA_EYE_MUSIC_LYRICS;
+      case NYABULA_EYE_SCENE_TIMER:
+        return payload->remaining_ms > 10000;
+      case NYABULA_EYE_SCENE_STOPWATCH:
+        return payload->elapsed_ms != 0;
+      case NYABULA_EYE_SCENE_WEATHER:
+      case NYABULA_EYE_SCENE_ALARM:
+      case NYABULA_EYE_SCENE_CALL:
+      case NYABULA_EYE_SCENE_TASK:
+      case NYABULA_EYE_SCENE_SLEEP_TIMER:
+      case NYABULA_EYE_SCENE_CAPTION:
+      case NYABULA_EYE_SCENE_BRIEFING:
+      case NYABULA_EYE_SCENE_PRIVACY:
+      case NYABULA_EYE_SCENE_MEMORY:
+      case NYABULA_EYE_SCENE_HEALTH:
+      case NYABULA_EYE_SCENE_COMPANION:
+      case NYABULA_EYE_SCENE_HOME:
+      case NYABULA_EYE_SCENE_SUBWOOFER:
+        return id == NYABULA_EYE_RIGHT;
+      case NYABULA_EYE_SCENE_NETWORK:
+        return id == NYABULA_EYE_LEFT ||
+               payload->network_state == NYABULA_EYE_NETWORK_OFFLINE;
+      default:
+        return false;
+    }
+}
+
+static bool frame_is_time_independent(const struct nyabula_eye_frame_s *frame,
+                                      int id)
+{
+  if (frame->scene.previous_scene != NYABULA_EYE_SCENE_NONE)
+    {
+      return false;
+    }
+
+  if (frame->scene.scene != NYABULA_EYE_SCENE_NONE)
+    {
+      return scene_eye_is_time_independent(&frame->scene, id);
+    }
+
+  switch (frame->expression)
+    {
+      case NYABULA_EYE_EXPRESSION_PROCESSING:
+      case NYABULA_EYE_EXPRESSION_STAR:
+      case NYABULA_EYE_EXPRESSION_HEART:
+      case NYABULA_EYE_EXPRESSION_DIZZY:
+      case NYABULA_EYE_EXPRESSION_SAD:
+      case NYABULA_EYE_EXPRESSION_SLEEP:
+        return false;
+      default:
+        return true;
+    }
+}
+
+static bool frame_pixels_unchanged(struct nyabula_eye_renderer_s *r,
+                                   const struct nyabula_eye_frame_s *frame,
+                                   int id)
+{
+  const struct nyabula_eye_frame_s *last = &r->last_frame[id];
+
+  if (!r->last_frame_valid[id] || !frame_is_time_independent(frame, id) ||
+      frame->iris_rgb != last->iris_rgb)
+    {
+      return false;
+    }
+
+  if (frame->scene.scene != NYABULA_EYE_SCENE_NONE)
+    {
+      return frame->scene.scene == last->scene.scene &&
+             frame->scene.style == last->scene.style &&
+             frame->scene.alpha == last->scene.alpha &&
+             frame->scene.lid == last->scene.lid &&
+             frame->scene.reveal == last->scene.reveal &&
+             memcmp(&frame->scene.payload, &last->scene.payload,
+                    sizeof(frame->scene.payload)) == 0;
+    }
+
+  return frame->pupil_width == last->pupil_width &&
+         frame->pupil_height == last->pupil_height &&
+         frame->lid_top == last->lid_top &&
+         frame->lid_bottom == last->lid_bottom &&
+         frame->lid_slant == last->lid_slant &&
+         frame->bottom_curve == last->bottom_curve &&
+         frame->gaze_x == last->gaze_x && frame->gaze_y == last->gaze_y &&
+         frame->iris_scale == last->iris_scale && frame->glow == last->glow &&
+         frame->overlay == last->overlay && frame->squint == last->squint &&
+         frame->derp == last->derp && frame->iris_rgb == last->iris_rgb &&
+         frame->expression == last->expression;
+}
+
+static void remember_frame(struct nyabula_eye_renderer_s *r,
+                           const struct nyabula_eye_frame_s *frame, int id)
+{
+  r->last_frame[id] = *frame;
+  r->last_frame_valid[id] = frame_is_time_independent(frame, id);
+}
+
 static void report(struct nyabula_eye_renderer_s *r, uint32_t render_ms)
 {
   r->render_total += render_ms;
   if (++r->frames == 300)
     {
       uint32_t elapsed = lv_tick_elaps(r->perf_start);
-      LV_LOG_USER("nyabula_eye: %u.%u fps, %u.%02u ms average raster render",
+      LV_LOG_USER("nyabula_eye: %u.%u fps, %u.%02u ms dual vector; "
+                  "%u.%02u build, %u.%02u raster, %u.%02u copy, "
+                   "%u.%02u flush, %u%% shared, %u%% reused, "
+                   "%u/%u base hit/build",
                   300000u / elapsed, (3000000u / elapsed) % 10u,
                   r->render_total / r->frames,
-                  (r->render_total * 100u / r->frames) % 100u);
+                  (r->render_total * 100u / r->frames) % 100u,
+                  r->build_total / r->frames,
+                  (r->build_total * 100u / r->frames) % 100u,
+                  r->raster_total / r->frames,
+                  (r->raster_total * 100u / r->frames) % 100u,
+                  r->copy_total / r->frames,
+                  (r->copy_total * 100u / r->frames) % 100u,
+                  r->flush_total / r->frames,
+                  (r->flush_total * 100u / r->frames) % 100u,
+                   r->shared_frames * 100u / r->frames,
+                   r->reused_eyes * 50u / r->frames,
+                   r->base_cache_hits, r->base_cache_builds);
       (void)elapsed;
       r->frames = 0;
       r->render_total = 0;
+      r->build_total = 0;
+      r->raster_total = 0;
+      r->copy_total = 0;
+      r->flush_total = 0;
+      r->shared_frames = 0;
+      r->reused_eyes = 0;
+      r->base_cache_hits = 0;
+      r->base_cache_builds = 0;
       r->perf_start = lv_tick_get();
     }
 }
@@ -3333,59 +3860,237 @@ static void renderer_unload_fonts(struct nyabula_eye_renderer_s *r)
 }
 #endif
 
-struct nyabula_eye_renderer_s *nyabula_eye_renderer_create(lv_obj_t *parent)
+struct nyabula_eye_renderer_s *
+nyabula_eye_renderer_create(lv_obj_t *left_parent, lv_obj_t *right_parent)
 {
   struct nyabula_eye_renderer_s *r = calloc(1, sizeof(*r));
+  lv_obj_t *parents[NYABULA_EYE_COUNT] = {left_parent, right_parent};
+  int eye;
+  int page;
+  int sample;
+
   if (r == NULL)
     {
       return NULL;
     }
 
-  r->buffer[0] =
-      lv_draw_buf_create(W, H, LV_COLOR_FORMAT_ARGB8888, LV_STRIDE_AUTO);
-  r->buffer[1] =
-      lv_draw_buf_create(W, H, LV_COLOR_FORMAT_ARGB8888, LV_STRIDE_AUTO);
-  r->glyph =
-      lv_draw_buf_create(128, 128, LV_COLOR_FORMAT_A8, LV_STRIDE_AUTO);
-  if (r->buffer[0] == NULL || r->buffer[1] == NULL || r->glyph == NULL)
+  if (left_parent == NULL || right_parent == NULL)
     {
-      if (r->buffer[0])
-        lv_draw_buf_destroy(r->buffer[0]);
-      if (r->buffer[1])
-        lv_draw_buf_destroy(r->buffer[1]);
-      if (r->glyph)
-        lv_draw_buf_destroy(r->glyph);
       free(r);
       return NULL;
     }
 
-  r->draw = r->buffer[0];
-  r->canvas = lv_canvas_create(parent);
-  lv_canvas_set_draw_buf(r->canvas, r->draw);
-  lv_obj_set_pos(r->canvas, 0, 0);
+  for (eye = 0; eye < FIBERS; eye++)
+    {
+      float angle = (float)eye / FIBERS * PI * 2.0f +
+                    sinf(eye * 7.0f) * 0.1f;
+
+      r->fibers[eye].cosine = cosf(angle);
+      r->fibers[eye].sine = sinf(angle);
+      r->fibers[eye].inner_radius =
+          0.28f + (float)((eye * 37) % 13) / 13.0f * 0.15f;
+      r->fibers[eye].outer_radius =
+          0.82f + (float)((eye * 53) % 7) / 7.0f * 0.14f;
+    }
+
+  for (sample = 0; sample < HEART_SAMPLES; sample++)
+    {
+      float angle = sample * PI * 2.0f / HEART_SAMPLES;
+      float dx = cosf(angle);
+      float dy = sinf(angle);
+      float low = 0.0f;
+      float high = 3.0f;
+      int iteration;
+
+      for (iteration = 0; iteration < 12; iteration++)
+        {
+          float candidate = (low + high) * 0.5f;
+          float nx = dx * candidate;
+          float ny = dy * candidate;
+          float q = nx * nx + ny * ny - 1.0f;
+
+          if (q * q * q - nx * nx * ny * ny * ny <= 0.0f)
+            {
+              low = candidate;
+            }
+          else
+            {
+              high = candidate;
+            }
+        }
+
+      r->heart_points[sample].x = dx * low / 1.15f;
+      r->heart_points[sample].y = -dy * low / 1.15f;
+    }
+
+  for (eye = 0; eye < NYABULA_EYE_COUNT; eye++)
+    {
+      for (page = 0; page < 2; page++)
+        {
+          r->buffer[eye][page] = lv_draw_buf_create(
+              W, H, LV_COLOR_FORMAT_ARGB8888, LV_STRIDE_AUTO);
+          if (r->buffer[eye][page] == NULL)
+            {
+              goto fail;
+            }
+        }
+
+      r->canvas[eye] = lv_canvas_create(parents[eye]);
+      if (r->canvas[eye] == NULL)
+        {
+          goto fail;
+        }
+
+      lv_canvas_set_draw_buf(r->canvas[eye], r->buffer[eye][0]);
+      lv_obj_set_pos(r->canvas[eye],
+                     left_parent == right_parent ? eye * W : 0, 0);
+    }
+
+  r->mask_buffer = lv_draw_buf_create(W, H, LV_COLOR_FORMAT_ARGB8888,
+                                      LV_STRIDE_AUTO);
+  if (r->mask_buffer == NULL)
+    {
+      goto fail;
+    }
+
+  r->mask_canvas = lv_canvas_create(left_parent);
+  if (r->mask_canvas == NULL)
+    {
+      goto fail;
+    }
+
+  lv_canvas_set_draw_buf(r->mask_canvas, r->mask_buffer);
+  lv_draw_buf_to_image(r->mask_buffer, &r->mask_image);
+  lv_obj_add_flag(r->mask_canvas, LV_OBJ_FLAG_HIDDEN);
+
+  for (page = 0; page < BASE_CACHE_COUNT; page++)
+    {
+      r->base_cache[page].buffer = lv_draw_buf_create(
+          W, H, LV_COLOR_FORMAT_ARGB8888, LV_STRIDE_AUTO);
+      if (r->base_cache[page].buffer == NULL)
+        {
+          goto fail;
+        }
+
+      r->base_cache[page].canvas = lv_canvas_create(left_parent);
+      if (r->base_cache[page].canvas == NULL)
+        {
+          goto fail;
+        }
+
+      lv_canvas_set_draw_buf(r->base_cache[page].canvas,
+                             r->base_cache[page].buffer);
+      lv_obj_add_flag(r->base_cache[page].canvas, LV_OBJ_FLAG_HIDDEN);
+    }
+
   r->random = 0x5a7a5a7au;
   r->perf_start = lv_tick_get();
 #if defined(CONFIG_CONTEST2026_062_NYABULA_DYNAMIC_FONTS) && LV_USE_FREETYPE
   renderer_load_fonts(r);
 #endif
   return r;
+
+fail:
+  for (page = 0; page < BASE_CACHE_COUNT; page++)
+    {
+      if (r->base_cache[page].canvas != NULL)
+        {
+          lv_obj_delete(r->base_cache[page].canvas);
+        }
+
+      if (r->base_cache[page].buffer != NULL)
+        {
+          lv_draw_buf_destroy(r->base_cache[page].buffer);
+        }
+    }
+
+  if (r->mask_canvas != NULL)
+    {
+      lv_obj_delete(r->mask_canvas);
+    }
+
+  if (r->mask_buffer != NULL)
+    {
+      lv_draw_buf_destroy(r->mask_buffer);
+    }
+
+  for (eye = 0; eye < NYABULA_EYE_COUNT; eye++)
+    {
+      if (r->canvas[eye] != NULL)
+        {
+          lv_obj_delete(r->canvas[eye]);
+        }
+
+      for (page = 0; page < 2; page++)
+        {
+          if (r->buffer[eye][page] != NULL)
+            {
+              lv_draw_buf_destroy(r->buffer[eye][page]);
+            }
+        }
+    }
+
+  free(r);
+  return NULL;
 }
 
 void nyabula_eye_renderer_destroy(struct nyabula_eye_renderer_s *r)
 {
+  int eye;
+  int page;
+
   if (r != NULL)
     {
 #if defined(CONFIG_CONTEST2026_062_NYABULA_DYNAMIC_FONTS) && LV_USE_FREETYPE
       renderer_unload_fonts(r);
 #endif
-      lv_obj_delete(r->canvas);
-      lv_draw_buf_destroy(r->buffer[0]);
-      lv_draw_buf_destroy(r->buffer[1]);
-      lv_draw_buf_destroy(r->glyph);
-      for (int index = 0; index < ICON_CACHE_COUNT; index++)
+      for (eye = 0; eye < NYABULA_EYE_COUNT; eye++)
         {
-          free(r->icon_cache[index].coverage);
+          lv_obj_delete(r->canvas[eye]);
+          for (page = 0; page < 2; page++)
+            {
+              lv_draw_buf_destroy(r->buffer[eye][page]);
+            }
         }
+
+      lv_obj_delete(r->mask_canvas);
+      lv_draw_buf_destroy(r->mask_buffer);
+      if (r->path != NULL)
+        {
+          lv_vector_path_delete(r->path);
+        }
+
+      if (r->vector != NULL)
+        {
+          lv_vector_dsc_delete(r->vector);
+        }
+
+      if (r->cache_path != NULL)
+        {
+          lv_vector_path_delete(r->cache_path);
+        }
+
+      if (r->cache_vector != NULL)
+        {
+          lv_vector_dsc_delete(r->cache_vector);
+        }
+
+      if (r->mask_path != NULL)
+        {
+          lv_vector_path_delete(r->mask_path);
+        }
+
+      if (r->mask_vector != NULL)
+        {
+          lv_vector_dsc_delete(r->mask_vector);
+        }
+
+      for (page = 0; page < BASE_CACHE_COUNT; page++)
+        {
+          lv_obj_delete(r->base_cache[page].canvas);
+          lv_draw_buf_destroy(r->base_cache[page].buffer);
+        }
+
       free(r);
     }
 }
@@ -3394,12 +4099,9 @@ void nyabula_eye_renderer_render(struct nyabula_eye_renderer_s *r,
                                  const struct nyabula_eye_frame_s frames[2])
 {
   struct eye_s e;
-  lv_color32_t *pixels;
-  uint32_t stride;
   uint32_t start;
+  bool share_pixels;
   int id;
-  int x;
-  int y;
 
   if (r == NULL || frames == NULL)
     {
@@ -3407,58 +4109,203 @@ void nyabula_eye_renderer_render(struct nyabula_eye_renderer_s *r,
     }
 
   start = lv_tick_get();
-  r->index ^= 1u;
-  r->draw = r->buffer[r->index];
-  memset(r->draw->data, 0, r->draw->data_size);
-  pixels = (lv_color32_t *)r->draw->data;
-  stride = r->draw->header.stride / sizeof(*pixels);
-  for (y = 0; y < H; y++)
-    {
-      for (x = 0; x < W; x++)
-        pixels[y * stride + x].alpha = 255;
-    }
-
   update_z(r, &frames[0]);
-  for (id = 0; id < 2; id++)
+  share_pixels = frames_can_share_pixels(frames);
+  for (id = 0; id < NYABULA_EYE_COUNT; id++)
     {
-      bool minimal_exit =
+      uint32_t eye_start = lv_tick_get();
+      uint32_t stage_start;
+      lv_draw_buf_t *base_buffer = NULL;
+      struct page_state_s *page_state;
+      bool minimal_exit;
+      bool eye_content;
+      bool open_lids = false;
+
+      if (frame_pixels_unchanged(r, &frames[id], id))
+        {
+          r->reused_eyes++;
+          continue;
+        }
+
+      r->index[id] ^= 1u;
+      r->mask_ready = false;
+      r->draw = r->buffer[id][r->index[id]];
+      page_state = &r->page_state[id][r->index[id]];
+      lv_canvas_set_draw_buf(r->canvas[id], r->draw);
+      if (id == NYABULA_EYE_RIGHT && share_pixels)
+        {
+          const struct page_state_s *source_state =
+              &r->page_state[NYABULA_EYE_LEFT]
+                            [r->index[NYABULA_EYE_LEFT]];
+          const lv_area_t *copy_area = NULL;
+          lv_area_t dirty_union;
+
+          prepare(&e, &frames[id], id);
+          if (page_base_matches(page_state, &e) &&
+              page_base_matches(source_state, &e))
+            {
+              dirty_union = page_dirty_union(page_state, source_state);
+              copy_area = &dirty_union;
+            }
+
+          stage_start = lv_tick_get();
+          lv_draw_buf_copy(r->draw, copy_area,
+                           r->buffer[NYABULA_EYE_LEFT]
+                                    [r->index[NYABULA_EYE_LEFT]],
+                           copy_area);
+          r->copy_total += lv_tick_elaps(stage_start);
+          stage_start = lv_tick_get();
+          lv_obj_invalidate(r->canvas[id]);
+          r->flush_total += lv_tick_elaps(stage_start);
+          r->shared_frames++;
+          *page_state =
+              r->page_state[NYABULA_EYE_LEFT]
+                           [r->index[NYABULA_EYE_LEFT]];
+          remember_frame(r, &frames[id], id);
+          continue;
+        }
+
+      minimal_exit =
           frames[id].scene.scene != NYABULA_EYE_SCENE_NONE &&
           frames[id].scene.style == NYABULA_EYE_SCENE_STYLE_MINIMAL &&
           frames[id].scene.lid < 0.999f && frames[id].scene.alpha < 0.999f;
+      eye_content = frames[id].scene.scene == NYABULA_EYE_SCENE_NONE ||
+                    minimal_exit;
+      if (eye_content)
+        {
+          if (frames[id].scene.lid > 0.001f &&
+              (frames[id].scene.scene == NYABULA_EYE_SCENE_NONE ||
+               minimal_exit))
+            {
+              prepare_scene_lids(&e, &frames[id], id, frames[id].scene.lid);
+            }
+          else
+            {
+              prepare(&e, &frames[id], id);
+            }
+
+          base_buffer = base_cache_get(r, &e);
+          open_lids = lids_are_open(&e);
+        }
+
+      if (base_buffer != NULL)
+        {
+          const lv_area_t *restore_area =
+              page_base_matches(page_state, &e) ? &page_state->dirty : NULL;
+
+          stage_start = lv_tick_get();
+          lv_draw_buf_copy(r->draw, restore_area, base_buffer, restore_area);
+          r->copy_total += lv_tick_elaps(stage_start);
+        }
+      else
+        {
+          lv_canvas_fill_bg(r->canvas[id], lv_color_black(), LV_OPA_COVER);
+        }
+
+      lv_canvas_init_layer(r->canvas[id], &r->layer);
+      if (r->vector == NULL)
+        {
+          r->vector = lv_vector_dsc_create(&r->layer);
+        }
+
+      if (r->path == NULL)
+        {
+          r->path = lv_vector_path_create(LV_VECTOR_PATH_QUALITY_HIGH);
+        }
+
+      if (r->vector == NULL || r->path == NULL)
+        {
+          if (r->path != NULL)
+            {
+              lv_vector_path_delete(r->path);
+              r->path = NULL;
+            }
+
+          if (r->vector != NULL)
+            {
+              lv_vector_dsc_delete(r->vector);
+              r->vector = NULL;
+            }
+
+          lv_canvas_finish_layer(r->canvas[id], &r->layer);
+          continue;
+        }
+
       if (frames[id].scene.scene != NYABULA_EYE_SCENE_NONE && !minimal_exit)
         {
           render_scene(r, &frames[id], id);
           prepare_scene(&e, &frames[id], id);
           arc(r, &e, 0.0f, 0.0f, R - 0.8f, 0.0f, PI * 2.0f, 2.0f,
               0x3c4655, 0.45f);
-          continue;
-        }
-
-      if (frames[id].scene.scene == NYABULA_EYE_SCENE_NONE &&
-          frames[id].scene.lid > 0.001f)
-        {
-          prepare_scene_lids(&e, &frames[id], id, frames[id].scene.lid);
         }
       else
         {
-          prepare(&e, &frames[id], id);
+          if (base_buffer == NULL)
+            {
+              base(r, &e);
+            }
+
+          if (base_buffer == NULL)
+            {
+              iris(r, &e);
+            }
+          pupil(r, &e);
+          overlays(r, &e);
+          highlights(r, &e);
+          if (!open_lids)
+            {
+              lids(r, &e);
+            }
+
+          draw_z(r, &e);
+          if (minimal_exit)
+            {
+              render_scene(r, &frames[id], id);
+            }
+
+          if (base_buffer == NULL || !open_lids)
+            {
+              arc(r, &e, 0.0f, 0.0f, R - 0.8f, 0.0f, PI * 2.0f, 2.0f,
+                  0x3c4655, 0.45f);
+            }
         }
-      base(r, &e);
-      iris(r, &e);
-      pupil(r, &e);
-      overlays(r, &e);
-      highlights(r, &e);
-      lids(r, &e);
-      draw_z(r, &e);
-      if (minimal_exit)
+
+      r->build_total += lv_tick_elaps(eye_start);
+      stage_start = lv_tick_get();
+      lv_draw_vector(r->vector);
+      if (r->mask_ready)
         {
-          render_scene(r, &frames[id], id);
+          lv_draw_image_dsc_t image_descriptor;
+          lv_area_t area = {0, 0, W - 1, H - 1};
+
+          lv_draw_image_dsc_init(&image_descriptor);
+          image_descriptor.src = &r->mask_image;
+          lv_draw_image(&r->layer, &image_descriptor, &area);
         }
-      arc(r, &e, 0.0f, 0.0f, R - 0.8f, 0.0f, PI * 2.0f, 2.0f, 0x3c4655, 0.45f);
+
+      lv_canvas_finish_layer(r->canvas[id], &r->layer);
+      r->raster_total += lv_tick_elaps(stage_start);
+      stage_start = lv_tick_get();
+      lv_draw_buf_flush_cache(r->draw, NULL);
+      lv_obj_invalidate(r->canvas[id]);
+      r->flush_total += lv_tick_elaps(stage_start);
+      if (eye_content && fabsf(e.t.sn) <= 0.0001f &&
+          fabsf(e.t.cs - 1.0f) <= 0.0001f)
+        {
+          bool simple = frames[id].scene.scene == NYABULA_EYE_SCENE_NONE &&
+                        frames[id].expression == NYABULA_EYE_EXPRESSION_IDLE &&
+                        open_lids && frames[id].overlay <= 0.02f;
+
+          page_remember_base(page_state, &e);
+          page_remember_dynamic_area(page_state, &e, simple);
+        }
+      else
+        {
+          page_state->valid = false;
+        }
+
+      remember_frame(r, &frames[id], id);
     }
 
-  lv_draw_buf_flush_cache(r->draw, NULL);
-  lv_canvas_set_draw_buf(r->canvas, r->draw);
-  lv_obj_invalidate(r->canvas);
   report(r, lv_tick_elaps(start));
 }

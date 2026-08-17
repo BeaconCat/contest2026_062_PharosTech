@@ -243,6 +243,8 @@ extern "C"
 #endif
 
 struct nyabula_eye_engine_s *nyabula_eye_engine_create(lv_obj_t *parent);
+struct nyabula_eye_engine_s *
+nyabula_eye_engine_create_dual(lv_obj_t *left_parent, lv_obj_t *right_parent);
 void nyabula_eye_engine_destroy(struct nyabula_eye_engine_s *engine);
 
 int nyabula_eye_engine_set_expression(struct nyabula_eye_engine_s *engine,

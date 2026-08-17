@@ -611,12 +611,13 @@ static void nyabula_eye_engine_animation_cb(lv_timer_t *timer)
   nyabula_eye_renderer_render(engine->renderer, frames);
 }
 
-struct nyabula_eye_engine_s *nyabula_eye_engine_create(lv_obj_t *parent)
+struct nyabula_eye_engine_s *
+nyabula_eye_engine_create_dual(lv_obj_t *left_parent, lv_obj_t *right_parent)
 {
   struct nyabula_eye_engine_s *engine;
   int eye_id;
 
-  if (parent == NULL)
+  if (left_parent == NULL || right_parent == NULL)
     {
       return NULL;
     }
@@ -627,7 +628,8 @@ struct nyabula_eye_engine_s *nyabula_eye_engine_create(lv_obj_t *parent)
       return NULL;
     }
 
-  engine->renderer = nyabula_eye_renderer_create(parent);
+  engine->renderer =
+      nyabula_eye_renderer_create(left_parent, right_parent);
   if (engine->renderer == NULL)
     {
       free(engine);
@@ -668,6 +670,11 @@ struct nyabula_eye_engine_s *nyabula_eye_engine_create(lv_obj_t *parent)
 
   nyabula_eye_engine_animation_cb(engine->timer);
   return engine;
+}
+
+struct nyabula_eye_engine_s *nyabula_eye_engine_create(lv_obj_t *parent)
+{
+  return nyabula_eye_engine_create_dual(parent, parent);
 }
 
 void nyabula_eye_engine_destroy(struct nyabula_eye_engine_s *engine)
