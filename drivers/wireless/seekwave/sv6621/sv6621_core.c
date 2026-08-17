@@ -991,13 +991,7 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
 
   if (id == SV6621_CORE_EVENT_BA_ACTION)
     {
-      int ret = sv6621_data_ba_event(&dev->data, payload, length);
-
-      if (ret < 0)
-        {
-          sv6621_core_queue_recovery(dev, ret);
-        }
-
+      (void)sv6621_data_ba_event(&dev->data, payload, length);
       return;
     }
 
