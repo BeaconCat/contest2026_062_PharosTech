@@ -43,6 +43,7 @@
 #define SV6621_CORE_WIFI_TIMEOUT_MS 2000
 #define SV6621_CORE_SCAN_TIMEOUT_MS 10000
 #define SV6621_CORE_CONNECT_TIMEOUT_MS 5000
+#define SV6621_CORE_HANDSHAKE_TIMEOUT_MS 10000
 
 /****************************************************************************
  * Private Function Prototypes
@@ -967,6 +968,8 @@ unlock_lifecycle:
 int sv6621_connect(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_connect_s *request)
 {
+  FAR struct sv6621_scan_entry_s *target = NULL;
+  bool wpa_prepared = false;
   int ret;
 
   if (dev == NULL || request == NULL)
@@ -974,7 +977,8 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
       return -EINVAL;
     }
 
-  if (request->security != SV6621_SECURITY_OPEN)
+  if (request->security != SV6621_SECURITY_OPEN &&
+      request->security != SV6621_SECURITY_WPA2_PSK)
     {
       return -EOPNOTSUPP;
     }
@@ -997,8 +1001,77 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
       goto unlock_lifecycle;
     }
 
+  ret = nxmutex_lock(&dev->station.lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  if (dev->station.state != SV6621_STATION_IDLE)
+    {
+      ret = -EBUSY;
+    }
+
+  nxmutex_unlock(&dev->station.lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  if (request->security == SV6621_SECURITY_WPA2_PSK)
+    {
+      target = kmm_malloc(sizeof(*target));
+      if (target == NULL)
+        {
+          ret = -ENOMEM;
+          goto unlock_lifecycle;
+        }
+
+      ret = sv6621_scan_cache_find(&dev->scan.cache, request, target);
+      if (ret < 0)
+        {
+          goto free_target;
+        }
+
+      ret = sv6621_wpa_prepare(&dev->wpa, request, dev->wifi_info.mac,
+                               target->bss.bssid);
+      if (ret < 0)
+        {
+          goto free_target;
+        }
+
+      wpa_prepared = true;
+      kmm_free(target);
+      target = NULL;
+    }
+
   ret = sv6621_station_connect(&dev->station, request,
                                SV6621_CORE_CONNECT_TIMEOUT_MS);
+  if (ret < 0)
+    {
+      goto cancel_wpa;
+    }
+
+  if (wpa_prepared)
+    {
+      ret = sv6621_wpa_run(&dev->wpa, &dev->station.peer,
+                           SV6621_CORE_HANDSHAKE_TIMEOUT_MS);
+      if (ret < 0)
+        {
+          sv6621_station_disconnect(&dev->station, 1);
+          goto cancel_wpa;
+        }
+    }
+
+  goto unlock_lifecycle;
+
+free_target:
+  kmm_free(target);
+cancel_wpa:
+  if (wpa_prepared)
+    {
+      sv6621_wpa_cancel(&dev->wpa, ret);
+    }
 
 unlock_lifecycle:
   nxmutex_unlock(&dev->lifecycle_lock);
@@ -1027,6 +1100,10 @@ int sv6621_disconnect(FAR struct sv6621_dev_s *dev, uint16_t reason)
   else
     {
       ret = sv6621_station_disconnect(&dev->station, reason);
+      if (ret == 0)
+        {
+          sv6621_wpa_cancel(&dev->wpa, -ENOTCONN);
+        }
     }
 
   nxmutex_unlock(&dev->lifecycle_lock);
