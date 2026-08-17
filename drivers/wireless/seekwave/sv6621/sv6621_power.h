@@ -1,5 +1,5 @@
 /****************************************************************************
- * drivers/wireless/seekwave/sv6621/sv6621_transport.c
+ * drivers/wireless/seekwave/sv6621/sv6621_power.h
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -20,38 +20,26 @@
  *
  ****************************************************************************/
 
+#ifndef __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_POWER_H
+#define __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_POWER_H
+
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
 #include <nuttx/config.h>
 
-#include <errno.h>
+#include <stdbool.h>
+#include <stdint.h>
 
-#include "sv6621_transport.h"
+#include "sv6621_command.h"
 
 /****************************************************************************
- * Public Functions
+ * Public Function Prototypes
  ****************************************************************************/
 
-int sv6621_transport_validate(FAR const struct sv6621_transport_s *transport)
-{
-  FAR const struct sv6621_transport_ops_s *ops;
+int sv6621_power_suspend(FAR struct sv6621_command_engine_s *command,
+                         bool wake_enabled, uint16_t wake_flags);
+int sv6621_power_resume(FAR struct sv6621_command_engine_s *command);
 
-  if (transport == NULL || transport->ops == NULL)
-    {
-      return -EINVAL;
-    }
-
-  ops = transport->ops;
-  if (ops->open == NULL || ops->enumerate == NULL || ops->close == NULL ||
-      ops->read_byte == NULL ||
-      ops->write_byte == NULL || ops->read == NULL || ops->write == NULL ||
-      ops->attach_irq == NULL || ops->enable_irq == NULL ||
-      ops->recover == NULL)
-    {
-      return -ENOSYS;
-    }
-
-  return OK;
-}
+#endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_POWER_H */
