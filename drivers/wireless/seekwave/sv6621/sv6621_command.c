@@ -542,8 +542,9 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
               *response_length = engine->response_length;
             }
 
-          ret = engine->completion_result < 0 ? engine->completion_result
-                                              : engine->firmware_status;
+          ret = engine->completion_result < 0 ? engine->completion_result :
+                engine->firmware_status == 0 ? 0 :
+                -(int)engine->firmware_status;
           nxmutex_unlock(&engine->state_lock);
         }
     }
