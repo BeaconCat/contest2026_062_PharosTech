@@ -525,7 +525,7 @@ void sv6621_command_channel_consumer(uint8_t channel,
 
   if (engine == NULL || payload == NULL ||
       channel != SV6621_CHANNEL_WIFI_COMMAND ||
-      length < SV6621_COMMAND_RX_LINK_HEADER_SIZE + SV6621_COMMAND_HEADER_SIZE)
+      length < SV6621_RX_LINK_HEADER_SIZE + SV6621_COMMAND_HEADER_SIZE)
     {
       if (engine != NULL)
         {
@@ -535,6 +535,6 @@ void sv6621_command_channel_consumer(uint8_t channel,
       return;
     }
 
-  sv6621_command_receive(engine, payload + SV6621_COMMAND_RX_LINK_HEADER_SIZE,
-                         length - SV6621_COMMAND_RX_LINK_HEADER_SIZE);
+  sv6621_command_receive(engine, payload + SV6621_RX_LINK_HEADER_SIZE,
+                         length - SV6621_RX_LINK_HEADER_SIZE);
 }
