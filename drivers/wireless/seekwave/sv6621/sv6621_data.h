@@ -50,6 +50,8 @@
 
 #define SV6621_DATA_TX_BLOCK_SLEEP     (1 << 0)
 #define SV6621_DATA_TX_BLOCK_THERMAL   (1 << 1)
+#define SV6621_DATA_TX_BLOCK_RECOVERY  (1 << 2)
+#define SV6621_DATA_TX_BLOCK_CHANNEL   (1 << 3)
 
 /****************************************************************************
  * Public Types

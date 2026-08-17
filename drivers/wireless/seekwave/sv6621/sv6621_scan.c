@@ -557,8 +557,8 @@ int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
   int ret;
 
   if (cache == NULL || request == NULL || entry == NULL ||
-      request->ssid_length == 0 ||
-      request->ssid_length > SV6621_SSID_MAX_LENGTH)
+      request->ssid_length > SV6621_SSID_MAX_LENGTH ||
+      (request->ssid_length == 0 && !request->bssid_valid))
     {
       return -EINVAL;
     }
@@ -574,14 +574,20 @@ int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
     {
       FAR const struct sv6621_bss_s *bss = &cache->entries[index].bss;
 
-      if (bss->ssid_length != request->ssid_length ||
-          memcmp(bss->ssid, request->ssid, request->ssid_length) != 0)
+      if (request->ssid_length != 0 &&
+          (bss->ssid_length != request->ssid_length ||
+           memcmp(bss->ssid, request->ssid, request->ssid_length) != 0))
         {
           continue;
         }
 
       if (request->bssid_valid &&
           memcmp(bss->bssid, request->bssid, SV6621_MAC_LENGTH) != 0)
+        {
+          continue;
+        }
+
+      if (request->channel != 0 && bss->channel != request->channel)
         {
           continue;
         }

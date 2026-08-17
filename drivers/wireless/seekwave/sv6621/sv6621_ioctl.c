@@ -50,6 +50,8 @@ static int sv6621_ioctl_essid(FAR struct sv6621_ioctl_s *ioctl,
                               FAR struct iwreq *request, bool set);
 static int sv6621_ioctl_frequency(FAR struct sv6621_ioctl_s *ioctl,
                                   FAR struct iwreq *request);
+static int sv6621_ioctl_frequency_set(FAR struct sv6621_ioctl_s *ioctl,
+                                      FAR const struct iwreq *request);
 static int sv6621_ioctl_range(FAR struct sv6621_ioctl_s *ioctl,
                               FAR struct iwreq *request);
 static int sv6621_ioctl_auth_query(FAR struct sv6621_ioctl_s *ioctl,
@@ -86,6 +88,8 @@ static int sv6621_ioctl_auth(FAR struct sv6621_ioctl_s *ioctl,
         if (value == IW_AUTH_WPA_VERSION_DISABLED)
           {
             ioctl->connection.security = SV6621_SECURITY_OPEN;
+            memset(ioctl->connection.credential, 0,
+                   sizeof(ioctl->connection.credential));
             ioctl->connection.credential_length = 0;
             return 0;
           }
@@ -113,6 +117,13 @@ static int sv6621_ioctl_auth(FAR struct sv6621_ioctl_s *ioctl,
       case IW_AUTH_WPA_ENABLED:
         ioctl->connection.security = value ? SV6621_SECURITY_WPA2_PSK :
                                              SV6621_SECURITY_OPEN;
+        if (!value)
+          {
+            memset(ioctl->connection.credential, 0,
+                   sizeof(ioctl->connection.credential));
+            ioctl->connection.credential_length = 0;
+          }
+
         return 0;
 
       default:
@@ -138,6 +149,8 @@ static int sv6621_ioctl_key(FAR struct sv6621_ioctl_s *ioctl,
       return -EINVAL;
     }
 
+  memset(ioctl->connection.credential, 0,
+         sizeof(ioctl->connection.credential));
   memcpy(ioctl->connection.credential, extension->key, extension->key_len);
   ioctl->connection.credential_length = extension->key_len;
   ioctl->connection.security = SV6621_SECURITY_WPA2_PSK;
@@ -153,6 +166,7 @@ static int sv6621_ioctl_bssid(FAR struct sv6621_ioctl_s *ioctl,
 {
   static const uint8_t zero[SV6621_MAC_LENGTH];
   struct sv6621_status_s status;
+  int ret;
 
   if (set)
     {
@@ -160,7 +174,13 @@ static int sv6621_ioctl_bssid(FAR struct sv6621_ioctl_s *ioctl,
              SV6621_MAC_LENGTH);
       ioctl->connection.bssid_valid =
           memcmp(ioctl->connection.bssid, zero, sizeof(zero)) != 0;
-      return 0;
+      if (ioctl->connection.bssid_valid)
+        {
+          return sv6621_connect(ioctl->owner, &ioctl->connection);
+        }
+
+      ret = sv6621_disconnect(ioctl->owner, 3);
+      return ret == -ENOTCONN ? 0 : ret;
     }
 
   if (sv6621_get_status(ioctl->owner, &status) < 0)
@@ -254,6 +274,77 @@ static int sv6621_ioctl_frequency(FAR struct sv6621_ioctl_s *ioctl,
   request->u.freq.e = 0;
   request->u.freq.i = status.channel;
   request->u.freq.flags = status.channel == 0 ? IW_FREQ_AUTO : IW_FREQ_FIXED;
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_ioctl_frequency_set
+ ****************************************************************************/
+
+static int sv6621_ioctl_frequency_set(FAR struct sv6621_ioctl_s *ioctl,
+                                      FAR const struct iwreq *request)
+{
+  int64_t frequency;
+  int exponent;
+  int channel;
+
+  if (request->u.freq.flags == IW_FREQ_AUTO || request->u.freq.m == 0)
+    {
+      ioctl->connection.channel = 0;
+      return 0;
+    }
+
+  if (request->u.freq.e == 0 && request->u.freq.m <= UINT8_MAX)
+    {
+      channel = request->u.freq.m;
+    }
+  else
+    {
+      frequency = request->u.freq.m;
+      exponent = request->u.freq.e;
+      while (exponent > 6)
+        {
+          if (frequency > INT64_MAX / 10)
+            {
+              return -ERANGE;
+            }
+
+          frequency *= 10;
+          exponent--;
+        }
+
+      while (exponent < 6)
+        {
+          frequency /= 10;
+          exponent++;
+        }
+
+      if (frequency == 2484)
+        {
+          channel = 14;
+        }
+      else if (frequency >= 2412 && frequency <= 2472 &&
+               (frequency - 2407) % 5 == 0)
+        {
+          channel = (frequency - 2407) / 5;
+        }
+      else if (frequency >= 5000 && frequency <= 5900 &&
+               (frequency - 5000) % 5 == 0)
+        {
+          channel = (frequency - 5000) / 5;
+        }
+      else
+        {
+          return -EINVAL;
+        }
+    }
+
+  if (channel <= 0 || channel > UINT8_MAX)
+    {
+      return -EINVAL;
+    }
+
+  ioctl->connection.channel = channel;
   return 0;
 }
 
@@ -500,7 +591,8 @@ static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
     {
       required += IW_EV_LEN(ap_addr) + IW_EV_LEN(essid) +
                   ((results[index].ssid_length + 3) & ~3) +
-                  IW_EV_LEN(qual) + IW_EV_LEN(freq) + IW_EV_LEN(data);
+                  IW_EV_LEN(mode) + IW_EV_LEN(qual) + IW_EV_LEN(freq) +
+                  IW_EV_LEN(data);
     }
 
   if (request->u.data.pointer == NULL || request->u.data.length < required)
@@ -528,6 +620,7 @@ static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
   for (index = 0; index < count; index++)
     {
       FAR const struct sv6621_bss_s *bss = &results[index];
+      size_t event_length;
 
       event = (FAR struct iw_event *)cursor;
       memset(event, 0, IW_EV_LEN(ap_addr));
@@ -538,13 +631,21 @@ static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
       cursor += event->len;
 
       event = (FAR struct iw_event *)cursor;
-      memset(event, 0, IW_EV_LEN(essid));
+      event_length = IW_EV_LEN(essid) + ((bss->ssid_length + 3) & ~3);
+      memset(event, 0, event_length);
       event->cmd = SIOCGIWESSID;
       event->u.essid.flags = IW_ESSID_ON;
       event->u.essid.length = bss->ssid_length;
       event->u.essid.pointer = (FAR void *)sizeof(event->u.essid);
       memcpy(&event->u.essid + 1, bss->ssid, bss->ssid_length);
-      event->len = IW_EV_LEN(essid) + ((bss->ssid_length + 3) & ~3);
+      event->len = event_length;
+      cursor += event->len;
+
+      event = (FAR struct iw_event *)cursor;
+      memset(event, 0, IW_EV_LEN(mode));
+      event->cmd = SIOCGIWMODE;
+      event->u.mode = IW_MODE_INFRA;
+      event->len = IW_EV_LEN(mode);
       cursor += event->len;
 
       event = (FAR struct iw_event *)cursor;
@@ -692,6 +793,10 @@ int sv6621_ioctl_handle(FAR struct sv6621_ioctl_s *ioctl, int command,
 
       case SIOCGIWFREQ:
         ret = sv6621_ioctl_frequency(ioctl, request);
+        break;
+
+      case SIOCSIWFREQ:
+        ret = sv6621_ioctl_frequency_set(ioctl, request);
         break;
 
       case SIOCGIWRANGE:
