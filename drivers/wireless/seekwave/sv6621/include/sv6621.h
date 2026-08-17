@@ -171,6 +171,7 @@ struct sv6621_config_s
   struct sv6621_firmware_s dram;
   struct sv6621_firmware_s nvram;
   struct sv6621_firmware_s calibration;
+  FAR const struct sv6621_regulatory_domain_s *regulatory;
   sv6621_event_t event;
   FAR void *event_arg;
 };

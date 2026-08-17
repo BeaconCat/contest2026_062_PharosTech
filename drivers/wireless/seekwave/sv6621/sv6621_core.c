@@ -304,7 +304,7 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       config->iram.length == 0 || config->dram.data == NULL ||
       config->dram.length == 0 || config->nvram.data == NULL ||
       config->nvram.length == 0 || config->calibration.data == NULL ||
-      config->calibration.length == 0)
+      config->calibration.length == 0 || config->regulatory == NULL)
     {
       return -EINVAL;
     }
