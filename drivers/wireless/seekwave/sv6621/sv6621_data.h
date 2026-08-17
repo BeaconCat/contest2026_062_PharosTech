@@ -41,6 +41,7 @@
 
 #define SV6621_DATA_RX_DESCRIPTOR_SIZE 20
 #define SV6621_DATA_RX_PREFIX_SIZE     52
+#define SV6621_DATA_TX_DESCRIPTOR_SIZE 8
 
 /****************************************************************************
  * Public Types
@@ -59,6 +60,15 @@ struct sv6621_data_rx_s
   bool peer_valid;
   bool multicast;
   bool eapol;
+};
+
+struct sv6621_data_tx_context_s
+{
+  uint8_t peer_index;
+  uint8_t multicast_index;
+  uint8_t instance;
+  uint8_t lmac_id;
+  uint8_t tid;
 };
 
 typedef void (*sv6621_data_input_t)(FAR const struct sv6621_data_rx_s *rx,
@@ -85,6 +95,10 @@ struct sv6621_data_s
 
 int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
                           FAR struct sv6621_data_rx_s *rx);
+int sv6621_data_encode_tx(
+    FAR const struct sv6621_data_tx_context_s *context,
+    FAR const uint8_t *frame, size_t frame_length, FAR uint8_t *payload,
+    size_t capacity, FAR size_t *written);
 int sv6621_data_init(FAR struct sv6621_data_s *data,
                      FAR struct sv6621_packet_router_s *router,
                      sv6621_data_input_t input, FAR void *input_arg);

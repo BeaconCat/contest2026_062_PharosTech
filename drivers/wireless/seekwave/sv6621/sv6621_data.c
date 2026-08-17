@@ -42,12 +42,19 @@
 #define SV6621_DATA_RX_MSDU_OFFSET_OFFSET  18
 #define SV6621_DATA_RX_ETHERNET_HEADER_TAIL 6
 #define SV6621_DATA_RX_EAPOL_MASK          (1 << 6)
+#define SV6621_DATA_ETHERNET_HEADER_SIZE    14
+#define SV6621_DATA_MSDU_LENGTH_MASK        0x0fff
+#define SV6621_DATA_PEER_INDEX_MASK         0x1f
+#define SV6621_DATA_INSTANCE_MASK           0x03
+#define SV6621_DATA_LMAC_MASK               0x03
+#define SV6621_DATA_TID_MASK                0x0f
 
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
 static uint16_t sv6621_data_get_le16(FAR const uint8_t *value);
+static void sv6621_data_put_le16(FAR uint8_t *output, uint16_t value);
 static void sv6621_data_packet(uint8_t channel,
                                FAR const uint8_t *payload, size_t length,
                                FAR void *arg);
@@ -63,6 +70,16 @@ static void sv6621_data_packet(uint8_t channel,
 static uint16_t sv6621_data_get_le16(FAR const uint8_t *value)
 {
   return value[0] | ((uint16_t)value[1] << 8);
+}
+
+/****************************************************************************
+ * Name: sv6621_data_put_le16
+ ****************************************************************************/
+
+static void sv6621_data_put_le16(FAR uint8_t *output, uint16_t value)
+{
+  output[0] = value & 0xff;
+  output[1] = value >> 8;
 }
 
 /****************************************************************************
@@ -137,6 +154,51 @@ int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
   rx->tid = context >> 12;
   rx->eapol =
       (payload[SV6621_DATA_RX_EAPOL_OFFSET] & SV6621_DATA_RX_EAPOL_MASK) != 0;
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_encode_tx
+ ****************************************************************************/
+
+int sv6621_data_encode_tx(
+    FAR const struct sv6621_data_tx_context_s *context,
+    FAR const uint8_t *frame, size_t frame_length, FAR uint8_t *payload,
+    size_t capacity, FAR size_t *written)
+{
+  uint16_t descriptor;
+  uint8_t peer_index;
+
+  if (context == NULL || frame == NULL || payload == NULL || written == NULL ||
+      frame_length < SV6621_DATA_ETHERNET_HEADER_SIZE ||
+      frame_length > SV6621_DATA_MSDU_LENGTH_MASK ||
+      capacity < SV6621_DATA_TX_DESCRIPTOR_SIZE + frame_length ||
+      context->peer_index > SV6621_DATA_PEER_INDEX_MASK ||
+      context->multicast_index > SV6621_DATA_PEER_INDEX_MASK ||
+      context->instance > SV6621_DATA_INSTANCE_MASK ||
+      context->lmac_id > SV6621_DATA_LMAC_MASK ||
+      context->tid > SV6621_DATA_TID_MASK)
+    {
+      return -EINVAL;
+    }
+
+  peer_index = (frame[0] & 1) != 0 ? context->multicast_index :
+                                     context->peer_index;
+  descriptor = ((uint16_t)context->instance << 2) |
+               ((uint16_t)context->tid << 4) |
+               ((uint16_t)peer_index << 8);
+  sv6621_data_put_le16(payload, descriptor);
+
+  descriptor = (uint16_t)frame_length |
+               ((uint16_t)context->lmac_id << 12);
+  sv6621_data_put_le16(payload + 2, descriptor);
+
+  payload[4] = frame[12];
+  payload[5] = frame[13];
+  payload[6] = 0;
+  payload[7] = 0;
+  memcpy(payload + SV6621_DATA_TX_DESCRIPTOR_SIZE, frame, frame_length);
+  *written = SV6621_DATA_TX_DESCRIPTOR_SIZE + frame_length;
   return 0;
 }
 
