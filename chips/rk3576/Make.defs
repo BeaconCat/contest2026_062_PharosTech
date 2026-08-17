@@ -56,6 +56,7 @@ CHIP_CSRCS += sv6621_station.c
 CHIP_CSRCS += sv6621_transport.c sv6621_tx.c sv6621_wifi.c
 CHIP_CSRCS += sv6621_wpa_crypto.c
 CHIP_CSRCS += sv6621_wpa_eapol.c
+CHIP_CSRCS += sv6621_wpa_handshake.c
 endif
 
 ifeq ($(CONFIG_RK3576_I2C),y)
