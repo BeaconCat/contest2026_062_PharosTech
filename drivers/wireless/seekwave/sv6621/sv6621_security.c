@@ -1,0 +1,91 @@
+/****************************************************************************
+ * drivers/wireless/seekwave/sv6621/sv6621_security.c
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ ****************************************************************************/
+
+/****************************************************************************
+ * Included Files
+ ****************************************************************************/
+
+#include <nuttx/config.h>
+
+#include <errno.h>
+#include <string.h>
+
+#include "sv6621_security.h"
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#define SV6621_SECURITY_INSTANCE           0
+#define SV6621_SECURITY_COMMAND_ADD_KEY     12
+#define SV6621_SECURITY_COMMAND_TIMEOUT_MS  5000
+#define SV6621_SECURITY_PACKET_NUMBER_SIZE  6
+#define SV6621_SECURITY_KEY_CAPACITY        32
+#define SV6621_SECURITY_KEY_PAYLOAD_SIZE    48
+#define SV6621_SECURITY_KEY_TYPE_OFFSET     6
+#define SV6621_SECURITY_CIPHER_OFFSET       7
+#define SV6621_SECURITY_PN_OFFSET           8
+#define SV6621_SECURITY_KEY_INDEX_OFFSET    14
+#define SV6621_SECURITY_KEY_LENGTH_OFFSET   15
+#define SV6621_SECURITY_KEY_OFFSET          16
+
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+int sv6621_security_add_key(
+    FAR struct sv6621_command_engine_s *command,
+    enum sv6621_security_key_type_e type,
+    enum sv6621_security_cipher_e cipher,
+    FAR const uint8_t address[SV6621_MAC_LENGTH], uint8_t key_index,
+    FAR const uint8_t *key, size_t key_length,
+    FAR const uint8_t packet_number[SV6621_SECURITY_PACKET_NUMBER_SIZE])
+{
+  uint8_t payload[SV6621_SECURITY_KEY_PAYLOAD_SIZE];
+
+  if (command == NULL || address == NULL || key == NULL || key_length == 0 ||
+      key_length > SV6621_SECURITY_KEY_CAPACITY || key_index > 6 ||
+      type > SV6621_SECURITY_KEY_BEACON_INTEGRITY_GROUP ||
+      cipher != SV6621_SECURITY_CIPHER_CCMP)
+    {
+      return -EINVAL;
+    }
+
+  memset(payload, 0, sizeof(payload));
+  memcpy(payload, address, SV6621_MAC_LENGTH);
+  payload[SV6621_SECURITY_KEY_TYPE_OFFSET] = type;
+  payload[SV6621_SECURITY_CIPHER_OFFSET] = cipher;
+  if (packet_number != NULL)
+    {
+      memcpy(payload + SV6621_SECURITY_PN_OFFSET, packet_number,
+             SV6621_SECURITY_PACKET_NUMBER_SIZE);
+    }
+
+  payload[SV6621_SECURITY_KEY_INDEX_OFFSET] = key_index;
+  payload[SV6621_SECURITY_KEY_LENGTH_OFFSET] = key_length;
+  memcpy(payload + SV6621_SECURITY_KEY_OFFSET, key, key_length);
+
+  return sv6621_command_execute(
+      command, SV6621_SECURITY_INSTANCE, SV6621_SECURITY_COMMAND_ADD_KEY,
+      payload, sizeof(payload), NULL, NULL,
+      SV6621_SECURITY_COMMAND_TIMEOUT_MS);
+}
