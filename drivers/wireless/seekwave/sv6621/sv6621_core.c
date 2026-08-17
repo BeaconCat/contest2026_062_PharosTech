@@ -436,6 +436,8 @@ static void sv6621_core_recovery_worker(FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
   enum sv6621_state_e state = SV6621_STATE_RECOVERING;
+  uint16_t disconnect_reason = 0;
+  bool report_disconnect = false;
   int error = -EIO;
   int ret;
 
@@ -464,6 +466,20 @@ static void sv6621_core_recovery_worker(FAR void *arg)
   dev->recovery_pending = false;
   dev->status.state = SV6621_STATE_RECOVERING;
   dev->status.recovery_count++;
+  if (dev->station_connected || dev->status.connected)
+    {
+      report_disconnect = !dev->station_work_scheduled;
+      dev->station_connected = false;
+      dev->station_reason = disconnect_reason;
+      dev->station_generation++;
+    }
+
+  dev->status.connected = false;
+  memset(dev->status.bssid, 0, sizeof(dev->status.bssid));
+  memset(dev->status.ssid, 0, sizeof(dev->status.ssid));
+  dev->status.ssid_length = 0;
+  dev->status.channel = 0;
+  dev->status.signal_dbm = 0;
   nxmutex_unlock(&dev->status_lock);
   sv6621_core_report(dev, SV6621_EVENT_STATE_CHANGED, &state, sizeof(state));
   sv6621_core_report(dev, SV6621_EVENT_RECOVERY_STARTED, &error,
@@ -475,6 +491,12 @@ static void sv6621_core_recovery_worker(FAR void *arg)
   sv6621_scan_controller_cancel(&dev->scan);
   sv6621_wpa_cancel(&dev->wpa, error);
   sv6621_station_reset(&dev->station, error);
+  if (report_disconnect)
+    {
+      sv6621_core_report(dev, SV6621_EVENT_DISCONNECTED,
+                         &disconnect_reason, sizeof(disconnect_reason));
+    }
+
   sv6621_command_cancel(&dev->command, error);
   sv6621_data_reset_credits(&dev->data);
   sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
