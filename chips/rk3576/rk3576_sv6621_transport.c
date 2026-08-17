@@ -796,6 +796,12 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
       up_udelay(5);
     }
 
+  if (index == RK3576_SV6621_POLL_LIMIT)
+    {
+      nxmutex_unlock(&priv->lock);
+      return -ETIMEDOUT;
+    }
+
   putreg32(UINT32_MAX, RK3576_SV6621_RINTSTS);
   putreg32(argument, RK3576_SV6621_CMDARG);
   putreg32(RK3576_SV6621_CMD53_WRITE, RK3576_SV6621_CMD);
@@ -804,6 +810,12 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
        index < RK3576_SV6621_POLL_LIMIT;
        index++)
     ;
+
+  if (index == RK3576_SV6621_POLL_LIMIT)
+    {
+      nxmutex_unlock(&priv->lock);
+      return -ETIMEDOUT;
+    }
 
   for (index = 0; index < 2000000 && sent < words; index++)
     {
@@ -835,7 +847,8 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
 
   status = getreg32(RK3576_SV6621_RINTSTS);
   nxmutex_unlock(&priv->lock);
-  if ((status & RK3576_SV6621_INT_RTO) != 0 || (size_t)sent < words)
+  if (index == 400000 || (status & RK3576_SV6621_INT_RTO) != 0 ||
+      sent < words)
     {
       return -ETIMEDOUT;
     }
