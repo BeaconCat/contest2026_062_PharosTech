@@ -74,6 +74,7 @@ struct sv6621_dev_s
   size_t scan_channel_count;
   struct work_s event_work;
   struct work_s recovery_work;
+  struct work_s thermal_work;
   struct work_s scan_work;
   struct work_s station_work;
   int scan_result;
@@ -81,6 +82,7 @@ struct sv6621_dev_s
   bool station_connected;
   bool scan_reporting;
   bool recovery_pending;
+  bool thermal_blocked;
   bool suspended;
   bool powered;
   bool transport_open;
