@@ -180,7 +180,8 @@ framebuffer、片选或左右声道式的板级映射。
 - 电脑 Agent 到 Nyabula 的 MCP 配对、权限和审计；
 - [~] 内嵌 HTML 调试控制台已完成，Flutter Client 待实现；
 - BLE 离线控制与设备发现；
-- 状态订阅、鉴权和配对。
+- [ ] WebSocket 权威状态订阅：snapshot、revision patch、command ack、时钟同步；
+- [ ] 鉴权、配对、scope、限流和审计。
 
 ### M4：Go 公网母服务
 
