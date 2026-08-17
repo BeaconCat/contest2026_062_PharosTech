@@ -1410,6 +1410,18 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
       goto unlock_lifecycle;
     }
 
+#ifdef CONFIG_NET
+  if (dev->station_connected)
+    {
+      ret = sv6621_network_sync_addresses(&dev->network);
+      if (ret != 0)
+        {
+          ret = ret < 0 ? ret : -EREMOTEIO;
+          goto unlock_lifecycle;
+        }
+    }
+#endif
+
   ret = sv6621_data_set_tx_blocked(&dev->data, true);
   if (ret < 0)
     {
