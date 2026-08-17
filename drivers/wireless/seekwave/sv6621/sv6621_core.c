@@ -421,6 +421,22 @@ static void sv6621_core_signal_worker(FAR void *arg)
       event = dev->signal_events[dev->signal_tail];
       dev->signal_tail =
           (dev->signal_tail + 1) % SV6621_CORE_SIGNAL_EVENT_DEPTH;
+      if (!dev->station_connected ||
+          nxmutex_lock(&dev->station.lock) < 0)
+        {
+          nxmutex_unlock(&dev->status_lock);
+          continue;
+        }
+
+      if (memcmp(event.bssid, dev->station.target.bss.bssid,
+                 SV6621_MAC_LENGTH) != 0)
+        {
+          nxmutex_unlock(&dev->station.lock);
+          nxmutex_unlock(&dev->status_lock);
+          continue;
+        }
+
+      nxmutex_unlock(&dev->station.lock);
       dev->status.signal_dbm = event.signal_dbm;
       nxmutex_unlock(&dev->status_lock);
       sv6621_core_report(dev, SV6621_EVENT_SIGNAL_CHANGED, &event,
