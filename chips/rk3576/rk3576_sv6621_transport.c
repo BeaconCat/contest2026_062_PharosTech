@@ -275,12 +275,18 @@ static int rk3576_sv6621_direct(bool write, uint8_t function, uint32_t address,
   uint32_t argument;
   uint32_t response = 0;
   uint32_t status;
+  int ret;
 
   argument = (write ? (1u << 31) : 0) | ((function & 7) << 28) |
              (write ? (1u << 27) : 0) | ((address & 0x1ffff) << 9) |
              (write ? value : 0);
 
-  nxmutex_lock(&g_rk3576_sv6621_priv.lock);
+  ret = nxmutex_lock(&g_rk3576_sv6621_priv.lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   status = rk3576_sv6621_command(RK3576_SV6621_CMD52, argument, &response);
   nxmutex_unlock(&g_rk3576_sv6621_priv.lock);
 
@@ -653,6 +659,7 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
   size_t words = (length + 3) / 4;
   size_t received = 0;
   int index;
+  int ret;
   bool block = length >= RK3576_SV6621_BLOCK_SIZE &&
                (length % RK3576_SV6621_BLOCK_SIZE) == 0;
 
@@ -666,7 +673,12 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
       return -EINVAL;
     }
 
-  nxmutex_lock(&priv->lock);
+  ret = nxmutex_lock(&priv->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   modifyreg32(RK3576_SV6621_CTRL, 0, 1u << 1);
   for (index = 0;
        (getreg32(RK3576_SV6621_CTRL) & (1u << 1)) != 0 && index < 100000;
@@ -729,6 +741,7 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
   size_t words = (length + 3) / 4;
   size_t sent = 0;
   int index;
+  int ret;
   bool block = length >= RK3576_SV6621_BLOCK_SIZE &&
                (length % RK3576_SV6621_BLOCK_SIZE) == 0;
 
@@ -742,7 +755,12 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
       return -EINVAL;
     }
 
-  nxmutex_lock(&priv->lock);
+  ret = nxmutex_lock(&priv->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   modifyreg32(RK3576_SV6621_CTRL, 0, 1u << 1);
   for (index = 0;
        (getreg32(RK3576_SV6621_CTRL) & (1u << 1)) != 0 && index < 100000;
