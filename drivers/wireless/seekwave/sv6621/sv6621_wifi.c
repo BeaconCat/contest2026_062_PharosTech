@@ -78,6 +78,12 @@
 #define SV6621_WIFI_MIB_TLV_HEADER_SIZE     4
 #define SV6621_WIFI_MIB_MAX_VALUE_SIZE      512
 
+#define SV6621_WIFI_MIB_BAND_2GHZ           23
+#define SV6621_WIFI_MIB_LINK_LOSS_THRESHOLD 35
+#define SV6621_WIFI_MIB_HDK_TEST            131
+#define SV6621_WIFI_BANDWIDTH_40MHZ         1
+#define SV6621_WIFI_LINK_LOSS_DEFAULT       6
+
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
@@ -421,4 +427,34 @@ int sv6621_wifi_set_mib(FAR struct sv6621_command_engine_s *command,
       payload_length, NULL, NULL, SV6621_WIFI_COMMAND_TIMEOUT_MS);
   kmm_free(payload);
   return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
+}
+
+int sv6621_wifi_configure_baseline(FAR struct sv6621_command_engine_s *command)
+{
+  uint8_t bandwidth[4] = { SV6621_WIFI_BANDWIDTH_40MHZ, 0, 0, 0 };
+  uint8_t link_loss = SV6621_WIFI_LINK_LOSS_DEFAULT;
+  uint8_t hdk_test = 0;
+  int ret;
+
+  if (command == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = sv6621_wifi_set_mib(command, SV6621_WIFI_MIB_LINK_LOSS_THRESHOLD,
+                            &link_loss, sizeof(link_loss));
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = sv6621_wifi_set_mib(command, SV6621_WIFI_MIB_BAND_2GHZ, bandwidth,
+                            sizeof(bandwidth));
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  return sv6621_wifi_set_mib(command, SV6621_WIFI_MIB_HDK_TEST, &hdk_test,
+                             sizeof(hdk_test));
 }
