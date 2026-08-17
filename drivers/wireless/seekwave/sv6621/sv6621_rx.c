@@ -57,6 +57,7 @@
 static uint32_t sv6621_rx_get_le32(FAR const uint8_t *data);
 static void sv6621_rx_interrupt(FAR void *arg);
 static void sv6621_rx_worker(FAR void *arg);
+static int sv6621_rx_drain(FAR struct sv6621_rx_s *rx);
 static void sv6621_rx_report_error(FAR struct sv6621_rx_s *rx, int error);
 
 /****************************************************************************
@@ -80,6 +81,9 @@ static uint32_t sv6621_rx_get_le32(FAR const uint8_t *data)
 static void sv6621_rx_interrupt(FAR void *arg)
 {
   FAR struct sv6621_rx_s *rx = arg;
+  irqstate_t flags;
+  bool schedule = false;
+  int ret;
 
   if (rx == NULL || !rx->running || rx->suspended)
     {
@@ -87,9 +91,30 @@ static void sv6621_rx_interrupt(FAR void *arg)
     }
 
   rx->stats.interrupts++;
-  if (work_available(&rx->work))
+  flags = spin_lock_irqsave(&rx->schedule_lock);
+  if (!rx->work_scheduled)
     {
-      work_queue(HPWORK, &rx->work, sv6621_rx_worker, rx, 0);
+      rx->work_scheduled = true;
+      schedule = true;
+    }
+  else
+    {
+      rx->work_reschedule = true;
+    }
+
+  spin_unlock_irqrestore(&rx->schedule_lock, flags);
+  if (!schedule)
+    {
+      return;
+    }
+
+  ret = work_queue(HPWORK, &rx->work, sv6621_rx_worker, rx, 0);
+  if (ret < 0)
+    {
+      flags = spin_lock_irqsave(&rx->schedule_lock);
+      rx->work_scheduled = false;
+      rx->work_reschedule = false;
+      spin_unlock_irqrestore(&rx->schedule_lock, flags);
     }
 }
 
@@ -106,12 +131,11 @@ static void sv6621_rx_report_error(FAR struct sv6621_rx_s *rx, int error)
 }
 
 /****************************************************************************
- * Name: sv6621_rx_worker
+ * Name: sv6621_rx_drain
  ****************************************************************************/
 
-static void sv6621_rx_worker(FAR void *arg)
+static int sv6621_rx_drain(FAR struct sv6621_rx_s *rx)
 {
-  FAR struct sv6621_rx_s *rx = arg;
   unsigned int slots = 1;
   unsigned int burst;
   uint8_t fifo_indicator;
@@ -125,20 +149,20 @@ static void sv6621_rx_worker(FAR void *arg)
     {
       rx->stats.transport_errors++;
       sv6621_rx_report_error(rx, ret);
-      return;
+      return ret;
     }
 
   if (fifo_indicator == SV6621_RX_FIFO_ASSERT)
     {
       sv6621_rx_report_error(rx, -EIO);
-      return;
+      return -EIO;
     }
 
   if (rx->fifo_indicator_valid &&
       fifo_indicator == rx->stats.last_fifo_indicator)
     {
       rx->stats.duplicate_interrupts++;
-      return;
+      return 0;
     }
 
   rx->stats.last_fifo_indicator = fifo_indicator;
@@ -157,7 +181,7 @@ static void sv6621_rx_worker(FAR void *arg)
         {
           rx->stats.transport_errors++;
           sv6621_rx_report_error(rx, ret);
-          return;
+          return ret;
         }
 
       rx->stats.bursts++;
@@ -167,7 +191,7 @@ static void sv6621_rx_worker(FAR void *arg)
         {
           rx->stats.malformed_bursts++;
           sv6621_rx_report_error(rx, ret);
-          return;
+          return ret;
         }
 
       if (pending_count == 0)
@@ -182,9 +206,10 @@ static void sv6621_rx_worker(FAR void *arg)
             {
               rx->stats.transport_errors++;
               sv6621_rx_report_error(rx, ret);
+              return ret;
             }
 
-          return;
+          return 0;
         }
 
       slots = pending_count;
@@ -197,7 +222,42 @@ static void sv6621_rx_worker(FAR void *arg)
   if (rx->running && !rx->suspended)
     {
       sv6621_rx_report_error(rx, -ELOOP);
+      return -ELOOP;
     }
+
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_rx_worker
+ ****************************************************************************/
+
+static void sv6621_rx_worker(FAR void *arg)
+{
+  FAR struct sv6621_rx_s *rx = arg;
+  irqstate_t flags;
+  bool retry;
+  int ret;
+
+  do
+    {
+      flags = spin_lock_irqsave(&rx->schedule_lock);
+      rx->work_reschedule = false;
+      spin_unlock_irqrestore(&rx->schedule_lock, flags);
+
+      ret = sv6621_rx_drain(rx);
+
+      flags = spin_lock_irqsave(&rx->schedule_lock);
+      retry = ret == 0 && rx->work_reschedule && rx->running &&
+              !rx->suspended;
+      if (!retry)
+        {
+          rx->work_scheduled = false;
+        }
+
+      spin_unlock_irqrestore(&rx->schedule_lock, flags);
+    }
+  while (retry);
 }
 
 /****************************************************************************
@@ -248,6 +308,7 @@ void sv6621_rx_deinit(FAR struct sv6621_rx_s *rx)
 
 int sv6621_rx_start(FAR struct sv6621_rx_s *rx)
 {
+  irqstate_t flags;
   int ret;
 
   if (rx == NULL || rx->buffer == NULL || rx->running)
@@ -264,6 +325,10 @@ int sv6621_rx_start(FAR struct sv6621_rx_s *rx)
   rx->running = true;
   rx->suspended = false;
   rx->fifo_indicator_valid = false;
+  flags = spin_lock_irqsave(&rx->schedule_lock);
+  rx->work_scheduled = false;
+  rx->work_reschedule = false;
+  spin_unlock_irqrestore(&rx->schedule_lock, flags);
   ret = rx->transport->ops->enable_irq(rx->transport, true);
   if (ret < 0)
     {
@@ -281,6 +346,7 @@ int sv6621_rx_start(FAR struct sv6621_rx_s *rx)
 
 int sv6621_rx_suspend(FAR struct sv6621_rx_s *rx)
 {
+  irqstate_t flags;
   int ret;
 
   if (rx == NULL || !rx->running)
@@ -302,6 +368,10 @@ int sv6621_rx_suspend(FAR struct sv6621_rx_s *rx)
     }
 
   work_cancel_sync(HPWORK, &rx->work);
+  flags = spin_lock_irqsave(&rx->schedule_lock);
+  rx->work_scheduled = false;
+  rx->work_reschedule = false;
+  spin_unlock_irqrestore(&rx->schedule_lock, flags);
   return 0;
 }
 
@@ -335,6 +405,8 @@ int sv6621_rx_resume(FAR struct sv6621_rx_s *rx)
 
 void sv6621_rx_stop(FAR struct sv6621_rx_s *rx)
 {
+  irqstate_t flags;
+
   if (rx == NULL || !rx->running)
     {
       return;
@@ -345,6 +417,10 @@ void sv6621_rx_stop(FAR struct sv6621_rx_s *rx)
   rx->transport->ops->enable_irq(rx->transport, false);
   rx->transport->ops->attach_irq(rx->transport, NULL, NULL);
   work_cancel_sync(HPWORK, &rx->work);
+  flags = spin_lock_irqsave(&rx->schedule_lock);
+  rx->work_scheduled = false;
+  rx->work_reschedule = false;
+  spin_unlock_irqrestore(&rx->schedule_lock, flags);
 }
 
 int sv6621_rx_parse_burst(FAR struct sv6621_rx_s *rx,
