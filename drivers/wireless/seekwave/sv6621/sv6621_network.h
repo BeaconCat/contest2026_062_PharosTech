@@ -69,6 +69,7 @@ struct sv6621_network_s
   bool registered;
   bool interface_up;
   bool link_up;
+  bool rx_scheduled;
   uint8_t rx_head;
   uint8_t rx_tail;
   uint8_t multicast_count;

@@ -55,6 +55,9 @@ static int sv6621_network_queue_multicast(
     FAR struct sv6621_network_s *network);
 #endif
 static void sv6621_network_reply(FAR struct sv6621_network_s *network);
+static bool sv6621_network_tx_snapshot(
+    FAR struct sv6621_network_s *network,
+    FAR struct sv6621_data_tx_context_s *context);
 static int sv6621_network_transmit(FAR struct sv6621_network_s *network);
 static int sv6621_network_tx_poll(FAR struct net_driver_s *dev);
 static int sv6621_network_ifup(FAR struct net_driver_s *dev);
@@ -85,20 +88,47 @@ static void sv6621_network_reply(FAR struct sv6621_network_s *network)
     }
 }
 
+/****************************************************************************
+ * Name: sv6621_network_tx_snapshot
+ ****************************************************************************/
+
+static bool sv6621_network_tx_snapshot(
+    FAR struct sv6621_network_s *network,
+    FAR struct sv6621_data_tx_context_s *context)
+{
+  irqstate_t flags;
+  bool ready;
+
+  flags = spin_lock_irqsave(&network->lock);
+  ready = network->interface_up && network->link_up;
+  if (ready && context != NULL)
+    {
+      *context = network->tx_context;
+    }
+
+  spin_unlock_irqrestore(&network->lock, flags);
+  return ready;
+}
+
 static int sv6621_network_transmit(FAR struct sv6621_network_s *network)
 {
+  struct sv6621_data_tx_context_s context;
   int ret;
 
-  if (!network->link_up)
+  if (!sv6621_network_tx_snapshot(network, &context))
     {
       return -ENETDOWN;
     }
 
-  ret = sv6621_data_send(network->data, &network->tx_context,
+  ret = sv6621_data_send(network->data, &context,
                           network->dev.d_buf, network->dev.d_len);
   if (ret < 0)
     {
-      NETDEV_TXERRORS(&network->dev);
+      if (ret != -EAGAIN)
+        {
+          NETDEV_TXERRORS(&network->dev);
+        }
+
       return ret;
     }
 
@@ -118,7 +148,7 @@ static void sv6621_network_tx_worker(FAR void *arg)
   FAR struct sv6621_network_s *network = arg;
 
   net_lock();
-  if (network->interface_up && network->link_up)
+  if (sv6621_network_tx_snapshot(network, NULL))
     {
       network->dev.d_buf = network->tx_frame;
       devif_poll(&network->dev, sv6621_network_tx_poll);
@@ -169,6 +199,7 @@ static void sv6621_network_rx_worker(FAR void *arg)
       flags = spin_lock_irqsave(&network->lock);
       if (network->rx_tail == network->rx_head)
         {
+          network->rx_scheduled = false;
           spin_unlock_irqrestore(&network->lock, flags);
           break;
         }
@@ -455,6 +486,7 @@ int sv6621_network_sync_multicast(FAR struct sv6621_network_s *network)
 int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network)
 {
   struct sv6621_offload_addresses_s addresses;
+  struct sv6621_data_tx_context_s context;
 #ifdef CONFIG_NET_IPv6
   static const uint8_t zero[SV6621_OFFLOAD_IPV6_LENGTH];
   size_t index;
@@ -463,6 +495,11 @@ int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network)
   if (network == NULL || network->command == NULL || !network->registered)
     {
       return -EINVAL;
+    }
+
+  if (!sv6621_network_tx_snapshot(network, &context))
+    {
+      return -ENETDOWN;
     }
 
   memset(&addresses, 0, sizeof(addresses));
@@ -500,7 +537,7 @@ int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network)
     }
 
   return sv6621_offload_set_addresses(network->command,
-                                       network->tx_context.instance,
+                                       context.instance,
                                        &addresses);
 }
 
@@ -554,7 +591,9 @@ void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx,
 {
   FAR struct sv6621_network_s *network = arg;
   irqstate_t flags;
+  bool schedule = false;
   uint8_t next;
+  int ret;
 
   if (network == NULL || rx == NULL ||
       rx->frame_length > MAX_NETDEV_PKTSIZE)
@@ -578,12 +617,24 @@ void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx,
   memcpy(network->rx_frame[network->rx_head], rx->frame, rx->frame_length);
   network->rx_length[network->rx_head] = rx->frame_length;
   network->rx_head = next;
+  if (!network->rx_scheduled)
+    {
+      network->rx_scheduled = true;
+      schedule = true;
+    }
+
   spin_unlock_irqrestore(&network->lock, flags);
 
-  if (work_available(&network->rx_work))
+  if (schedule)
     {
-      work_queue(LPWORK, &network->rx_work, sv6621_network_rx_worker, network,
-                 0);
+      ret = work_queue(LPWORK, &network->rx_work, sv6621_network_rx_worker,
+                       network, 0);
+      if (ret < 0)
+        {
+          flags = spin_lock_irqsave(&network->lock);
+          network->rx_scheduled = false;
+          spin_unlock_irqrestore(&network->lock, flags);
+        }
     }
 }
 
