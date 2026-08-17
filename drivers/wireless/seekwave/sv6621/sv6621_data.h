@@ -103,6 +103,7 @@ struct sv6621_data_s
   FAR void *eapol_arg;
   struct sv6621_data_stats_s stats;
   uint16_t credits[SV6621_DATA_LMAC_COUNT];
+  bool tx_blocked;
   uint8_t tx_buffer[SV6621_DATA_TX_BUFFER_SIZE];
 };
 
@@ -126,6 +127,7 @@ void sv6621_data_set_eapol_input(FAR struct sv6621_data_s *data,
 void sv6621_data_add_credits(FAR struct sv6621_data_s *data,
                              uint16_t lmac0, uint16_t lmac1);
 void sv6621_data_reset_credits(FAR struct sv6621_data_s *data);
+int sv6621_data_set_tx_blocked(FAR struct sv6621_data_s *data, bool blocked);
 int sv6621_data_send(FAR struct sv6621_data_s *data,
                      FAR const struct sv6621_data_tx_context_s *context,
                      FAR const uint8_t *frame, size_t frame_length);
