@@ -46,7 +46,8 @@ CHIP_CSRCS += sv6621.c sv6621_netdev.c sv6621_wpa.c
 CHIP_CSRCS += sv6621_command.c sv6621_core.c sv6621_firmware.c
 CHIP_CSRCS += sv6621_memory.c
 CHIP_CSRCS += sv6621_packet.c
-CHIP_CSRCS += sv6621_protocol.c sv6621_rx.c sv6621_scan.c sv6621_service.c
+CHIP_CSRCS += sv6621_protocol.c sv6621_regulatory.c sv6621_rx.c
+CHIP_CSRCS += sv6621_scan.c sv6621_service.c
 CHIP_CSRCS += sv6621_transport.c sv6621_tx.c sv6621_wifi.c
 endif
 
