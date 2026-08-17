@@ -18,7 +18,18 @@ if(CONFIG_RK3576_SV6621_TRANSPORT)
 endif()
 
 if(CONFIG_SV6621)
-  list(APPEND SRCS sv6621.c sv6621_netdev.c sv6621_wpa.c)
+  set(SV6621_DIR
+      ${CMAKE_CURRENT_LIST_DIR}/../../drivers/wireless/seekwave/sv6621)
+  list(APPEND SRCS
+       sv6621.c
+       sv6621_netdev.c
+       sv6621_wpa.c
+       ${SV6621_DIR}/sv6621_command.c
+       ${SV6621_DIR}/sv6621_firmware.c
+       ${SV6621_DIR}/sv6621_memory.c
+       ${SV6621_DIR}/sv6621_packet.c
+       ${SV6621_DIR}/sv6621_protocol.c
+       ${SV6621_DIR}/sv6621_transport.c)
 endif()
 
 if(CONFIG_RK3576_I2C)
