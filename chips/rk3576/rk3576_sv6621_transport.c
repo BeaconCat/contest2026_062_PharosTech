@@ -523,11 +523,28 @@ static int rk3576_sv6621_enumerate(
   rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPDATE);
   up_mdelay(10);
 
-  status = rk3576_sv6621_command(RK3576_SV6621_CMD5, 0x01300000, &response);
-  if ((status & RK3576_SV6621_INT_RTO) != 0)
+  for (index = 0; index < 100; index++)
     {
-      wlerr("ERROR: SV6621 CMD5 response timed out\n");
-      return rk3576_sv6621_open_failed(priv, -ENODEV);
+      status = rk3576_sv6621_command(RK3576_SV6621_CMD5, 0x01300000,
+                                     &response);
+      if ((status & RK3576_SV6621_INT_RTO) != 0)
+        {
+          wlerr("ERROR: SV6621 CMD5 response timed out\n");
+          return rk3576_sv6621_open_failed(priv, -ENODEV);
+        }
+
+      if ((response & (1u << 31)) != 0)
+        {
+          break;
+        }
+
+      up_mdelay(10);
+    }
+
+  if (index == 100)
+    {
+      wlerr("ERROR: SV6621 remained busy after CMD5\n");
+      return rk3576_sv6621_open_failed(priv, -ETIMEDOUT);
     }
 
   if ((response & (1u << 24)) == 0)
