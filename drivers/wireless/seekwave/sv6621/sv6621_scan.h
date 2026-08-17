@@ -130,6 +130,9 @@ int sv6621_scan_cache_store(FAR struct sv6621_scan_cache_s *cache,
 int sv6621_scan_cache_snapshot(FAR struct sv6621_scan_cache_s *cache,
                                FAR struct sv6621_bss_s *entries,
                                FAR size_t *count);
+int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
+                           FAR const struct sv6621_connect_s *request,
+                           FAR struct sv6621_scan_entry_s *entry);
 int sv6621_scan_controller_init(FAR struct sv6621_scan_s *scan,
                                 FAR struct sv6621_command_engine_s *command,
                                 uint32_t timeout_ms,

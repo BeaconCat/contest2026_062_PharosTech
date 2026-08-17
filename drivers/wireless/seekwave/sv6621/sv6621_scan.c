@@ -549,6 +549,60 @@ int sv6621_scan_cache_snapshot(FAR struct sv6621_scan_cache_s *cache,
   return copy_count < cache->count ? -ENOSPC : 0;
 }
 
+int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
+                           FAR const struct sv6621_connect_s *request,
+                           FAR struct sv6621_scan_entry_s *entry)
+{
+  size_t index;
+  int ret;
+
+  if (cache == NULL || request == NULL || entry == NULL ||
+      request->ssid_length == 0 ||
+      request->ssid_length > SV6621_SSID_MAX_LENGTH)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&cache->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = -ENOENT;
+  for (index = 0; index < cache->count; index++)
+    {
+      FAR const struct sv6621_bss_s *bss = &cache->entries[index].bss;
+
+      if (bss->ssid_length != request->ssid_length ||
+          memcmp(bss->ssid, request->ssid, request->ssid_length) != 0)
+        {
+          continue;
+        }
+
+      if (request->bssid_valid &&
+          memcmp(bss->bssid, request->bssid, SV6621_MAC_LENGTH) != 0)
+        {
+          continue;
+        }
+
+      if (ret == -ENOENT ||
+          bss->signal_dbm > entry->bss.signal_dbm)
+        {
+          *entry = cache->entries[index];
+          ret = 0;
+        }
+
+      if (request->bssid_valid)
+        {
+          break;
+        }
+    }
+
+  nxmutex_unlock(&cache->lock);
+  return ret;
+}
+
 int sv6621_scan_controller_init(FAR struct sv6621_scan_s *scan,
                                 FAR struct sv6621_command_engine_s *command,
                                 uint32_t timeout_ms,
