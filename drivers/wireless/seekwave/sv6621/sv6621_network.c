@@ -60,6 +60,10 @@ static int sv6621_network_tx_poll(FAR struct net_driver_s *dev);
 static int sv6621_network_ifup(FAR struct net_driver_s *dev);
 static int sv6621_network_ifdown(FAR struct net_driver_s *dev);
 static int sv6621_network_txavail(FAR struct net_driver_s *dev);
+#ifdef CONFIG_NETDEV_IOCTL
+static int sv6621_network_ioctl(FAR struct net_driver_s *dev, int command,
+                                unsigned long argument);
+#endif
 #if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
 static int sv6621_network_addmac(FAR struct net_driver_s *dev,
                                  FAR const uint8_t *mac);
@@ -255,6 +259,20 @@ static int sv6621_network_txavail(FAR struct net_driver_s *dev)
   return 0;
 }
 
+#ifdef CONFIG_NETDEV_IOCTL
+/****************************************************************************
+ * Name: sv6621_network_ioctl
+ ****************************************************************************/
+
+static int sv6621_network_ioctl(FAR struct net_driver_s *dev, int command,
+                                unsigned long argument)
+{
+  FAR struct sv6621_network_s *network = dev->d_private;
+
+  return sv6621_ioctl_handle(&network->ioctl, command, argument);
+}
+#endif
+
 #if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
 static int sv6621_network_addmac(FAR struct net_driver_s *dev,
                                  FAR const uint8_t *mac)
@@ -335,6 +353,7 @@ static int sv6621_network_rmmac(FAR struct net_driver_s *dev,
  ****************************************************************************/
 
 int sv6621_network_init(FAR struct sv6621_network_s *network,
+                        FAR struct sv6621_dev_s *owner,
                         FAR struct sv6621_data_s *data,
                         FAR struct sv6621_command_engine_s *command,
                         uint8_t multicast_limit,
@@ -342,7 +361,8 @@ int sv6621_network_init(FAR struct sv6621_network_s *network,
 {
   int ret;
 
-  if (network == NULL || data == NULL || command == NULL || mac == NULL ||
+  if (network == NULL || owner == NULL || data == NULL || command == NULL ||
+      mac == NULL ||
       multicast_limit == 0)
     {
       return -EINVAL;
@@ -359,6 +379,9 @@ int sv6621_network_init(FAR struct sv6621_network_s *network,
   network->dev.d_ifup = sv6621_network_ifup;
   network->dev.d_ifdown = sv6621_network_ifdown;
   network->dev.d_txavail = sv6621_network_txavail;
+#ifdef CONFIG_NETDEV_IOCTL
+  network->dev.d_ioctl = sv6621_network_ioctl;
+#endif
 #if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
   network->dev.d_addmac = sv6621_network_addmac;
 #ifdef CONFIG_NET_MCASTGROUP
@@ -369,11 +392,21 @@ int sv6621_network_init(FAR struct sv6621_network_s *network,
   network->dev.d_buf = network->tx_frame;
   memcpy(network->dev.d_mac.ether.ether_addr_octet, mac, SV6621_MAC_LENGTH);
 
-  ret = netdev_register(&network->dev, NET_LL_ETHERNET);
+  ret = sv6621_ioctl_init(&network->ioctl, owner);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = netdev_register(&network->dev, NET_LL_IEEE80211);
   if (ret >= 0)
     {
       network->registered = true;
       netdev_carrier_off(&network->dev);
+    }
+  else
+    {
+      sv6621_ioctl_deinit(&network->ioctl);
     }
 
   return ret;
@@ -387,6 +420,7 @@ void sv6621_network_deinit(FAR struct sv6621_network_s *network)
       work_cancel(LPWORK, &network->tx_work);
       work_cancel_sync(LPWORK, &network->multicast_work);
       netdev_unregister(&network->dev);
+      sv6621_ioctl_deinit(&network->ioctl);
       network->registered = false;
     }
 }
