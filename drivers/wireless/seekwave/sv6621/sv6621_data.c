@@ -126,8 +126,9 @@ static bool sv6621_data_pn_follows(FAR const uint8_t *previous,
 static void sv6621_data_free_ba_session(
     FAR struct sv6621_data_ba_session_s *session);
 static int sv6621_data_configure_ba_session(
-    FAR struct sv6621_data_ba_session_s *session, uint8_t peer_index,
-    uint16_t window_start, uint16_t window_size);
+    FAR struct sv6621_data_s *data,
+    FAR struct sv6621_data_ba_session_s *session,
+    uint8_t peer_index, uint16_t window_start, uint16_t window_size);
 static bool sv6621_data_sequence_less(uint16_t left, uint16_t right);
 static uint16_t sv6621_data_sequence_add(uint16_t sequence, uint16_t value);
 static void sv6621_data_deliver(FAR struct sv6621_data_s *data,
@@ -142,6 +143,9 @@ static void sv6621_data_advance_reorder_window(
     FAR struct sv6621_data_s *data,
     FAR struct sv6621_data_ba_session_s *session, uint16_t new_start);
 static void sv6621_data_release_ready(
+    FAR struct sv6621_data_s *data,
+    FAR struct sv6621_data_ba_session_s *session);
+static void sv6621_data_flush_ba_session(
     FAR struct sv6621_data_s *data,
     FAR struct sv6621_data_ba_session_s *session);
 static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
@@ -306,8 +310,9 @@ static void sv6621_data_free_ba_session(
  ****************************************************************************/
 
 static int sv6621_data_configure_ba_session(
-    FAR struct sv6621_data_ba_session_s *session, uint8_t peer_index,
-    uint16_t window_start, uint16_t window_size)
+    FAR struct sv6621_data_s *data,
+    FAR struct sv6621_data_ba_session_s *session,
+    uint8_t peer_index, uint16_t window_start, uint16_t window_size)
 {
   FAR struct sv6621_data_reorder_slot_s *slots;
   uint16_t capacity = window_size < SV6621_DATA_BA_MIN_CAPACITY ?
@@ -317,10 +322,12 @@ static int sv6621_data_configure_ba_session(
   slots = kmm_zalloc((size_t)capacity * sizeof(*slots));
   if (slots == NULL)
     {
+      sv6621_data_flush_ba_session(data, session);
       sv6621_data_free_ba_session(session);
       return -ENOMEM;
     }
 
+  sv6621_data_flush_ba_session(data, session);
   sv6621_data_free_ba_session(session);
   session->slots = slots;
   session->window_start = window_start;
@@ -471,6 +478,24 @@ static void sv6621_data_release_ready(
       sv6621_data_release_reorder_slot(data, session, slot);
       session->window_start =
           sv6621_data_sequence_add(session->window_start, 1);
+    }
+}
+
+/****************************************************************************
+ * Name: sv6621_data_flush_ba_session
+ ****************************************************************************/
+
+static void sv6621_data_flush_ba_session(
+    FAR struct sv6621_data_s *data,
+    FAR struct sv6621_data_ba_session_s *session)
+{
+  if (session->active && session->slots != NULL &&
+      session->queued_sequences > 0)
+    {
+      sv6621_data_advance_reorder_window(
+          data, session,
+          sv6621_data_sequence_add(session->window_start,
+                                   session->capacity));
     }
 }
 
@@ -1355,6 +1380,7 @@ int sv6621_data_ba_event(FAR struct sv6621_data_s *data,
     {
       if (session->active && session->peer_index == peer_index)
         {
+          sv6621_data_flush_ba_session(data, session);
           sv6621_data_free_ba_session(session);
         }
     }
@@ -1362,7 +1388,7 @@ int sv6621_data_ba_event(FAR struct sv6621_data_s *data,
            (session->active && session->peer_index == peer_index))
     {
       ret = sv6621_data_configure_ba_session(
-          session, peer_index, window_start, window_size);
+          data, session, peer_index, window_start, window_size);
     }
 
   data->stats.ba_events++;
