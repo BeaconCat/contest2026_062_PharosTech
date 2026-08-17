@@ -32,6 +32,7 @@
 #include <string.h>
 
 #include "sv6621_firmware.h"
+#include "sv6621_memory.h"
 #include "sv6621_protocol.h"
 
 /****************************************************************************
@@ -46,6 +47,7 @@
 #define SV6621_FIRMWARE_NV_HEADER_SIZE 0x20
 #define SV6621_FIRMWARE_NV_OFFSET      0x08
 #define SV6621_FIRMWARE_NV_LENGTH      0x0c
+#define SV6621_FIRMWARE_IDENTITY_SIZE  16
 
 /****************************************************************************
  * Private Data
@@ -70,6 +72,11 @@ static const uint8_t g_sv6621_firmware_nv_start
 static const uint8_t g_sv6621_firmware_nv_end[SV6621_FIRMWARE_NV_MARK_SIZE] =
 {
   'D', 'E', 'V', 'N'
+};
+
+static const uint8_t g_sv6621_firmware_identity[] =
+{
+  'S', 'V', '6', '1', '6', '0', 'L', 'I', 'T', 'E'
 };
 
 /****************************************************************************
@@ -180,6 +187,28 @@ int sv6621_firmware_parse_iram(FAR const uint8_t *image, size_t length,
     {
       layout->nv_offset = nv_start_offset + SV6621_FIRMWARE_NV_MARK_SIZE;
       layout->nv_capacity = nv_end_offset - layout->nv_offset;
+    }
+
+  return 0;
+}
+
+int sv6621_firmware_verify_device(
+    FAR struct sv6621_transport_s *transport)
+{
+  uint8_t identity[SV6621_FIRMWARE_IDENTITY_SIZE];
+  int ret;
+
+  ret = sv6621_memory_read(transport, SV6621_CP_CHIP_ID_ADDRESS, identity,
+                           sizeof(identity));
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (memcmp(identity, g_sv6621_firmware_identity,
+             sizeof(g_sv6621_firmware_identity)) != 0)
+    {
+      return -ENODEV;
     }
 
   return 0;

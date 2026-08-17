@@ -36,6 +36,8 @@
  * Public Types
  ****************************************************************************/
 
+struct sv6621_transport_s;
+
 struct sv6621_firmware_layout_s
 {
   uint32_t iram_address;
@@ -52,6 +54,8 @@ struct sv6621_firmware_layout_s
 
 int sv6621_firmware_parse_iram(FAR const uint8_t *image, size_t length,
                                FAR struct sv6621_firmware_layout_s *layout);
+int sv6621_firmware_verify_device(
+    FAR struct sv6621_transport_s *transport);
 int sv6621_firmware_prepare_iram(FAR const uint8_t *image,
                                  size_t image_length,
                                  FAR const uint8_t *nvram,
