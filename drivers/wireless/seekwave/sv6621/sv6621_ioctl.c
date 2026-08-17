@@ -48,6 +48,14 @@ static int sv6621_ioctl_bssid(FAR struct sv6621_ioctl_s *ioctl,
                               FAR struct iwreq *request, bool set);
 static int sv6621_ioctl_essid(FAR struct sv6621_ioctl_s *ioctl,
                               FAR struct iwreq *request, bool set);
+static int sv6621_ioctl_frequency(FAR struct sv6621_ioctl_s *ioctl,
+                                  FAR struct iwreq *request);
+static int sv6621_ioctl_range(FAR struct sv6621_ioctl_s *ioctl,
+                              FAR struct iwreq *request);
+static int sv6621_ioctl_auth_query(FAR struct sv6621_ioctl_s *ioctl,
+                                   FAR struct iwreq *request);
+static int sv6621_ioctl_encoding_query(FAR struct sv6621_ioctl_s *ioctl,
+                                       FAR struct iwreq *request);
 static int sv6621_ioctl_scan_start(FAR struct sv6621_ioctl_s *ioctl);
 static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
                                      FAR struct iwreq *request);
@@ -218,6 +226,123 @@ static int sv6621_ioctl_essid(FAR struct sv6621_ioctl_s *ioctl,
     }
 
   return sv6621_connect(ioctl->owner, &ioctl->connection);
+}
+
+/****************************************************************************
+ * Name: sv6621_ioctl_frequency
+ ****************************************************************************/
+
+static int sv6621_ioctl_frequency(FAR struct sv6621_ioctl_s *ioctl,
+                                  FAR struct iwreq *request)
+{
+  struct sv6621_status_s status;
+  int ret;
+
+  ret = sv6621_get_status(ioctl->owner, &status);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  request->u.freq.m = status.channel;
+  request->u.freq.e = 0;
+  request->u.freq.i = status.channel;
+  request->u.freq.flags = status.channel == 0 ? IW_FREQ_AUTO : IW_FREQ_FIXED;
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_ioctl_range
+ ****************************************************************************/
+
+static int sv6621_ioctl_range(FAR struct sv6621_ioctl_s *ioctl,
+                              FAR struct iwreq *request)
+{
+  FAR struct iw_range *range = request->u.data.pointer;
+  size_t count;
+  size_t index;
+
+  if (range == NULL || request->u.data.length < sizeof(*range))
+    {
+      request->u.data.length = sizeof(*range);
+      return -E2BIG;
+    }
+
+  memset(range, 0, sizeof(*range));
+  count = ioctl->owner->scan_channel_count;
+  if (count > IW_MAX_FREQUENCIES)
+    {
+      count = IW_MAX_FREQUENCIES;
+    }
+
+  range->num_frequency = count;
+  for (index = 0; index < count; index++)
+    {
+      range->freq[index].m = ioctl->owner->scan_channels[index].number;
+      range->freq[index].e = 0;
+      range->freq[index].i = ioctl->owner->scan_channels[index].number;
+      range->freq[index].flags = IW_FREQ_FIXED;
+    }
+
+  request->u.data.length = sizeof(*range);
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_ioctl_auth_query
+ ****************************************************************************/
+
+static int sv6621_ioctl_auth_query(FAR struct sv6621_ioctl_s *ioctl,
+                                   FAR struct iwreq *request)
+{
+  switch (request->u.param.flags & IW_AUTH_INDEX)
+    {
+      case IW_AUTH_WPA_VERSION:
+        request->u.param.value =
+            ioctl->connection.security == SV6621_SECURITY_OPEN ?
+            IW_AUTH_WPA_VERSION_DISABLED : IW_AUTH_WPA_VERSION_WPA2;
+        return 0;
+
+      case IW_AUTH_CIPHER_PAIRWISE:
+      case IW_AUTH_CIPHER_GROUP:
+        request->u.param.value =
+            ioctl->connection.security == SV6621_SECURITY_OPEN ?
+            IW_AUTH_CIPHER_NONE : IW_AUTH_CIPHER_CCMP;
+        return 0;
+
+      case IW_AUTH_KEY_MGMT:
+        request->u.param.value =
+            ioctl->connection.security == SV6621_SECURITY_OPEN ?
+            0 : IW_AUTH_KEY_MGMT_PSK;
+        return 0;
+
+      case IW_AUTH_80211_AUTH_ALG:
+        request->u.param.value = IW_AUTH_ALG_OPEN_SYSTEM;
+        return 0;
+
+      case IW_AUTH_WPA_ENABLED:
+      case IW_AUTH_PRIVACY_INVOKED:
+        request->u.param.value =
+            ioctl->connection.security == SV6621_SECURITY_OPEN ? 0 : 1;
+        return 0;
+
+      default:
+        return -EOPNOTSUPP;
+    }
+}
+
+/****************************************************************************
+ * Name: sv6621_ioctl_encoding_query
+ ****************************************************************************/
+
+static int sv6621_ioctl_encoding_query(FAR struct sv6621_ioctl_s *ioctl,
+                                       FAR struct iwreq *request)
+{
+  request->u.encoding.length = 0;
+  request->u.encoding.flags =
+      ioctl->connection.security == SV6621_SECURITY_OPEN ?
+      IW_ENCODE_DISABLED : IW_ENCODE_ENABLED | IW_ENCODE_NOKEY;
+  return 0;
 }
 
 /****************************************************************************
@@ -423,8 +548,16 @@ int sv6621_ioctl_handle(FAR struct sv6621_ioctl_s *ioctl, int command,
         ret = sv6621_ioctl_auth(ioctl, request);
         break;
 
+      case SIOCGIWAUTH:
+        ret = sv6621_ioctl_auth_query(ioctl, request);
+        break;
+
       case SIOCSIWENCODEEXT:
         ret = sv6621_ioctl_key(ioctl, request);
+        break;
+
+      case SIOCGIWENCODE:
+        ret = sv6621_ioctl_encoding_query(ioctl, request);
         break;
 
       case SIOCSIWAP:
@@ -459,6 +592,14 @@ int sv6621_ioctl_handle(FAR struct sv6621_ioctl_s *ioctl, int command,
       case SIOCGIWMODE:
         request->u.mode = IW_MODE_INFRA;
         ret = 0;
+        break;
+
+      case SIOCGIWFREQ:
+        ret = sv6621_ioctl_frequency(ioctl, request);
+        break;
+
+      case SIOCGIWRANGE:
+        ret = sv6621_ioctl_range(ioctl, request);
         break;
 
       default:
