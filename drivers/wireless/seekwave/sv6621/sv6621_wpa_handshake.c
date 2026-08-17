@@ -164,7 +164,7 @@ static int sv6621_wpa_send_response(
   frame[12] = SV6621_WPA_ETHERTYPE_EAPOL >> 8;
   frame[13] = SV6621_WPA_ETHERTYPE_EAPOL & 0xff;
   ret = sv6621_wpa_eapol_build(
-      response, wpa->replay, wpa->snonce,
+      response, wpa->eapol_version, wpa->replay, wpa->snonce,
       wpa->ptk + SV6621_WPA_KCK_OFFSET,
       frame + SV6621_WPA_ETHERNET_HEADER_SIZE,
       sizeof(frame) - SV6621_WPA_ETHERNET_HEADER_SIZE, &eapol_length);
@@ -202,6 +202,7 @@ static int sv6621_wpa_process_message_1(
 
   memcpy(wpa->anonce, eapol->nonce, sizeof(wpa->anonce));
   memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
+  wpa->eapol_version = eapol->version;
   ret = sv6621_wpa_derive_ptk(
       wpa->pmk, wpa->authenticator, wpa->supplicant, wpa->anonce,
       wpa->snonce, wpa->ptk);
@@ -299,6 +300,7 @@ static int sv6621_wpa_process_message_3(
   wpa->group_installed = true;
 
   memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
+  wpa->eapol_version = eapol->version;
   ret = sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_4);
   if (ret == 0)
     {
@@ -502,6 +504,7 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
   memcpy(wpa->authenticator, authenticator, sizeof(wpa->authenticator));
   memset(wpa->replay, 0, sizeof(wpa->replay));
   wpa->result = -EINPROGRESS;
+  wpa->eapol_version = 0;
   wpa->peer_ready = false;
   wpa->frame_pending = false;
   wpa->state = SV6621_WPA_WAIT_MESSAGE_1;
