@@ -1,5 +1,5 @@
 /****************************************************************************
- * drivers/wireless/seekwave/sv6621/sv6621_core.h
+ * drivers/wireless/seekwave/sv6621/sv6621_security.h
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -20,64 +20,45 @@
  *
  ****************************************************************************/
 
-#ifndef __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_CORE_H
-#define __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_CORE_H
+#ifndef __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_SECURITY_H
+#define __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_SECURITY_H
 
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
 #include <nuttx/config.h>
-#include <nuttx/mutex.h>
 
 #include "include/sv6621.h"
 #include "sv6621_command.h"
-#include "sv6621_data.h"
-#include "sv6621_network.h"
-#include "sv6621_packet.h"
-#include "sv6621_regulatory.h"
-#include "sv6621_rx.h"
-#include "sv6621_scan.h"
-#include "sv6621_service.h"
-#include "sv6621_station.h"
-#include "sv6621_tx.h"
-#include "sv6621_wifi.h"
 
 /****************************************************************************
  * Public Types
  ****************************************************************************/
 
-struct sv6621_dev_s
+enum sv6621_security_key_type_e
 {
-  struct sv6621_config_s config;
-  mutex_t lifecycle_lock;
-  mutex_t status_lock;
-  struct sv6621_status_s status;
-  struct sv6621_packet_router_s router;
-  struct sv6621_tx_s tx;
-  struct sv6621_data_s data;
-#ifdef CONFIG_NET
-  struct sv6621_network_s network;
-#endif
-  struct sv6621_command_engine_s command;
-  struct sv6621_scan_s scan;
-  struct sv6621_station_s station;
-  struct sv6621_service_s service;
-  struct sv6621_rx_s rx;
-  struct sv6621_wifi_info_s wifi_info;
-  struct sv6621_scan_channel_s
-      scan_channels[SV6621_REGULATORY_SCAN_CHANNEL_CAPACITY];
-  size_t scan_channel_count;
-  struct work_s event_work;
-  struct work_s scan_work;
-  struct work_s station_work;
-  int scan_result;
-  uint16_t station_reason;
-  bool station_connected;
-  bool scan_reporting;
-  bool powered;
-  bool transport_open;
-  bool station_open;
+  SV6621_SECURITY_KEY_PAIRWISE = 0,
+  SV6621_SECURITY_KEY_GROUP = 1,
+  SV6621_SECURITY_KEY_INTEGRITY_GROUP = 2,
+  SV6621_SECURITY_KEY_BEACON_INTEGRITY_GROUP = 3
 };
 
-#endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_CORE_H */
+enum sv6621_security_cipher_e
+{
+  SV6621_SECURITY_CIPHER_CCMP = 8
+};
+
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
+
+int sv6621_security_add_key(
+    FAR struct sv6621_command_engine_s *command,
+    enum sv6621_security_key_type_e type,
+    enum sv6621_security_cipher_e cipher,
+    FAR const uint8_t address[SV6621_MAC_LENGTH], uint8_t key_index,
+    FAR const uint8_t *key, size_t key_length,
+    FAR const uint8_t packet_number[6]);
+
+#endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_SECURITY_H */
