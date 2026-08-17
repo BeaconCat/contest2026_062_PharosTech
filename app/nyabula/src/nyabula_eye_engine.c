@@ -126,8 +126,13 @@ static float nyabula_eye_engine_bezier(float progress)
 static float nyabula_eye_engine_follow(float current, float target,
                                        float speed, float delta_seconds)
 {
-  return nyabula_eye_engine_lerp(current, target,
-                                 1.0f - expf(-speed * delta_seconds));
+  float next = nyabula_eye_engine_lerp(
+      current, target, 1.0f - expf(-speed * delta_seconds));
+
+  /* Stop subpixel interpolation tails once their largest possible screen
+   * displacement is well below the antialiasing sample resolution. */
+
+  return fabsf(target - next) < 0.00001f ? target : next;
 }
 
 static uint32_t nyabula_eye_engine_random(struct nyabula_eye_engine_s *engine)
