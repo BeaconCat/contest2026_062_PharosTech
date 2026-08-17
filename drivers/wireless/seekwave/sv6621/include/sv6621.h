@@ -60,6 +60,7 @@ typedef void (*sv6621_transport_irq_t)(FAR void *arg);
 struct sv6621_transport_ops_s
 {
   int (*open)(FAR struct sv6621_transport_s *transport);
+  int (*enumerate)(FAR struct sv6621_transport_s *transport);
   void (*close)(FAR struct sv6621_transport_s *transport);
   int (*read_byte)(FAR struct sv6621_transport_s *transport, uint8_t function,
                    uint32_t address, FAR uint8_t *value);
