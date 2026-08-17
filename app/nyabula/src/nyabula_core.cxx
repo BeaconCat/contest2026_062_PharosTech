@@ -47,7 +47,6 @@ struct nyabula_core_expression_slot_s
 struct nyabula_core_scene_slot_s
 {
   bool used;
-  bool hidden;
   char source[NYABULA_CORE_SOURCE_MAX];
   uint8_t priority;
   uint64_t sequence;
@@ -304,7 +303,7 @@ static void nyabula_core_apply_winners(struct nyabula_core_s *core,
 
   if (scene != core->scene_winner)
     {
-      if (scene < 0 || core->scenes[scene].hidden)
+      if (scene < 0)
         {
           nyabula_eye_engine_hide_scene(core->eye_engine);
           core->snapshot.scene = NYABULA_EYE_SCENE_NONE;
@@ -454,7 +453,7 @@ static int nyabula_core_process(struct nyabula_core_s *core,
 
       case NYABULA_CORE_ACTION_SCENE_UPDATE:
         slot = nyabula_core_find_scene_slot(core, command->source);
-        if (!core->scenes[slot].used || core->scenes[slot].hidden ||
+        if (!core->scenes[slot].used ||
             strcmp(core->scenes[slot].source, command->source) != 0)
           {
             return -ENOENT;
@@ -480,22 +479,11 @@ static int nyabula_core_process(struct nyabula_core_s *core,
         break;
 
       case NYABULA_CORE_ACTION_SCENE_HIDE:
-        slot = nyabula_core_find_scene_slot(core, command->source);
-        if (slot == core->scene_winner)
-          {
-            core->scene_winner = -2;
-          }
+        /* Hiding ends this source's scene ownership.  It must not leave a
+         * persistent tombstone that suppresses lower-priority sources. */
 
-        memset(&core->scenes[slot], 0, sizeof(core->scenes[slot]));
-        core->scenes[slot].used = true;
-        core->scenes[slot].hidden = true;
-        nyabula_core_copy_string(core->scenes[slot].source,
-                                 sizeof(core->scenes[slot].source),
-                                 command->source);
-        core->scenes[slot].priority = command->priority;
-        core->scenes[slot].sequence = ++core->sequence;
-        core->scenes[slot].expires_at_ms =
-            nyabula_core_expiry(now, command->lease_ms);
+        nyabula_core_release(core, command->source,
+                             NYABULA_CORE_DOMAIN_SCENE);
         break;
 
       case NYABULA_CORE_ACTION_RELEASE:
