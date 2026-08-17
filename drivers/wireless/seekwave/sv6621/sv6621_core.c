@@ -1463,11 +1463,35 @@ unlock_lifecycle:
   return ret;
 }
 
+/****************************************************************************
+ * Name: sv6621_scan
+ ****************************************************************************/
+
 int sv6621_scan(FAR struct sv6621_dev_s *dev)
+{
+  if (dev == NULL)
+    {
+      return -EINVAL;
+    }
+
+  return sv6621_scan_selected(dev, dev->scan_channels,
+                              dev->scan_channel_count, NULL, 0);
+}
+
+/****************************************************************************
+ * Name: sv6621_scan_selected
+ ****************************************************************************/
+
+int sv6621_scan_selected(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_scan_channel_s *channels, size_t channel_count,
+    FAR const uint8_t *ssid, size_t ssid_length)
 {
   int ret;
 
-  if (dev == NULL)
+  if (dev == NULL || channels == NULL || channel_count == 0 ||
+      ssid_length > SV6621_SSID_MAX_LENGTH ||
+      (ssid_length != 0 && ssid == NULL))
     {
       return -EINVAL;
     }
@@ -1503,8 +1527,8 @@ int sv6621_scan(FAR struct sv6621_dev_s *dev)
       goto unlock_lifecycle;
     }
 
-  ret = sv6621_scan_controller_begin(&dev->scan, dev->scan_channels,
-                                     dev->scan_channel_count);
+  ret = sv6621_scan_controller_begin(&dev->scan, channels, channel_count,
+                                     ssid, ssid_length);
 
 unlock_lifecycle:
   nxmutex_unlock(&dev->lifecycle_lock);
@@ -1819,7 +1843,7 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
       goto unlock_lifecycle;
     }
 
-  scan_active = dev->scan.active;
+  scan_active = dev->scan.active || dev->scan.stopping;
   nxmutex_unlock(&dev->scan.lock);
 
   ret = nxmutex_lock(&dev->wpa.lock);
