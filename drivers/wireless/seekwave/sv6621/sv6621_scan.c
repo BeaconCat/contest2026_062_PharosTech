@@ -179,6 +179,7 @@ static void sv6621_scan_timeout_worker(FAR void *arg)
   FAR struct sv6621_scan_s *scan = arg;
   sv6621_scan_complete_t complete = NULL;
   FAR void *complete_arg = NULL;
+  bool timed_out = false;
 
   if (nxmutex_lock(&scan->lock) < 0)
     {
@@ -188,16 +189,27 @@ static void sv6621_scan_timeout_worker(FAR void *arg)
   if (scan->active)
     {
       scan->active = false;
+      scan->stopping = true;
       scan->stats.timed_out++;
       complete = scan->complete;
       complete_arg = scan->complete_arg;
+      timed_out = true;
     }
 
   nxmutex_unlock(&scan->lock);
-  if (complete != NULL)
+  if (timed_out)
     {
       sv6621_scan_stop(scan->command);
-      complete(-ETIMEDOUT, complete_arg);
+      if (nxmutex_lock(&scan->lock) >= 0)
+        {
+          scan->stopping = false;
+          nxmutex_unlock(&scan->lock);
+        }
+
+      if (complete != NULL)
+        {
+          complete(-ETIMEDOUT, complete_arg);
+        }
     }
 }
 
@@ -670,7 +682,7 @@ int sv6621_scan_controller_begin(
       return ret;
     }
 
-  if (scan->active)
+  if (scan->active || scan->stopping)
     {
       nxmutex_unlock(&scan->lock);
       return -EBUSY;
@@ -716,12 +728,18 @@ int sv6621_scan_controller_begin(
   if (ret < 0)
     {
       scan->active = false;
+      scan->stopping = true;
     }
 
   nxmutex_unlock(&scan->lock);
   if (ret < 0)
     {
       sv6621_scan_stop(scan->command);
+      if (nxmutex_lock(&scan->lock) >= 0)
+        {
+          scan->stopping = false;
+          nxmutex_unlock(&scan->lock);
+        }
     }
 
   return ret;
@@ -747,6 +765,7 @@ int sv6621_scan_controller_cancel(FAR struct sv6621_scan_s *scan)
   scan->active = false;
   if (active)
     {
+      scan->stopping = true;
       scan->stats.cancelled++;
     }
 
@@ -757,7 +776,14 @@ int sv6621_scan_controller_cancel(FAR struct sv6621_scan_s *scan)
     }
 
   work_cancel_sync(LPWORK, &scan->timeout_work);
-  return sv6621_scan_stop(scan->command);
+  ret = sv6621_scan_stop(scan->command);
+  if (nxmutex_lock(&scan->lock) >= 0)
+    {
+      scan->stopping = false;
+      nxmutex_unlock(&scan->lock);
+    }
+
+  return ret;
 }
 
 void sv6621_scan_command_event(uint8_t instance, uint8_t id,
@@ -794,11 +820,18 @@ void sv6621_scan_command_event(uint8_t instance, uint8_t id,
   if (id == SV6621_SCAN_EVENT_COMPLETE)
     {
       scan->active = false;
+      scan->stopping = true;
       scan->stats.completed++;
       complete = scan->complete;
       complete_arg = scan->complete_arg;
       nxmutex_unlock(&scan->lock);
-      work_cancel(LPWORK, &scan->timeout_work);
+      work_cancel_sync(LPWORK, &scan->timeout_work);
+      if (nxmutex_lock(&scan->lock) >= 0)
+        {
+          scan->stopping = false;
+          nxmutex_unlock(&scan->lock);
+        }
+
       if (complete != NULL)
         {
           complete(0, complete_arg);

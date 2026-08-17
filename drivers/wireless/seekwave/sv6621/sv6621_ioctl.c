@@ -589,7 +589,7 @@ static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
       return ret;
     }
 
-  active = ioctl->owner->scan.active;
+  active = ioctl->owner->scan.active || ioctl->owner->scan.stopping;
   nxmutex_unlock(&ioctl->owner->scan.lock);
   if (active)
     {
