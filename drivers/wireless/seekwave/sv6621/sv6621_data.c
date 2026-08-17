@@ -35,13 +35,33 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
+#define SV6621_DATA_RX_STATUS_OFFSET       0
 #define SV6621_DATA_RX_MSDU_LENGTH_OFFSET  2
-#define SV6621_DATA_RX_EAPOL_OFFSET        1
+#define SV6621_DATA_RX_ATTRIBUTES_OFFSET   4
+#define SV6621_DATA_RX_CHECKSUM_OFFSET     5
+#define SV6621_DATA_RX_FILTER_OFFSET       7
 #define SV6621_DATA_RX_SEQUENCE_OFFSET     8
 #define SV6621_DATA_RX_CONTEXT_OFFSET      10
+#define SV6621_DATA_RX_PN_OFFSET           12
 #define SV6621_DATA_RX_MSDU_OFFSET_OFFSET  18
+#define SV6621_DATA_RX_AMSDU_INDEX_OFFSET  19
 #define SV6621_DATA_RX_ETHERNET_HEADER_TAIL 6
+#define SV6621_DATA_RX_MORE_DATA_MASK      (1 << 1)
+#define SV6621_DATA_RX_RETRY_MASK          (1 << 3)
+#define SV6621_DATA_RX_CIPHER_MASK         0x0f
 #define SV6621_DATA_RX_EAPOL_MASK          (1 << 6)
+#define SV6621_DATA_RX_CHECKSUM_VALID_MASK (1 << 0)
+#define SV6621_DATA_RX_AMPDU_MASK          (1 << 1)
+#define SV6621_DATA_RX_SNAP_MATCH_MASK     (1 << 2)
+#define SV6621_DATA_RX_AMSDU_MASK          (1 << 3)
+#define SV6621_DATA_RX_QOS_DATA_MASK       (1 << 4)
+#define SV6621_DATA_RX_AMSDU_FIRST_MASK    (1 << 5)
+#define SV6621_DATA_RX_AMSDU_LAST_MASK     (1 << 6)
+#define SV6621_DATA_RX_MORE_FRAGMENTS_MASK (1 << 3)
+#define SV6621_DATA_RX_FIRST_MSDU_MASK     (1 << 11)
+#define SV6621_DATA_RX_AMSDU_INDEX_MASK    0x3f
+#define SV6621_DATA_RX_NEED_FORWARD_MASK   (1 << 6)
+#define SV6621_DATA_RX_MAC_DROP_FRAG_MASK  (1 << 7)
 #define SV6621_DATA_ETHERNET_HEADER_SIZE    14
 #define SV6621_DATA_MSDU_LENGTH_MASK        0x0fff
 #define SV6621_DATA_PEER_INDEX_MASK         0x1f
@@ -212,8 +232,42 @@ int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
   rx->peer_valid = (context & (1 << 9)) != 0;
   rx->multicast = (context & (1 << 10)) != 0;
   rx->tid = context >> 12;
-  rx->eapol =
-      (payload[SV6621_DATA_RX_EAPOL_OFFSET] & SV6621_DATA_RX_EAPOL_MASK) != 0;
+  rx->checksum =
+      sv6621_data_get_le16(payload + SV6621_DATA_RX_CHECKSUM_OFFSET);
+  rx->cipher =
+      payload[SV6621_DATA_RX_STATUS_OFFSET + 1] & SV6621_DATA_RX_CIPHER_MASK;
+  rx->msdu_filter = payload[SV6621_DATA_RX_FILTER_OFFSET];
+  memcpy(rx->packet_number, payload + SV6621_DATA_RX_PN_OFFSET,
+         sizeof(rx->packet_number));
+  rx->amsdu_index = payload[SV6621_DATA_RX_AMSDU_INDEX_OFFSET] &
+                    SV6621_DATA_RX_AMSDU_INDEX_MASK;
+  rx->eapol = (payload[SV6621_DATA_RX_STATUS_OFFSET + 1] &
+               SV6621_DATA_RX_EAPOL_MASK) != 0;
+  rx->more_data = (payload[SV6621_DATA_RX_STATUS_OFFSET] &
+                   SV6621_DATA_RX_MORE_DATA_MASK) != 0;
+  rx->retry = (payload[SV6621_DATA_RX_STATUS_OFFSET] &
+               SV6621_DATA_RX_RETRY_MASK) != 0;
+  rx->checksum_valid = (payload[SV6621_DATA_RX_ATTRIBUTES_OFFSET] &
+                        SV6621_DATA_RX_CHECKSUM_VALID_MASK) != 0;
+  rx->ampdu = (payload[SV6621_DATA_RX_ATTRIBUTES_OFFSET] &
+               SV6621_DATA_RX_AMPDU_MASK) != 0;
+  rx->snap_match = (payload[SV6621_DATA_RX_ATTRIBUTES_OFFSET] &
+                    SV6621_DATA_RX_SNAP_MATCH_MASK) != 0;
+  rx->amsdu = (payload[SV6621_DATA_RX_ATTRIBUTES_OFFSET] &
+               SV6621_DATA_RX_AMSDU_MASK) != 0;
+  rx->qos_data = (payload[SV6621_DATA_RX_ATTRIBUTES_OFFSET] &
+                  SV6621_DATA_RX_QOS_DATA_MASK) != 0;
+  rx->amsdu_first = (payload[SV6621_DATA_RX_ATTRIBUTES_OFFSET] &
+                     SV6621_DATA_RX_AMSDU_FIRST_MASK) != 0;
+  rx->amsdu_last = (payload[SV6621_DATA_RX_ATTRIBUTES_OFFSET] &
+                    SV6621_DATA_RX_AMSDU_LAST_MASK) != 0;
+  rx->more_fragments = (context & SV6621_DATA_RX_MORE_FRAGMENTS_MASK) != 0;
+  rx->first_msdu = (context & SV6621_DATA_RX_FIRST_MSDU_MASK) != 0;
+  rx->need_forward = (payload[SV6621_DATA_RX_AMSDU_INDEX_OFFSET] &
+                      SV6621_DATA_RX_NEED_FORWARD_MASK) != 0;
+  rx->mac_dropped_fragments =
+      (payload[SV6621_DATA_RX_AMSDU_INDEX_OFFSET] &
+       SV6621_DATA_RX_MAC_DROP_FRAG_MASK) != 0;
   return 0;
 }
 

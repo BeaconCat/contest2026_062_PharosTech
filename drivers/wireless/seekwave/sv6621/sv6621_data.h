@@ -62,14 +62,32 @@ struct sv6621_data_rx_s
   FAR const uint8_t *frame;
   size_t frame_length;
   uint16_t sequence;
+  uint16_t checksum;
   uint8_t fragment;
   uint8_t instance;
   uint8_t peer_index;
   uint8_t tid;
+  uint8_t cipher;
+  uint8_t msdu_filter;
+  uint8_t packet_number[6];
+  uint8_t amsdu_index;
   bool instance_valid;
   bool peer_valid;
   bool multicast;
   bool eapol;
+  bool more_data;
+  bool retry;
+  bool checksum_valid;
+  bool ampdu;
+  bool snap_match;
+  bool amsdu;
+  bool qos_data;
+  bool amsdu_first;
+  bool amsdu_last;
+  bool more_fragments;
+  bool first_msdu;
+  bool need_forward;
+  bool mac_dropped_fragments;
 };
 
 struct sv6621_data_tx_context_s
