@@ -125,8 +125,8 @@ struct rk3576_sv6621_transport_priv_s
  * Private Function Prototypes
  ****************************************************************************/
 
-static void rk3576_sv6621_ciu_update(uint32_t command);
-static void rk3576_sv6621_set_clock(uint32_t source, uint32_t divider);
+static int rk3576_sv6621_ciu_update(uint32_t command);
+static int rk3576_sv6621_set_clock(uint32_t source, uint32_t divider);
 static uint32_t rk3576_sv6621_command(uint32_t command, uint32_t argument,
                                       FAR uint32_t *response);
 static int rk3576_sv6621_direct(bool write, uint8_t function, uint32_t address,
@@ -189,7 +189,7 @@ static struct sv6621_transport_s g_rk3576_sv6621_transport = {
  * Private Functions
  ****************************************************************************/
 
-static void rk3576_sv6621_ciu_update(uint32_t command)
+static int rk3576_sv6621_ciu_update(uint32_t command)
 {
   int index;
 
@@ -199,17 +199,32 @@ static void rk3576_sv6621_ciu_update(uint32_t command)
        index < RK3576_SV6621_POLL_LIMIT;
        index++)
     ;
+
+  return index == RK3576_SV6621_POLL_LIMIT ? -ETIMEDOUT : 0;
 }
 
-static void rk3576_sv6621_set_clock(uint32_t source, uint32_t divider)
+static int rk3576_sv6621_set_clock(uint32_t source, uint32_t divider)
 {
+  int ret;
+
   putreg32(0, RK3576_SV6621_CLKENA);
-  rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPDATE);
+  ret = rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPDATE);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   putreg32((0x3fffu << 16) | (source & 0x3fff), RK3576_SV6621_CRU_SDIO_SEL);
   putreg32(divider, RK3576_SV6621_CLKDIV);
   putreg32(1, RK3576_SV6621_CLKENA);
-  rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPDATE);
+  ret = rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPDATE);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   up_mdelay(2);
+  return 0;
 }
 
 static uint32_t rk3576_sv6621_command(uint32_t command, uint32_t argument,
@@ -332,11 +347,18 @@ static int rk3576_sv6621_voltage_switch(void)
 
   putreg32(RK3576_SV6621_INT_VOLTSW, RK3576_SV6621_RINTSTS);
   putreg32(0, RK3576_SV6621_CLKENA);
-  rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPD_VOLT);
+  if (rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPD_VOLT) < 0)
+    {
+      return -ETIMEDOUT;
+    }
+
   modifyreg32(RK3576_SV6621_UHS, 0, 1);
   up_mdelay(10);
   putreg32(1, RK3576_SV6621_CLKENA);
-  rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPD_VOLT);
+  if (rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPD_VOLT) < 0)
+    {
+      return -ETIMEDOUT;
+    }
 
   for (index = 0; index < 200000; index++)
     {
@@ -399,7 +421,12 @@ static int rk3576_sv6621_tune_sdr104(void)
       return ret;
     }
 
-  rk3576_sv6621_set_clock(RK3576_SV6621_SRC_396M, 0);
+  ret = rk3576_sv6621_set_clock(RK3576_SV6621_SRC_396M, 0);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   putreg32(RK3576_SV6621_TCON_180, RK3576_SV6621_TIMING0);
   putreg32(RK3576_SV6621_TCON_180, RK3576_SV6621_TIMING1);
 
@@ -473,6 +500,7 @@ static int rk3576_sv6621_open_failed(
 static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
 {
   FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
+  int ret;
 
   if (priv->prepared || priv->opened)
     {
@@ -489,7 +517,12 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
   SDIO_CLOCK(priv->sdio, CLOCK_SDIO_DISABLED);
 
   putreg32(0, RK3576_SV6621_CLKENA);
-  rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPDATE);
+  ret = rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPDATE);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   putreg32(0, RK3576_SV6621_CLKDIV);
   putreg32(0x0ffe0002, RK3576_SV6621_TIMING0);
   putreg32((0x3fffu << 16) | 0x2f9d, RK3576_SV6621_CRU_SDIO_SEL);
@@ -520,7 +553,12 @@ static int rk3576_sv6621_enumerate(
     }
 
   putreg32(1, RK3576_SV6621_CLKENA);
-  rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPDATE);
+  ret = rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPDATE);
+  if (ret < 0)
+    {
+      return rk3576_sv6621_open_failed(priv, ret);
+    }
+
   up_mdelay(10);
 
   for (index = 0; index < 100; index++)
