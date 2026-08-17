@@ -1819,7 +1819,7 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
       goto unlock_lifecycle;
     }
 
-  scan_active = dev->scan.active;
+  scan_active = dev->scan.active || dev->scan.stopping;
   nxmutex_unlock(&dev->scan.lock);
 
   ret = nxmutex_lock(&dev->wpa.lock);

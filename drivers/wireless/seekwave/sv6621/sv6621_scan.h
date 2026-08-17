@@ -108,6 +108,7 @@ struct sv6621_scan_s
   FAR void *complete_arg;
   uint32_t timeout_ms;
   bool active;
+  bool stopping;
   struct sv6621_scan_stats_s stats;
 };
 
