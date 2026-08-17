@@ -56,8 +56,12 @@ struct sv6621_network_s
   struct net_driver_s dev;
   spinlock_t lock;
   struct work_s rx_work;
+  struct work_s tx_work;
+  FAR struct sv6621_data_s *data;
+  struct sv6621_data_tx_context_s tx_context;
   bool registered;
   bool interface_up;
+  bool link_up;
   uint8_t rx_head;
   uint8_t rx_tail;
   uint16_t rx_length[SV6621_NETWORK_RX_DEPTH];
@@ -70,8 +74,12 @@ struct sv6621_network_s
  ****************************************************************************/
 
 int sv6621_network_init(FAR struct sv6621_network_s *network,
+                        FAR struct sv6621_data_s *data,
                         FAR const uint8_t mac[SV6621_MAC_LENGTH]);
 void sv6621_network_deinit(FAR struct sv6621_network_s *network);
+void sv6621_network_set_link(
+    FAR struct sv6621_network_s *network, bool link_up,
+    FAR const struct sv6621_data_tx_context_s *context);
 void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx,
                           FAR void *arg);
 
