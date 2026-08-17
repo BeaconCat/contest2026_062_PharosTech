@@ -33,6 +33,7 @@
 #include "include/sv6621.h"
 #include "sv6621_command.h"
 #include "sv6621_packet.h"
+#include "sv6621_regulatory.h"
 #include "sv6621_rx.h"
 #include "sv6621_scan.h"
 #include "sv6621_service.h"
@@ -56,6 +57,9 @@ struct sv6621_dev_s
   struct sv6621_service_s service;
   struct sv6621_rx_s rx;
   struct sv6621_wifi_info_s wifi_info;
+  struct sv6621_scan_channel_s
+      scan_channels[SV6621_REGULATORY_SCAN_CHANNEL_CAPACITY];
+  size_t scan_channel_count;
   struct work_s event_work;
   struct work_s scan_work;
   int scan_result;
