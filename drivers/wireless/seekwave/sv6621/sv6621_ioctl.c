@@ -88,6 +88,8 @@ static int sv6621_ioctl_auth(FAR struct sv6621_ioctl_s *ioctl,
         if (value == IW_AUTH_WPA_VERSION_DISABLED)
           {
             ioctl->connection.security = SV6621_SECURITY_OPEN;
+            memset(ioctl->connection.credential, 0,
+                   sizeof(ioctl->connection.credential));
             ioctl->connection.credential_length = 0;
             return 0;
           }
@@ -115,6 +117,13 @@ static int sv6621_ioctl_auth(FAR struct sv6621_ioctl_s *ioctl,
       case IW_AUTH_WPA_ENABLED:
         ioctl->connection.security = value ? SV6621_SECURITY_WPA2_PSK :
                                              SV6621_SECURITY_OPEN;
+        if (!value)
+          {
+            memset(ioctl->connection.credential, 0,
+                   sizeof(ioctl->connection.credential));
+            ioctl->connection.credential_length = 0;
+          }
+
         return 0;
 
       default:
@@ -140,6 +149,8 @@ static int sv6621_ioctl_key(FAR struct sv6621_ioctl_s *ioctl,
       return -EINVAL;
     }
 
+  memset(ioctl->connection.credential, 0,
+         sizeof(ioctl->connection.credential));
   memcpy(ioctl->connection.credential, extension->key, extension->key_len);
   ioctl->connection.credential_length = extension->key_len;
   ioctl->connection.security = SV6621_SECURITY_WPA2_PSK;
