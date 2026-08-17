@@ -82,7 +82,6 @@
 #define RK3576_SV6621_INT_DTO      (1u << 3)
 #define RK3576_SV6621_INT_RTO      (1u << 8)
 #define RK3576_SV6621_INT_VOLTSW   (1u << 10)
-#define RK3576_SV6621_INT_RESPERR  0x00000142
 #define RK3576_SV6621_INT_CMDERR   0x00001142
 #define RK3576_SV6621_INT_DATAERR  0x0000ae80
 
@@ -402,7 +401,7 @@ static int rk3576_sv6621_voltage_switch(void)
   int index;
 
   status = rk3576_sv6621_command(RK3576_SV6621_CMD11, 0, &response);
-  if ((status & RK3576_SV6621_INT_RESPERR) != 0)
+  if ((status & RK3576_SV6621_INT_CMDERR) != 0)
     {
       return (status & RK3576_SV6621_INT_RTO) != 0 ? -ETIMEDOUT : -EIO;
     }
