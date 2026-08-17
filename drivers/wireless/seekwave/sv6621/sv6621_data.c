@@ -99,7 +99,7 @@ static void sv6621_data_packet(uint8_t channel, FAR const uint8_t *payload,
     }
 
   data->stats.received++;
-  data->stats.bytes += rx.frame_length;
+  data->stats.received_bytes += rx.frame_length;
   data->input(&rx, data->input_arg);
   (void)channel;
 }
@@ -208,24 +208,33 @@ int sv6621_data_encode_tx(
 
 int sv6621_data_init(FAR struct sv6621_data_s *data,
                      FAR struct sv6621_packet_router_s *router,
-                     sv6621_data_input_t input, FAR void *input_arg)
+                     FAR struct sv6621_tx_s *tx, sv6621_data_input_t input,
+                     FAR void *input_arg)
 {
   int ret;
 
-  if (data == NULL || router == NULL || input == NULL)
+  if (data == NULL || router == NULL || tx == NULL || input == NULL)
     {
       return -EINVAL;
     }
 
   memset(data, 0, sizeof(*data));
   data->router = router;
+  data->tx = tx;
   data->input = input;
   data->input_arg = input_arg;
+
+  ret = nxmutex_init(&data->tx_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
 
   ret = sv6621_packet_subscribe(router, SV6621_CHANNEL_WIFI_DATA,
                                 sv6621_data_packet, data);
   if (ret < 0)
     {
+      nxmutex_destroy(&data->tx_lock);
       return ret;
     }
 
@@ -235,6 +244,7 @@ int sv6621_data_init(FAR struct sv6621_data_s *data,
     {
       sv6621_packet_unsubscribe(router, SV6621_CHANNEL_WIFI_DATA,
                                 sv6621_data_packet, data);
+      nxmutex_destroy(&data->tx_lock);
     }
 
   return ret;
@@ -255,5 +265,64 @@ void sv6621_data_deinit(FAR struct sv6621_data_s *data)
                             sv6621_data_packet, data);
   sv6621_packet_unsubscribe(data->router, SV6621_CHANNEL_WIFI_DATA,
                             sv6621_data_packet, data);
+  nxmutex_destroy(&data->tx_lock);
   data->router = NULL;
+  data->tx = NULL;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_send
+ ****************************************************************************/
+
+int sv6621_data_send(FAR struct sv6621_data_s *data,
+                     FAR const struct sv6621_data_tx_context_s *context,
+                     FAR const uint8_t *frame, size_t frame_length)
+{
+  uint8_t payload[SV6621_DATA_TX_DESCRIPTOR_SIZE +
+                  SV6621_DATA_MAX_FRAME_SIZE];
+  size_t payload_length;
+  size_t packet_length;
+  int ret;
+
+  if (data == NULL || data->tx == NULL || frame == NULL ||
+      frame_length > SV6621_DATA_MAX_FRAME_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&data->tx_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = sv6621_data_encode_tx(context, frame, frame_length, payload,
+                              sizeof(payload), &payload_length);
+  if (ret < 0)
+    {
+      goto unlock;
+    }
+
+  ret = sv6621_packet_build(SV6621_CHANNEL_WIFI_DATA, payload,
+                            payload_length, data->tx_buffer,
+                            sizeof(data->tx_buffer), &packet_length);
+  if (ret < 0)
+    {
+      goto unlock;
+    }
+
+  ret = sv6621_tx_send(data->tx, data->tx_buffer, packet_length);
+  if (ret < 0)
+    {
+      data->stats.transmit_errors++;
+    }
+  else
+    {
+      data->stats.transmitted++;
+      data->stats.transmitted_bytes += frame_length;
+    }
+
+unlock:
+  nxmutex_unlock(&data->tx_lock);
+  return ret;
 }
