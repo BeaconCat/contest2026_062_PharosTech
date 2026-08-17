@@ -242,6 +242,7 @@ struct sv6621_link_stats_s
 {
   struct sv6621_tx_rate_s tx;
   struct sv6621_rx_rate_s rx;
+  uint32_t tx_bitrate_100kbps;
   int8_t signal_dbm;
   int8_t noise_dbm;
   uint8_t tx_success_percent;
