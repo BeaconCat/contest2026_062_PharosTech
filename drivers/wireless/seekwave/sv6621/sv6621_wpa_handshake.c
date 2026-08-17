@@ -271,17 +271,20 @@ static int sv6621_wpa_process_message_1(
 {
   int ret;
 
-  ret = sv6621_wpa_compare_replay(eapol->replay, wpa->replay);
-  if (ret == 0)
+  if (wpa->replay_valid)
     {
-      return memcmp(eapol->nonce, wpa->anonce, sizeof(wpa->anonce)) == 0 ?
-             sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_2) :
-             -EKEYREJECTED;
-    }
+      ret = sv6621_wpa_compare_replay(eapol->replay, wpa->replay);
+      if (ret == 0)
+        {
+          return memcmp(eapol->nonce, wpa->anonce, sizeof(wpa->anonce)) == 0 ?
+                 sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_2) :
+                 -EKEYREJECTED;
+        }
 
-  if (ret < 0)
-    {
-      return -EALREADY;
+      if (ret < 0)
+        {
+          return -EALREADY;
+        }
     }
 
   if (wpa->state == SV6621_WPA_WAIT_MESSAGE_3 &&
@@ -296,6 +299,7 @@ static int sv6621_wpa_process_message_1(
 
   memcpy(wpa->anonce, eapol->nonce, sizeof(wpa->anonce));
   memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
+  wpa->replay_valid = true;
   wpa->eapol_version = eapol->version;
   ret = sv6621_wpa_derive_ptk(
       wpa->pmk, wpa->authenticator, wpa->supplicant, wpa->anonce,
@@ -668,6 +672,7 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
   memcpy(wpa->supplicant, supplicant, sizeof(wpa->supplicant));
   memcpy(wpa->authenticator, authenticator, sizeof(wpa->authenticator));
   memset(wpa->replay, 0, sizeof(wpa->replay));
+  wpa->replay_valid = false;
   wpa->result = -EINPROGRESS;
   wpa->eapol_version = 0;
   wpa->peer_ready = false;
@@ -818,7 +823,11 @@ void sv6621_wpa_input(FAR const struct sv6621_data_rx_s *rx, FAR void *arg)
       return;
     }
 
-  if ((wpa->state == SV6621_WPA_WAIT_MESSAGE_1 ||
+  if (rx->frame_length >= SV6621_WPA_ETHERNET_HEADER_SIZE &&
+      memcmp(rx->frame, wpa->supplicant, SV6621_MAC_LENGTH) == 0 &&
+      memcmp(rx->frame + SV6621_MAC_LENGTH, wpa->authenticator,
+             SV6621_MAC_LENGTH) == 0 &&
+      (wpa->state == SV6621_WPA_WAIT_MESSAGE_1 ||
        wpa->state == SV6621_WPA_WAIT_MESSAGE_3 ||
        wpa->state == SV6621_WPA_COMPLETE) &&
       !wpa->frame_pending && !wpa->canceling)
