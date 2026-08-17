@@ -20,10 +20,8 @@ endif()
 if(CONFIG_SV6621)
   set(SV6621_DIR
       ${CMAKE_CURRENT_LIST_DIR}/../../drivers/wireless/seekwave/sv6621)
+  target_include_directories(arch PRIVATE ${SV6621_DIR}/include)
   list(APPEND SRCS
-       sv6621.c
-       sv6621_netdev.c
-       sv6621_wpa.c
        ${SV6621_DIR}/sv6621_command.c
        ${SV6621_DIR}/sv6621_connection.c
        ${SV6621_DIR}/sv6621_core.c

@@ -29,11 +29,14 @@
 #include <debug.h>
 #include <errno.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/irq.h>
 #include <nuttx/mutex.h>
 #include <nuttx/sdio.h>
+#include <nuttx/spinlock.h>
 
 #include "arm64_internal.h"
 #include "rk3576_sdmmc.h"
@@ -86,6 +89,22 @@
   (((uint32_t)0x7ff << 1 << 16) | ((uint32_t)(raw) << 1))
 #define RK3576_SV6621_TCON_180   RK3576_SV6621_TCON(0x2)
 #define RK3576_SV6621_POLL_LIMIT 200000
+#define RK3576_SV6621_FUNCTION_MAX 7
+#define RK3576_SV6621_ADDRESS_MAX  0x1ffff
+#define RK3576_SV6621_BLOCK_SIZE   512
+#define RK3576_SV6621_BYTE_COUNT_MAX 511
+#define RK3576_SV6621_BLOCK_COUNT_MAX 511
+
+#define RK3576_SV6621_CCCR_IO_ENABLE  0x02
+#define RK3576_SV6621_CCCR_IO_READY   0x03
+#define RK3576_SV6621_CCCR_INTERRUPT  0x04
+#define RK3576_SV6621_CCCR_BUS_IF      0x07
+#define RK3576_SV6621_CCCR_SPEED       0x13
+#define RK3576_SV6621_FBR1_BLOCK_LOW   0x110
+#define RK3576_SV6621_FBR1_BLOCK_HIGH  0x111
+
+#define RK3576_SV6621_FUNCTION1_BIT    (1 << 1)
+#define RK3576_SV6621_INTERRUPT_MASTER (1 << 0)
 
 /****************************************************************************
  * Private Types
@@ -95,6 +114,10 @@ struct rk3576_sv6621_transport_priv_s
 {
   FAR struct sdio_dev_s *sdio;
   mutex_t lock;
+  sv6621_transport_irq_t handler;
+  FAR void *handler_arg;
+  bool opened;
+  bool irq_enabled;
 };
 
 /****************************************************************************
@@ -109,23 +132,28 @@ static int rk3576_sv6621_direct(bool write, uint8_t function, uint32_t address,
                                 uint8_t value, FAR uint8_t *result);
 static void rk3576_sv6621_voltage_switch(void);
 static void rk3576_sv6621_tune_sdr104(void);
-static int rk3576_sv6621_initialize(FAR struct sv6621_transport_s *transport,
-                                    sv6621_power_t power, FAR void *power_arg);
-static int rk3576_sv6621_readb(FAR struct sv6621_transport_s *transport,
-                               uint8_t function, uint32_t address,
-                               FAR uint8_t *value);
-static int rk3576_sv6621_writeb(FAR struct sv6621_transport_s *transport,
-                                uint8_t function, uint32_t address,
-                                uint8_t value);
+static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport);
+static void rk3576_sv6621_close(FAR struct sv6621_transport_s *transport);
+static int rk3576_sv6621_read_byte(FAR struct sv6621_transport_s *transport,
+                                   uint8_t function, uint32_t address,
+                                   FAR uint8_t *value);
+static int rk3576_sv6621_write_byte(FAR struct sv6621_transport_s *transport,
+                                    uint8_t function, uint32_t address,
+                                    uint8_t value);
 static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
                               uint8_t function, uint32_t address,
-                              bool increment, FAR uint8_t *buffer, int length);
+                              bool increment, FAR void *buffer, size_t length);
 static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
                                uint8_t function, uint32_t address,
-                               bool increment, FAR const uint8_t *buffer,
-                               int length);
-static void
-rk3576_sv6621_ack_interrupt(FAR struct sv6621_transport_s *transport);
+                               bool increment, FAR const void *buffer,
+                               size_t length);
+static int rk3576_sv6621_attach_irq(FAR struct sv6621_transport_s *transport,
+                                    sv6621_transport_irq_t handler,
+                                    FAR void *arg);
+static int rk3576_sv6621_enable_irq(FAR struct sv6621_transport_s *transport,
+                                    bool enable);
+static int rk3576_sv6621_recover(FAR struct sv6621_transport_s *transport);
+static void rk3576_sv6621_host_interrupt(FAR void *arg);
 
 /****************************************************************************
  * Private Data
@@ -136,12 +164,15 @@ static struct rk3576_sv6621_transport_priv_s g_rk3576_sv6621_priv = {
 };
 
 static const struct sv6621_transport_ops_s g_rk3576_sv6621_ops = {
-  .initialize = rk3576_sv6621_initialize,
-  .readb = rk3576_sv6621_readb,
-  .writeb = rk3576_sv6621_writeb,
+  .open = rk3576_sv6621_open,
+  .close = rk3576_sv6621_close,
+  .read_byte = rk3576_sv6621_read_byte,
+  .write_byte = rk3576_sv6621_write_byte,
   .read = rk3576_sv6621_read,
   .write = rk3576_sv6621_write,
-  .ack_interrupt = rk3576_sv6621_ack_interrupt,
+  .attach_irq = rk3576_sv6621_attach_irq,
+  .enable_irq = rk3576_sv6621_enable_irq,
+  .recover = rk3576_sv6621_recover,
 };
 
 static struct sv6621_transport_s g_rk3576_sv6621_transport = {
@@ -325,8 +356,7 @@ static void rk3576_sv6621_tune_sdr104(void)
     }
 }
 
-static int rk3576_sv6621_initialize(FAR struct sv6621_transport_s *transport,
-                                    sv6621_power_t power, FAR void *power_arg)
+static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
 {
   FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
   uint32_t response = 0;
@@ -334,6 +364,12 @@ static int rk3576_sv6621_initialize(FAR struct sv6621_transport_s *transport,
   uint32_t rca;
   uint8_t value = 0;
   int index;
+  int ret;
+
+  if (priv->opened)
+    {
+      return -EBUSY;
+    }
 
   priv->sdio = rk3576_sdmmc_initialize(RK3576_SDIO_SLOT);
   if (priv->sdio == NULL)
@@ -342,9 +378,7 @@ static int rk3576_sv6621_initialize(FAR struct sv6621_transport_s *transport,
       return -ENODEV;
     }
 
-  power(power_arg, false);
   SDIO_CLOCK(priv->sdio, CLOCK_SDIO_DISABLED);
-  up_mdelay(1000);
 
   putreg32(0, RK3576_SV6621_CLKENA);
   rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPDATE);
@@ -352,8 +386,6 @@ static int rk3576_sv6621_initialize(FAR struct sv6621_transport_s *transport,
   putreg32(0x0ffe0002, RK3576_SV6621_TIMING0);
   putreg32((0x3fffu << 16) | 0x2f9d, RK3576_SV6621_CRU_SDIO_SEL);
 
-  power(power_arg, true);
-  up_mdelay(200);
   putreg32(1, RK3576_SV6621_CLKENA);
   rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPDATE);
   up_mdelay(10);
@@ -386,19 +418,54 @@ static int rk3576_sv6621_initialize(FAR struct sv6621_transport_s *transport,
       return -EIO;
     }
 
-  rk3576_sv6621_direct(true, 0, 0x16, 0x03, NULL);
-  rk3576_sv6621_direct(true, 0, 0x04, 0x03, NULL);
+  ret = rk3576_sv6621_direct(true, 0, 0x16, 0x03, NULL);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_INTERRUPT, 0,
+                             NULL);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   rk3576_sv6621_tune_sdr104();
 
-  rk3576_sv6621_direct(true, 0, 0x110, 0, NULL);
-  rk3576_sv6621_direct(true, 0, 0x111, 2, NULL);
-  rk3576_sv6621_direct(true, 0, 0x02, 2, NULL);
+  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_FBR1_BLOCK_LOW,
+                             RK3576_SV6621_BLOCK_SIZE & 0xff, NULL);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_FBR1_BLOCK_HIGH,
+                             RK3576_SV6621_BLOCK_SIZE >> 8, NULL);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_IO_ENABLE,
+                             RK3576_SV6621_FUNCTION1_BIT, NULL);
+  if (ret < 0)
+    {
+      return ret;
+    }
 
   for (index = 0; index < 100; index++)
     {
-      rk3576_sv6621_direct(false, 0, 0x03, 0, &value);
-      if ((value & 0x02) != 0)
+      ret = rk3576_sv6621_direct(false, 0,
+                                 RK3576_SV6621_CCCR_IO_READY, 0, &value);
+      if (ret < 0)
         {
+          return ret;
+        }
+
+      if ((value & RK3576_SV6621_FUNCTION1_BIT) != 0)
+        {
+          priv->opened = true;
           return OK;
         }
 
@@ -409,32 +476,61 @@ static int rk3576_sv6621_initialize(FAR struct sv6621_transport_s *transport,
   return -EIO;
 }
 
-static int rk3576_sv6621_readb(FAR struct sv6621_transport_s *transport,
-                               uint8_t function, uint32_t address,
-                               FAR uint8_t *value)
+static int rk3576_sv6621_read_byte(FAR struct sv6621_transport_s *transport,
+                                  uint8_t function, uint32_t address,
+                                  FAR uint8_t *value)
 {
+  FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
+
+  if (!priv->opened || value == NULL ||
+      function > RK3576_SV6621_FUNCTION_MAX ||
+      address > RK3576_SV6621_ADDRESS_MAX)
+    {
+      return -EINVAL;
+    }
+
   return rk3576_sv6621_direct(false, function, address, 0, value);
 }
 
-static int rk3576_sv6621_writeb(FAR struct sv6621_transport_s *transport,
-                                uint8_t function, uint32_t address,
-                                uint8_t value)
+static int rk3576_sv6621_write_byte(FAR struct sv6621_transport_s *transport,
+                                   uint8_t function, uint32_t address,
+                                   uint8_t value)
 {
+  FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
+
+  if (!priv->opened || function > RK3576_SV6621_FUNCTION_MAX ||
+      address > RK3576_SV6621_ADDRESS_MAX)
+    {
+      return -EINVAL;
+    }
+
   return rk3576_sv6621_direct(true, function, address, value, NULL);
 }
 
 static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
                               uint8_t function, uint32_t address,
-                              bool increment, FAR uint8_t *buffer, int length)
+                              bool increment, FAR void *buffer, size_t length)
 {
   FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
+  FAR uint8_t *bytes = buffer;
   uint32_t argument;
   uint32_t status;
   uint32_t fifo_count;
-  int words = (length + 3) / 4;
+  size_t words = (length + 3) / 4;
   int received = 0;
   int index;
-  bool block = length >= 512 && (length % 512) == 0;
+  bool block = length >= RK3576_SV6621_BLOCK_SIZE &&
+               (length % RK3576_SV6621_BLOCK_SIZE) == 0;
+
+  if (!priv->opened || buffer == NULL || length == 0 ||
+      function > RK3576_SV6621_FUNCTION_MAX ||
+      address > RK3576_SV6621_ADDRESS_MAX ||
+      (!block && length > RK3576_SV6621_BYTE_COUNT_MAX) ||
+      (block && length / RK3576_SV6621_BLOCK_SIZE >
+                    RK3576_SV6621_BLOCK_COUNT_MAX))
+    {
+      return -EINVAL;
+    }
 
   nxmutex_lock(&priv->lock);
   modifyreg32(RK3576_SV6621_CTRL, 0, 1u << 1);
@@ -443,11 +539,14 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
        index++)
     ;
 
-  putreg32(block ? 512 : (uint32_t)length, RK3576_SV6621_BLKSIZ);
+  putreg32(block ? RK3576_SV6621_BLOCK_SIZE : (uint32_t)length,
+           RK3576_SV6621_BLKSIZ);
   putreg32(length, RK3576_SV6621_BYTCNT);
   argument = ((function & 7) << 28) | (increment ? (1u << 26) : 0) |
              ((address & 0x1ffff) << 9) |
-             (block ? ((1u << 27) | ((uint32_t)(length / 512) & 0x1ff))
+             (block ? ((1u << 27) |
+                       ((uint32_t)(length / RK3576_SV6621_BLOCK_SIZE) &
+                        0x1ff))
                     : ((uint32_t)length & 0x1ff));
 
   status = rk3576_sv6621_command(RK3576_SV6621_CMD53_READ, argument, NULL);
@@ -467,7 +566,7 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
 
           for (byte = 0; byte < 4 && received * 4 + byte < length; byte++)
             {
-              buffer[received * 4 + byte] = (word >> (8 * byte)) & 0xff;
+              bytes[received * 4 + byte] = (word >> (8 * byte)) & 0xff;
             }
 
           received++;
@@ -479,28 +578,35 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
   status = getreg32(RK3576_SV6621_RINTSTS);
   nxmutex_unlock(&priv->lock);
 
-  if (received != words && received > 0 && (status & (1u << 9)) != 0)
-    {
-      return OK;
-    }
-
   return (status & RK3576_SV6621_INT_DATAERR) != 0
              ? -EIO
-             : (received == words ? OK : -EIO);
+             : ((size_t)received == words ? OK : -ETIMEDOUT);
 }
 
 static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
                                uint8_t function, uint32_t address,
-                               bool increment, FAR const uint8_t *buffer,
-                               int length)
+                               bool increment, FAR const void *buffer,
+                               size_t length)
 {
   FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
+  FAR const uint8_t *bytes = buffer;
   uint32_t argument;
   uint32_t status;
-  int words = (length + 3) / 4;
+  size_t words = (length + 3) / 4;
   int sent = 0;
   int index;
-  bool block = length > 512 && (length % 512) == 0;
+  bool block = length >= RK3576_SV6621_BLOCK_SIZE &&
+               (length % RK3576_SV6621_BLOCK_SIZE) == 0;
+
+  if (!priv->opened || buffer == NULL || length == 0 ||
+      function > RK3576_SV6621_FUNCTION_MAX ||
+      address > RK3576_SV6621_ADDRESS_MAX ||
+      (!block && length > RK3576_SV6621_BYTE_COUNT_MAX) ||
+      (block && length / RK3576_SV6621_BLOCK_SIZE >
+                    RK3576_SV6621_BLOCK_COUNT_MAX))
+    {
+      return -EINVAL;
+    }
 
   nxmutex_lock(&priv->lock);
   modifyreg32(RK3576_SV6621_CTRL, 0, 1u << 1);
@@ -509,11 +615,14 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
        index++)
     ;
 
-  putreg32(block ? 512 : (uint32_t)length, RK3576_SV6621_BLKSIZ);
+  putreg32(block ? RK3576_SV6621_BLOCK_SIZE : (uint32_t)length,
+           RK3576_SV6621_BLKSIZ);
   putreg32(length, RK3576_SV6621_BYTCNT);
   argument = (1u << 31) | ((function & 7) << 28) |
              (increment ? (1u << 26) : 0) | ((address & 0x1ffff) << 9) |
-             (block ? ((1u << 27) | ((uint32_t)(length / 512) & 0x1ff))
+             (block ? ((1u << 27) |
+                       ((uint32_t)(length / RK3576_SV6621_BLOCK_SIZE) &
+                        0x1ff))
                     : ((uint32_t)length & 0x1ff));
 
   for (index = 0; (getreg32(RK3576_SV6621_STATUS) & (1u << 9)) != 0 &&
@@ -541,7 +650,7 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
 
           for (byte = 0; byte < 4 && sent * 4 + byte < length; byte++)
             {
-              word |= ((uint32_t)buffer[sent * 4 + byte]) << (8 * byte);
+              word |= ((uint32_t)bytes[sent * 4 + byte]) << (8 * byte);
             }
 
           putreg32(word, RK3576_SV6621_FIFO);
@@ -562,7 +671,7 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
 
   status = getreg32(RK3576_SV6621_RINTSTS);
   nxmutex_unlock(&priv->lock);
-  if ((status & RK3576_SV6621_INT_RTO) != 0 || sent < words)
+  if ((status & RK3576_SV6621_INT_RTO) != 0 || (size_t)sent < words)
     {
       return -ETIMEDOUT;
     }
@@ -570,15 +679,176 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
   return (status & RK3576_SV6621_INT_DATAERR) != 0 ? -EIO : OK;
 }
 
-static void
-rk3576_sv6621_ack_interrupt(FAR struct sv6621_transport_s *transport)
+static void rk3576_sv6621_close(FAR struct sv6621_transport_s *transport)
 {
-  uint32_t status = getreg32(RK3576_SV6621_RINTSTS);
+  FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
 
-  if ((status & (1u << 16)) != 0)
+  if (!priv->opened)
     {
-      putreg32(1u << 16, RK3576_SV6621_RINTSTS);
+      return;
     }
+
+  rk3576_sv6621_enable_irq(transport, false);
+  rk3576_sdmmc_register_sdio_callback(priv->sdio, NULL, NULL);
+  SDIO_CLOCK(priv->sdio, CLOCK_SDIO_DISABLED);
+  priv->opened = false;
+}
+
+static void rk3576_sv6621_host_interrupt(FAR void *arg)
+{
+  FAR struct rk3576_sv6621_transport_priv_s *priv = arg;
+  sv6621_transport_irq_t handler = priv->handler;
+
+  if (handler != NULL)
+    {
+      handler(priv->handler_arg);
+    }
+}
+
+static int rk3576_sv6621_attach_irq(FAR struct sv6621_transport_s *transport,
+                                    sv6621_transport_irq_t handler,
+                                    FAR void *arg)
+{
+  FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
+  irqstate_t flags;
+  int ret;
+
+  if (!priv->opened)
+    {
+      return -ENODEV;
+    }
+
+  if (handler == NULL && priv->irq_enabled)
+    {
+      return -EBUSY;
+    }
+
+  ret = rk3576_sdmmc_register_sdio_callback(
+      priv->sdio, handler != NULL ? rk3576_sv6621_host_interrupt : NULL,
+      handler != NULL ? priv : NULL);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  flags = enter_critical_section();
+  priv->handler = handler;
+  priv->handler_arg = handler != NULL ? arg : NULL;
+  leave_critical_section(flags);
+  return 0;
+}
+
+static int rk3576_sv6621_enable_irq(FAR struct sv6621_transport_s *transport,
+                                    bool enable)
+{
+  FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
+  uint8_t value;
+  int ret;
+
+  if (!priv->opened)
+    {
+      return -ENODEV;
+    }
+
+  if (enable && priv->handler == NULL)
+    {
+      return -EINVAL;
+    }
+
+  if (priv->irq_enabled == enable)
+    {
+      return 0;
+    }
+
+  if (enable)
+    {
+      ret = rk3576_sv6621_direct(
+          true, 0, RK3576_SV6621_CCCR_INTERRUPT,
+          RK3576_SV6621_INTERRUPT_MASTER | RK3576_SV6621_FUNCTION1_BIT,
+          NULL);
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      ret = rk3576_sdmmc_enable_sdio_interrupt(priv->sdio, true);
+      if (ret < 0)
+        {
+          rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_INTERRUPT, 0,
+                               NULL);
+          return ret;
+        }
+    }
+  else
+    {
+      ret = rk3576_sdmmc_enable_sdio_interrupt(priv->sdio, false);
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      ret = rk3576_sv6621_direct(false, 0,
+                                 RK3576_SV6621_CCCR_INTERRUPT, 0, &value);
+      if (ret >= 0)
+        {
+          value &= ~(RK3576_SV6621_INTERRUPT_MASTER |
+                     RK3576_SV6621_FUNCTION1_BIT);
+          ret = rk3576_sv6621_direct(true, 0,
+                                     RK3576_SV6621_CCCR_INTERRUPT, value,
+                                     NULL);
+        }
+
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+
+  priv->irq_enabled = enable;
+  return 0;
+}
+
+static int rk3576_sv6621_recover(FAR struct sv6621_transport_s *transport)
+{
+  FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
+  bool restore_irq;
+  int ret;
+
+  if (!priv->opened)
+    {
+      return -ENODEV;
+    }
+
+  restore_irq = priv->irq_enabled;
+  rk3576_sv6621_close(transport);
+  ret = rk3576_sv6621_open(transport);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (priv->handler != NULL)
+    {
+      ret = rk3576_sdmmc_register_sdio_callback(
+          priv->sdio, rk3576_sv6621_host_interrupt, priv);
+      if (ret < 0)
+        {
+          rk3576_sv6621_close(transport);
+          return ret;
+        }
+    }
+
+  if (restore_irq)
+    {
+      ret = rk3576_sv6621_enable_irq(transport, true);
+      if (ret < 0)
+        {
+          rk3576_sv6621_close(transport);
+          return ret;
+        }
+    }
+
+  return 0;
 }
 
 /****************************************************************************
