@@ -50,6 +50,8 @@
 #define SV6621_CORE_EVENT_CQM           20
 #define SV6621_CORE_MIC_FAILURE_SIZE    9
 #define SV6621_CORE_CQM_EVENT_SIZE      11
+#define SV6621_CORE_CQM_THRESHOLD_DBM  -70
+#define SV6621_CORE_CQM_HYSTERESIS_DB   40
 
 /****************************************************************************
  * Private Function Prototypes
@@ -583,6 +585,8 @@ static void sv6621_core_station_worker(FAR void *arg)
 
   if (connected)
     {
+      (void)sv6621_set_signal_threshold(dev, SV6621_CORE_CQM_THRESHOLD_DBM,
+                                        SV6621_CORE_CQM_HYSTERESIS_DB);
       sv6621_core_report(dev, SV6621_EVENT_CONNECTED, &status,
                          sizeof(status));
     }
