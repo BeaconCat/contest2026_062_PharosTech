@@ -44,6 +44,14 @@ struct sv6621_connection_peer_s
   uint8_t multicast_index;
 };
 
+enum sv6621_connection_auth_algorithm_e
+{
+  SV6621_CONNECTION_AUTH_OPEN = 0,
+  SV6621_CONNECTION_AUTH_SHARED_KEY = 1,
+  SV6621_CONNECTION_AUTH_FT = 2,
+  SV6621_CONNECTION_AUTH_SAE = 3
+};
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
@@ -51,5 +59,10 @@ struct sv6621_connection_peer_s
 int sv6621_connection_join(FAR struct sv6621_command_engine_s *command,
                            FAR const struct sv6621_scan_entry_s *entry,
                            FAR struct sv6621_connection_peer_s *peer);
+int sv6621_connection_authenticate(
+    FAR struct sv6621_command_engine_s *command,
+    enum sv6621_connection_auth_algorithm_e algorithm,
+    FAR const uint8_t *auth_data, size_t auth_data_length,
+    FAR const uint8_t *auth_ies, size_t auth_ies_length);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_CONNECTION_H */
