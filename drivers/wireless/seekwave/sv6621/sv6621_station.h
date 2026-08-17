@@ -28,8 +28,14 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include <nuttx/mutex.h>
+#include <nuttx/semaphore.h>
+#include <nuttx/wqueue.h>
 
 #include "include/sv6621.h"
+#include "sv6621_command.h"
+#include "sv6621_connection.h"
+#include "sv6621_scan.h"
 
 /****************************************************************************
  * Public Types
@@ -56,6 +62,38 @@ struct sv6621_station_mgmt_s
   uint16_t reason;
 };
 
+enum sv6621_station_state_e
+{
+  SV6621_STATION_IDLE = 0,
+  SV6621_STATION_JOINING,
+  SV6621_STATION_AUTHENTICATING,
+  SV6621_STATION_ASSOCIATING,
+  SV6621_STATION_ASSOCIATED,
+  SV6621_STATION_CONNECTED,
+  SV6621_STATION_DISCONNECTING
+};
+
+typedef void (*sv6621_station_event_t)(bool connected, uint16_t reason,
+                                       FAR void *arg);
+
+struct sv6621_station_s
+{
+  mutex_t lock;
+  sem_t completion;
+  struct work_s association_work;
+  FAR struct sv6621_command_engine_s *command;
+  FAR struct sv6621_scan_s *scan;
+  sv6621_station_event_t event;
+  FAR void *event_arg;
+  enum sv6621_station_state_e state;
+  struct sv6621_scan_entry_s target;
+  struct sv6621_connect_s request;
+  struct sv6621_connection_peer_s peer;
+  uint8_t association_ies[SV6621_CONNECTION_ASSOC_IE_CAPACITY];
+  size_t association_ie_length;
+  int result;
+};
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
@@ -65,5 +103,20 @@ int sv6621_station_parse_mgmt(FAR const uint8_t *payload, size_t length,
 int sv6621_station_parse_disconnect(
     FAR const uint8_t *payload, size_t length,
     uint8_t bssid[SV6621_MAC_LENGTH], FAR uint16_t *reason);
+int sv6621_station_init(FAR struct sv6621_station_s *station,
+                        FAR struct sv6621_command_engine_s *command,
+                        FAR struct sv6621_scan_s *scan,
+                        sv6621_station_event_t event, FAR void *event_arg);
+void sv6621_station_deinit(FAR struct sv6621_station_s *station);
+int sv6621_station_connect(FAR struct sv6621_station_s *station,
+                           FAR const struct sv6621_connect_s *request,
+                           uint32_t timeout_ms);
+int sv6621_station_disconnect(FAR struct sv6621_station_s *station,
+                              uint16_t reason);
+int sv6621_station_mark_connected(FAR struct sv6621_station_s *station);
+void sv6621_station_reset(FAR struct sv6621_station_s *station, int result);
+void sv6621_station_command_event(uint8_t instance, uint8_t id,
+                                  FAR const uint8_t *payload, size_t length,
+                                  FAR void *arg);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_STATION_H */
