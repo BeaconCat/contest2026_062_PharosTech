@@ -78,6 +78,7 @@ typedef void (*sv6621_station_event_t)(bool connected, uint16_t reason,
 
 struct sv6621_station_s
 {
+  mutex_t connect_lock;
   mutex_t lock;
   sem_t completion;
   struct work_s association_work;
@@ -92,6 +93,7 @@ struct sv6621_station_s
   uint8_t association_ies[SV6621_CONNECTION_ASSOC_IE_CAPACITY];
   size_t association_ie_length;
   int result;
+  bool shutting_down;
 };
 
 /****************************************************************************
