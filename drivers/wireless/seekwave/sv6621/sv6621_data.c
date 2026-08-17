@@ -95,6 +95,15 @@
 #define SV6621_DATA_SEQUENCE_HALF              0x0800
 
 /****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+static const uint8_t g_sv6621_data_snap_header[6] =
+{
+  0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00
+};
+
+/****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
@@ -386,9 +395,18 @@ static void sv6621_data_release_reorder_slot(
   while ((frame = slot->head) != NULL)
     {
       slot->head = frame->next;
-      sv6621_data_deliver(data, &frame->rx);
-      data->stats.reordered++;
+      if (!slot->tainted)
+        {
+          sv6621_data_deliver(data, &frame->rx);
+          data->stats.reordered++;
+        }
+
       kmm_free(frame);
+    }
+
+  if (slot->tainted)
+    {
+      data->stats.reorder_amsdu_drops++;
     }
 
   if (slot->occupied && session->queued_sequences > 0)
@@ -434,11 +452,15 @@ static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
   FAR struct sv6621_data_ba_session_s *session;
   FAR struct sv6621_data_reorder_slot_s *slot;
   FAR struct sv6621_data_reorder_frame_s *frame;
+  FAR struct sv6621_data_reorder_frame_s *current;
+  FAR struct sv6621_data_reorder_frame_s *previous;
+  uint64_t amsdu_bit = 0;
   uint16_t window_end;
   uint16_t new_start;
+  bool new_slot = false;
 
-  if (!rx->qos_data || rx->multicast || rx->amsdu ||
-      rx->fragment != 0 || rx->more_fragments || !rx->peer_valid ||
+  if (!rx->qos_data || rx->multicast || rx->fragment != 0 ||
+      rx->more_fragments || !rx->peer_valid ||
       rx->lmac_id >= SV6621_DATA_LMAC_COUNT ||
       rx->tid >= SV6621_DATA_TID_COUNT)
     {
@@ -473,16 +495,38 @@ static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
     {
       if (slot->sequence == rx->sequence)
         {
-          data->stats.reorder_duplicates++;
-          return true;
-        }
+          if (!rx->amsdu || !slot->amsdu)
+            {
+              data->stats.reorder_duplicates++;
+              return true;
+            }
 
-      sv6621_data_purge_reorder_slot(slot);
-      if (session->queued_sequences > 0)
+          amsdu_bit = UINT64_C(1) << rx->amsdu_index;
+          if (slot->complete ||
+              (slot->amsdu_bitmap & amsdu_bit) != 0)
+            {
+              data->stats.reorder_duplicates++;
+              return true;
+            }
+
+          if (slot->amsdu_last &&
+              (slot->amsdu_mask & amsdu_bit) == 0)
+            {
+              slot->tainted = true;
+              return true;
+            }
+        }
+      else
         {
-          session->queued_sequences--;
+          sv6621_data_purge_reorder_slot(slot);
+          if (session->queued_sequences > 0)
+            {
+              session->queued_sequences--;
+            }
         }
     }
+
+  new_slot = !slot->occupied;
 
   if (rx->frame_length > SIZE_MAX - sizeof(*frame))
     {
@@ -501,14 +545,79 @@ static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
   frame->rx = *rx;
   frame->rx.frame = frame->frame;
   memcpy(frame->frame, rx->frame, rx->frame_length);
-  slot->head = frame;
-  slot->tail = frame;
-  slot->sequence = rx->sequence;
-  slot->occupied = true;
-  slot->complete = true;
-  session->queued_sequences++;
+  if (new_slot)
+    {
+      slot->sequence = rx->sequence;
+      slot->occupied = true;
+      slot->amsdu = rx->amsdu;
+      session->queued_sequences++;
+    }
 
-  if (rx->sequence != session->window_start)
+  if (rx->amsdu)
+    {
+      previous = NULL;
+      current = slot->head;
+      while (current != NULL &&
+             current->rx.amsdu_index < rx->amsdu_index)
+        {
+          previous = current;
+          current = current->next;
+        }
+
+      frame->next = current;
+      if (previous == NULL)
+        {
+          slot->head = frame;
+        }
+      else
+        {
+          previous->next = frame;
+        }
+
+      if (current == NULL)
+        {
+          slot->tail = frame;
+        }
+
+      amsdu_bit = UINT64_C(1) << rx->amsdu_index;
+      slot->amsdu_bitmap |= amsdu_bit;
+      if (rx->amsdu_first &&
+          memcmp(rx->frame, g_sv6621_data_snap_header,
+                 sizeof(g_sv6621_data_snap_header)) == 0)
+        {
+          slot->tainted = true;
+        }
+
+      if (rx->amsdu_last)
+        {
+          uint64_t mask = rx->amsdu_index == 63 ?
+                          UINT64_MAX :
+                          (UINT64_C(1) << (rx->amsdu_index + 1)) - 1;
+
+          if (slot->amsdu_last && slot->amsdu_mask != mask)
+            {
+              slot->tainted = true;
+            }
+
+          slot->amsdu_last = true;
+          slot->amsdu_mask = mask;
+        }
+
+      slot->complete = slot->amsdu_last &&
+                       slot->amsdu_bitmap == slot->amsdu_mask;
+      if (slot->complete)
+        {
+          data->stats.reorder_amsdu_completed++;
+        }
+    }
+  else
+    {
+      slot->head = frame;
+      slot->tail = frame;
+      slot->complete = true;
+    }
+
+  if (rx->sequence != session->window_start || !slot->complete)
     {
       data->stats.reorder_buffered++;
       return true;
