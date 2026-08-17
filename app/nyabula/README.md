@@ -1,6 +1,6 @@
 # Nyabula openvela APP
 
-Nyabula 的产品代码从模拟器阶段起就在 openvela/NuttX 中运行。当前首个功能节点使用 LVGL 9，在一个 `720×360` 的 sim framebuffer 中模拟左右两块 `360×360` 圆屏。
+Nyabula 的产品代码从模拟器阶段起就在 openvela/NuttX 中运行。Eye Engine 使用 LVGL 9 Vector Graphic API 与 ThorVG 抗锯齿软件后端，并始终渲染到左、右两个独立 `360×360` surface。sim 的 `720×360` framebuffer 只负责并排展示这两个 surface，不属于 Eye Engine 的内部画布。
 
 ## 当前边界
 
@@ -8,8 +8,9 @@ Nyabula 的产品代码从模拟器阶段起就在 openvela/NuttX 中运行。�
 - `eye rig` 统一生成双眼状态，避免维护两套 UI。
 - 动画按 LVGL 单调 tick 采样，掉帧不会改变动画速度。
 - X11 等宿主窗口实现仅是 `sim` 板的显示后端，产品代码不调用桌面 API。
-- 当前 sim renderer 在一个 LVGL display 上使用双视口；真实屏幕适配层可将同一逻辑帧
-  映射到两个独立的 `360×360` buffer 和 flush queue，不改变 Eye Engine 或 Core。
+- renderer 从创建阶段就持有两个独立 `360×360` 双缓冲 surface；真实双屏通过
+  `nyabula_eye_engine_create_dual()` 分别传入左右 display root，sim 则把两个 canvas
+  并排挂到同一个 root。两种模式不发生逐帧拆分或 framebuffer 复制。
 
 ## 构建基线
 
@@ -24,6 +25,25 @@ packages/demos/contest2026_062_nyabula
 ```text
 nyabula
 ```
+
+当前 openvela 基线的 NuttX libc++ 与宿主 GCC 14 存在 builtin trait 兼容问题；使用
+GCC 14 构建 sim 时追加 libc++ 已提供的兼容宏：
+
+```text
+make -C nuttx -j4 EXTRAFLAGS=-D_LIBCPP_WORKAROUND_OBJCXX_COMPILER_INTRINSICS
+```
+
+完整字体位于 `res/fonts`。sim 可用 HostFS 把 `res` 挂到 `/data/nyabula` 后启动：
+
+```text
+mkdir /data
+mkdir /data/nyabula
+mount -t hostfs -o fs=/absolute/path/to/app/nyabula/res /data/nyabula
+nyabula demo
+```
+
+未挂载资源文件系统时会使用编译内置字体作为启动安全 fallback，但这不能替代正式
+视觉回归；真机应把完整字体部署到 `CONFIG_CONTEST2026_062_NYABULA_FONT_ROOT`。
 
 运行产物后应看到两块并列圆形猫眼，双眼同步凝视、呼吸并周期性眨眼。代码仅依赖 openvela/NuttX 和 LVGL，不依赖宿主 SDL API。
 

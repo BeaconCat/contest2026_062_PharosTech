@@ -138,8 +138,9 @@ transport；产品需要补齐网络 transport、初始化握手、配对 token�
 
 ## 6. 双屏抽象
 
-逻辑层始终持有左、右两个 `eye surface`。模拟器第一阶段可在一个 `720×360`
-framebuffer 中显示两个 `360×360` 视口，但 renderer API 不依赖这种拼接方式。
+逻辑层与 renderer 始终持有左、右两个独立 `360×360 eye surface`。模拟器可在一个
+`720×360` 宿主 framebuffer 中把两个 canvas 并排展示，但不允许创建合成 draw
+buffer 后再拆分。真实双屏通过双 parent API 直接绑定各自的 display root。
 
 硬件阶段注册两个独立 display/flush queue，分别绑定 ST77916 CS。两块屏共享
 FSPI 总线，因此 flush 可独立排队，但最终由总线串行执行。Eye Engine 不感知
@@ -153,15 +154,16 @@ framebuffer、片选或左右声道式的板级映射。
 ### M1：LVGL Eye Engine
 
 - [x] OpenVela APP、Kconfig/Make/CMake 收录；
-- [x] `720×360` 双视口 sim 基线编译；
+- [x] 两个独立 `360×360` surface 在 `720×360` sim 宿主中并排编译；
 - [x] 模型、时间线、renderer 分层；
 - [x] 语义表情 API、显式眨眼和凝视 API；
 - [x] 从 HTML 迁移全部表情与粒子；
-- [ ] 两个独立 LVGL display/flush queue；
+- [x] renderer 双 surface 与双 display root 创建 API；
+- [ ] 板级两个独立 LVGL display/flush queue；
 - [x] 预定义 eye scene、typed payload 与闭眼换景协议；
 - [x] 所有 scene 共用上下眼皮并集剪贴蒙版；
 - [x] sim 窗口运行；
-- [~] sim 视觉回归（LVGL 9.2 严格语法检查通过，完整链接与逐场景截图待做）。
+- [x] sim 视觉回归（ThorVG 实际运行，完整字体及待机/音乐/计时器截图通过）。
 
 ### M2：Nyabula Core
 
@@ -193,8 +195,13 @@ framebuffer、片选或左右声道式的板级映射。
   `编译通过`。
 - 2026-08-16：在 Debian VM 的 Xvfb/Openbox/x11vnc 环境启动 sim，NSH 中
   执行 `nyabula demo` 后成功打开 `720×360` framebuffer；窗口运行置信为
-  `实测确认`，表情视觉回归仍待逐项完成。
-- 当前实现仍是单 display 双视口，已具备首批语义表情、凝视、呼吸和眨眼。
+  `实测确认`。
+- 2026-08-17：启用 LVGL Vector Graphic 与 ThorVG internal backend 后在构建机
+  Xvfb 中实测；两个独立 `360×360` canvas 的待机、音乐和计时器截图通过，完整
+  字体挂载后无 FreeType 错误，常态约 53～61 fps。真机 RK3576 性能仍待双屏
+  display/flush 后端完成后测量。
+- 当前 sim 仍使用一个宿主 display，但 renderer 已是两个独立 `360×360` canvas；
+  真机只需把双 parent API 接到队友的两个 display root，不再重构帧布局。
 - Core 首版已实现固定队列、优先级、租约恢复和 typed scene 命令；HTTP/JSON
   网关与内嵌控制台已在 NuttX sim 的 `0.0.0.0:8080` 实测。
 - HTML Demo 已覆盖更完整的视觉行为，迁移时以其参数与动效为基准，不复制

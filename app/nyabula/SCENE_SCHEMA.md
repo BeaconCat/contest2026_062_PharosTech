@@ -51,8 +51,9 @@ MCP 与 LLM 都不得直接创建 LVGL 控件或逐帧修改绘制参数。
 
 ## 资源生成
 
-- `tools/generate_vector_icons.py` 把已批准 SVG 扁平化为轮廓点；renderer 使用同一
-  份数据完成路径揭示和填充，不依赖运行时 SVG/iconfont。
+- `tools/generate_vector_icons.py` 将已批准 SVG 的 move/line/quadratic/cubic/close
+  命令无损固化为 C 资源；renderer 直接交给 ThorVG 绘制原始 Bézier 路径。路径
+  reveal 仅在过渡期间生成抗锯齿折线，最终填充与描边保持原 SVG 曲线。
 - `tools/generate_fonts.py` 从 Web Demo 实际文案提取字形，生成 4bpp、未压缩的
   LVGL 字体。标题使用阿里妈妈数黑体，正文使用 MiSans Semibold；英文数字使用
   开源、与 Times New Roman 度量兼容的 Tinos Bold，避免分发微软专有字体。
