@@ -608,6 +608,7 @@ static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
   for (index = 0; index < count; index++)
     {
       FAR const struct sv6621_bss_s *bss = &results[index];
+      size_t event_length;
 
       event = (FAR struct iw_event *)cursor;
       memset(event, 0, IW_EV_LEN(ap_addr));
@@ -618,13 +619,14 @@ static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
       cursor += event->len;
 
       event = (FAR struct iw_event *)cursor;
-      memset(event, 0, IW_EV_LEN(essid));
+      event_length = IW_EV_LEN(essid) + ((bss->ssid_length + 3) & ~3);
+      memset(event, 0, event_length);
       event->cmd = SIOCGIWESSID;
       event->u.essid.flags = IW_ESSID_ON;
       event->u.essid.length = bss->ssid_length;
       event->u.essid.pointer = (FAR void *)sizeof(event->u.essid);
       memcpy(&event->u.essid + 1, bss->ssid, bss->ssid_length);
-      event->len = IW_EV_LEN(essid) + ((bss->ssid_length + 3) & ~3);
+      event->len = event_length;
       cursor += event->len;
 
       event = (FAR struct iw_event *)cursor;
