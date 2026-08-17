@@ -26,6 +26,9 @@
 
 #include <nuttx/config.h>
 
+#include <nuttx/clock.h>
+#include <nuttx/kmalloc.h>
+
 #include <errno.h>
 #include <string.h>
 
@@ -48,12 +51,33 @@
 #define SV6621_STATION_ASSOC_FRAME_SIZE       30
 #define SV6621_STATION_REASON_FRAME_SIZE      26
 #define SV6621_STATION_DISCONNECT_EVENT_SIZE  8
+#define SV6621_STATION_EVENT_DISCONNECT        2
+#define SV6621_STATION_EVENT_RX_MGMT           4
+#define SV6621_STATION_AUTH_SUCCESS_TRANSACTION 2
+#define SV6621_STATION_REASON_UNSPECIFIED       1
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+static const uint8_t g_sv6621_station_ht_capability
+    [SV6621_CONNECTION_HT_CAPABILITY_SIZE] = {
+      0x6e, 0x00, 0x17, 0xff
+    };
+static const uint8_t g_sv6621_station_vht_capability
+    [SV6621_CONNECTION_VHT_CAPABILITY_SIZE] = { 0 };
 
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
 static uint16_t sv6621_station_get_le16(FAR const uint8_t *value);
+static bool sv6621_station_security_matches(enum sv6621_security_e requested,
+                                            enum sv6621_security_e advertised);
+static void sv6621_station_association_worker(FAR void *arg);
+static void sv6621_station_finish(FAR struct sv6621_station_s *station,
+                                  enum sv6621_station_state_e state,
+                                  int result);
 
 /****************************************************************************
  * Private Functions
@@ -66,6 +90,80 @@ static uint16_t sv6621_station_get_le16(FAR const uint8_t *value);
 static uint16_t sv6621_station_get_le16(FAR const uint8_t *value)
 {
   return value[0] | ((uint16_t)value[1] << 8);
+}
+
+/****************************************************************************
+ * Name: sv6621_station_security_matches
+ ****************************************************************************/
+
+static bool sv6621_station_security_matches(enum sv6621_security_e requested,
+                                            enum sv6621_security_e advertised)
+{
+  if (requested == SV6621_SECURITY_OPEN)
+    {
+      return advertised == SV6621_SECURITY_OPEN;
+    }
+
+  if (requested == SV6621_SECURITY_WPA2_PSK ||
+      requested == SV6621_SECURITY_WPA2_WPA3_PSK)
+    {
+      return advertised == SV6621_SECURITY_WPA2_PSK ||
+             advertised == SV6621_SECURITY_WPA2_WPA3_PSK;
+    }
+
+  return false;
+}
+
+/****************************************************************************
+ * Name: sv6621_station_finish
+ ****************************************************************************/
+
+static void sv6621_station_finish(FAR struct sv6621_station_s *station,
+                                  enum sv6621_station_state_e state,
+                                  int result)
+{
+  if (nxmutex_lock(&station->lock) < 0)
+    {
+      return;
+    }
+
+  station->state = state;
+  station->result = result;
+  nxmutex_unlock(&station->lock);
+  nxsem_post(&station->completion);
+}
+
+/****************************************************************************
+ * Name: sv6621_station_association_worker
+ ****************************************************************************/
+
+static void sv6621_station_association_worker(FAR void *arg)
+{
+  FAR struct sv6621_station_s *station = arg;
+  int ret;
+
+  ret = nxmutex_lock(&station->lock);
+  if (ret < 0)
+    {
+      return;
+    }
+
+  if (station->state != SV6621_STATION_AUTHENTICATING)
+    {
+      nxmutex_unlock(&station->lock);
+      return;
+    }
+
+  station->state = SV6621_STATION_ASSOCIATING;
+  nxmutex_unlock(&station->lock);
+  ret = sv6621_connection_associate(
+      station->command, station->target.bss.bssid,
+      g_sv6621_station_ht_capability, g_sv6621_station_vht_capability,
+      station->association_ies, station->association_ie_length);
+  if (ret < 0)
+    {
+      sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
+    }
 }
 
 /****************************************************************************
@@ -170,4 +268,460 @@ int sv6621_station_parse_disconnect(
   *reason = sv6621_station_get_le16(payload);
   memcpy(bssid, payload + 2, SV6621_MAC_LENGTH);
   return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_station_init
+ ****************************************************************************/
+
+int sv6621_station_init(FAR struct sv6621_station_s *station,
+                        FAR struct sv6621_command_engine_s *command,
+                        FAR struct sv6621_scan_s *scan,
+                        sv6621_station_event_t event, FAR void *event_arg)
+{
+  int ret;
+
+  if (station == NULL || command == NULL || scan == NULL)
+    {
+      return -EINVAL;
+    }
+
+  memset(station, 0, sizeof(*station));
+  ret = nxmutex_init(&station->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxsem_init(&station->completion, 0, 0);
+  if (ret < 0)
+    {
+      nxmutex_destroy(&station->lock);
+      return ret;
+    }
+
+  station->command = command;
+  station->scan = scan;
+  station->event = event;
+  station->event_arg = event_arg;
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_station_deinit
+ ****************************************************************************/
+
+void sv6621_station_deinit(FAR struct sv6621_station_s *station)
+{
+  if (station != NULL)
+    {
+      sv6621_station_reset(station, -ESHUTDOWN);
+      nxsem_destroy(&station->completion);
+      nxmutex_destroy(&station->lock);
+    }
+}
+
+/****************************************************************************
+ * Name: sv6621_station_connect
+ ****************************************************************************/
+
+int sv6621_station_connect(FAR struct sv6621_station_s *station,
+                           FAR const struct sv6621_connect_s *request,
+                           uint32_t timeout_ms)
+{
+  FAR struct sv6621_scan_entry_s *target;
+  int ret;
+
+  if (station == NULL || request == NULL || timeout_ms == 0 ||
+      request->ssid_length == 0 ||
+      request->ssid_length > SV6621_SSID_MAX_LENGTH ||
+      request->credential_length > SV6621_KEY_MAX_LENGTH)
+    {
+      return -EINVAL;
+    }
+
+  if (request->security == SV6621_SECURITY_WPA3_SAE)
+    {
+      return -EOPNOTSUPP;
+    }
+
+  if ((request->security == SV6621_SECURITY_OPEN &&
+       request->credential_length != 0) ||
+      (request->security != SV6621_SECURITY_OPEN &&
+       (request->credential_length < 8 || request->credential_length > 64)))
+    {
+      return -EINVAL;
+    }
+
+  target = kmm_malloc(sizeof(*target));
+  if (target == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  ret = sv6621_scan_cache_find(&station->scan->cache, request, target);
+  if (ret < 0)
+    {
+      goto free_target;
+    }
+
+  if (!sv6621_station_security_matches(request->security,
+                                       target->bss.security))
+    {
+      ret = -EACCES;
+      goto free_target;
+    }
+
+  ret = nxmutex_lock(&station->lock);
+  if (ret < 0)
+    {
+      goto free_target;
+    }
+
+  if (station->state != SV6621_STATION_IDLE)
+    {
+      nxmutex_unlock(&station->lock);
+      ret = -EBUSY;
+      goto free_target;
+    }
+
+  ret = sv6621_connection_build_association_ies(
+      target, request->security, station->association_ies,
+      sizeof(station->association_ies), &station->association_ie_length);
+  if (ret < 0)
+    {
+      nxmutex_unlock(&station->lock);
+      goto free_target;
+    }
+
+  nxsem_reset(&station->completion, 0);
+  station->target = *target;
+  station->request = *request;
+  station->result = -EINPROGRESS;
+  station->state = SV6621_STATION_JOINING;
+  nxmutex_unlock(&station->lock);
+  kmm_free(target);
+
+  ret = sv6621_connection_join(station->command, &station->target,
+                               &station->peer);
+  if (ret < 0)
+    {
+      sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
+      nxsem_trywait(&station->completion);
+      return ret;
+    }
+
+  ret = nxmutex_lock(&station->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  station->state = SV6621_STATION_AUTHENTICATING;
+  nxmutex_unlock(&station->lock);
+  ret = sv6621_connection_authenticate(
+      station->command, SV6621_CONNECTION_AUTH_OPEN, NULL, 0, NULL, 0);
+  if (ret < 0)
+    {
+      sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
+      nxsem_trywait(&station->completion);
+      return ret;
+    }
+
+  ret = nxsem_tickwait(&station->completion, MSEC2TICK(timeout_ms));
+  if (ret < 0)
+    {
+      work_cancel_sync(LPWORK, &station->association_work);
+      sv6621_connection_disconnect(
+          station->command, SV6621_CONNECTION_DISCONNECT_ONLY, true,
+          SV6621_STATION_REASON_UNSPECIFIED, NULL, 0);
+      sv6621_station_reset(station, -ETIMEDOUT);
+      return -ETIMEDOUT;
+    }
+
+  ret = nxmutex_lock(&station->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = station->result;
+  nxmutex_unlock(&station->lock);
+  return ret;
+
+free_target:
+  kmm_free(target);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_station_disconnect
+ ****************************************************************************/
+
+int sv6621_station_disconnect(FAR struct sv6621_station_s *station,
+                              uint16_t reason)
+{
+  enum sv6621_station_state_e previous_state;
+  int ret;
+
+  if (station == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&station->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  previous_state = station->state;
+  if (previous_state != SV6621_STATION_ASSOCIATED &&
+      previous_state != SV6621_STATION_CONNECTED)
+    {
+      nxmutex_unlock(&station->lock);
+      return -ENOTCONN;
+    }
+
+  station->state = SV6621_STATION_DISCONNECTING;
+  nxmutex_unlock(&station->lock);
+  ret = sv6621_connection_disconnect(
+      station->command, SV6621_CONNECTION_DISCONNECT_DEAUTH, false, reason,
+      NULL, 0);
+  if (ret < 0)
+    {
+      if (nxmutex_lock(&station->lock) >= 0)
+        {
+          station->state = previous_state;
+          nxmutex_unlock(&station->lock);
+        }
+
+      return ret;
+    }
+
+  if (nxmutex_lock(&station->lock) >= 0)
+    {
+      station->state = SV6621_STATION_IDLE;
+      nxmutex_unlock(&station->lock);
+    }
+
+  if (previous_state == SV6621_STATION_CONNECTED && station->event != NULL)
+    {
+      station->event(false, reason, station->event_arg);
+    }
+
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_station_mark_connected
+ ****************************************************************************/
+
+int sv6621_station_mark_connected(FAR struct sv6621_station_s *station)
+{
+  int ret;
+
+  if (station == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&station->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (station->state != SV6621_STATION_ASSOCIATED)
+    {
+      nxmutex_unlock(&station->lock);
+      return station->state == SV6621_STATION_CONNECTED ? 0 : -ENOTCONN;
+    }
+
+  station->state = SV6621_STATION_CONNECTED;
+  nxmutex_unlock(&station->lock);
+  if (station->event != NULL)
+    {
+      station->event(true, 0, station->event_arg);
+    }
+
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_station_reset
+ ****************************************************************************/
+
+void sv6621_station_reset(FAR struct sv6621_station_s *station, int result)
+{
+  bool pending = false;
+
+  if (station == NULL)
+    {
+      return;
+    }
+
+  work_cancel_sync(LPWORK, &station->association_work);
+  if (nxmutex_lock(&station->lock) >= 0)
+    {
+      pending = station->state == SV6621_STATION_JOINING ||
+                station->state == SV6621_STATION_AUTHENTICATING ||
+                station->state == SV6621_STATION_ASSOCIATING;
+      station->state = SV6621_STATION_IDLE;
+      station->result = result;
+      nxmutex_unlock(&station->lock);
+    }
+
+  if (pending)
+    {
+      nxsem_post(&station->completion);
+    }
+}
+
+/****************************************************************************
+ * Name: sv6621_station_command_event
+ ****************************************************************************/
+
+void sv6621_station_command_event(uint8_t instance, uint8_t id,
+                                  FAR const uint8_t *payload, size_t length,
+                                  FAR void *arg)
+{
+  FAR struct sv6621_station_s *station = arg;
+  struct sv6621_station_mgmt_s mgmt;
+  uint8_t bssid[SV6621_MAC_LENGTH];
+  enum sv6621_station_state_e state;
+  uint16_t reason;
+  bool notify = false;
+  bool notify_connected = false;
+  bool complete = false;
+  int result = 0;
+  int ret;
+
+  if (station == NULL || instance != 0)
+    {
+      return;
+    }
+
+  if (id == SV6621_STATION_EVENT_DISCONNECT)
+    {
+      ret = sv6621_station_parse_disconnect(payload, length, bssid, &reason);
+      if (ret < 0)
+        {
+          return;
+        }
+
+      ret = nxmutex_lock(&station->lock);
+      if (ret < 0)
+        {
+          return;
+        }
+
+      state = station->state;
+      if (state != SV6621_STATION_IDLE &&
+          memcmp(bssid, station->target.bss.bssid, SV6621_MAC_LENGTH) == 0)
+        {
+          complete = state == SV6621_STATION_JOINING ||
+                     state == SV6621_STATION_AUTHENTICATING ||
+                     state == SV6621_STATION_ASSOCIATING;
+          notify = state == SV6621_STATION_CONNECTED;
+          notify_connected = false;
+          station->state = SV6621_STATION_IDLE;
+          station->result = -ECONNRESET;
+        }
+
+      nxmutex_unlock(&station->lock);
+    }
+  else if (id == SV6621_STATION_EVENT_RX_MGMT)
+    {
+      ret = sv6621_station_parse_mgmt(payload, length, &mgmt);
+      if (ret < 0)
+        {
+          return;
+        }
+
+      ret = nxmutex_lock(&station->lock);
+      if (ret < 0)
+        {
+          return;
+        }
+
+      state = station->state;
+      if (memcmp(mgmt.bssid, station->target.bss.bssid,
+                 SV6621_MAC_LENGTH) != 0)
+        {
+          nxmutex_unlock(&station->lock);
+          return;
+        }
+
+      if (mgmt.type == SV6621_STATION_MGMT_AUTH &&
+          state == SV6621_STATION_AUTHENTICATING)
+        {
+          if (mgmt.algorithm != SV6621_CONNECTION_AUTH_OPEN ||
+              mgmt.transaction != SV6621_STATION_AUTH_SUCCESS_TRANSACTION ||
+              mgmt.status != 0)
+            {
+              station->state = SV6621_STATION_IDLE;
+              station->result = -EACCES;
+              complete = true;
+            }
+          else
+            {
+              ret = work_queue(LPWORK, &station->association_work,
+                               sv6621_station_association_worker, station, 0);
+              if (ret < 0)
+                {
+                  station->state = SV6621_STATION_IDLE;
+                  station->result = ret;
+                  complete = true;
+                }
+            }
+        }
+      else if (mgmt.type == SV6621_STATION_MGMT_ASSOC &&
+               state == SV6621_STATION_ASSOCIATING)
+        {
+          result = mgmt.status == 0 ? 0 : -ECONNREFUSED;
+          station->state = result == 0 ? SV6621_STATION_ASSOCIATED
+                                       : SV6621_STATION_IDLE;
+          station->result = result;
+          complete = true;
+          if (result == 0 &&
+              station->request.security == SV6621_SECURITY_OPEN)
+            {
+              station->state = SV6621_STATION_CONNECTED;
+              notify = true;
+              notify_connected = true;
+            }
+
+          reason = mgmt.status;
+        }
+      else if ((mgmt.type == SV6621_STATION_MGMT_DEAUTH ||
+                mgmt.type == SV6621_STATION_MGMT_DISASSOC) &&
+               state != SV6621_STATION_IDLE)
+        {
+          complete = state == SV6621_STATION_JOINING ||
+                     state == SV6621_STATION_AUTHENTICATING ||
+                     state == SV6621_STATION_ASSOCIATING;
+          notify = state == SV6621_STATION_CONNECTED;
+          notify_connected = false;
+          station->state = SV6621_STATION_IDLE;
+          station->result = -ECONNRESET;
+          reason = mgmt.reason;
+        }
+
+      nxmutex_unlock(&station->lock);
+    }
+  else
+    {
+      return;
+    }
+
+  if (complete)
+    {
+      nxsem_post(&station->completion);
+    }
+
+  if (notify && station->event != NULL)
+    {
+      station->event(notify_connected, reason, station->event_arg);
+    }
 }
