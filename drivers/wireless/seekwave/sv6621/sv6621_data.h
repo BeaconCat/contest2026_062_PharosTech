@@ -29,10 +29,12 @@
 
 #include <nuttx/config.h>
 #include <nuttx/spinlock.h>
+#include <nuttx/wqueue.h>
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <time.h>
 
 #include "sv6621_packet.h"
 #include "sv6621_tx.h"
@@ -134,6 +136,7 @@ struct sv6621_data_reorder_slot_s
   uint64_t amsdu_bitmap;
   uint64_t amsdu_mask;
   uint16_t sequence;
+  clock_t queued_at;
   bool occupied;
   bool complete;
   bool amsdu;
@@ -180,6 +183,8 @@ struct sv6621_data_stats_s
   uint32_t reorder_allocation_failures;
   uint32_t reorder_amsdu_completed;
   uint32_t reorder_amsdu_drops;
+  uint32_t reorder_timeouts;
+  uint32_t reorder_schedule_errors;
 };
 
 struct sv6621_data_s
@@ -188,6 +193,7 @@ struct sv6621_data_s
   FAR struct sv6621_tx_s *tx;
   mutex_t tx_lock;
   mutex_t rx_lock;
+  struct work_s reorder_work;
   spinlock_t credit_lock;
   sv6621_data_input_t input;
   FAR void *input_arg;
@@ -198,6 +204,7 @@ struct sv6621_data_s
   uint32_t fragment_age;
   uint8_t tx_block_reasons;
   bool pn_reuse;
+  bool reorder_work_scheduled;
   struct sv6621_data_fragment_s fragments[SV6621_DATA_FRAGMENT_ENTRIES];
   struct sv6621_data_ba_session_s
       ba[SV6621_DATA_LMAC_COUNT][SV6621_DATA_TID_COUNT];
