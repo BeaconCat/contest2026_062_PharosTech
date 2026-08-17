@@ -110,6 +110,15 @@ config SV6621
 		the SeekWave SV6621/SWT6621-S combo.  A platform transport adapter
 		must also be selected.
 
+config SV6621_PM
+	bool "SeekWave SV6621 system power management"
+	default n
+	depends on SV6621 && PM
+	---help---
+		Register the SV6621 core with the NuttX power manager.  System sleep
+		uses the wake policy supplied by the board configuration and resumes
+		the firmware before higher-power system states become visible.
+
 config RK3576_SV6621_TRANSPORT
 	bool
 	default n

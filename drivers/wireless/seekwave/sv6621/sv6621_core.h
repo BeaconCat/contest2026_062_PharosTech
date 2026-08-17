@@ -29,6 +29,9 @@
 
 #include <nuttx/config.h>
 #include <nuttx/mutex.h>
+#ifdef CONFIG_SV6621_PM
+#include <nuttx/power/pm.h>
+#endif
 
 #include "include/sv6621.h"
 #include "sv6621_command.h"
@@ -46,6 +49,13 @@
 #include "sv6621_tx.h"
 #include "sv6621_wifi.h"
 #include "sv6621_wpa_handshake.h"
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#define SV6621_CORE_SECURITY_EVENT_DEPTH 8
+#define SV6621_CORE_SIGNAL_EVENT_DEPTH   8
 
 /****************************************************************************
  * Public Types
@@ -80,18 +90,37 @@ struct sv6621_dev_s
   struct work_s signal_work;
   struct work_s scan_work;
   struct work_s station_work;
+  uint32_t fatal_generation;
+  bool fatal_work_scheduled;
   int scan_result;
   uint16_t station_reason;
+  uint32_t station_generation;
   bool station_connected;
+  bool station_work_scheduled;
   bool scan_reporting;
   bool recovery_pending;
+  uint32_t thermal_generation;
   bool thermal_blocked;
-  struct sv6621_mic_failure_s mic_failure;
-  struct sv6621_signal_event_s signal_event;
+  bool thermal_work_scheduled;
+  struct sv6621_mic_failure_s
+      security_events[SV6621_CORE_SECURITY_EVENT_DEPTH];
+  uint8_t security_head;
+  uint8_t security_tail;
+  bool security_work_scheduled;
+  struct sv6621_signal_event_s
+      signal_events[SV6621_CORE_SIGNAL_EVENT_DEPTH];
+  uint8_t signal_head;
+  uint8_t signal_tail;
+  bool signal_work_scheduled;
   bool suspended;
   bool powered;
   bool transport_open;
   bool station_open;
+#ifdef CONFIG_SV6621_PM
+  struct pm_callback_s pm_callback;
+  bool pm_registered;
+  bool pm_suspended;
+#endif
 };
 
 /****************************************************************************

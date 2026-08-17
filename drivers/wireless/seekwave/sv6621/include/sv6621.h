@@ -263,6 +263,10 @@ struct sv6621_status_s
   enum sv6621_band_e band;
   int16_t signal_dbm;
   uint32_t recovery_count;
+  uint32_t unprotected_frames;
+  uint32_t mic_failures;
+  uint32_t mic_failures_dropped;
+  uint32_t signal_events_dropped;
   int last_error;
 };
 
@@ -289,6 +293,9 @@ struct sv6621_config_s
   struct sv6621_firmware_s nvram;
   struct sv6621_firmware_s calibration;
   FAR const struct sv6621_regulatory_domain_s *regulatory;
+#ifdef CONFIG_SV6621_PM
+  struct sv6621_suspend_s system_suspend;
+#endif
   sv6621_event_t event;
   FAR void *event_arg;
 };
