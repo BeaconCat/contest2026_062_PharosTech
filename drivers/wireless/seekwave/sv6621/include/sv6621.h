@@ -129,12 +129,21 @@ enum sv6621_event_e
   SV6621_EVENT_RECOVERY_STARTED,
   SV6621_EVENT_RECOVERY_COMPLETE,
   SV6621_EVENT_THERMAL_CHANGED,
+  SV6621_EVENT_MIC_FAILURE,
   SV6621_EVENT_FATAL
 };
 
 struct sv6621_thermal_s
 {
   bool transmit_blocked;
+};
+
+struct sv6621_mic_failure_s
+{
+  uint8_t address[SV6621_MAC_LENGTH];
+  uint8_t key_index;
+  uint8_t lmac_id;
+  bool group_key;
 };
 
 struct sv6621_firmware_s
