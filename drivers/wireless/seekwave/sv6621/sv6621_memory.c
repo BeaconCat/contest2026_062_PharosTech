@@ -115,8 +115,14 @@ static int sv6621_memory_transfer(FAR struct sv6621_transport_s *transport,
               break;
             }
 
-          transport->ops->write_byte(transport, SV6621_SDIO_FUNCTION_CONTROL,
-                                     SV6621_SDIO_CCCR_ABORT, 0x01);
+          ret = transport->ops->write_byte(
+              transport, SV6621_SDIO_FUNCTION_CONTROL,
+              SV6621_SDIO_CCCR_ABORT, 0x01);
+          if (ret < 0)
+            {
+              break;
+            }
+
           up_mdelay(SV6621_MEMORY_RETRY_DELAY_MS);
           ret = sv6621_memory_latch(transport, address + offset);
           if (ret < 0)

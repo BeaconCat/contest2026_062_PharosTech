@@ -191,18 +191,20 @@ int sv6621_packet_build(uint8_t channel, FAR const void *payload,
 {
   struct sv6621_packet_header_s header;
   struct sv6621_packet_header_s terminator;
+  size_t aligned_length;
   size_t payload_end;
   size_t total;
   int ret;
 
   if (payload == NULL || buffer == NULL || written == NULL || length == 0 ||
-      length > UINT16_MAX || channel >= SV6621_PACKET_CHANNEL_COUNT)
+      length > UINT16_MAX - (SV6621_PACKET_ALIGNMENT - 1) ||
+      channel >= SV6621_PACKET_CHANNEL_COUNT)
     {
       return -EINVAL;
     }
 
-  payload_end = SV6621_PACKET_HEADER_SIZE +
-                sv6621_packet_align(length, SV6621_PACKET_ALIGNMENT);
+  aligned_length = sv6621_packet_align(length, SV6621_PACKET_ALIGNMENT);
+  payload_end = SV6621_PACKET_HEADER_SIZE + aligned_length;
   total = sv6621_packet_align(payload_end + SV6621_PACKET_HEADER_SIZE,
                               SV6621_SDIO_BLOCK_SIZE);
   if (total > capacity)
@@ -211,7 +213,7 @@ int sv6621_packet_build(uint8_t channel, FAR const void *payload,
     }
 
   memset(buffer, 0, total);
-  header.length = (uint16_t)length;
+  header.length = (uint16_t)aligned_length;
   header.padding = 0;
   header.end_of_frame = false;
   header.channel = channel;
