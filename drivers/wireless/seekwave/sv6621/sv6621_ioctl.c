@@ -50,6 +50,8 @@ static int sv6621_ioctl_essid(FAR struct sv6621_ioctl_s *ioctl,
                               FAR struct iwreq *request, bool set);
 static int sv6621_ioctl_frequency(FAR struct sv6621_ioctl_s *ioctl,
                                   FAR struct iwreq *request);
+static int sv6621_ioctl_decode_channel(FAR const struct iw_freq *frequency,
+                                       FAR uint8_t *channel);
 static int sv6621_ioctl_frequency_set(FAR struct sv6621_ioctl_s *ioctl,
                                       FAR const struct iwreq *request);
 static int sv6621_ioctl_range(FAR struct sv6621_ioctl_s *ioctl,
@@ -291,60 +293,57 @@ static int sv6621_ioctl_frequency(FAR struct sv6621_ioctl_s *ioctl,
 }
 
 /****************************************************************************
- * Name: sv6621_ioctl_frequency_set
+ * Name: sv6621_ioctl_decode_channel
  ****************************************************************************/
 
-static int sv6621_ioctl_frequency_set(FAR struct sv6621_ioctl_s *ioctl,
-                                      FAR const struct iwreq *request)
+static int sv6621_ioctl_decode_channel(FAR const struct iw_freq *frequency,
+                                       FAR uint8_t *channel)
 {
-  int64_t frequency;
+  int64_t mhz;
   int exponent;
-  int channel;
+  int decoded;
 
-  if (request->u.freq.flags == IW_FREQ_AUTO || request->u.freq.m == 0)
+  if (frequency == NULL || channel == NULL || frequency->m <= 0)
     {
-      ioctl->connection.channel = 0;
-      return 0;
+      return -EINVAL;
     }
 
-  if (request->u.freq.e == 0 && request->u.freq.m <= UINT8_MAX)
+  if (frequency->e == 0 && frequency->m <= UINT8_MAX)
     {
-      channel = request->u.freq.m;
+      decoded = frequency->m;
     }
   else
     {
-      frequency = request->u.freq.m;
-      exponent = request->u.freq.e;
+      mhz = frequency->m;
+      exponent = frequency->e;
       while (exponent > 6)
         {
-          if (frequency > INT64_MAX / 10)
+          if (mhz > INT64_MAX / 10)
             {
               return -ERANGE;
             }
 
-          frequency *= 10;
+          mhz *= 10;
           exponent--;
         }
 
       while (exponent < 6)
         {
-          frequency /= 10;
+          mhz /= 10;
           exponent++;
         }
 
-      if (frequency == 2484)
+      if (mhz == 2484)
         {
-          channel = 14;
+          decoded = 14;
         }
-      else if (frequency >= 2412 && frequency <= 2472 &&
-               (frequency - 2407) % 5 == 0)
+      else if (mhz >= 2412 && mhz <= 2472 && (mhz - 2407) % 5 == 0)
         {
-          channel = (frequency - 2407) / 5;
+          decoded = (mhz - 2407) / 5;
         }
-      else if (frequency >= 5000 && frequency <= 5900 &&
-               (frequency - 5000) % 5 == 0)
+      else if (mhz >= 5000 && mhz <= 5900 && (mhz - 5000) % 5 == 0)
         {
-          channel = (frequency - 5000) / 5;
+          decoded = (mhz - 5000) / 5;
         }
       else
         {
@@ -352,9 +351,35 @@ static int sv6621_ioctl_frequency_set(FAR struct sv6621_ioctl_s *ioctl,
         }
     }
 
-  if (channel <= 0 || channel > UINT8_MAX)
+  if (decoded <= 0 || decoded > UINT8_MAX)
     {
       return -EINVAL;
+    }
+
+  *channel = decoded;
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_ioctl_frequency_set
+ ****************************************************************************/
+
+static int sv6621_ioctl_frequency_set(FAR struct sv6621_ioctl_s *ioctl,
+                                      FAR const struct iwreq *request)
+{
+  uint8_t channel;
+  int ret;
+
+  if (request->u.freq.flags == IW_FREQ_AUTO || request->u.freq.m == 0)
+    {
+      ioctl->connection.channel = 0;
+      return 0;
+    }
+
+  ret = sv6621_ioctl_decode_channel(&request->u.freq, &channel);
+  if (ret < 0)
+    {
+      return ret;
     }
 
   ioctl->connection.channel = channel;
@@ -566,8 +591,20 @@ static int sv6621_ioctl_scan_start(FAR struct sv6621_ioctl_s *ioctl,
                                    FAR const struct iwreq *request)
 {
   FAR const struct iw_scan_req *scan_request = request->u.data.pointer;
+  struct sv6621_scan_channel_s selected[SV6621_REGULATORY_SCAN_CHANNEL_CAPACITY];
   FAR const uint8_t *ssid = NULL;
+  size_t selected_count = 0;
   size_t ssid_length = 0;
+  size_t available;
+  size_t index;
+  size_t requested;
+  bool passive = false;
+  int ret;
+
+  if (scan_request != NULL && request->u.data.length < sizeof(*scan_request))
+    {
+      return -EINVAL;
+    }
 
   if ((request->u.data.flags & IW_SCAN_THIS_ESSID) != 0)
     {
@@ -583,8 +620,96 @@ static int sv6621_ioctl_scan_start(FAR struct sv6621_ioctl_s *ioctl,
       ssid_length = scan_request->essid_len;
     }
 
-  return sv6621_scan_selected(ioctl->owner, ioctl->owner->scan_channels,
-                              ioctl->owner->scan_channel_count, ssid,
+  if (scan_request != NULL)
+    {
+      if (scan_request->scan_type != IW_SCAN_TYPE_ACTIVE &&
+          scan_request->scan_type != IW_SCAN_TYPE_PASSIVE)
+        {
+          return -EINVAL;
+        }
+
+      passive = scan_request->scan_type == IW_SCAN_TYPE_PASSIVE;
+      requested = scan_request->num_channels;
+      if (requested > IW_MAX_FREQUENCIES)
+        {
+          return -E2BIG;
+        }
+    }
+  else
+    {
+      requested = 0;
+    }
+
+  available = ioctl->owner->scan_channel_count;
+  if (requested == 0)
+    {
+      memcpy(selected, ioctl->owner->scan_channels,
+             available * sizeof(*selected));
+      selected_count = available;
+    }
+  else
+    {
+      size_t request_index;
+
+      for (request_index = 0; request_index < requested; request_index++)
+        {
+          uint8_t channel;
+          bool duplicate = false;
+          bool found = false;
+
+          ret = sv6621_ioctl_decode_channel(
+              &scan_request->channel_list[request_index], &channel);
+          if (ret < 0)
+            {
+              return ret;
+            }
+
+          for (index = 0; index < selected_count; index++)
+            {
+              if (selected[index].number == channel)
+                {
+                  duplicate = true;
+                  break;
+                }
+            }
+
+          if (duplicate)
+            {
+              continue;
+            }
+
+          for (index = 0; index < available; index++)
+            {
+              if (ioctl->owner->scan_channels[index].number == channel)
+                {
+                  selected[selected_count++] =
+                      ioctl->owner->scan_channels[index];
+                  found = true;
+                  break;
+                }
+            }
+
+          if (!found)
+            {
+              return -EINVAL;
+            }
+        }
+    }
+
+  if (selected_count == 0)
+    {
+      return -EINVAL;
+    }
+
+  if (passive)
+    {
+      for (index = 0; index < selected_count; index++)
+        {
+          selected[index].flags |= SV6621_SCAN_FLAG_PASSIVE;
+        }
+    }
+
+  return sv6621_scan_selected(ioctl->owner, selected, selected_count, ssid,
                               ssid_length);
 }
 
