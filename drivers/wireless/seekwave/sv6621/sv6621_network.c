@@ -294,6 +294,7 @@ static void sv6621_network_rx_worker(FAR void *arg)
   FAR struct sv6621_network_s *network = arg;
   FAR struct eth_hdr_s *ethernet;
   irqstate_t flags;
+  bool ready;
   uint8_t tail;
 
   net_lock();
@@ -309,9 +310,10 @@ static void sv6621_network_rx_worker(FAR void *arg)
 
       tail = network->rx_tail;
       network->rx_tail = (tail + 1) % SV6621_NETWORK_RX_DEPTH;
+      ready = network->interface_up && network->link_up;
       spin_unlock_irqrestore(&network->lock, flags);
 
-      if (!network->interface_up)
+      if (!ready)
         {
           continue;
         }
@@ -692,6 +694,11 @@ void sv6621_network_set_link(
     }
 
   network->link_up = link_up;
+  if (!link_up)
+    {
+      network->rx_tail = network->rx_head;
+    }
+
   spin_unlock_irqrestore(&network->lock, flags);
 
   if (link_up)
@@ -725,6 +732,7 @@ void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx,
 {
   FAR struct sv6621_network_s *network = arg;
   irqstate_t flags;
+  bool count_drop;
   bool schedule = false;
   uint8_t next;
   int ret;
@@ -736,11 +744,13 @@ void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx,
     }
 
   flags = spin_lock_irqsave(&network->lock);
+  count_drop = network->registered;
   next = (network->rx_head + 1) % SV6621_NETWORK_RX_DEPTH;
-  if (!network->registered || next == network->rx_tail)
+  if (!network->registered || !network->interface_up || !network->link_up ||
+      next == network->rx_tail)
     {
       spin_unlock_irqrestore(&network->lock, flags);
-      if (network->registered)
+      if (count_drop)
         {
           NETDEV_RXDROPPED(&network->dev);
         }
