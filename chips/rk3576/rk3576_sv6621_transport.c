@@ -225,6 +225,11 @@ static uint32_t rk3576_sv6621_command(uint32_t command, uint32_t argument,
       up_udelay(5);
     }
 
+  if (index == RK3576_SV6621_POLL_LIMIT)
+    {
+      return RK3576_SV6621_INT_RTO;
+    }
+
   putreg32(UINT32_MAX, RK3576_SV6621_RINTSTS);
   putreg32(argument, RK3576_SV6621_CMDARG);
   putreg32(command, RK3576_SV6621_CMD);
@@ -235,6 +240,11 @@ static uint32_t rk3576_sv6621_command(uint32_t command, uint32_t argument,
        index++)
     ;
 
+  if (index == RK3576_SV6621_POLL_LIMIT)
+    {
+      return RK3576_SV6621_INT_RTO;
+    }
+
   for (index = 0; index < RK3576_SV6621_POLL_LIMIT; index++)
     {
       status = getreg32(RK3576_SV6621_RINTSTS);
@@ -244,6 +254,11 @@ static uint32_t rk3576_sv6621_command(uint32_t command, uint32_t argument,
         }
 
       up_udelay(5);
+    }
+
+  if (index == RK3576_SV6621_POLL_LIMIT)
+    {
+      return RK3576_SV6621_INT_RTO;
     }
 
   if (response != NULL)
