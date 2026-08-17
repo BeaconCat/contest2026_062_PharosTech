@@ -438,6 +438,12 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       goto fail;
     }
 
+  ret = sv6621_wifi_configure_baseline(&dev->command);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
   ret = sv6621_wifi_download_calibration(&dev->command,
                                          dev->config.calibration.data,
                                          dev->config.calibration.length);
