@@ -55,6 +55,9 @@ static int sv6621_network_queue_multicast(
     FAR struct sv6621_network_s *network);
 #endif
 static void sv6621_network_reply(FAR struct sv6621_network_s *network);
+static bool sv6621_network_tx_snapshot(
+    FAR struct sv6621_network_s *network,
+    FAR struct sv6621_data_tx_context_s *context);
 static int sv6621_network_transmit(FAR struct sv6621_network_s *network);
 static int sv6621_network_tx_poll(FAR struct net_driver_s *dev);
 static int sv6621_network_ifup(FAR struct net_driver_s *dev);
@@ -85,16 +88,39 @@ static void sv6621_network_reply(FAR struct sv6621_network_s *network)
     }
 }
 
+/****************************************************************************
+ * Name: sv6621_network_tx_snapshot
+ ****************************************************************************/
+
+static bool sv6621_network_tx_snapshot(
+    FAR struct sv6621_network_s *network,
+    FAR struct sv6621_data_tx_context_s *context)
+{
+  irqstate_t flags;
+  bool ready;
+
+  flags = spin_lock_irqsave(&network->lock);
+  ready = network->interface_up && network->link_up;
+  if (ready && context != NULL)
+    {
+      *context = network->tx_context;
+    }
+
+  spin_unlock_irqrestore(&network->lock, flags);
+  return ready;
+}
+
 static int sv6621_network_transmit(FAR struct sv6621_network_s *network)
 {
+  struct sv6621_data_tx_context_s context;
   int ret;
 
-  if (!network->link_up)
+  if (!sv6621_network_tx_snapshot(network, &context))
     {
       return -ENETDOWN;
     }
 
-  ret = sv6621_data_send(network->data, &network->tx_context,
+  ret = sv6621_data_send(network->data, &context,
                           network->dev.d_buf, network->dev.d_len);
   if (ret < 0)
     {
@@ -118,7 +144,7 @@ static void sv6621_network_tx_worker(FAR void *arg)
   FAR struct sv6621_network_s *network = arg;
 
   net_lock();
-  if (network->interface_up && network->link_up)
+  if (sv6621_network_tx_snapshot(network, NULL))
     {
       network->dev.d_buf = network->tx_frame;
       devif_poll(&network->dev, sv6621_network_tx_poll);
@@ -456,6 +482,7 @@ int sv6621_network_sync_multicast(FAR struct sv6621_network_s *network)
 int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network)
 {
   struct sv6621_offload_addresses_s addresses;
+  struct sv6621_data_tx_context_s context;
 #ifdef CONFIG_NET_IPv6
   static const uint8_t zero[SV6621_OFFLOAD_IPV6_LENGTH];
   size_t index;
@@ -464,6 +491,11 @@ int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network)
   if (network == NULL || network->command == NULL || !network->registered)
     {
       return -EINVAL;
+    }
+
+  if (!sv6621_network_tx_snapshot(network, &context))
+    {
+      return -ENETDOWN;
     }
 
   memset(&addresses, 0, sizeof(addresses));
@@ -501,7 +533,7 @@ int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network)
     }
 
   return sv6621_offload_set_addresses(network->command,
-                                       network->tx_context.instance,
+                                       context.instance,
                                        &addresses);
 }
 
