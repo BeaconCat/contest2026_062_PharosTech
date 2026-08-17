@@ -141,6 +141,8 @@ struct rk3576_sdmmc_dev_s
   struct work_s cbwork;     /* Callback work queue item */
   rk3576_sdmmc_media_callback_t media_callback;
   void *media_arg;
+  rk3576_sdmmc_sdio_callback_t sdio_callback;
+  void *sdio_arg;
 
   /* Data transfer (PIO) state */
 
@@ -742,6 +744,11 @@ static int rk3576_sdmmc_interrupt(int irq, void *context, void *arg)
 
           priv->media_callback(priv->media_arg, inserted);
         }
+    }
+
+  if ((pending & SDMMC_INT_SDIO) != 0 && priv->sdio_callback != NULL)
+    {
+      priv->sdio_callback(priv->sdio_arg);
     }
 
   return OK;
@@ -1886,6 +1893,73 @@ int rk3576_sdmmc_register_media_callback(
   priv->media_arg = arg;
   leave_critical_section(flags);
   return OK;
+}
+
+/****************************************************************************
+ * Name: rk3576_sdmmc_register_sdio_callback
+ ****************************************************************************/
+
+int rk3576_sdmmc_register_sdio_callback(
+    FAR struct sdio_dev_s *dev, rk3576_sdmmc_sdio_callback_t callback,
+    FAR void *arg)
+{
+  FAR struct rk3576_sdmmc_dev_s *priv;
+  irqstate_t flags;
+
+  if (dev == NULL)
+    {
+      return -EINVAL;
+    }
+
+  priv = (FAR struct rk3576_sdmmc_dev_s *)dev;
+  if (!priv->nonremovable)
+    {
+      return -ENOTSUP;
+    }
+
+  flags = enter_critical_section();
+  priv->sdio_callback = callback;
+  priv->sdio_arg = callback != NULL ? arg : NULL;
+  leave_critical_section(flags);
+  return 0;
+}
+
+/****************************************************************************
+ * Name: rk3576_sdmmc_enable_sdio_interrupt
+ ****************************************************************************/
+
+int rk3576_sdmmc_enable_sdio_interrupt(FAR struct sdio_dev_s *dev,
+                                       bool enable)
+{
+  FAR struct rk3576_sdmmc_dev_s *priv;
+  irqstate_t flags;
+  uint32_t mask;
+
+  if (dev == NULL)
+    {
+      return -EINVAL;
+    }
+
+  priv = (FAR struct rk3576_sdmmc_dev_s *)dev;
+  if (!priv->nonremovable)
+    {
+      return -ENOTSUP;
+    }
+
+  flags = enter_critical_section();
+  mask = rk3576_sdmmc_getreg(priv, RK3576_SDMMC_INTMASK);
+  if (enable)
+    {
+      mask |= SDMMC_INT_SDIO;
+    }
+  else
+    {
+      mask &= ~SDMMC_INT_SDIO;
+    }
+
+  rk3576_sdmmc_putreg(priv, RK3576_SDMMC_INTMASK, mask);
+  leave_critical_section(flags);
+  return 0;
 }
 
 #endif /* CONFIG_RK3576_SDMMC || CONFIG_RK3576_SDIO */

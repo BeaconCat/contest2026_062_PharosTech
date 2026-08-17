@@ -29,7 +29,7 @@
 
 #include <nuttx/config.h>
 
-#include "sv6621_transport.h"
+#include "sv6621.h"
 
 /****************************************************************************
  * Public Function Prototypes
