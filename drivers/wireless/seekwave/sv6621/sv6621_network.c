@@ -124,7 +124,11 @@ static int sv6621_network_transmit(FAR struct sv6621_network_s *network)
                           network->dev.d_buf, network->dev.d_len);
   if (ret < 0)
     {
-      NETDEV_TXERRORS(&network->dev);
+      if (ret != -EAGAIN)
+        {
+          NETDEV_TXERRORS(&network->dev);
+        }
+
       return ret;
     }
 
