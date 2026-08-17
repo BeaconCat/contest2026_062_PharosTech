@@ -85,6 +85,7 @@ typedef void (*sv6621_command_error_t)(int error, FAR void *arg);
 struct sv6621_command_engine_s
 {
   mutex_t execute_lock;
+  mutex_t receive_lock;
   mutex_t state_lock;
   sem_t completion;
   sv6621_command_sender_t sender;
@@ -98,6 +99,7 @@ struct sv6621_command_engine_s
   uint16_t pending_sequence;
   uint8_t pending_id;
   bool pending;
+  bool shutting_down;
   bool dispatching_event;
   bool event_sequence_valid;
   int completion_result;
