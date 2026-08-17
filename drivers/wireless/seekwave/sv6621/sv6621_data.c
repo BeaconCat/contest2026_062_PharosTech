@@ -70,6 +70,10 @@
 #define SV6621_DATA_LMAC_MASK               0x03
 #define SV6621_DATA_TID_MASK                0x0f
 #define SV6621_DATA_ETHERTYPE_EAPOL         0x888e
+#define SV6621_DATA_CIPHER_CCMP              8
+#define SV6621_DATA_CIPHER_CCMP_256          9
+#define SV6621_DATA_CIPHER_GCMP              10
+#define SV6621_DATA_CIPHER_GCMP_256          11
 
 /****************************************************************************
  * Private Function Prototypes
@@ -85,6 +89,10 @@ sv6621_data_find_fragment(FAR struct sv6621_data_s *data,
                           FAR const struct sv6621_data_rx_s *rx);
 static FAR struct sv6621_data_fragment_s *
 sv6621_data_select_fragment(FAR struct sv6621_data_s *data);
+static bool sv6621_data_cipher_uses_pn(uint8_t cipher);
+static bool sv6621_data_pn_follows(FAR const uint8_t *previous,
+                                   FAR const uint8_t *current,
+                                   size_t length);
 static int sv6621_data_reassemble(FAR struct sv6621_data_s *data,
                                   FAR struct sv6621_data_rx_s *rx);
 static bool sv6621_data_take_credit(FAR struct sv6621_data_s *data,
@@ -172,6 +180,43 @@ sv6621_data_select_fragment(FAR struct sv6621_data_s *data)
 }
 
 /****************************************************************************
+ * Name: sv6621_data_cipher_uses_pn
+ ****************************************************************************/
+
+static bool sv6621_data_cipher_uses_pn(uint8_t cipher)
+{
+  return cipher == SV6621_DATA_CIPHER_CCMP ||
+         cipher == SV6621_DATA_CIPHER_CCMP_256 ||
+         cipher == SV6621_DATA_CIPHER_GCMP ||
+         cipher == SV6621_DATA_CIPHER_GCMP_256;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_pn_follows
+ ****************************************************************************/
+
+static bool sv6621_data_pn_follows(FAR const uint8_t *previous,
+                                   FAR const uint8_t *current,
+                                   size_t length)
+{
+  unsigned int carry = 1;
+  size_t index;
+
+  for (index = 0; index < length; index++)
+    {
+      uint8_t expected = previous[index] + carry;
+
+      carry = carry != 0 && previous[index] == UINT8_MAX;
+      if (current[index] != expected)
+        {
+          return false;
+        }
+    }
+
+  return carry == 0;
+}
+
+/****************************************************************************
  * Name: sv6621_data_reassemble
  ****************************************************************************/
 
@@ -213,6 +258,8 @@ static int sv6621_data_reassemble(FAR struct sv6621_data_s *data,
       entry->peer_valid = rx->peer_valid;
       entry->tid = rx->tid;
       entry->active = true;
+      memcpy(entry->last_packet_number, rx->packet_number,
+             sizeof(entry->last_packet_number));
       memcpy(entry->frame, rx->frame, rx->frame_length);
       return -EINPROGRESS;
     }
@@ -228,6 +275,24 @@ static int sv6621_data_reassemble(FAR struct sv6621_data_s *data,
 
       data->stats.fragment_drops++;
       return -EPROTO;
+    }
+
+  if (sv6621_data_cipher_uses_pn(entry->first.cipher))
+    {
+      size_t pn_length = data->pn_reuse ? 4 : 6;
+
+      if (rx->cipher != entry->first.cipher ||
+          !sv6621_data_pn_follows(entry->last_packet_number,
+                                  rx->packet_number, pn_length))
+        {
+          entry->active = false;
+          data->stats.fragment_drops++;
+          data->stats.fragment_pn_drops++;
+          return -EACCES;
+        }
+
+      memcpy(entry->last_packet_number, rx->packet_number,
+             sizeof(entry->last_packet_number));
     }
 
   append_length = rx->frame_length - 12;
