@@ -40,6 +40,7 @@
 
 #define SV6621_WPA_PASSPHRASE_MIN 8
 #define SV6621_WPA_PASSPHRASE_MAX 63
+#define SV6621_WPA_HEX_PSK_SIZE    64
 #define SV6621_WPA_SSID_MAX        32
 #define SV6621_WPA_PBKDF_ROUNDS    4096
 #define SV6621_WPA_PBKDF_SALT_MAX  (SV6621_WPA_SSID_MAX + 4)
@@ -55,6 +56,40 @@ static const uint8_t g_sv6621_wpa_ptk_label[] = "Pairwise key expansion";
 static const uint8_t g_sv6621_wpa_wrap_iv[8] = {
   0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6
 };
+
+/****************************************************************************
+ * Private Function Prototypes
+ ****************************************************************************/
+
+static int sv6621_wpa_hex_value(uint8_t character);
+
+/****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: sv6621_wpa_hex_value
+ ****************************************************************************/
+
+static int sv6621_wpa_hex_value(uint8_t character)
+{
+  if (character >= '0' && character <= '9')
+    {
+      return character - '0';
+    }
+
+  if (character >= 'a' && character <= 'f')
+    {
+      return character - 'a' + 10;
+    }
+
+  if (character >= 'A' && character <= 'F')
+    {
+      return character - 'A' + 10;
+    }
+
+  return -EINVAL;
+}
 
 /****************************************************************************
  * Public Functions
@@ -123,9 +158,32 @@ int sv6621_wpa_derive_pmk(FAR const uint8_t *passphrase,
   int ret;
 
   if (passphrase == NULL || ssid == NULL || pmk == NULL ||
-      passphrase_length < SV6621_WPA_PASSPHRASE_MIN ||
-      passphrase_length > SV6621_WPA_PASSPHRASE_MAX || ssid_length == 0 ||
+      passphrase_length < SV6621_WPA_PASSPHRASE_MIN || ssid_length == 0 ||
       ssid_length > SV6621_WPA_SSID_MAX)
+    {
+      return -EINVAL;
+    }
+
+  if (passphrase_length == SV6621_WPA_HEX_PSK_SIZE)
+    {
+      for (index = 0; index < SV6621_WPA_PMK_SIZE; index++)
+        {
+          int high = sv6621_wpa_hex_value(passphrase[index * 2]);
+          int low = sv6621_wpa_hex_value(passphrase[index * 2 + 1]);
+
+          if (high < 0 || low < 0)
+            {
+              memset(pmk, 0, SV6621_WPA_PMK_SIZE);
+              return -EINVAL;
+            }
+
+          pmk[index] = (high << 4) | low;
+        }
+
+      return 0;
+    }
+
+  if (passphrase_length > SV6621_WPA_PASSPHRASE_MAX)
     {
       return -EINVAL;
     }
