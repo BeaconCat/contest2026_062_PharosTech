@@ -59,6 +59,13 @@ enum sv6621_connection_auth_algorithm_e
   SV6621_CONNECTION_AUTH_SAE = 3
 };
 
+enum sv6621_connection_disconnect_mode_e
+{
+  SV6621_CONNECTION_DISCONNECT_ONLY = 0,
+  SV6621_CONNECTION_DISCONNECT_DISASSOC = 1,
+  SV6621_CONNECTION_DISCONNECT_DEAUTH = 2
+};
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
@@ -77,5 +84,9 @@ int sv6621_connection_associate(
     FAR const uint8_t ht_capability[SV6621_CONNECTION_HT_CAPABILITY_SIZE],
     FAR const uint8_t vht_capability[SV6621_CONNECTION_VHT_CAPABILITY_SIZE],
     FAR const uint8_t *ies, size_t ies_length);
+int sv6621_connection_disconnect(
+    FAR struct sv6621_command_engine_s *command,
+    enum sv6621_connection_disconnect_mode_e mode, bool local_state_change,
+    uint16_t reason, FAR const uint8_t *ies, size_t ies_length);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_CONNECTION_H */

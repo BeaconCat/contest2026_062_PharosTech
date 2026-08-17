@@ -41,6 +41,7 @@
 #define SV6621_CONNECTION_COMMAND_JOIN        9
 #define SV6621_CONNECTION_COMMAND_AUTH        10
 #define SV6621_CONNECTION_COMMAND_ASSOC       11
+#define SV6621_CONNECTION_COMMAND_DISCONNECT  17
 #define SV6621_CONNECTION_COMMAND_TIMEOUT_MS  5000
 #define SV6621_CONNECTION_JOIN_HEADER_SIZE    25
 #define SV6621_CONNECTION_JOIN_RESPONSE_SIZE  4
@@ -52,6 +53,8 @@
 #define SV6621_CONNECTION_ASSOC_IE_OFFSET_OFFSET  50
 #define SV6621_CONNECTION_ASSOC_IE_LENGTH_OFFSET  52
 #define SV6621_CONNECTION_ASSOC_MAX_IE_SIZE       1024
+#define SV6621_CONNECTION_DISCONNECT_HEADER_SIZE  8
+#define SV6621_CONNECTION_DISCONNECT_MAX_IE_SIZE  512
 
 /****************************************************************************
  * Private Function Prototypes
@@ -260,6 +263,54 @@ int sv6621_connection_associate(
       command, SV6621_CONNECTION_INSTANCE, SV6621_CONNECTION_COMMAND_ASSOC,
       payload, payload_length, NULL, NULL,
       SV6621_CONNECTION_COMMAND_TIMEOUT_MS);
+  kmm_free(payload);
+  return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
+}
+
+/****************************************************************************
+ * Name: sv6621_connection_disconnect
+ ****************************************************************************/
+
+int sv6621_connection_disconnect(
+    FAR struct sv6621_command_engine_s *command,
+    enum sv6621_connection_disconnect_mode_e mode, bool local_state_change,
+    uint16_t reason, FAR const uint8_t *ies, size_t ies_length)
+{
+  FAR uint8_t *payload;
+  size_t payload_length;
+  int ret;
+
+  if (command == NULL || mode < SV6621_CONNECTION_DISCONNECT_ONLY ||
+      mode > SV6621_CONNECTION_DISCONNECT_DEAUTH ||
+      (ies == NULL && ies_length != 0) ||
+      ies_length > SV6621_CONNECTION_DISCONNECT_MAX_IE_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  payload_length = SV6621_CONNECTION_DISCONNECT_HEADER_SIZE + ies_length;
+  payload = kmm_zalloc(payload_length);
+  if (payload == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  payload[0] = mode;
+  payload[1] = local_state_change;
+  sv6621_connection_put_le16(payload + 2, reason);
+  if (ies_length > 0)
+    {
+      sv6621_connection_put_le16(
+          payload + 4, SV6621_CONNECTION_DISCONNECT_HEADER_SIZE);
+      sv6621_connection_put_le16(payload + 6, ies_length);
+      memcpy(payload + SV6621_CONNECTION_DISCONNECT_HEADER_SIZE, ies,
+             ies_length);
+    }
+
+  ret = sv6621_command_execute(
+      command, SV6621_CONNECTION_INSTANCE,
+      SV6621_CONNECTION_COMMAND_DISCONNECT, payload, payload_length, NULL,
+      NULL, SV6621_CONNECTION_COMMAND_TIMEOUT_MS);
   kmm_free(payload);
   return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
 }
