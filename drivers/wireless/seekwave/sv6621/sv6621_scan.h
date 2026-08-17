@@ -32,6 +32,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "include/sv6621.h"
 #include "sv6621_command.h"
 
 /****************************************************************************
@@ -67,5 +68,7 @@ int sv6621_scan_start(FAR struct sv6621_command_engine_s *command,
                       FAR const struct sv6621_scan_channel_s *channels,
                       size_t channel_count);
 int sv6621_scan_stop(FAR struct sv6621_command_engine_s *command);
+int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
+                             FAR struct sv6621_bss_s *bss);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_SCAN_H */
