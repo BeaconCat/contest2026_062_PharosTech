@@ -130,8 +130,8 @@ static uint32_t rk3576_sv6621_command(uint32_t command, uint32_t argument,
                                       FAR uint32_t *response);
 static int rk3576_sv6621_direct(bool write, uint8_t function, uint32_t address,
                                 uint8_t value, FAR uint8_t *result);
-static void rk3576_sv6621_voltage_switch(void);
-static void rk3576_sv6621_tune_sdr104(void);
+static int rk3576_sv6621_voltage_switch(void);
+static int rk3576_sv6621_tune_sdr104(void);
 static int rk3576_sv6621_open_failed(
     FAR struct rk3576_sv6621_transport_priv_s *priv, int error);
 static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport);
@@ -279,12 +279,18 @@ static int rk3576_sv6621_direct(bool write, uint8_t function, uint32_t address,
   return ((response >> 8) & 0xcb) != 0 ? -EIO : OK;
 }
 
-static void rk3576_sv6621_voltage_switch(void)
+static int rk3576_sv6621_voltage_switch(void)
 {
   uint32_t response;
+  uint32_t status;
   int index;
 
-  rk3576_sv6621_command(RK3576_SV6621_CMD11, 0, &response);
+  status = rk3576_sv6621_command(RK3576_SV6621_CMD11, 0, &response);
+  if ((status & RK3576_SV6621_INT_RTO) != 0)
+    {
+      return -ETIMEDOUT;
+    }
+
   for (index = 0; index < 100000; index++)
     {
       if ((getreg32(RK3576_SV6621_RINTSTS) & RK3576_SV6621_INT_VOLTSW) != 0)
@@ -293,6 +299,11 @@ static void rk3576_sv6621_voltage_switch(void)
         }
 
       up_udelay(5);
+    }
+
+  if (index == 100000)
+    {
+      return -ETIMEDOUT;
     }
 
   putreg32(RK3576_SV6621_INT_VOLTSW, RK3576_SV6621_RINTSTS);
@@ -313,23 +324,56 @@ static void rk3576_sv6621_voltage_switch(void)
       up_udelay(5);
     }
 
+  if (index == 200000)
+    {
+      return -ETIMEDOUT;
+    }
+
   putreg32(RK3576_SV6621_INT_VOLTSW, RK3576_SV6621_RINTSTS);
   up_mdelay(5);
+  return 0;
 }
 
-static void rk3576_sv6621_tune_sdr104(void)
+static int rk3576_sv6621_tune_sdr104(void)
 {
   uint32_t response;
   uint32_t fifo_count;
+  uint32_t status;
   uint8_t value;
   int received = 0;
   int index;
+  int ret;
 
-  rk3576_sv6621_direct(false, 0, 0x07, 0, &value);
-  rk3576_sv6621_direct(true, 0, 0x07, 0x02, NULL);
+  ret = rk3576_sv6621_direct(false, 0, RK3576_SV6621_CCCR_BUS_IF, 0,
+                             &value);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  value = (value & ~0x03) | 0x02;
+  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_BUS_IF, value,
+                             NULL);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   putreg32(1, RK3576_SV6621_CTYPE);
-  rk3576_sv6621_direct(false, 0, 0x13, 0, &value);
-  rk3576_sv6621_direct(true, 0, 0x13, 0x07, NULL);
+  ret = rk3576_sv6621_direct(false, 0, RK3576_SV6621_CCCR_SPEED, 0,
+                             &value);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  value = (value & ~0x0e) | 0x07;
+  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_SPEED, value,
+                             NULL);
+  if (ret < 0)
+    {
+      return ret;
+    }
 
   rk3576_sv6621_set_clock(RK3576_SV6621_SRC_396M, 0);
   putreg32(RK3576_SV6621_TCON_180, RK3576_SV6621_TIMING0);
@@ -341,9 +385,18 @@ static void rk3576_sv6621_tune_sdr104(void)
        index++)
     ;
 
+  if (index == 100000)
+    {
+      return -ETIMEDOUT;
+    }
+
   putreg32(64, RK3576_SV6621_BLKSIZ);
   putreg32(64, RK3576_SV6621_BYTCNT);
-  rk3576_sv6621_command(RK3576_SV6621_CMD19, 0, &response);
+  status = rk3576_sv6621_command(RK3576_SV6621_CMD19, 0, &response);
+  if ((status & (RK3576_SV6621_INT_RTO | RK3576_SV6621_INT_DATAERR)) != 0)
+    {
+      return (status & RK3576_SV6621_INT_RTO) != 0 ? -ETIMEDOUT : -EIO;
+    }
 
   for (index = 0; index < 200000 && received < 16; index++)
     {
@@ -356,6 +409,25 @@ static void rk3576_sv6621_tune_sdr104(void)
 
       up_udelay(2);
     }
+
+  for (index = 0; index < 200000; index++)
+    {
+      status = getreg32(RK3576_SV6621_RINTSTS);
+      if ((status & (RK3576_SV6621_INT_DTO |
+                     RK3576_SV6621_INT_DATAERR)) != 0)
+        {
+          break;
+        }
+
+      up_udelay(2);
+    }
+
+  if (received != 16 || index == 200000)
+    {
+      return -ETIMEDOUT;
+    }
+
+  return (status & RK3576_SV6621_INT_DATAERR) != 0 ? -EIO : 0;
 }
 
 /****************************************************************************
@@ -417,9 +489,15 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
       return rk3576_sv6621_open_failed(priv, -ENODEV);
     }
 
-  if ((response & (1u << 24)) != 0)
+  if ((response & (1u << 24)) == 0)
     {
-      rk3576_sv6621_voltage_switch();
+      return rk3576_sv6621_open_failed(priv, -EOPNOTSUPP);
+    }
+
+  ret = rk3576_sv6621_voltage_switch();
+  if (ret < 0)
+    {
+      return rk3576_sv6621_open_failed(priv, ret);
     }
 
   status = rk3576_sv6621_command(RK3576_SV6621_CMD3, 0, &response);
@@ -448,7 +526,11 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
       return rk3576_sv6621_open_failed(priv, ret);
     }
 
-  rk3576_sv6621_tune_sdr104();
+  ret = rk3576_sv6621_tune_sdr104();
+  if (ret < 0)
+    {
+      return rk3576_sv6621_open_failed(priv, ret);
+    }
 
   ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_FBR1_BLOCK_LOW,
                              RK3576_SV6621_BLOCK_SIZE & 0xff, NULL);
