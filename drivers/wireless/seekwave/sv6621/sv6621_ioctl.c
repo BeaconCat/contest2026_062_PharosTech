@@ -368,8 +368,9 @@ static int sv6621_ioctl_range(FAR struct sv6621_ioctl_s *ioctl,
                               FAR struct iwreq *request)
 {
   FAR struct iw_range *range = request->u.data.pointer;
-  size_t count;
   size_t index;
+  size_t output = 0;
+  unsigned int pass;
 
   if (range == NULL || request->u.data.length < sizeof(*range))
     {
@@ -378,21 +379,31 @@ static int sv6621_ioctl_range(FAR struct sv6621_ioctl_s *ioctl,
     }
 
   memset(range, 0, sizeof(*range));
-  count = ioctl->owner->scan_channel_count;
-  if (count > IW_MAX_FREQUENCIES)
+  for (pass = 0; pass < 2 && output < IW_MAX_FREQUENCIES; pass++)
     {
-      count = IW_MAX_FREQUENCIES;
+      bool passive = pass != 0;
+
+      for (index = 0; index < ioctl->owner->scan_channel_count &&
+                      output < IW_MAX_FREQUENCIES;
+           index++)
+        {
+          FAR const struct sv6621_scan_channel_s *channel =
+              &ioctl->owner->scan_channels[index];
+
+          if (((channel->flags & SV6621_SCAN_FLAG_PASSIVE) != 0) != passive)
+            {
+              continue;
+            }
+
+          range->freq[output].m = channel->number;
+          range->freq[output].e = 0;
+          range->freq[output].i = channel->number;
+          range->freq[output].flags = IW_FREQ_FIXED;
+          output++;
+        }
     }
 
-  range->num_frequency = count;
-  for (index = 0; index < count; index++)
-    {
-      range->freq[index].m = ioctl->owner->scan_channels[index].number;
-      range->freq[index].e = 0;
-      range->freq[index].i = ioctl->owner->scan_channels[index].number;
-      range->freq[index].flags = IW_FREQ_FIXED;
-    }
-
+  range->num_frequency = output;
   request->u.data.length = sizeof(*range);
   return 0;
 }
