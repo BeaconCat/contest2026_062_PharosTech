@@ -40,28 +40,33 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_WIFI_INSTANCE               0
-#define SV6621_WIFI_COMMAND_GET_INFO       1
-#define SV6621_WIFI_COMMAND_SYNC_VERSION   2
-#define SV6621_WIFI_COMMAND_VERSION        1
-#define SV6621_WIFI_LAST_SUPPORTED_COMMAND 61
-#define SV6621_WIFI_VERSION_TABLE_SIZE     256
-#define SV6621_WIFI_VERSION_RESPONSE_SIZE  512
-#define SV6621_WIFI_COMMAND_TIMEOUT_MS     5000
+#define SV6621_WIFI_INSTANCE                0
+#define SV6621_WIFI_COMMAND_GET_INFO        1
+#define SV6621_WIFI_COMMAND_SYNC_VERSION    2
+#define SV6621_WIFI_COMMAND_PHY_BB_CONFIG   50
+#define SV6621_WIFI_COMMAND_VERSION         1
+#define SV6621_WIFI_LAST_SUPPORTED_COMMAND  61
+#define SV6621_WIFI_VERSION_TABLE_SIZE      256
+#define SV6621_WIFI_VERSION_RESPONSE_SIZE   512
+#define SV6621_WIFI_COMMAND_TIMEOUT_MS      5000
 
-#define SV6621_WIFI_CHIP_INFO_SIZE         234
-#define SV6621_WIFI_CHIP_INFO_MIN_SIZE     70
-#define SV6621_WIFI_INFO_ENCRYPTION_OFFSET 0
-#define SV6621_WIFI_INFO_MODEL_OFFSET      2
-#define SV6621_WIFI_INFO_VERSION_OFFSET    6
-#define SV6621_WIFI_INFO_FIRMWARE_OFFSET   10
-#define SV6621_WIFI_INFO_CAPABILITY_OFFSET 14
-#define SV6621_WIFI_INFO_MAX_STA_OFFSET    18
-#define SV6621_WIFI_INFO_MAX_MC_OFFSET     19
-#define SV6621_WIFI_INFO_MAX_SCAN_OFFSET   42
-#define SV6621_WIFI_INFO_MAC_OFFSET        64
-#define SV6621_WIFI_INFO_BANDWIDTH_OFFSET  86
-#define SV6621_WIFI_INFO_PRIVATE_OFFSET    90
+#define SV6621_WIFI_CHIP_INFO_SIZE          234
+#define SV6621_WIFI_CHIP_INFO_MIN_SIZE      70
+#define SV6621_WIFI_INFO_ENCRYPTION_OFFSET  0
+#define SV6621_WIFI_INFO_MODEL_OFFSET       2
+#define SV6621_WIFI_INFO_VERSION_OFFSET     6
+#define SV6621_WIFI_INFO_FIRMWARE_OFFSET    10
+#define SV6621_WIFI_INFO_CAPABILITY_OFFSET  14
+#define SV6621_WIFI_INFO_MAX_STA_OFFSET     18
+#define SV6621_WIFI_INFO_MAX_MC_OFFSET      19
+#define SV6621_WIFI_INFO_MAX_SCAN_OFFSET    42
+#define SV6621_WIFI_INFO_MAC_OFFSET         64
+#define SV6621_WIFI_INFO_BANDWIDTH_OFFSET   86
+#define SV6621_WIFI_INFO_PRIVATE_OFFSET     90
+
+#define SV6621_WIFI_CALIBRATION_HEADER_SIZE 4
+#define SV6621_WIFI_CALIBRATION_CHUNK_SIZE  512
+#define SV6621_WIFI_CALIBRATION_MAX_SIZE    (256 * 512)
 
 /****************************************************************************
  * Private Function Prototypes
@@ -278,4 +283,56 @@ int sv6621_wifi_get_info(FAR struct sv6621_command_engine_s *command,
 
   return sv6621_wifi_select_address(
       board_ops, board_arg, response + SV6621_WIFI_INFO_MAC_OFFSET, info->mac);
+}
+
+int sv6621_wifi_download_calibration(
+    FAR struct sv6621_command_engine_s *command, FAR const uint8_t *data,
+    size_t length)
+{
+  uint8_t payload[SV6621_WIFI_CALIBRATION_HEADER_SIZE +
+                  SV6621_WIFI_CALIBRATION_CHUNK_SIZE];
+  size_t offset = 0;
+  size_t chunk_length;
+  uint8_t sequence = 0;
+  int ret;
+
+  if (command == NULL || data == NULL || length == 0)
+    {
+      return -EINVAL;
+    }
+
+  if (length > SV6621_WIFI_CALIBRATION_MAX_SIZE)
+    {
+      return -EFBIG;
+    }
+
+  while (offset < length)
+    {
+      chunk_length = length - offset;
+      if (chunk_length > SV6621_WIFI_CALIBRATION_CHUNK_SIZE)
+        {
+          chunk_length = SV6621_WIFI_CALIBRATION_CHUNK_SIZE;
+        }
+
+      payload[0] = sequence;
+      payload[1] = offset + chunk_length == length;
+      payload[2] = chunk_length & 0xff;
+      payload[3] = chunk_length >> 8;
+      memcpy(payload + SV6621_WIFI_CALIBRATION_HEADER_SIZE, data + offset,
+             chunk_length);
+
+      ret = sv6621_command_execute(
+          command, SV6621_WIFI_INSTANCE, SV6621_WIFI_COMMAND_PHY_BB_CONFIG,
+          payload, SV6621_WIFI_CALIBRATION_HEADER_SIZE + chunk_length, NULL,
+          NULL, SV6621_WIFI_COMMAND_TIMEOUT_MS);
+      if (ret != 0)
+        {
+          return ret < 0 ? ret : -EREMOTEIO;
+        }
+
+      offset += chunk_length;
+      sequence++;
+    }
+
+  return 0;
 }

@@ -60,5 +60,8 @@ int sv6621_wifi_get_info(FAR struct sv6621_command_engine_s *command,
                          FAR const struct sv6621_board_ops_s *board_ops,
                          FAR void *board_arg,
                          FAR struct sv6621_wifi_info_s *info);
+int sv6621_wifi_download_calibration(
+    FAR struct sv6621_command_engine_s *command, FAR const uint8_t *data,
+    size_t length);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_WIFI_H */
