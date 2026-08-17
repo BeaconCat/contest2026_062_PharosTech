@@ -37,6 +37,7 @@
 
 #define SV6621_SECURITY_INSTANCE           0
 #define SV6621_SECURITY_COMMAND_ADD_KEY     12
+#define SV6621_SECURITY_COMMAND_TX_DATA      15
 #define SV6621_SECURITY_COMMAND_TIMEOUT_MS  5000
 #define SV6621_SECURITY_PACKET_NUMBER_SIZE  6
 #define SV6621_SECURITY_KEY_CAPACITY        32
@@ -47,9 +48,14 @@
 #define SV6621_SECURITY_KEY_INDEX_OFFSET    14
 #define SV6621_SECURITY_KEY_LENGTH_OFFSET   15
 #define SV6621_SECURITY_KEY_OFFSET          16
+#define SV6621_SECURITY_ETHERTYPE_EAPOL      0x888e
 
 /****************************************************************************
  * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: sv6621_security_add_key
  ****************************************************************************/
 
 int sv6621_security_add_key(
@@ -87,5 +93,40 @@ int sv6621_security_add_key(
   return sv6621_command_execute(
       command, SV6621_SECURITY_INSTANCE, SV6621_SECURITY_COMMAND_ADD_KEY,
       payload, sizeof(payload), NULL, NULL,
+      SV6621_SECURITY_COMMAND_TIMEOUT_MS);
+}
+
+/****************************************************************************
+ * Name: sv6621_security_send_eapol
+ ****************************************************************************/
+
+int sv6621_security_send_eapol(
+    FAR struct sv6621_command_engine_s *command,
+    FAR const struct sv6621_data_tx_context_s *context,
+    FAR const uint8_t *frame, size_t frame_length)
+{
+  uint8_t payload[SV6621_DATA_TX_DESCRIPTOR_SIZE +
+                  SV6621_DATA_MAX_FRAME_SIZE];
+  size_t payload_length;
+  int ret;
+
+  if (command == NULL || context == NULL || frame == NULL ||
+      frame_length < 14 || frame_length > SV6621_DATA_MAX_FRAME_SIZE ||
+      (((uint16_t)frame[12] << 8) | frame[13]) !=
+          SV6621_SECURITY_ETHERTYPE_EAPOL)
+    {
+      return -EINVAL;
+    }
+
+  ret = sv6621_data_encode_tx(context, frame, frame_length, payload,
+                              sizeof(payload), &payload_length);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  return sv6621_command_execute(
+      command, SV6621_SECURITY_INSTANCE, SV6621_SECURITY_COMMAND_TX_DATA,
+      payload, payload_length, NULL, NULL,
       SV6621_SECURITY_COMMAND_TIMEOUT_MS);
 }
