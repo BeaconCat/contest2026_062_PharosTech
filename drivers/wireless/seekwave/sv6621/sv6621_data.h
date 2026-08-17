@@ -142,6 +142,7 @@ struct sv6621_data_s
   FAR struct sv6621_packet_router_s *router;
   FAR struct sv6621_tx_s *tx;
   mutex_t tx_lock;
+  mutex_t rx_lock;
   spinlock_t credit_lock;
   sv6621_data_input_t input;
   FAR void *input_arg;
