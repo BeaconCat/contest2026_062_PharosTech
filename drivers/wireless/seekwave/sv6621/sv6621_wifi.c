@@ -43,6 +43,9 @@
 #define SV6621_WIFI_INSTANCE                0
 #define SV6621_WIFI_COMMAND_GET_INFO        1
 #define SV6621_WIFI_COMMAND_SYNC_VERSION    2
+#define SV6621_WIFI_COMMAND_OPEN_DEVICE     3
+#define SV6621_WIFI_COMMAND_CLOSE_DEVICE    4
+#define SV6621_WIFI_COMMAND_SET_MIB         40
 #define SV6621_WIFI_COMMAND_PHY_BB_CONFIG   50
 #define SV6621_WIFI_COMMAND_VERSION         1
 #define SV6621_WIFI_LAST_SUPPORTED_COMMAND  61
@@ -67,6 +70,19 @@
 #define SV6621_WIFI_CALIBRATION_HEADER_SIZE 4
 #define SV6621_WIFI_CALIBRATION_CHUNK_SIZE  512
 #define SV6621_WIFI_CALIBRATION_MAX_SIZE    (256 * 512)
+
+#define SV6621_WIFI_OPEN_MODE_STATION       1
+#define SV6621_WIFI_OPEN_PAYLOAD_SIZE       10
+
+#define SV6621_WIFI_MIB_LENGTH_SIZE         2
+#define SV6621_WIFI_MIB_TLV_HEADER_SIZE     4
+#define SV6621_WIFI_MIB_MAX_VALUE_SIZE      512
+
+#define SV6621_WIFI_MIB_BAND_2GHZ           23
+#define SV6621_WIFI_MIB_LINK_LOSS_THRESHOLD 35
+#define SV6621_WIFI_MIB_HDK_TEST            131
+#define SV6621_WIFI_BANDWIDTH_40MHZ         1
+#define SV6621_WIFI_LINK_LOSS_DEFAULT       6
 
 /****************************************************************************
  * Private Function Prototypes
@@ -335,4 +351,110 @@ int sv6621_wifi_download_calibration(
     }
 
   return 0;
+}
+
+int sv6621_wifi_open_station(FAR struct sv6621_command_engine_s *command,
+                             FAR const uint8_t address[SV6621_MAC_LENGTH])
+{
+  uint8_t payload[SV6621_WIFI_OPEN_PAYLOAD_SIZE];
+  int ret;
+
+  if (command == NULL || address == NULL ||
+      !sv6621_wifi_address_valid(address))
+    {
+      return -EINVAL;
+    }
+
+  payload[0] = SV6621_WIFI_OPEN_MODE_STATION;
+  payload[1] = 0;
+  payload[2] = 0;
+  payload[3] = 0;
+  memcpy(payload + 4, address, SV6621_MAC_LENGTH);
+  ret = sv6621_command_execute(
+      command, SV6621_WIFI_INSTANCE, SV6621_WIFI_COMMAND_OPEN_DEVICE, payload,
+      sizeof(payload), NULL, NULL, SV6621_WIFI_COMMAND_TIMEOUT_MS);
+  return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
+}
+
+int sv6621_wifi_close_station(FAR struct sv6621_command_engine_s *command)
+{
+  int ret;
+
+  if (command == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = sv6621_command_execute(command, SV6621_WIFI_INSTANCE,
+                               SV6621_WIFI_COMMAND_CLOSE_DEVICE, NULL, 0, NULL,
+                               NULL, SV6621_WIFI_COMMAND_TIMEOUT_MS);
+  return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
+}
+
+int sv6621_wifi_set_mib(FAR struct sv6621_command_engine_s *command,
+                        uint16_t type, FAR const void *value, uint16_t length)
+{
+  FAR uint8_t *payload;
+  size_t payload_length;
+  int ret;
+
+  if (command == NULL || value == NULL || length == 0 ||
+      length > SV6621_WIFI_MIB_MAX_VALUE_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  payload_length =
+      SV6621_WIFI_MIB_LENGTH_SIZE + SV6621_WIFI_MIB_TLV_HEADER_SIZE + length;
+  payload = kmm_malloc(payload_length);
+  if (payload == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  payload[0] = payload_length & 0xff;
+  payload[1] = payload_length >> 8;
+  payload[2] = type & 0xff;
+  payload[3] = type >> 8;
+  payload[4] = length & 0xff;
+  payload[5] = length >> 8;
+  memcpy(payload + SV6621_WIFI_MIB_LENGTH_SIZE +
+             SV6621_WIFI_MIB_TLV_HEADER_SIZE,
+         value, length);
+
+  ret = sv6621_command_execute(
+      command, SV6621_WIFI_INSTANCE, SV6621_WIFI_COMMAND_SET_MIB, payload,
+      payload_length, NULL, NULL, SV6621_WIFI_COMMAND_TIMEOUT_MS);
+  kmm_free(payload);
+  return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
+}
+
+int sv6621_wifi_configure_baseline(FAR struct sv6621_command_engine_s *command)
+{
+  uint8_t bandwidth[4] = { SV6621_WIFI_BANDWIDTH_40MHZ, 0, 0, 0 };
+  uint8_t link_loss = SV6621_WIFI_LINK_LOSS_DEFAULT;
+  uint8_t hdk_test = 0;
+  int ret;
+
+  if (command == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = sv6621_wifi_set_mib(command, SV6621_WIFI_MIB_LINK_LOSS_THRESHOLD,
+                            &link_loss, sizeof(link_loss));
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = sv6621_wifi_set_mib(command, SV6621_WIFI_MIB_BAND_2GHZ, bandwidth,
+                            sizeof(bandwidth));
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  return sv6621_wifi_set_mib(command, SV6621_WIFI_MIB_HDK_TEST, &hdk_test,
+                             sizeof(hdk_test));
 }

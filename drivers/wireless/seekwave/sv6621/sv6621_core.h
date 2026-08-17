@@ -34,6 +34,7 @@
 #include "sv6621_command.h"
 #include "sv6621_packet.h"
 #include "sv6621_rx.h"
+#include "sv6621_scan.h"
 #include "sv6621_service.h"
 #include "sv6621_tx.h"
 #include "sv6621_wifi.h"
@@ -51,12 +52,17 @@ struct sv6621_dev_s
   struct sv6621_packet_router_s router;
   struct sv6621_tx_s tx;
   struct sv6621_command_engine_s command;
+  struct sv6621_scan_s scan;
   struct sv6621_service_s service;
   struct sv6621_rx_s rx;
   struct sv6621_wifi_info_s wifi_info;
   struct work_s event_work;
+  struct work_s scan_work;
+  int scan_result;
+  bool scan_reporting;
   bool powered;
   bool transport_open;
+  bool station_open;
 };
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_CORE_H */

@@ -40,6 +40,7 @@
 
 #define SV6621_CORE_BSP_TIMEOUT_MS  2000
 #define SV6621_CORE_WIFI_TIMEOUT_MS 2000
+#define SV6621_CORE_SCAN_TIMEOUT_MS 10000
 
 /****************************************************************************
  * Private Function Prototypes
@@ -49,6 +50,11 @@ static void sv6621_core_service_event(enum sv6621_service_event_e event,
                                       FAR const uint8_t *payload,
                                       size_t length, FAR void *arg);
 static void sv6621_core_rx_error(int error, FAR void *arg);
+static void sv6621_core_command_event(uint8_t instance, uint8_t id,
+                                      FAR const uint8_t *payload,
+                                      size_t length, FAR void *arg);
+static void sv6621_core_scan_complete(int result, FAR void *arg);
+static void sv6621_core_scan_worker(FAR void *arg);
 static void sv6621_core_report(FAR struct sv6621_dev_s *dev,
                                enum sv6621_event_e event, FAR const void *data,
                                size_t length);
@@ -173,6 +179,92 @@ static void sv6621_core_rx_error(int error, FAR void *arg)
 }
 
 /****************************************************************************
+ * Name: sv6621_core_command_event
+ ****************************************************************************/
+
+static void sv6621_core_command_event(uint8_t instance, uint8_t id,
+                                      FAR const uint8_t *payload,
+                                      size_t length, FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+
+  sv6621_scan_command_event(instance, id, payload, length, &dev->scan);
+}
+
+/****************************************************************************
+ * Name: sv6621_core_scan_complete
+ ****************************************************************************/
+
+static void sv6621_core_scan_complete(int result, FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+  int ret;
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      return;
+    }
+
+  if (dev->scan_reporting)
+    {
+      nxmutex_unlock(&dev->status_lock);
+      return;
+    }
+
+  dev->scan_reporting = true;
+  dev->scan_result = result;
+  nxmutex_unlock(&dev->status_lock);
+  ret = work_queue(LPWORK, &dev->scan_work, sv6621_core_scan_worker, dev, 0);
+  if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
+    {
+      dev->scan_reporting = false;
+      nxmutex_unlock(&dev->status_lock);
+    }
+}
+
+/****************************************************************************
+ * Name: sv6621_core_scan_worker
+ ****************************************************************************/
+
+static void sv6621_core_scan_worker(FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+  FAR struct sv6621_bss_s *entries;
+  size_t count = SV6621_SCAN_CACHE_CAPACITY;
+  size_t index;
+  int result;
+  int ret;
+
+  entries = kmm_malloc(sizeof(*entries) * SV6621_SCAN_CACHE_CAPACITY);
+  if (entries == NULL)
+    {
+      count = 0;
+      result = -ENOMEM;
+    }
+  else
+    {
+      ret = sv6621_scan_cache_snapshot(&dev->scan.cache, entries, &count);
+      result = ret < 0 ? ret : dev->scan_result;
+    }
+
+  for (index = 0; index < count; index++)
+    {
+      sv6621_core_report(dev, SV6621_EVENT_SCAN_RESULT, &entries[index],
+                         sizeof(entries[index]));
+    }
+
+  kmm_free(entries);
+  if (nxmutex_lock(&dev->status_lock) >= 0)
+    {
+      dev->scan_reporting = false;
+      nxmutex_unlock(&dev->status_lock);
+    }
+
+  sv6621_core_report(dev, SV6621_EVENT_SCAN_COMPLETE, &result, sizeof(result));
+}
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -234,11 +326,19 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       goto deinit_router;
     }
 
-  ret = sv6621_command_engine_init(&dev->command, sv6621_tx_command_sender,
-                                   &dev->tx, NULL, NULL);
+  ret = sv6621_scan_controller_init(&dev->scan, &dev->command,
+                                    SV6621_CORE_SCAN_TIMEOUT_MS,
+                                    sv6621_core_scan_complete, dev);
   if (ret < 0)
     {
       goto deinit_tx;
+    }
+
+  ret = sv6621_command_engine_init(&dev->command, sv6621_tx_command_sender,
+                                   &dev->tx, sv6621_core_command_event, dev);
+  if (ret < 0)
+    {
+      goto deinit_scan;
     }
 
   ret = sv6621_service_init(&dev->service, sv6621_core_service_event, dev);
@@ -282,6 +382,8 @@ deinit_service:
   sv6621_service_deinit(&dev->service);
 deinit_command:
   sv6621_command_engine_deinit(&dev->command);
+deinit_scan:
+  sv6621_scan_controller_deinit(&dev->scan);
 deinit_tx:
   sv6621_tx_deinit(&dev->tx);
 deinit_router:
@@ -305,12 +407,14 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
   dev->config.event = NULL;
   sv6621_stop(dev);
   work_cancel_sync(LPWORK, &dev->event_work);
+  work_cancel_sync(LPWORK, &dev->scan_work);
   sv6621_packet_unsubscribe(&dev->router, SV6621_CHANNEL_WIFI_COMMAND,
                             sv6621_command_channel_consumer, &dev->command);
   sv6621_packet_unsubscribe(&dev->router, SV6621_CHANNEL_LOOPCHECK,
                             sv6621_service_channel_consumer, &dev->service);
   sv6621_rx_deinit(&dev->rx);
   sv6621_service_deinit(&dev->service);
+  sv6621_scan_controller_deinit(&dev->scan);
   sv6621_command_engine_deinit(&dev->command);
   sv6621_tx_deinit(&dev->tx);
   sv6621_packet_router_deinit(&dev->router);
@@ -438,6 +542,12 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       goto fail;
     }
 
+  ret = sv6621_wifi_configure_baseline(&dev->command);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
   ret = sv6621_wifi_download_calibration(&dev->command,
                                          dev->config.calibration.data,
                                          dev->config.calibration.length);
@@ -446,6 +556,14 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       ret = ret < 0 ? ret : -EREMOTEIO;
       goto fail;
     }
+
+  ret = sv6621_wifi_open_station(&dev->command, dev->wifi_info.mac);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
+  dev->station_open = true;
 
   ret = nxmutex_lock(&dev->status_lock);
   if (ret < 0)
@@ -469,6 +587,12 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
   return 0;
 
 fail:
+  if (dev->station_open)
+    {
+      sv6621_wifi_close_station(&dev->command);
+      dev->station_open = false;
+    }
+
   if (rx_started)
     {
       sv6621_rx_stop(&dev->rx);
@@ -502,6 +626,8 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 {
   enum sv6621_state_e state;
   uint32_t recovery_count;
+  int scan_ret = 0;
+  int close_ret = 0;
   int ret;
 
   if (dev == NULL)
@@ -532,6 +658,13 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
     }
 
   sv6621_core_set_state(dev, SV6621_STATE_STOPPING, 0);
+  scan_ret = sv6621_scan_controller_cancel(&dev->scan);
+  if (dev->station_open)
+    {
+      close_ret = sv6621_wifi_close_station(&dev->command);
+      dev->station_open = false;
+    }
+
   sv6621_command_cancel(&dev->command, -ESHUTDOWN);
   sv6621_rx_stop(&dev->rx);
   if (dev->transport_open)
@@ -564,7 +697,12 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 
   state = SV6621_STATE_OFF;
   sv6621_core_report(dev, SV6621_EVENT_STATE_CHANGED, &state, sizeof(state));
-  return 0;
+  if (scan_ret < 0)
+    {
+      return scan_ret;
+    }
+
+  return close_ret < 0 ? close_ret : 0;
 }
 
 int sv6621_get_status(FAR struct sv6621_dev_s *dev,
