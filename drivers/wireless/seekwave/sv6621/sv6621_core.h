@@ -40,6 +40,7 @@
 #include "sv6621_rx.h"
 #include "sv6621_scan.h"
 #include "sv6621_service.h"
+#include "sv6621_signal.h"
 #include "sv6621_station.h"
 #include "sv6621_stats.h"
 #include "sv6621_tx.h"
@@ -75,6 +76,8 @@ struct sv6621_dev_s
   struct work_s event_work;
   struct work_s recovery_work;
   struct work_s thermal_work;
+  struct work_s security_work;
+  struct work_s signal_work;
   struct work_s scan_work;
   struct work_s station_work;
   int scan_result;
@@ -83,6 +86,8 @@ struct sv6621_dev_s
   bool scan_reporting;
   bool recovery_pending;
   bool thermal_blocked;
+  struct sv6621_mic_failure_s mic_failure;
+  struct sv6621_signal_event_s signal_event;
   bool suspended;
   bool powered;
   bool transport_open;
