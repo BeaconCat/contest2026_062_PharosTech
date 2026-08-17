@@ -40,6 +40,7 @@
 
 #define SV6621_WPA_REPLAY_SIZE 8
 #define SV6621_WPA_MIC_SIZE    16
+#define SV6621_WPA_GTK_MAX_SIZE 32
 
 /****************************************************************************
  * Public Types
@@ -89,5 +90,9 @@ int sv6621_wpa_eapol_build(
 int sv6621_wpa_eapol_verify_mic(
     FAR const struct sv6621_wpa_eapol_s *eapol,
     FAR const uint8_t kck[SV6621_WPA_MIC_SIZE]);
+int sv6621_wpa_eapol_extract_gtk(
+    FAR const uint8_t *key_data, size_t key_data_length,
+    FAR uint8_t *key_index, FAR uint8_t *gtk, size_t capacity,
+    FAR size_t *gtk_length);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_WPA_EAPOL_H */
