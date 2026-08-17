@@ -40,6 +40,7 @@
 #define SV6621_WPA_PMK_SIZE  32
 #define SV6621_WPA_NONCE_SIZE 32
 #define SV6621_WPA_PTK_SIZE   48
+#define SV6621_WPA_KEK_SIZE   16
 
 /****************************************************************************
  * Public Function Prototypes
@@ -58,5 +59,9 @@ int sv6621_wpa_derive_ptk(
     FAR const uint8_t anonce[SV6621_WPA_NONCE_SIZE],
     FAR const uint8_t snonce[SV6621_WPA_NONCE_SIZE],
     uint8_t ptk[SV6621_WPA_PTK_SIZE]);
+int sv6621_wpa_unwrap_key(
+    FAR const uint8_t kek[SV6621_WPA_KEK_SIZE],
+    FAR const uint8_t *wrapped, size_t wrapped_length, FAR uint8_t *plain,
+    size_t capacity, FAR size_t *plain_length);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_WPA_CRYPTO_H */

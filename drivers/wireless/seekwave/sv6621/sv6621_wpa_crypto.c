@@ -30,6 +30,7 @@
 #include <string.h>
 
 #include <mbedtls/md.h>
+#include <mbedtls/aes.h>
 
 #include "sv6621_wpa_crypto.h"
 
@@ -51,6 +52,9 @@
  ****************************************************************************/
 
 static const uint8_t g_sv6621_wpa_ptk_label[] = "Pairwise key expansion";
+static const uint8_t g_sv6621_wpa_wrap_iv[8] = {
+  0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6
+};
 
 /****************************************************************************
  * Public Functions
@@ -265,4 +269,78 @@ int sv6621_wpa_derive_ptk(
   memset(input, 0, sizeof(input));
   memset(digest, 0, sizeof(digest));
   return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_unwrap_key
+ ****************************************************************************/
+
+int sv6621_wpa_unwrap_key(
+    FAR const uint8_t kek[SV6621_WPA_KEK_SIZE],
+    FAR const uint8_t *wrapped, size_t wrapped_length, FAR uint8_t *plain,
+    size_t capacity, FAR size_t *plain_length)
+{
+  mbedtls_aes_context aes;
+  uint8_t block[16];
+  uint8_t a[8];
+  size_t count;
+  size_t index;
+  unsigned int round;
+  int ret;
+
+  if (kek == NULL || wrapped == NULL || plain == NULL ||
+      plain_length == NULL || wrapped_length < 24 ||
+      (wrapped_length & 7) != 0 || capacity < wrapped_length - 8)
+    {
+      return -EINVAL;
+    }
+
+  count = wrapped_length / 8 - 1;
+  memcpy(a, wrapped, sizeof(a));
+  memcpy(plain, wrapped + 8, wrapped_length - 8);
+
+  mbedtls_aes_init(&aes);
+  ret = mbedtls_aes_setkey_dec(&aes, kek, 128);
+  for (round = 6; ret == 0 && round > 0; round--)
+    {
+      for (index = count; index > 0; index--)
+        {
+          uint64_t counter = (uint64_t)(round - 1) * count + index;
+          size_t byte;
+
+          memcpy(block, a, sizeof(a));
+          for (byte = 0; byte < sizeof(a); byte++)
+            {
+              block[sizeof(a) - 1 - byte] ^= counter & 0xff;
+              counter >>= 8;
+            }
+
+          memcpy(block + sizeof(a), plain + (index - 1) * 8, 8);
+          ret = mbedtls_aes_crypt_ecb(&aes, MBEDTLS_AES_DECRYPT, block,
+                                      block);
+          if (ret != 0)
+            {
+              break;
+            }
+
+          memcpy(a, block, sizeof(a));
+          memcpy(plain + (index - 1) * 8, block + sizeof(a), 8);
+        }
+    }
+
+  mbedtls_aes_free(&aes);
+  if (ret != 0 || memcmp(a, g_sv6621_wpa_wrap_iv, sizeof(a)) != 0)
+    {
+      memset(plain, 0, wrapped_length - 8);
+      ret = ret != 0 ? -EIO : -EKEYREJECTED;
+    }
+  else
+    {
+      *plain_length = wrapped_length - 8;
+      ret = 0;
+    }
+
+  memset(a, 0, sizeof(a));
+  memset(block, 0, sizeof(block));
+  return ret;
 }
