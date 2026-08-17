@@ -52,6 +52,8 @@
  ****************************************************************************/
 
 static void sv6621_wpa_clear(FAR void *buffer, size_t length);
+static int sv6621_wpa_generate_nonce(
+    uint8_t nonce[SV6621_WPA_NONCE_SIZE]);
 static int sv6621_wpa_compare_replay(FAR const uint8_t *left,
                                      FAR const uint8_t *right);
 static void sv6621_wpa_remove_keys(FAR struct sv6621_wpa_s *wpa);
@@ -82,6 +84,24 @@ static void sv6621_wpa_clear(FAR void *buffer, size_t length)
     {
       *bytes++ = 0;
     }
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_generate_nonce
+ ****************************************************************************/
+
+static int sv6621_wpa_generate_nonce(
+    uint8_t nonce[SV6621_WPA_NONCE_SIZE])
+{
+  ssize_t random_length;
+
+  random_length = getrandom(nonce, SV6621_WPA_NONCE_SIZE, 0);
+  if (random_length < 0)
+    {
+      return -errno;
+    }
+
+  return random_length == SV6621_WPA_NONCE_SIZE ? 0 : -EIO;
 }
 
 /****************************************************************************
@@ -189,15 +209,26 @@ static int sv6621_wpa_process_message_1(
   int ret;
 
   ret = sv6621_wpa_compare_replay(eapol->replay, wpa->replay);
-  if (ret == 0 &&
-      memcmp(eapol->nonce, wpa->anonce, sizeof(wpa->anonce)) == 0)
+  if (ret == 0)
     {
-      return sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_2);
+      return memcmp(eapol->nonce, wpa->anonce, sizeof(wpa->anonce)) == 0 ?
+             sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_2) :
+             -EKEYREJECTED;
     }
 
   if (ret < 0)
     {
       return -EALREADY;
+    }
+
+  if (wpa->state == SV6621_WPA_WAIT_MESSAGE_3 &&
+      memcmp(eapol->nonce, wpa->anonce, sizeof(wpa->anonce)) != 0)
+    {
+      ret = sv6621_wpa_generate_nonce(wpa->snonce);
+      if (ret < 0)
+        {
+          return ret;
+        }
     }
 
   memcpy(wpa->anonce, eapol->nonce, sizeof(wpa->anonce));
@@ -453,7 +484,6 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
 {
   uint8_t pmk[SV6621_WPA_PMK_SIZE];
   uint8_t snonce[SV6621_WPA_NONCE_SIZE];
-  ssize_t random_length;
   int ret;
 
   if (wpa == NULL || request == NULL || supplicant == NULL ||
@@ -471,11 +501,11 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
       return ret;
     }
 
-  random_length = getrandom(snonce, sizeof(snonce), 0);
-  if (random_length != sizeof(snonce))
+  ret = sv6621_wpa_generate_nonce(snonce);
+  if (ret < 0)
     {
       sv6621_wpa_clear(pmk, sizeof(pmk));
-      return random_length < 0 ? -errno : -EIO;
+      return ret;
     }
 
   sv6621_wpa_cancel(wpa, -ECANCELED);
