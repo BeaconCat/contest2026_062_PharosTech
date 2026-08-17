@@ -132,6 +132,8 @@ static int rk3576_sv6621_direct(bool write, uint8_t function, uint32_t address,
                                 uint8_t value, FAR uint8_t *result);
 static void rk3576_sv6621_voltage_switch(void);
 static void rk3576_sv6621_tune_sdr104(void);
+static int rk3576_sv6621_open_failed(
+    FAR struct rk3576_sv6621_transport_priv_s *priv, int error);
 static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport);
 static void rk3576_sv6621_close(FAR struct sv6621_transport_s *transport);
 static int rk3576_sv6621_read_byte(FAR struct sv6621_transport_s *transport,
@@ -356,6 +358,21 @@ static void rk3576_sv6621_tune_sdr104(void)
     }
 }
 
+/****************************************************************************
+ * Name: rk3576_sv6621_open_failed
+ ****************************************************************************/
+
+static int rk3576_sv6621_open_failed(
+    FAR struct rk3576_sv6621_transport_priv_s *priv, int error)
+{
+  rk3576_sdmmc_enable_sdio_interrupt(priv->sdio, false);
+  rk3576_sdmmc_register_sdio_callback(priv->sdio, NULL, NULL);
+  SDIO_CLOCK(priv->sdio, CLOCK_SDIO_DISABLED);
+  priv->irq_enabled = false;
+  priv->opened = false;
+  return error;
+}
+
 static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
 {
   FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
@@ -397,7 +414,7 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
   if ((status & RK3576_SV6621_INT_RTO) != 0)
     {
       wlerr("ERROR: SV6621 CMD5 response timed out\n");
-      return -ENODEV;
+      return rk3576_sv6621_open_failed(priv, -ENODEV);
     }
 
   if ((response & (1u << 24)) != 0)
@@ -408,27 +425,27 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
   status = rk3576_sv6621_command(RK3576_SV6621_CMD3, 0, &response);
   if ((status & RK3576_SV6621_INT_RTO) != 0)
     {
-      return -EIO;
+      return rk3576_sv6621_open_failed(priv, -EIO);
     }
 
   rca = response >> 16;
   status = rk3576_sv6621_command(RK3576_SV6621_CMD7, rca << 16, &response);
   if ((status & RK3576_SV6621_INT_RTO) != 0)
     {
-      return -EIO;
+      return rk3576_sv6621_open_failed(priv, -EIO);
     }
 
   ret = rk3576_sv6621_direct(true, 0, 0x16, 0x03, NULL);
   if (ret < 0)
     {
-      return ret;
+      return rk3576_sv6621_open_failed(priv, ret);
     }
 
   ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_INTERRUPT, 0,
                              NULL);
   if (ret < 0)
     {
-      return ret;
+      return rk3576_sv6621_open_failed(priv, ret);
     }
 
   rk3576_sv6621_tune_sdr104();
@@ -437,21 +454,21 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
                              RK3576_SV6621_BLOCK_SIZE & 0xff, NULL);
   if (ret < 0)
     {
-      return ret;
+      return rk3576_sv6621_open_failed(priv, ret);
     }
 
   ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_FBR1_BLOCK_HIGH,
                              RK3576_SV6621_BLOCK_SIZE >> 8, NULL);
   if (ret < 0)
     {
-      return ret;
+      return rk3576_sv6621_open_failed(priv, ret);
     }
 
   ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_IO_ENABLE,
                              RK3576_SV6621_FUNCTION1_BIT, NULL);
   if (ret < 0)
     {
-      return ret;
+      return rk3576_sv6621_open_failed(priv, ret);
     }
 
   for (index = 0; index < 100; index++)
@@ -460,7 +477,7 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
                                  RK3576_SV6621_CCCR_IO_READY, 0, &value);
       if (ret < 0)
         {
-          return ret;
+          return rk3576_sv6621_open_failed(priv, ret);
         }
 
       if ((value & RK3576_SV6621_FUNCTION1_BIT) != 0)
@@ -473,7 +490,7 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
     }
 
   wlerr("ERROR: SV6621 function 1 did not become ready\n");
-  return -EIO;
+  return rk3576_sv6621_open_failed(priv, -ETIMEDOUT);
 }
 
 static int rk3576_sv6621_read_byte(FAR struct sv6621_transport_s *transport,
