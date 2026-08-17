@@ -423,6 +423,39 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       goto fail;
     }
 
+  ret = sv6621_wifi_sync_versions(&dev->command);
+  if (ret != 0)
+    {
+      ret = ret < 0 ? ret : -EREMOTEIO;
+      goto fail;
+    }
+
+  ret = sv6621_wifi_get_info(&dev->command, dev->config.board_ops,
+                             dev->config.board_arg, &dev->wifi_info);
+  if (ret != 0)
+    {
+      ret = ret < 0 ? ret : -EREMOTEIO;
+      goto fail;
+    }
+
+  ret = sv6621_wifi_download_calibration(&dev->command,
+                                         dev->config.calibration.data,
+                                         dev->config.calibration.length);
+  if (ret != 0)
+    {
+      ret = ret < 0 ? ret : -EREMOTEIO;
+      goto fail;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
+  memcpy(dev->status.mac, dev->wifi_info.mac, SV6621_MAC_LENGTH);
+  nxmutex_unlock(&dev->status_lock);
+
   ret = sv6621_core_set_state(dev, SV6621_STATE_WIFI_READY, 0);
   if (ret < 0)
     {

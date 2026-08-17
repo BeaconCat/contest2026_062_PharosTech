@@ -36,6 +36,7 @@
 #include "sv6621_rx.h"
 #include "sv6621_service.h"
 #include "sv6621_tx.h"
+#include "sv6621_wifi.h"
 
 /****************************************************************************
  * Public Types
@@ -52,6 +53,7 @@ struct sv6621_dev_s
   struct sv6621_command_engine_s command;
   struct sv6621_service_s service;
   struct sv6621_rx_s rx;
+  struct sv6621_wifi_info_s wifi_info;
   struct work_s event_work;
   bool powered;
   bool transport_open;
