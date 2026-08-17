@@ -333,22 +333,28 @@ static void sv6621_data_packet(uint8_t channel, FAR const uint8_t *payload,
   struct sv6621_data_rx_s rx;
   int ret;
 
+  ret = nxmutex_lock(&data->rx_lock);
+  if (ret < 0)
+    {
+      return;
+    }
+
   if (sv6621_data_decode_rx(payload, length, data->pn_reuse, &rx) < 0)
     {
       data->stats.malformed++;
-      return;
+      goto unlock;
     }
 
   ret = sv6621_data_reassemble(data, &rx);
   if (ret == -EINPROGRESS)
     {
-      return;
+      goto unlock;
     }
 
   if (ret < 0)
     {
       data->stats.malformed++;
-      return;
+      goto unlock;
     }
 
   data->stats.received++;
@@ -364,6 +370,9 @@ static void sv6621_data_packet(uint8_t channel, FAR const uint8_t *payload,
     {
       data->input(&rx, data->input_arg);
     }
+
+unlock:
+  nxmutex_unlock(&data->rx_lock);
   (void)channel;
 }
 
@@ -579,10 +588,18 @@ int sv6621_data_init(FAR struct sv6621_data_s *data,
       return ret;
     }
 
+  ret = nxmutex_init(&data->rx_lock);
+  if (ret < 0)
+    {
+      nxmutex_destroy(&data->tx_lock);
+      return ret;
+    }
+
   ret = sv6621_packet_subscribe(router, SV6621_CHANNEL_WIFI_DATA,
                                 sv6621_data_packet, data);
   if (ret < 0)
     {
+      nxmutex_destroy(&data->rx_lock);
       nxmutex_destroy(&data->tx_lock);
       return ret;
     }
@@ -593,6 +610,7 @@ int sv6621_data_init(FAR struct sv6621_data_s *data,
     {
       sv6621_packet_unsubscribe(router, SV6621_CHANNEL_WIFI_DATA,
                                 sv6621_data_packet, data);
+      nxmutex_destroy(&data->rx_lock);
       nxmutex_destroy(&data->tx_lock);
     }
 
@@ -614,8 +632,9 @@ void sv6621_data_deinit(FAR struct sv6621_data_s *data)
                             sv6621_data_packet, data);
   sv6621_packet_unsubscribe(data->router, SV6621_CHANNEL_WIFI_DATA,
                             sv6621_data_packet, data);
-  nxmutex_destroy(&data->tx_lock);
   sv6621_data_reset_fragments(data);
+  nxmutex_destroy(&data->rx_lock);
+  nxmutex_destroy(&data->tx_lock);
   data->router = NULL;
   data->tx = NULL;
 }
@@ -686,10 +705,11 @@ void sv6621_data_reset_credits(FAR struct sv6621_data_s *data)
 
 void sv6621_data_reset_fragments(FAR struct sv6621_data_s *data)
 {
-  if (data != NULL)
+  if (data != NULL && nxmutex_lock(&data->rx_lock) >= 0)
     {
       memset(data->fragments, 0, sizeof(data->fragments));
       data->fragment_age = 0;
+      nxmutex_unlock(&data->rx_lock);
     }
 }
 
@@ -699,9 +719,10 @@ void sv6621_data_reset_fragments(FAR struct sv6621_data_s *data)
 
 void sv6621_data_set_pn_reuse(FAR struct sv6621_data_s *data, bool enabled)
 {
-  if (data != NULL)
+  if (data != NULL && nxmutex_lock(&data->rx_lock) >= 0)
     {
       data->pn_reuse = enabled;
+      nxmutex_unlock(&data->rx_lock);
     }
 }
 
