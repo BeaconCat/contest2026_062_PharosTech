@@ -33,6 +33,7 @@
 
 #include "sv6621_core.h"
 #include "sv6621_firmware.h"
+#include "sv6621_regulatory.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -282,7 +283,7 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       config->iram.length == 0 || config->dram.data == NULL ||
       config->dram.length == 0 || config->nvram.data == NULL ||
       config->nvram.length == 0 || config->calibration.data == NULL ||
-      config->calibration.length == 0)
+      config->calibration.length == 0 || config->regulatory == NULL)
     {
       return -EINVAL;
     }
@@ -302,6 +303,14 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
 
   dev->config = *config;
   dev->status.state = SV6621_STATE_OFF;
+  ret = sv6621_regulatory_scan_channels(
+      config->regulatory, dev->scan_channels,
+      SV6621_REGULATORY_SCAN_CHANNEL_CAPACITY, &dev->scan_channel_count);
+  if (ret < 0)
+    {
+      goto free_device;
+    }
+
   ret = nxmutex_init(&dev->lifecycle_lock);
   if (ret < 0)
     {
@@ -557,6 +566,13 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       goto fail;
     }
 
+  ret = sv6621_regulatory_set_domain(&dev->command,
+                                     dev->config.regulatory);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
   ret = sv6621_wifi_open_station(&dev->command, dev->wifi_info.mac);
   if (ret < 0)
     {
@@ -724,4 +740,52 @@ int sv6621_get_status(FAR struct sv6621_dev_s *dev,
   *status = dev->status;
   nxmutex_unlock(&dev->status_lock);
   return 0;
+}
+
+int sv6621_scan(FAR struct sv6621_dev_s *dev)
+{
+  int ret;
+
+  if (dev == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  if (dev->status.state != SV6621_STATE_WIFI_READY)
+    {
+      ret = -ENETDOWN;
+    }
+  else if (dev->scan_reporting)
+    {
+      ret = -EBUSY;
+    }
+  else
+    {
+      ret = 0;
+    }
+
+  nxmutex_unlock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_scan_controller_begin(&dev->scan, dev->scan_channels,
+                                     dev->scan_channel_count);
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
 }
