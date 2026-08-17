@@ -291,8 +291,7 @@ int sv6621_wpa_eapol_build(
     }
 
   sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_INFO_OFFSET, key_info);
-  sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_LENGTH_OFFSET,
-                             response == SV6621_WPA_RESPONSE_4 ? 16 : 0);
+  sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_LENGTH_OFFSET, 0);
   memcpy(output + SV6621_WPA_KEY_REPLAY_OFFSET, replay,
          SV6621_WPA_REPLAY_SIZE);
   if (response == SV6621_WPA_RESPONSE_2)
