@@ -34,6 +34,7 @@
 #include <stdint.h>
 
 #include "sv6621_packet.h"
+#include "sv6621_tx.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -42,6 +43,8 @@
 #define SV6621_DATA_RX_DESCRIPTOR_SIZE 20
 #define SV6621_DATA_RX_PREFIX_SIZE     52
 #define SV6621_DATA_TX_DESCRIPTOR_SIZE 8
+#define SV6621_DATA_MAX_FRAME_SIZE     1536
+#define SV6621_DATA_TX_BUFFER_SIZE     2048
 
 /****************************************************************************
  * Public Types
@@ -77,16 +80,22 @@ typedef void (*sv6621_data_input_t)(FAR const struct sv6621_data_rx_s *rx,
 struct sv6621_data_stats_s
 {
   uint32_t received;
-  uint32_t bytes;
+  uint32_t received_bytes;
   uint32_t malformed;
+  uint32_t transmitted;
+  uint32_t transmitted_bytes;
+  uint32_t transmit_errors;
 };
 
 struct sv6621_data_s
 {
   FAR struct sv6621_packet_router_s *router;
+  FAR struct sv6621_tx_s *tx;
+  mutex_t tx_lock;
   sv6621_data_input_t input;
   FAR void *input_arg;
   struct sv6621_data_stats_s stats;
+  uint8_t tx_buffer[SV6621_DATA_TX_BUFFER_SIZE];
 };
 
 /****************************************************************************
@@ -101,7 +110,11 @@ int sv6621_data_encode_tx(
     size_t capacity, FAR size_t *written);
 int sv6621_data_init(FAR struct sv6621_data_s *data,
                      FAR struct sv6621_packet_router_s *router,
-                     sv6621_data_input_t input, FAR void *input_arg);
+                     FAR struct sv6621_tx_s *tx, sv6621_data_input_t input,
+                     FAR void *input_arg);
 void sv6621_data_deinit(FAR struct sv6621_data_s *data);
+int sv6621_data_send(FAR struct sv6621_data_s *data,
+                     FAR const struct sv6621_data_tx_context_s *context,
+                     FAR const uint8_t *frame, size_t frame_length);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_DATA_H */
