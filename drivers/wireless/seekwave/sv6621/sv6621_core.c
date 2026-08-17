@@ -44,6 +44,7 @@
 #define SV6621_CORE_SCAN_TIMEOUT_MS 10000
 #define SV6621_CORE_CONNECT_TIMEOUT_MS 5000
 #define SV6621_CORE_HANDSHAKE_TIMEOUT_MS 10000
+#define SV6621_CORE_EVENT_BA_ACTION     13
 #define SV6621_CORE_EVENT_CREDIT_UPDATE 16
 #define SV6621_CORE_EVENT_MIC_FAILURE   17
 #define SV6621_CORE_EVENT_THERMAL_WARN  18
@@ -533,6 +534,7 @@ static void sv6621_core_recovery_worker(FAR void *arg)
       sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
       sv6621_rx_stop(&dev->rx);
       sv6621_data_reset_fragments(&dev->data);
+      sv6621_data_reset_ba(&dev->data);
       dev->suspended = false;
       dev->station_open = false;
 
@@ -987,6 +989,18 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
       return;
     }
 
+  if (id == SV6621_CORE_EVENT_BA_ACTION)
+    {
+      int ret = sv6621_data_ba_event(&dev->data, payload, length);
+
+      if (ret < 0)
+        {
+          sv6621_core_queue_recovery(dev, ret);
+        }
+
+      return;
+    }
+
   sv6621_scan_command_event(instance, id, payload, length, &dev->scan);
   sv6621_station_command_event(instance, id, payload, length, &dev->station);
 }
@@ -1003,6 +1017,7 @@ static void sv6621_core_station_event(bool connected, uint16_t reason,
   int ret;
 
   sv6621_data_reset_fragments(&dev->data);
+  sv6621_data_reset_ba(&dev->data);
   if (nxmutex_lock(&dev->status_lock) < 0)
     {
       return;
@@ -1551,6 +1566,7 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
 
   sv6621_data_reset_credits(&dev->data);
   sv6621_data_reset_fragments(&dev->data);
+  sv6621_data_reset_ba(&dev->data);
   ret = sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
   if (ret < 0)
     {
@@ -1783,6 +1799,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
   sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
   sv6621_rx_stop(&dev->rx);
   sv6621_data_reset_fragments(&dev->data);
+  sv6621_data_reset_ba(&dev->data);
   dev->suspended = false;
   if (dev->transport_open)
     {
