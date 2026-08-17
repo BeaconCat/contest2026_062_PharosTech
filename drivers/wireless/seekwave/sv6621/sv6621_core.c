@@ -476,10 +476,17 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       goto deinit_command;
     }
 
-  ret = sv6621_service_init(&dev->service, sv6621_core_service_event, dev);
+  ret = sv6621_wpa_init(&dev->wpa, &dev->command, &dev->station);
   if (ret < 0)
     {
       goto deinit_station;
+    }
+
+  sv6621_data_set_eapol_input(&dev->data, sv6621_wpa_input, &dev->wpa);
+  ret = sv6621_service_init(&dev->service, sv6621_core_service_event, dev);
+  if (ret < 0)
+    {
+      goto deinit_wpa;
     }
 
   ret = sv6621_rx_init(&dev->rx, config->transport, &dev->router,
@@ -515,6 +522,9 @@ deinit_rx:
   sv6621_rx_deinit(&dev->rx);
 deinit_service:
   sv6621_service_deinit(&dev->service);
+deinit_wpa:
+  sv6621_data_set_eapol_input(&dev->data, NULL, NULL);
+  sv6621_wpa_deinit(&dev->wpa);
 deinit_station:
   sv6621_station_deinit(&dev->station);
 deinit_command:
@@ -557,6 +567,8 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
   sv6621_network_deinit(&dev->network);
 #endif
   sv6621_service_deinit(&dev->service);
+  sv6621_data_set_eapol_input(&dev->data, NULL, NULL);
+  sv6621_wpa_deinit(&dev->wpa);
   sv6621_station_deinit(&dev->station);
   sv6621_scan_controller_deinit(&dev->scan);
   sv6621_command_engine_deinit(&dev->command);
@@ -829,6 +841,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
   sv6621_network_set_link(&dev->network, false, NULL);
 #endif
   scan_ret = sv6621_scan_controller_cancel(&dev->scan);
+  sv6621_wpa_cancel(&dev->wpa, -ESHUTDOWN);
   sv6621_station_disconnect(&dev->station, 3);
   sv6621_station_reset(&dev->station, -ESHUTDOWN);
   if (dev->station_open)
