@@ -571,7 +571,6 @@ static int rk3576_sv6621_open_failed(
   priv->irq_enabled = false;
   priv->opened = false;
   priv->prepared = false;
-  priv->sdio = NULL;
   return error;
 }
 
@@ -585,11 +584,18 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
       return -EBUSY;
     }
 
-  priv->sdio = rk3576_sdmmc_initialize(RK3576_SDIO_SLOT);
   if (priv->sdio == NULL)
     {
-      wlerr("ERROR: RK3576 SDIO host initialization failed\n");
-      return -ENODEV;
+      priv->sdio = rk3576_sdmmc_initialize(RK3576_SDIO_SLOT);
+      if (priv->sdio == NULL)
+        {
+          wlerr("ERROR: RK3576 SDIO host initialization failed\n");
+          return -ENODEV;
+        }
+    }
+  else
+    {
+      SDIO_RESET(priv->sdio);
     }
 
   SDIO_CLOCK(priv->sdio, CLOCK_SDIO_DISABLED);
@@ -1089,7 +1095,6 @@ static void rk3576_sv6621_close(FAR struct sv6621_transport_s *transport)
   priv->irq_enabled = false;
   priv->opened = false;
   priv->prepared = false;
-  priv->sdio = NULL;
 }
 
 static void rk3576_sv6621_host_interrupt(FAR void *arg)
