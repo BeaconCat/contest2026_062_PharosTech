@@ -1038,6 +1038,65 @@ int sv6621_get_status(FAR struct sv6621_dev_s *dev,
   return 0;
 }
 
+/****************************************************************************
+ * Name: sv6621_get_link_stats
+ ****************************************************************************/
+
+int sv6621_get_link_stats(FAR struct sv6621_dev_s *dev,
+                          FAR struct sv6621_link_stats_s *stats)
+{
+  uint8_t bssid[SV6621_MAC_LENGTH];
+  uint8_t instance;
+  int ret;
+
+  if (dev == NULL || stats == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  if (dev->status.state != SV6621_STATE_WIFI_READY ||
+      !dev->station_connected)
+    {
+      ret = -ENOTCONN;
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  memcpy(bssid, dev->status.bssid, sizeof(bssid));
+  nxmutex_unlock(&dev->status_lock);
+
+  ret = nxmutex_lock(&dev->station.lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  instance = dev->station.peer.instance;
+  nxmutex_unlock(&dev->station.lock);
+  ret = sv6621_stats_query(&dev->command, instance, bssid, stats);
+  if (ret == 0 && nxmutex_lock(&dev->status_lock) >= 0)
+    {
+      dev->status.signal_dbm = stats->signal_dbm;
+      nxmutex_unlock(&dev->status_lock);
+    }
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
+}
+
 int sv6621_scan(FAR struct sv6621_dev_s *dev)
 {
   int ret;

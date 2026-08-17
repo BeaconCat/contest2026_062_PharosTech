@@ -40,6 +40,7 @@
 #include "sv6621_scan.h"
 #include "sv6621_service.h"
 #include "sv6621_station.h"
+#include "sv6621_stats.h"
 #include "sv6621_tx.h"
 #include "sv6621_wifi.h"
 #include "sv6621_wpa_handshake.h"
