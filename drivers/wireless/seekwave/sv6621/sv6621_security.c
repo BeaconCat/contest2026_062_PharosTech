@@ -81,6 +81,7 @@ int sv6621_security_add_key(
   memcpy(payload, address, SV6621_MAC_LENGTH);
   payload[SV6621_SECURITY_KEY_TYPE_OFFSET] = type;
   payload[SV6621_SECURITY_CIPHER_OFFSET] = cipher;
+  payload[SV6621_SECURITY_PN_OFFSET] = 1;
   if (packet_number != NULL)
     {
       memcpy(payload + SV6621_SECURITY_PN_OFFSET, packet_number,
