@@ -258,9 +258,18 @@ int sv6621_command_engine_init(FAR struct sv6621_command_engine_s *engine,
       return ret;
     }
 
+  ret = nxmutex_init(&engine->receive_lock);
+  if (ret < 0)
+    {
+      nxmutex_destroy(&engine->state_lock);
+      nxmutex_destroy(&engine->execute_lock);
+      return ret;
+    }
+
   ret = nxsem_init(&engine->completion, 0, 0);
   if (ret < 0)
     {
+      nxmutex_destroy(&engine->receive_lock);
       nxmutex_destroy(&engine->state_lock);
       nxmutex_destroy(&engine->execute_lock);
       return ret;
@@ -277,13 +286,48 @@ int sv6621_command_engine_init(FAR struct sv6621_command_engine_s *engine,
 
 void sv6621_command_engine_deinit(FAR struct sv6621_command_engine_s *engine)
 {
-  if (engine != NULL)
+  int ret;
+
+  if (engine == NULL)
     {
-      sv6621_command_cancel(engine, -ESHUTDOWN);
-      nxmutex_destroy(&engine->execute_lock);
-      nxmutex_destroy(&engine->state_lock);
-      nxsem_destroy(&engine->completion);
+      return;
     }
+
+  ret = nxmutex_lock(&engine->state_lock);
+  if (ret >= 0)
+    {
+      engine->shutting_down = true;
+      if (engine->pending)
+        {
+          engine->pending = false;
+          engine->completion_result = -ESHUTDOWN;
+          engine->stats.cancelled++;
+          nxsem_post(&engine->completion);
+        }
+
+      nxmutex_unlock(&engine->state_lock);
+    }
+
+  /* Wake the current waiter above, then wait for both outbound command
+   * execution and inbound callback dispatch to leave the engine.
+   */
+
+  ret = nxmutex_lock(&engine->execute_lock);
+  if (ret >= 0)
+    {
+      nxmutex_unlock(&engine->execute_lock);
+    }
+
+  ret = nxmutex_lock(&engine->receive_lock);
+  if (ret >= 0)
+    {
+      nxmutex_unlock(&engine->receive_lock);
+    }
+
+  nxsem_destroy(&engine->completion);
+  nxmutex_destroy(&engine->receive_lock);
+  nxmutex_destroy(&engine->state_lock);
+  nxmutex_destroy(&engine->execute_lock);
 }
 
 /****************************************************************************
@@ -305,7 +349,11 @@ int sv6621_command_reset(FAR struct sv6621_command_engine_s *engine)
       return ret;
     }
 
-  if (engine->pending || engine->dispatching_event)
+  if (engine->shutting_down)
+    {
+      ret = -ESHUTDOWN;
+    }
+  else if (engine->pending || engine->dispatching_event)
     {
       ret = -EBUSY;
     }
@@ -356,6 +404,12 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
       return ret;
     }
 
+  if (engine->shutting_down)
+    {
+      nxmutex_unlock(&engine->state_lock);
+      return -ESHUTDOWN;
+    }
+
   if (engine->dispatching_event)
     {
       nxmutex_unlock(&engine->state_lock);
@@ -383,6 +437,13 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
   ret = nxmutex_lock(&engine->state_lock);
   if (ret < 0)
     {
+      goto unlock_execute;
+    }
+
+  if (engine->shutting_down)
+    {
+      ret = -ESHUTDOWN;
+      nxmutex_unlock(&engine->state_lock);
       goto unlock_execute;
     }
 
@@ -553,6 +614,13 @@ int sv6621_command_send_noack(FAR struct sv6621_command_engine_s *engine,
       goto unlock_execute;
     }
 
+  if (engine->shutting_down)
+    {
+      ret = -ESHUTDOWN;
+      nxmutex_unlock(&engine->state_lock);
+      goto unlock_execute;
+    }
+
   if (engine->dispatching_event || engine->pending)
     {
       ret = engine->dispatching_event ? -EDEADLK : -EBUSY;
@@ -640,11 +708,32 @@ int sv6621_command_receive(FAR struct sv6621_command_engine_s *engine,
       return -EINVAL;
     }
 
+  ret = nxmutex_lock(&engine->receive_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&engine->state_lock);
+  if (ret < 0)
+    {
+      nxmutex_unlock(&engine->receive_lock);
+      return ret;
+    }
+
+  if (engine->shutting_down)
+    {
+      nxmutex_unlock(&engine->state_lock);
+      nxmutex_unlock(&engine->receive_lock);
+      return -ESHUTDOWN;
+    }
+
+  nxmutex_unlock(&engine->state_lock);
   ret = sv6621_command_decode_header(message, length, &header);
   if (ret < 0)
     {
       engine->stats.malformed++;
-      return ret;
+      goto unlock_receive;
     }
 
   payload = message + SV6621_COMMAND_HEADER_SIZE;
@@ -672,6 +761,8 @@ int sv6621_command_receive(FAR struct sv6621_command_engine_s *engine,
       engine->stats.malformed++;
     }
 
+unlock_receive:
+  nxmutex_unlock(&engine->receive_lock);
   return ret;
 }
 
