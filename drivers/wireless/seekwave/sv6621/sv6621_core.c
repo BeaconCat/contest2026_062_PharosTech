@@ -447,6 +447,14 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       goto fail;
     }
 
+  ret = sv6621_wifi_open_station(&dev->command, dev->wifi_info.mac);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
+  dev->station_open = true;
+
   ret = nxmutex_lock(&dev->status_lock);
   if (ret < 0)
     {
@@ -469,6 +477,12 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
   return 0;
 
 fail:
+  if (dev->station_open)
+    {
+      sv6621_wifi_close_station(&dev->command);
+      dev->station_open = false;
+    }
+
   if (rx_started)
     {
       sv6621_rx_stop(&dev->rx);
@@ -502,6 +516,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 {
   enum sv6621_state_e state;
   uint32_t recovery_count;
+  int close_ret = 0;
   int ret;
 
   if (dev == NULL)
@@ -532,6 +547,12 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
     }
 
   sv6621_core_set_state(dev, SV6621_STATE_STOPPING, 0);
+  if (dev->station_open)
+    {
+      close_ret = sv6621_wifi_close_station(&dev->command);
+      dev->station_open = false;
+    }
+
   sv6621_command_cancel(&dev->command, -ESHUTDOWN);
   sv6621_rx_stop(&dev->rx);
   if (dev->transport_open)
@@ -564,7 +585,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 
   state = SV6621_STATE_OFF;
   sv6621_core_report(dev, SV6621_EVENT_STATE_CHANGED, &state, sizeof(state));
-  return 0;
+  return close_ret < 0 ? close_ret : 0;
 }
 
 int sv6621_get_status(FAR struct sv6621_dev_s *dev,
