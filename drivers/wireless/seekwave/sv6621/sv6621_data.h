@@ -47,6 +47,7 @@
 #define SV6621_DATA_MAX_FRAME_SIZE     1536
 #define SV6621_DATA_TX_BUFFER_SIZE     2048
 #define SV6621_DATA_LMAC_COUNT         2
+#define SV6621_DATA_FRAGMENT_ENTRIES   4
 
 #define SV6621_DATA_TX_BLOCK_SLEEP     (1 << 0)
 #define SV6621_DATA_TX_BLOCK_THERMAL   (1 << 1)
@@ -99,6 +100,22 @@ struct sv6621_data_tx_context_s
   uint8_t tid;
 };
 
+struct sv6621_data_fragment_s
+{
+  struct sv6621_data_rx_s first;
+  uint32_t age;
+  size_t length;
+  uint16_t sequence;
+  uint8_t expected_fragment;
+  uint8_t instance;
+  uint8_t peer_index;
+  uint8_t tid;
+  bool instance_valid;
+  bool peer_valid;
+  bool active;
+  uint8_t frame[SV6621_DATA_MAX_FRAME_SIZE];
+};
+
 typedef void (*sv6621_data_input_t)(FAR const struct sv6621_data_rx_s *rx,
                                     FAR void *arg);
 
@@ -112,6 +129,10 @@ struct sv6621_data_stats_s
   uint32_t transmit_errors;
   uint32_t credit_updates;
   uint32_t credit_starvations;
+  uint32_t fragments;
+  uint32_t reassembled;
+  uint32_t fragment_drops;
+  uint32_t fragment_evictions;
 };
 
 struct sv6621_data_s
@@ -126,7 +147,9 @@ struct sv6621_data_s
   FAR void *eapol_arg;
   struct sv6621_data_stats_s stats;
   uint16_t credits[SV6621_DATA_LMAC_COUNT];
+  uint32_t fragment_age;
   uint8_t tx_block_reasons;
+  struct sv6621_data_fragment_s fragments[SV6621_DATA_FRAGMENT_ENTRIES];
   uint8_t tx_buffer[SV6621_DATA_TX_BUFFER_SIZE];
 };
 
@@ -150,6 +173,7 @@ void sv6621_data_set_eapol_input(FAR struct sv6621_data_s *data,
 void sv6621_data_add_credits(FAR struct sv6621_data_s *data,
                              uint16_t lmac0, uint16_t lmac1);
 void sv6621_data_reset_credits(FAR struct sv6621_data_s *data);
+void sv6621_data_reset_fragments(FAR struct sv6621_data_s *data);
 int sv6621_data_set_tx_block(FAR struct sv6621_data_s *data, uint8_t reason,
                              bool blocked);
 int sv6621_data_send(FAR struct sv6621_data_s *data,
