@@ -29,6 +29,9 @@
 
 #include <nuttx/config.h>
 #include <nuttx/mutex.h>
+#ifdef CONFIG_SV6621_PM
+#include <nuttx/power/pm.h>
+#endif
 
 #include "include/sv6621.h"
 #include "sv6621_command.h"
@@ -92,6 +95,11 @@ struct sv6621_dev_s
   bool powered;
   bool transport_open;
   bool station_open;
+#ifdef CONFIG_SV6621_PM
+  struct pm_callback_s pm_callback;
+  bool pm_registered;
+  bool pm_suspended;
+#endif
 };
 
 /****************************************************************************

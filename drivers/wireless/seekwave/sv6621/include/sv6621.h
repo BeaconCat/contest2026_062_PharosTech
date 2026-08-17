@@ -290,6 +290,9 @@ struct sv6621_config_s
   struct sv6621_firmware_s nvram;
   struct sv6621_firmware_s calibration;
   FAR const struct sv6621_regulatory_domain_s *regulatory;
+#ifdef CONFIG_SV6621_PM
+  struct sv6621_suspend_s system_suspend;
+#endif
   sv6621_event_t event;
   FAR void *event_arg;
 };
