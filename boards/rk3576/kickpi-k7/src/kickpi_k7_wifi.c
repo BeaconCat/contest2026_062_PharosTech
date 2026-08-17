@@ -36,7 +36,9 @@
 #include <errno.h>
 #include <nuttx/config.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <nuttx/arch.h>
 #include <nuttx/i2c/i2c_master.h>
@@ -126,7 +128,12 @@ static const gpio_pinset_t g_wifi_sdio_pins[] = {
  ****************************************************************************/
 
 static int kickpi_k7_wifi_enable_32k(void);
-static void kickpi_k7_wifi_power(FAR void *arg, bool on);
+static int kickpi_k7_wifi_power_on(FAR void *arg);
+static void kickpi_k7_wifi_power_off(FAR void *arg);
+static int kickpi_k7_wifi_load_address(
+    FAR void *arg, uint8_t address[SV6621_MAC_LENGTH]);
+static int kickpi_k7_wifi_store_address(
+    FAR void *arg, FAR const uint8_t address[SV6621_MAC_LENGTH]);
 
 /****************************************************************************
  * Private Functions
@@ -202,26 +209,85 @@ static int kickpi_k7_wifi_enable_32k(void)
 }
 
 /****************************************************************************
- * Name: kickpi_k7_wifi_power
+ * Name: kickpi_k7_wifi_power_on
  *
  * Description:
- *   Core-driver power callback: drive WL_REG_ON (GPIO1_C6, active-low PDN).
- *   on=false asserts reset (low); on=true releases (high).
+ *   Reset the combo through WL_REG_ON and wait for the boot ROM to settle.
  ****************************************************************************/
 
-static void kickpi_k7_wifi_power(FAR void *arg, bool on)
+static int kickpi_k7_wifi_power_on(FAR void *arg)
 {
   (void)arg;
-  rk3576_gpio_write(WIFI_WL_REG_ON, on);
+  rk3576_gpio_write(WIFI_WL_REG_ON, false);
+  up_mdelay(1000);
+  rk3576_gpio_write(WIFI_WL_REG_ON, true);
+  up_mdelay(200);
+  return 0;
 }
 
 /****************************************************************************
- * Private Data (board integration record)
+ * Name: kickpi_k7_wifi_power_off
  ****************************************************************************/
 
-static struct sv6621_config_s g_kickpi_k7_wifi_config = {
-  .transport = NULL,
-  .power = kickpi_k7_wifi_power,
+static void kickpi_k7_wifi_power_off(FAR void *arg)
+{
+  (void)arg;
+  rk3576_gpio_write(WIFI_WL_REG_ON, false);
+}
+
+/****************************************************************************
+ * Name: kickpi_k7_wifi_load_address
+ ****************************************************************************/
+
+static int kickpi_k7_wifi_load_address(
+    FAR void *arg, uint8_t address[SV6621_MAC_LENGTH])
+{
+  FAR uint8_t *saved = arg;
+
+  if (saved[0] == 0)
+    {
+      return -ENOENT;
+    }
+
+  memcpy(address, saved, SV6621_MAC_LENGTH);
+  return 0;
+}
+
+/****************************************************************************
+ * Name: kickpi_k7_wifi_store_address
+ ****************************************************************************/
+
+static int kickpi_k7_wifi_store_address(
+    FAR void *arg, FAR const uint8_t address[SV6621_MAC_LENGTH])
+{
+  memcpy(arg, address, SV6621_MAC_LENGTH);
+  return 0;
+}
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+static uint8_t g_kickpi_k7_wifi_address[SV6621_MAC_LENGTH];
+static FAR struct sv6621_dev_s *g_kickpi_k7_wifi_dev;
+
+static const struct sv6621_board_ops_s g_kickpi_k7_wifi_board_ops = {
+  .power_on = kickpi_k7_wifi_power_on,
+  .power_off = kickpi_k7_wifi_power_off,
+  .load_address = kickpi_k7_wifi_load_address,
+  .store_address = kickpi_k7_wifi_store_address,
+};
+
+static const struct sv6621_regulatory_domain_s g_kickpi_k7_wifi_regulatory = {
+  .country = { 'C', 'N' },
+  .rule_count = 4,
+  .rules = {
+    { 1, 13, 20, 0, 0 },
+    { 36, 13, 23, 0, 0 },
+    { 52, 93, 23, 0, SV6621_REGULATORY_FLAG_DFS |
+                        SV6621_REGULATORY_FLAG_NO_IR },
+    { 149, 17, 33, 0, 0 },
+  },
 };
 
 /****************************************************************************
@@ -242,7 +308,7 @@ int kickpi_k7_wifi_initialize(void)
 {
   static bool initialized;
   static int init_result;
-  FAR struct sv6621_config_s *config = &g_kickpi_k7_wifi_config;
+  struct sv6621_config_s config;
   int ret;
   int i;
 
@@ -293,33 +359,34 @@ int kickpi_k7_wifi_initialize(void)
       return ret;
     }
 
-  config->transport = rk3576_sv6621_transport();
-  config->iram = g_sv6621_iram_start;
-  config->iram_len = (int)(g_sv6621_iram_end - g_sv6621_iram_start);
-  config->nv = g_sv6621_nv_start;
-  config->nv_len = (int)(g_sv6621_nv_end - g_sv6621_nv_start);
-  config->calib = g_sv6621_calib_start;
-  config->calib_len = (int)(g_sv6621_calib_end - g_sv6621_calib_start);
-  config->dram = g_sv6621_dram_start;
-  config->dram_len = (int)(g_sv6621_dram_end - g_sv6621_dram_start);
+  memset(&config, 0, sizeof(config));
+  config.transport = rk3576_sv6621_transport();
+  config.board_ops = &g_kickpi_k7_wifi_board_ops;
+  config.board_arg = g_kickpi_k7_wifi_address;
+  config.iram.data = g_sv6621_iram_start;
+  config.iram.length = g_sv6621_iram_end - g_sv6621_iram_start;
+  config.dram.data = g_sv6621_dram_start;
+  config.dram.length = g_sv6621_dram_end - g_sv6621_dram_start;
+  config.nvram.data = g_sv6621_nv_start;
+  config.nvram.length = g_sv6621_nv_end - g_sv6621_nv_start;
+  config.calibration.data = g_sv6621_calib_start;
+  config.calibration.length =
+      g_sv6621_calib_end - g_sv6621_calib_start;
+  config.regulatory = &g_kickpi_k7_wifi_regulatory;
 
-  ret = sv6621_initialize(config);
+  ret = sv6621_create(&config, &g_kickpi_k7_wifi_dev);
   if (ret < 0)
     {
-      /* A non-zero service state means the receive thread is already live;
-       * cache the error rather than rerunning board setup underneath it.
-       */
-
-      if (sv6621_state() != 0)
-        {
-          init_result = ret;
-          initialized = true;
-        }
-
       return ret;
     }
 
-  /* The core is live after sv6621_initialize() succeeds. */
+  ret = sv6621_start(g_kickpi_k7_wifi_dev);
+  if (ret < 0)
+    {
+      sv6621_destroy(g_kickpi_k7_wifi_dev);
+      g_kickpi_k7_wifi_dev = NULL;
+      return ret;
+    }
 
   init_result = ret;
   initialized = true;

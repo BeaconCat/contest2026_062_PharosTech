@@ -29,6 +29,7 @@ CSRCS += kickpi_k7_reset.c
 ifeq ($(CONFIG_KICKPI_K7_WIFI),y)
 CSRCS += kickpi_k7_wifi.c
 CFLAGS += -Wa,-I$(abspath $(BOARD_DIR)/firmware)
+CFLAGS += $(INCDIR_PREFIX)$(abspath $(BOARD_DIR)/../../../drivers/wireless/seekwave/sv6621/include)
 endif
 
 ifeq ($(CONFIG_KICKPI_K7_AUDIO),y)
