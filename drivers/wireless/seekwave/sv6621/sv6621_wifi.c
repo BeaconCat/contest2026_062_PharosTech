@@ -45,6 +45,7 @@
 #define SV6621_WIFI_COMMAND_SYNC_VERSION    2
 #define SV6621_WIFI_COMMAND_OPEN_DEVICE     3
 #define SV6621_WIFI_COMMAND_CLOSE_DEVICE    4
+#define SV6621_WIFI_COMMAND_SET_MIB         40
 #define SV6621_WIFI_COMMAND_PHY_BB_CONFIG   50
 #define SV6621_WIFI_COMMAND_VERSION         1
 #define SV6621_WIFI_LAST_SUPPORTED_COMMAND  61
@@ -72,6 +73,10 @@
 
 #define SV6621_WIFI_OPEN_MODE_STATION       1
 #define SV6621_WIFI_OPEN_PAYLOAD_SIZE       10
+
+#define SV6621_WIFI_MIB_LENGTH_SIZE         2
+#define SV6621_WIFI_MIB_TLV_HEADER_SIZE     4
+#define SV6621_WIFI_MIB_MAX_VALUE_SIZE      512
 
 /****************************************************************************
  * Private Function Prototypes
@@ -377,5 +382,43 @@ int sv6621_wifi_close_station(FAR struct sv6621_command_engine_s *command)
   ret = sv6621_command_execute(command, SV6621_WIFI_INSTANCE,
                                SV6621_WIFI_COMMAND_CLOSE_DEVICE, NULL, 0, NULL,
                                NULL, SV6621_WIFI_COMMAND_TIMEOUT_MS);
+  return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
+}
+
+int sv6621_wifi_set_mib(FAR struct sv6621_command_engine_s *command,
+                        uint16_t type, FAR const void *value, uint16_t length)
+{
+  FAR uint8_t *payload;
+  size_t payload_length;
+  int ret;
+
+  if (command == NULL || value == NULL || length == 0 ||
+      length > SV6621_WIFI_MIB_MAX_VALUE_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  payload_length =
+      SV6621_WIFI_MIB_LENGTH_SIZE + SV6621_WIFI_MIB_TLV_HEADER_SIZE + length;
+  payload = kmm_malloc(payload_length);
+  if (payload == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  payload[0] = payload_length & 0xff;
+  payload[1] = payload_length >> 8;
+  payload[2] = type & 0xff;
+  payload[3] = type >> 8;
+  payload[4] = length & 0xff;
+  payload[5] = length >> 8;
+  memcpy(payload + SV6621_WIFI_MIB_LENGTH_SIZE +
+             SV6621_WIFI_MIB_TLV_HEADER_SIZE,
+         value, length);
+
+  ret = sv6621_command_execute(
+      command, SV6621_WIFI_INSTANCE, SV6621_WIFI_COMMAND_SET_MIB, payload,
+      payload_length, NULL, NULL, SV6621_WIFI_COMMAND_TIMEOUT_MS);
+  kmm_free(payload);
   return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
 }
