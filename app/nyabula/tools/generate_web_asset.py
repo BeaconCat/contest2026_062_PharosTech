@@ -33,7 +33,9 @@ BANNER = """/*******************************************************************
 
 
 def main() -> None:
-    data = SOURCE.read_bytes()
+    # Embed a stable payload even when Git checks the HTML out with CRLF.
+
+    data = SOURCE.read_bytes().replace(b"\r\n", b"\n")
     lines = []
     for offset in range(0, len(data), 12):
         chunk = data[offset : offset + 12]
