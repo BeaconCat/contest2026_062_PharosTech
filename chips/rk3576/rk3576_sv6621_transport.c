@@ -727,12 +727,32 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
       up_udelay(5);
     }
 
-  status = getreg32(RK3576_SV6621_RINTSTS);
-  nxmutex_unlock(&priv->lock);
+  for (index = 0; index < 400000; index++)
+    {
+      status = getreg32(RK3576_SV6621_RINTSTS);
+      if ((status & (RK3576_SV6621_INT_DTO |
+                     RK3576_SV6621_INT_RTO |
+                     RK3576_SV6621_INT_DATAERR)) != 0)
+        {
+          break;
+        }
 
-  return (status & RK3576_SV6621_INT_DATAERR) != 0
-             ? -EIO
-             : ((size_t)received == words ? OK : -ETIMEDOUT);
+      up_udelay(5);
+    }
+
+  nxmutex_unlock(&priv->lock);
+  if ((status & RK3576_SV6621_INT_DATAERR) != 0)
+    {
+      return -EIO;
+    }
+
+  if (index == 400000 || (status & RK3576_SV6621_INT_RTO) != 0 ||
+      received < words)
+    {
+      return -ETIMEDOUT;
+    }
+
+  return OK;
 }
 
 static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
