@@ -22,19 +22,31 @@
 
 #include <stdint.h>
 
-struct nyabula_eye_icon_point_s
+enum nyabula_eye_icon_operation_e
 {
-  int32_t x;
-  int32_t y;
+  NYABULA_EYE_ICON_MOVE = 0,
+  NYABULA_EYE_ICON_LINE,
+  NYABULA_EYE_ICON_QUAD,
+  NYABULA_EYE_ICON_CUBIC,
+  NYABULA_EYE_ICON_CLOSE
+};
+
+struct nyabula_eye_icon_command_s
+{
+  uint8_t operation;
+  int32_t x1;
+  int32_t y1;
+  int32_t x2;
+  int32_t y2;
+  int32_t x3;
+  int32_t y3;
 };
 
 struct nyabula_eye_icon_s
 {
   const char *name;
-  const struct nyabula_eye_icon_point_s *points;
-  const uint16_t *contours;
-  uint16_t point_count;
-  uint16_t contour_count;
+  const struct nyabula_eye_icon_command_s *commands;
+  uint16_t command_count;
   uint32_t width;
   uint32_t height;
 };
