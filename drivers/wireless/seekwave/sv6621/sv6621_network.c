@@ -546,15 +546,31 @@ int sv6621_network_init(FAR struct sv6621_network_s *network,
 
 void sv6621_network_deinit(FAR struct sv6621_network_s *network)
 {
-  if (network != NULL && network->registered)
+  irqstate_t flags;
+  bool registered;
+
+  if (network == NULL)
     {
-      work_cancel(LPWORK, &network->rx_work);
-      work_cancel(LPWORK, &network->tx_work);
-      work_cancel_sync(LPWORK, &network->multicast_work);
-      netdev_unregister(&network->dev);
-      sv6621_ioctl_deinit(&network->ioctl);
-      network->registered = false;
+      return;
     }
+
+  flags = spin_lock_irqsave(&network->lock);
+  registered = network->registered;
+  network->registered = false;
+  network->interface_up = false;
+  network->link_up = false;
+  spin_unlock_irqrestore(&network->lock, flags);
+  if (!registered)
+    {
+      return;
+    }
+
+  work_cancel_sync(LPWORK, &network->rx_work);
+  work_cancel_sync(LPWORK, &network->tx_work);
+  work_cancel_sync(LPWORK, &network->multicast_work);
+  netdev_carrier_off(&network->dev);
+  netdev_unregister(&network->dev);
+  sv6621_ioctl_deinit(&network->ioctl);
 }
 
 /****************************************************************************
