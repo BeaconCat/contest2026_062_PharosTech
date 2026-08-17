@@ -149,6 +149,7 @@ struct sv6621_data_s
   uint16_t credits[SV6621_DATA_LMAC_COUNT];
   uint32_t fragment_age;
   uint8_t tx_block_reasons;
+  bool pn_reuse;
   struct sv6621_data_fragment_s fragments[SV6621_DATA_FRAGMENT_ENTRIES];
   uint8_t tx_buffer[SV6621_DATA_TX_BUFFER_SIZE];
 };
@@ -158,7 +159,7 @@ struct sv6621_data_s
  ****************************************************************************/
 
 int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
-                          FAR struct sv6621_data_rx_s *rx);
+                          bool pn_reuse, FAR struct sv6621_data_rx_s *rx);
 int sv6621_data_encode_tx(
     FAR const struct sv6621_data_tx_context_s *context,
     FAR const uint8_t *frame, size_t frame_length, FAR uint8_t *payload,
@@ -174,6 +175,7 @@ void sv6621_data_add_credits(FAR struct sv6621_data_s *data,
                              uint16_t lmac0, uint16_t lmac1);
 void sv6621_data_reset_credits(FAR struct sv6621_data_s *data);
 void sv6621_data_reset_fragments(FAR struct sv6621_data_s *data);
+void sv6621_data_set_pn_reuse(FAR struct sv6621_data_s *data, bool enabled);
 int sv6621_data_set_tx_block(FAR struct sv6621_data_s *data, uint8_t reason,
                              bool blocked);
 int sv6621_data_send(FAR struct sv6621_data_s *data,
