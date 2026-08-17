@@ -184,7 +184,9 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
 
   if (config == NULL || dev_out == NULL || config->transport == NULL ||
       config->board_ops == NULL || config->board_ops->power_on == NULL ||
-      config->board_ops->power_off == NULL || config->iram.data == NULL ||
+      config->board_ops->power_off == NULL ||
+      config->board_ops->load_address == NULL ||
+      config->board_ops->store_address == NULL || config->iram.data == NULL ||
       config->iram.length == 0 || config->dram.data == NULL ||
       config->dram.length == 0 || config->nvram.data == NULL ||
       config->nvram.length == 0)

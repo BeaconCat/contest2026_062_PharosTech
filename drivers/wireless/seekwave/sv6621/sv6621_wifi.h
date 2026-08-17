@@ -29,12 +29,36 @@
 
 #include <nuttx/config.h>
 
+#include "include/sv6621.h"
 #include "sv6621_command.h"
+
+/****************************************************************************
+ * Public Types
+ ****************************************************************************/
+
+struct sv6621_wifi_info_s
+{
+  uint16_t encryption_capabilities;
+  uint32_t chip_model;
+  uint32_t chip_version;
+  uint32_t firmware_version;
+  uint32_t firmware_capabilities;
+  uint32_t bandwidth_capabilities;
+  uint32_t private_capabilities;
+  uint8_t max_stations;
+  uint8_t max_multicast_addresses;
+  uint8_t max_scan_ssids;
+  uint8_t mac[SV6621_MAC_LENGTH];
+};
 
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
 int sv6621_wifi_sync_versions(FAR struct sv6621_command_engine_s *command);
+int sv6621_wifi_get_info(FAR struct sv6621_command_engine_s *command,
+                         FAR const struct sv6621_board_ops_s *board_ops,
+                         FAR void *board_arg,
+                         FAR struct sv6621_wifi_info_s *info);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_WIFI_H */
