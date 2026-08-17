@@ -498,6 +498,7 @@ static int rk3576_sv6621_open_failed(
   priv->irq_enabled = false;
   priv->opened = false;
   priv->prepared = false;
+  priv->sdio = NULL;
   return error;
 }
 
@@ -524,7 +525,7 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
   ret = rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPDATE);
   if (ret < 0)
     {
-      return ret;
+      return rk3576_sv6621_open_failed(priv, ret);
     }
 
   putreg32(0, RK3576_SV6621_CLKDIV);
@@ -968,6 +969,7 @@ static void rk3576_sv6621_close(FAR struct sv6621_transport_s *transport)
   priv->irq_enabled = false;
   priv->opened = false;
   priv->prepared = false;
+  priv->sdio = NULL;
 }
 
 static void rk3576_sv6621_host_interrupt(FAR void *arg)
