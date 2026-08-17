@@ -45,7 +45,9 @@
 #define SV6621_CORE_CONNECT_TIMEOUT_MS 5000
 #define SV6621_CORE_HANDSHAKE_TIMEOUT_MS 10000
 #define SV6621_CORE_EVENT_CREDIT_UPDATE 16
+#define SV6621_CORE_EVENT_MIC_FAILURE   17
 #define SV6621_CORE_EVENT_THERMAL_WARN  18
+#define SV6621_CORE_MIC_FAILURE_SIZE    9
 
 /****************************************************************************
  * Private Function Prototypes
@@ -74,6 +76,7 @@ static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
                                        int error);
 static void sv6621_core_recovery_worker(FAR void *arg);
 static void sv6621_core_thermal_worker(FAR void *arg);
+static void sv6621_core_security_worker(FAR void *arg);
 static int sv6621_core_set_state(FAR struct sv6621_dev_s *dev,
                                  enum sv6621_state_e state, int error);
 
@@ -211,6 +214,26 @@ static void sv6621_core_thermal_worker(FAR void *arg)
   nxmutex_unlock(&dev->status_lock);
   sv6621_core_report(dev, SV6621_EVENT_THERMAL_CHANGED, &thermal,
                      sizeof(thermal));
+}
+
+/****************************************************************************
+ * Name: sv6621_core_security_worker
+ ****************************************************************************/
+
+static void sv6621_core_security_worker(FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+  struct sv6621_mic_failure_s failure;
+
+  if (nxmutex_lock(&dev->status_lock) < 0)
+    {
+      return;
+    }
+
+  failure = dev->mic_failure;
+  nxmutex_unlock(&dev->status_lock);
+  sv6621_core_report(dev, SV6621_EVENT_MIC_FAILURE, &failure,
+                     sizeof(failure));
 }
 
 /****************************************************************************
@@ -379,6 +402,33 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
         {
           work_queue(LPWORK, &dev->thermal_work,
                      sv6621_core_thermal_worker, dev, 0);
+        }
+
+      return;
+    }
+
+  if (id == SV6621_CORE_EVENT_MIC_FAILURE)
+    {
+      if (length != SV6621_CORE_MIC_FAILURE_SIZE)
+        {
+          sv6621_core_queue_recovery(dev, -EPROTO);
+          return;
+        }
+
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          return;
+        }
+
+      dev->mic_failure.group_key = payload[0] != 0;
+      dev->mic_failure.key_index = payload[1];
+      dev->mic_failure.lmac_id = payload[2];
+      memcpy(dev->mic_failure.address, payload + 3, SV6621_MAC_LENGTH);
+      nxmutex_unlock(&dev->status_lock);
+      if (work_available(&dev->security_work))
+        {
+          work_queue(LPWORK, &dev->security_work,
+                     sv6621_core_security_worker, dev, 0);
         }
 
       return;
@@ -752,6 +802,7 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
   sv6621_stop(dev);
   work_cancel_sync(LPWORK, &dev->recovery_work);
   work_cancel_sync(LPWORK, &dev->thermal_work);
+  work_cancel_sync(LPWORK, &dev->security_work);
   work_cancel_sync(LPWORK, &dev->event_work);
   work_cancel_sync(LPWORK, &dev->scan_work);
   work_cancel_sync(LPWORK, &dev->station_work);
