@@ -445,6 +445,20 @@ void sv6621_network_set_link(
     }
 }
 
+/****************************************************************************
+ * Name: sv6621_network_credit_available
+ ****************************************************************************/
+
+void sv6621_network_credit_available(FAR struct sv6621_network_s *network)
+{
+  if (network != NULL && network->registered && network->interface_up &&
+      network->link_up && work_available(&network->tx_work))
+    {
+      work_queue(LPWORK, &network->tx_work, sv6621_network_tx_worker,
+                 network, 0);
+    }
+}
+
 void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx,
                           FAR void *arg)
 {

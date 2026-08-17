@@ -44,6 +44,7 @@
 #define SV6621_CORE_SCAN_TIMEOUT_MS 10000
 #define SV6621_CORE_CONNECT_TIMEOUT_MS 5000
 #define SV6621_CORE_HANDSHAKE_TIMEOUT_MS 10000
+#define SV6621_CORE_EVENT_CREDIT_UPDATE 16
 
 /****************************************************************************
  * Private Function Prototypes
@@ -238,6 +239,7 @@ static void sv6621_core_recovery_worker(FAR void *arg)
   sv6621_wpa_cancel(&dev->wpa, error);
   sv6621_station_reset(&dev->station, error);
   sv6621_command_cancel(&dev->command, error);
+  sv6621_data_reset_credits(&dev->data);
   sv6621_rx_stop(&dev->rx);
   dev->station_open = false;
 
@@ -305,6 +307,18 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
                                       size_t length, FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
+
+  if (id == SV6621_CORE_EVENT_CREDIT_UPDATE && length >= 4)
+    {
+      uint16_t lmac0 = payload[0] | ((uint16_t)payload[1] << 8);
+      uint16_t lmac1 = payload[2] | ((uint16_t)payload[3] << 8);
+
+      sv6621_data_add_credits(&dev->data, lmac0, lmac1);
+#ifdef CONFIG_NET
+      sv6621_network_credit_available(&dev->network);
+#endif
+      return;
+    }
 
   sv6621_scan_command_event(instance, id, payload, length, &dev->scan);
   sv6621_station_command_event(instance, id, payload, length, &dev->station);
@@ -760,6 +774,8 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       goto fail;
     }
 
+  sv6621_data_reset_credits(&dev->data);
+
   ret = sv6621_rx_start(&dev->rx);
   if (ret < 0)
     {
@@ -978,6 +994,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
     }
 
   sv6621_command_cancel(&dev->command, -ESHUTDOWN);
+  sv6621_data_reset_credits(&dev->data);
   sv6621_rx_stop(&dev->rx);
   if (dev->transport_open)
     {
