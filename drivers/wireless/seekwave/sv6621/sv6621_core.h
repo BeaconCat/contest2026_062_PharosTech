@@ -35,6 +35,7 @@
 #include "sv6621_data.h"
 #include "sv6621_network.h"
 #include "sv6621_packet.h"
+#include "sv6621_power.h"
 #include "sv6621_regulatory.h"
 #include "sv6621_rx.h"
 #include "sv6621_scan.h"
@@ -80,6 +81,7 @@ struct sv6621_dev_s
   bool station_connected;
   bool scan_reporting;
   bool recovery_pending;
+  bool suspended;
   bool powered;
   bool transport_open;
   bool station_open;
