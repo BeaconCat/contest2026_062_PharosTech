@@ -56,6 +56,12 @@ static int sv6621_ioctl_auth_query(FAR struct sv6621_ioctl_s *ioctl,
                                    FAR struct iwreq *request);
 static int sv6621_ioctl_encoding_query(FAR struct sv6621_ioctl_s *ioctl,
                                        FAR struct iwreq *request);
+static int sv6621_ioctl_sensitivity(FAR struct sv6621_ioctl_s *ioctl,
+                                    FAR struct iwreq *request);
+static int sv6621_ioctl_rate(FAR struct sv6621_ioctl_s *ioctl,
+                             FAR struct iwreq *request);
+static int sv6621_ioctl_stats(FAR struct sv6621_ioctl_s *ioctl,
+                              FAR struct iwreq *request);
 static int sv6621_ioctl_scan_start(FAR struct sv6621_ioctl_s *ioctl);
 static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
                                      FAR struct iwreq *request);
@@ -346,6 +352,96 @@ static int sv6621_ioctl_encoding_query(FAR struct sv6621_ioctl_s *ioctl,
 }
 
 /****************************************************************************
+ * Name: sv6621_ioctl_sensitivity
+ ****************************************************************************/
+
+static int sv6621_ioctl_sensitivity(FAR struct sv6621_ioctl_s *ioctl,
+                                    FAR struct iwreq *request)
+{
+  struct sv6621_link_stats_s stats;
+  int ret;
+
+  ret = sv6621_get_link_stats(ioctl->owner, &stats);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  request->u.sens.value = stats.signal_dbm;
+  request->u.sens.fixed = 1;
+  request->u.sens.disabled = 0;
+  request->u.sens.flags = IW_QUAL_DBM;
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_ioctl_rate
+ ****************************************************************************/
+
+static int sv6621_ioctl_rate(FAR struct sv6621_ioctl_s *ioctl,
+                             FAR struct iwreq *request)
+{
+  struct sv6621_link_stats_s stats;
+  int ret;
+
+  ret = sv6621_get_link_stats(ioctl->owner, &stats);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  request->u.bitrate.value = stats.tx.legacy_100kbps * 100000;
+  request->u.bitrate.fixed = 0;
+  request->u.bitrate.disabled = stats.tx.legacy_100kbps == 0;
+  request->u.bitrate.flags = 0;
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_ioctl_stats
+ ****************************************************************************/
+
+static int sv6621_ioctl_stats(FAR struct sv6621_ioctl_s *ioctl,
+                              FAR struct iwreq *request)
+{
+  FAR struct iw_statistics *wireless = request->u.data.pointer;
+  struct sv6621_link_stats_s stats;
+  int quality;
+  int ret;
+
+  if (wireless == NULL || request->u.data.length < sizeof(*wireless))
+    {
+      request->u.data.length = sizeof(*wireless);
+      return -E2BIG;
+    }
+
+  ret = sv6621_get_link_stats(ioctl->owner, &stats);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  memset(wireless, 0, sizeof(*wireless));
+  quality = stats.signal_dbm - stats.noise_dbm;
+  if (quality < 0)
+    {
+      quality = 0;
+    }
+  else if (quality > UINT8_MAX)
+    {
+      quality = UINT8_MAX;
+    }
+
+  wireless->qual.qual = quality;
+  wireless->qual.level = (uint8_t)stats.signal_dbm;
+  wireless->qual.noise = (uint8_t)stats.noise_dbm;
+  wireless->qual.updated = IW_QUAL_ALL_UPDATED | IW_QUAL_DBM;
+  wireless->discard.retries = stats.tx_failed;
+  request->u.data.length = sizeof(*wireless);
+  return 0;
+}
+
+/****************************************************************************
  * Name: sv6621_ioctl_scan_start
  ****************************************************************************/
 
@@ -600,6 +696,18 @@ int sv6621_ioctl_handle(FAR struct sv6621_ioctl_s *ioctl, int command,
 
       case SIOCGIWRANGE:
         ret = sv6621_ioctl_range(ioctl, request);
+        break;
+
+      case SIOCGIWSENS:
+        ret = sv6621_ioctl_sensitivity(ioctl, request);
+        break;
+
+      case SIOCGIWRATE:
+        ret = sv6621_ioctl_rate(ioctl, request);
+        break;
+
+      case SIOCGIWSTATS:
+        ret = sv6621_ioctl_stats(ioctl, request);
         break;
 
       default:
