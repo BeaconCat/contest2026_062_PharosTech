@@ -148,13 +148,12 @@ static void sv6621_station_association_worker(FAR void *arg)
       return;
     }
 
-  if (station->state != SV6621_STATION_AUTHENTICATING)
+  if (station->state != SV6621_STATION_ASSOCIATING)
     {
       nxmutex_unlock(&station->lock);
       return;
     }
 
-  station->state = SV6621_STATION_ASSOCIATING;
   nxmutex_unlock(&station->lock);
   ret = sv6621_connection_associate(
       station->command, station->target.bss.bssid,
@@ -667,6 +666,7 @@ void sv6621_station_command_event(uint8_t instance, uint8_t id,
             }
           else
             {
+              station->state = SV6621_STATION_ASSOCIATING;
               ret = work_queue(LPWORK, &station->association_work,
                                sv6621_station_association_worker, station, 0);
               if (ret < 0)
