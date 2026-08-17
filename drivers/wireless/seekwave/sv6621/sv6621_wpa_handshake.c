@@ -823,7 +823,11 @@ void sv6621_wpa_input(FAR const struct sv6621_data_rx_s *rx, FAR void *arg)
       return;
     }
 
-  if ((wpa->state == SV6621_WPA_WAIT_MESSAGE_1 ||
+  if (rx->frame_length >= SV6621_WPA_ETHERNET_HEADER_SIZE &&
+      memcmp(rx->frame, wpa->supplicant, SV6621_MAC_LENGTH) == 0 &&
+      memcmp(rx->frame + SV6621_MAC_LENGTH, wpa->authenticator,
+             SV6621_MAC_LENGTH) == 0 &&
+      (wpa->state == SV6621_WPA_WAIT_MESSAGE_1 ||
        wpa->state == SV6621_WPA_WAIT_MESSAGE_3 ||
        wpa->state == SV6621_WPA_COMPLETE) &&
       !wpa->frame_pending && !wpa->canceling)
