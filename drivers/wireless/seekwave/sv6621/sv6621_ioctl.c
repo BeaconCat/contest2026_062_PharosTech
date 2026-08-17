@@ -26,6 +26,7 @@
 
 #include <nuttx/config.h>
 
+#include <nuttx/kmalloc.h>
 #include <nuttx/wireless/wireless.h>
 
 #include <errno.h>
@@ -47,6 +48,9 @@ static int sv6621_ioctl_bssid(FAR struct sv6621_ioctl_s *ioctl,
                               FAR struct iwreq *request, bool set);
 static int sv6621_ioctl_essid(FAR struct sv6621_ioctl_s *ioctl,
                               FAR struct iwreq *request, bool set);
+static int sv6621_ioctl_scan_start(FAR struct sv6621_ioctl_s *ioctl);
+static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
+                                     FAR struct iwreq *request);
 
 /****************************************************************************
  * Private Functions
@@ -217,6 +221,145 @@ static int sv6621_ioctl_essid(FAR struct sv6621_ioctl_s *ioctl,
 }
 
 /****************************************************************************
+ * Name: sv6621_ioctl_scan_start
+ ****************************************************************************/
+
+static int sv6621_ioctl_scan_start(FAR struct sv6621_ioctl_s *ioctl)
+{
+  return sv6621_scan(ioctl->owner);
+}
+
+/****************************************************************************
+ * Name: sv6621_ioctl_scan_results
+ ****************************************************************************/
+
+static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
+                                     FAR struct iwreq *request)
+{
+  FAR struct sv6621_bss_s *results;
+  FAR struct iw_event *event;
+  FAR char *cursor;
+  size_t required = 0;
+  size_t count = SV6621_SCAN_CACHE_CAPACITY;
+  size_t index;
+  size_t next;
+  bool active;
+  int ret;
+
+  ret = nxmutex_lock(&ioctl->owner->scan.lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  active = ioctl->owner->scan.active;
+  nxmutex_unlock(&ioctl->owner->scan.lock);
+  if (active)
+    {
+      request->u.data.length = 0;
+      return -EAGAIN;
+    }
+
+  results = kmm_malloc(sizeof(*results) * SV6621_SCAN_CACHE_CAPACITY);
+  if (results == NULL)
+    {
+      request->u.data.length = 0;
+      return -ENOMEM;
+    }
+
+  ret = sv6621_scan_cache_snapshot(&ioctl->owner->scan.cache, results,
+                                    &count);
+  if (ret < 0)
+    {
+      request->u.data.length = 0;
+      goto free_results;
+    }
+
+  for (index = 0; index < count; index++)
+    {
+      required += IW_EV_LEN(ap_addr) + IW_EV_LEN(essid) +
+                  ((results[index].ssid_length + 3) & ~3) +
+                  IW_EV_LEN(qual) + IW_EV_LEN(freq) + IW_EV_LEN(data);
+    }
+
+  if (request->u.data.pointer == NULL || request->u.data.length < required)
+    {
+      request->u.data.length = required;
+      ret = -E2BIG;
+      goto free_results;
+    }
+
+  for (index = 0; index < count; index++)
+    {
+      for (next = index + 1; next < count; next++)
+        {
+          if (results[next].signal_dbm > results[index].signal_dbm)
+            {
+              struct sv6621_bss_s temporary = results[index];
+
+              results[index] = results[next];
+              results[next] = temporary;
+            }
+        }
+    }
+
+  cursor = request->u.data.pointer;
+  for (index = 0; index < count; index++)
+    {
+      FAR const struct sv6621_bss_s *bss = &results[index];
+
+      event = (FAR struct iw_event *)cursor;
+      memset(event, 0, IW_EV_LEN(ap_addr));
+      event->cmd = SIOCGIWAP;
+      event->u.ap_addr.sa_family = ARPHRD_ETHER;
+      memcpy(event->u.ap_addr.sa_data, bss->bssid, SV6621_MAC_LENGTH);
+      event->len = IW_EV_LEN(ap_addr);
+      cursor += event->len;
+
+      event = (FAR struct iw_event *)cursor;
+      memset(event, 0, IW_EV_LEN(essid));
+      event->cmd = SIOCGIWESSID;
+      event->u.essid.flags = IW_ESSID_ON;
+      event->u.essid.length = bss->ssid_length;
+      event->u.essid.pointer = (FAR void *)sizeof(event->u.essid);
+      memcpy(&event->u.essid + 1, bss->ssid, bss->ssid_length);
+      event->len = IW_EV_LEN(essid) + ((bss->ssid_length + 3) & ~3);
+      cursor += event->len;
+
+      event = (FAR struct iw_event *)cursor;
+      memset(event, 0, IW_EV_LEN(qual));
+      event->cmd = IWEVQUAL;
+      event->u.qual.level = (uint8_t)bss->signal_dbm;
+      event->u.qual.updated = IW_QUAL_DBM | IW_QUAL_LEVEL_UPDATED;
+      event->len = IW_EV_LEN(qual);
+      cursor += event->len;
+
+      event = (FAR struct iw_event *)cursor;
+      memset(event, 0, IW_EV_LEN(freq));
+      event->cmd = SIOCGIWFREQ;
+      event->u.freq.m = bss->channel;
+      event->len = IW_EV_LEN(freq);
+      cursor += event->len;
+
+      event = (FAR struct iw_event *)cursor;
+      memset(event, 0, IW_EV_LEN(data));
+      event->cmd = SIOCGIWENCODE;
+      event->u.data.flags = bss->security == SV6621_SECURITY_OPEN ?
+                            IW_ENCODE_DISABLED :
+                            IW_ENCODE_ENABLED | IW_ENCODE_NOKEY;
+      event->len = IW_EV_LEN(data);
+      cursor += event->len;
+    }
+
+  request->u.data.length = cursor - (FAR char *)request->u.data.pointer;
+  ret = 0;
+
+free_results:
+  kmm_free(results);
+  return ret;
+}
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -298,6 +441,14 @@ int sv6621_ioctl_handle(FAR struct sv6621_ioctl_s *ioctl, int command,
 
       case SIOCGIWESSID:
         ret = sv6621_ioctl_essid(ioctl, request, false);
+        break;
+
+      case SIOCSIWSCAN:
+        ret = sv6621_ioctl_scan_start(ioctl);
+        break;
+
+      case SIOCGIWSCAN:
+        ret = sv6621_ioctl_scan_results(ioctl, request);
         break;
 
       case SIOCSIWMODE:
