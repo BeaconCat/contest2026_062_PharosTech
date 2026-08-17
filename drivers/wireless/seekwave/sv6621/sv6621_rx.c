@@ -173,7 +173,7 @@ static int sv6621_rx_drain(FAR struct sv6621_rx_s *rx)
        burst++)
     {
       size_t length = slots * SV6621_PACKET_SIZE + SV6621_RX_TRAILER_SIZE;
-      uint32_t pending_count;
+      uint32_t pending_count = 0;
       ret = rx->transport->ops->read(rx->transport, SV6621_SDIO_FUNCTION_DATA,
                                      SV6621_SDIO_PACKET_WINDOW, false,
                                      rx->buffer, length);
