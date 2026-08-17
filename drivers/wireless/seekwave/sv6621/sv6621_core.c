@@ -323,17 +323,30 @@ static void sv6621_core_thermal_worker(FAR void *arg)
 static void sv6621_core_security_worker(FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
-  struct sv6621_mic_failure_s failure;
 
-  if (nxmutex_lock(&dev->status_lock) < 0)
+  for (;;)
     {
-      return;
-    }
+      struct sv6621_mic_failure_s failure;
 
-  failure = dev->mic_failure;
-  nxmutex_unlock(&dev->status_lock);
-  sv6621_core_report(dev, SV6621_EVENT_MIC_FAILURE, &failure,
-                     sizeof(failure));
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          return;
+        }
+
+      if (dev->security_tail == dev->security_head)
+        {
+          dev->security_work_scheduled = false;
+          nxmutex_unlock(&dev->status_lock);
+          return;
+        }
+
+      failure = dev->security_events[dev->security_tail];
+      dev->security_tail =
+          (dev->security_tail + 1) % SV6621_CORE_SECURITY_EVENT_DEPTH;
+      nxmutex_unlock(&dev->status_lock);
+      sv6621_core_report(dev, SV6621_EVENT_MIC_FAILURE, &failure,
+                         sizeof(failure));
+    }
 }
 
 /****************************************************************************
@@ -626,26 +639,70 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
 
   if (id == SV6621_CORE_EVENT_MIC_FAILURE)
     {
+      struct sv6621_mic_failure_s failure;
+      uint8_t next;
+      bool overflow = false;
+      bool queue = false;
+      int ret;
+
       if (length != SV6621_CORE_MIC_FAILURE_SIZE)
         {
           sv6621_core_queue_recovery(dev, -EPROTO);
           return;
         }
 
+      failure.group_key = payload[0] != 0;
+      failure.key_index = payload[1];
+      failure.lmac_id = payload[2];
+      memcpy(failure.address, payload + 3, SV6621_MAC_LENGTH);
       if (nxmutex_lock(&dev->status_lock) < 0)
         {
           return;
         }
 
-      dev->mic_failure.group_key = payload[0] != 0;
-      dev->mic_failure.key_index = payload[1];
-      dev->mic_failure.lmac_id = payload[2];
-      memcpy(dev->mic_failure.address, payload + 3, SV6621_MAC_LENGTH);
-      nxmutex_unlock(&dev->status_lock);
-      if (work_available(&dev->security_work))
+      dev->status.mic_failures++;
+      next = (dev->security_head + 1) % SV6621_CORE_SECURITY_EVENT_DEPTH;
+      if (next == dev->security_tail)
         {
-          work_queue(LPWORK, &dev->security_work,
-                     sv6621_core_security_worker, dev, 0);
+          dev->status.mic_failures_dropped++;
+          overflow = true;
+        }
+      else
+        {
+          dev->security_events[dev->security_head] = failure;
+          dev->security_head = next;
+          if (!dev->security_work_scheduled)
+            {
+              dev->security_work_scheduled = true;
+              queue = true;
+            }
+        }
+
+      nxmutex_unlock(&dev->status_lock);
+      if (overflow)
+        {
+          sv6621_core_queue_recovery(dev, -ENOBUFS);
+          return;
+        }
+
+      if (queue)
+        {
+          ret = work_queue(LPWORK, &dev->security_work,
+                           sv6621_core_security_worker, dev, 0);
+          if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
+            {
+              uint8_t dropped =
+                  dev->security_head >= dev->security_tail ?
+                  dev->security_head - dev->security_tail :
+                  SV6621_CORE_SECURITY_EVENT_DEPTH - dev->security_tail +
+                      dev->security_head;
+
+              dev->security_work_scheduled = false;
+              dev->status.mic_failures_dropped += dropped;
+              dev->security_tail = dev->security_head;
+              nxmutex_unlock(&dev->status_lock);
+              sv6621_core_queue_recovery(dev, ret);
+            }
         }
 
       return;

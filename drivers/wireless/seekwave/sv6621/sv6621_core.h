@@ -51,6 +51,12 @@
 #include "sv6621_wpa_handshake.h"
 
 /****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#define SV6621_CORE_SECURITY_EVENT_DEPTH 8
+
+/****************************************************************************
  * Public Types
  ****************************************************************************/
 
@@ -93,7 +99,11 @@ struct sv6621_dev_s
   uint32_t thermal_generation;
   bool thermal_blocked;
   bool thermal_work_scheduled;
-  struct sv6621_mic_failure_s mic_failure;
+  struct sv6621_mic_failure_s
+      security_events[SV6621_CORE_SECURITY_EVENT_DEPTH];
+  uint8_t security_head;
+  uint8_t security_tail;
+  bool security_work_scheduled;
   struct sv6621_signal_event_s signal_event;
   bool suspended;
   bool powered;
