@@ -40,6 +40,7 @@
 #include "sv6621_scan.h"
 #include "sv6621_service.h"
 #include "sv6621_station.h"
+#include "sv6621_stats.h"
 #include "sv6621_tx.h"
 #include "sv6621_wifi.h"
 #include "sv6621_wpa_handshake.h"
@@ -71,12 +72,14 @@ struct sv6621_dev_s
       scan_channels[SV6621_REGULATORY_SCAN_CHANNEL_CAPACITY];
   size_t scan_channel_count;
   struct work_s event_work;
+  struct work_s recovery_work;
   struct work_s scan_work;
   struct work_s station_work;
   int scan_result;
   uint16_t station_reason;
   bool station_connected;
   bool scan_reporting;
+  bool recovery_pending;
   bool powered;
   bool transport_open;
   bool station_open;
