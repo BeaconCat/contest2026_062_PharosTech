@@ -485,6 +485,7 @@ static int sv6621_ioctl_rate(FAR struct sv6621_ioctl_s *ioctl,
                              FAR struct iwreq *request)
 {
   struct sv6621_link_stats_s stats;
+  uint64_t bitrate;
   int ret;
 
   ret = sv6621_get_link_stats(ioctl->owner, &stats);
@@ -493,9 +494,10 @@ static int sv6621_ioctl_rate(FAR struct sv6621_ioctl_s *ioctl,
       return ret;
     }
 
-  request->u.bitrate.value = stats.tx.legacy_100kbps * 100000;
+  bitrate = (uint64_t)stats.tx_bitrate_100kbps * 100000;
+  request->u.bitrate.value = bitrate > INT32_MAX ? INT32_MAX : bitrate;
   request->u.bitrate.fixed = 0;
-  request->u.bitrate.disabled = stats.tx.legacy_100kbps == 0;
+  request->u.bitrate.disabled = stats.tx_bitrate_100kbps == 0;
   request->u.bitrate.flags = 0;
   return 0;
 }
