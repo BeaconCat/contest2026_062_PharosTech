@@ -41,6 +41,7 @@
 #include <string.h>
 
 #include "sv6621_network.h"
+#include "sv6621_filter.h"
 
 /****************************************************************************
  * Private Function Prototypes
@@ -48,6 +49,11 @@
 
 static void sv6621_network_rx_worker(FAR void *arg);
 static void sv6621_network_tx_worker(FAR void *arg);
+#if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
+static void sv6621_network_multicast_worker(FAR void *arg);
+static int sv6621_network_queue_multicast(
+    FAR struct sv6621_network_s *network);
+#endif
 static void sv6621_network_reply(FAR struct sv6621_network_s *network);
 static int sv6621_network_transmit(FAR struct sv6621_network_s *network);
 static int sv6621_network_tx_poll(FAR struct net_driver_s *dev);
@@ -116,6 +122,35 @@ static void sv6621_network_tx_worker(FAR void *arg)
 
   net_unlock();
 }
+
+#if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
+/****************************************************************************
+ * Name: sv6621_network_multicast_worker
+ ****************************************************************************/
+
+static void sv6621_network_multicast_worker(FAR void *arg)
+{
+  FAR struct sv6621_network_s *network = arg;
+
+  sv6621_network_sync_multicast(network);
+}
+
+/****************************************************************************
+ * Name: sv6621_network_queue_multicast
+ ****************************************************************************/
+
+static int sv6621_network_queue_multicast(
+    FAR struct sv6621_network_s *network)
+{
+  if (work_available(&network->multicast_work))
+    {
+      return work_queue(LPWORK, &network->multicast_work,
+                        sv6621_network_multicast_worker, network, 0);
+    }
+
+  return 0;
+}
+#endif
 
 static void sv6621_network_rx_worker(FAR void *arg)
 {
@@ -224,14 +259,73 @@ static int sv6621_network_txavail(FAR struct net_driver_s *dev)
 static int sv6621_network_addmac(FAR struct net_driver_s *dev,
                                  FAR const uint8_t *mac)
 {
-  return 0;
+  FAR struct sv6621_network_s *network = dev->d_private;
+  irqstate_t flags;
+  size_t index;
+  int ret = 0;
+
+  if (mac == NULL || (mac[0] & 1) == 0)
+    {
+      return -EINVAL;
+    }
+
+  flags = spin_lock_irqsave(&network->lock);
+  for (index = 0; index < network->multicast_count; index++)
+    {
+      if (memcmp(network->multicast[index], mac, SV6621_MAC_LENGTH) == 0)
+        {
+          spin_unlock_irqrestore(&network->lock, flags);
+          return 0;
+        }
+    }
+
+  if (network->multicast_count >= network->multicast_limit)
+    {
+      ret = -ENOSPC;
+    }
+  else
+    {
+      memcpy(network->multicast[network->multicast_count], mac,
+             SV6621_MAC_LENGTH);
+      network->multicast_count++;
+    }
+
+  spin_unlock_irqrestore(&network->lock, flags);
+  return ret < 0 ? ret : sv6621_network_queue_multicast(network);
 }
 
 #ifdef CONFIG_NET_MCASTGROUP
 static int sv6621_network_rmmac(FAR struct net_driver_s *dev,
                                 FAR const uint8_t *mac)
 {
-  return 0;
+  FAR struct sv6621_network_s *network = dev->d_private;
+  irqstate_t flags;
+  size_t index;
+
+  if (mac == NULL)
+    {
+      return -EINVAL;
+    }
+
+  flags = spin_lock_irqsave(&network->lock);
+  for (index = 1; index < network->multicast_count; index++)
+    {
+      if (memcmp(network->multicast[index], mac, SV6621_MAC_LENGTH) == 0)
+        {
+          network->multicast_count--;
+          if (index < network->multicast_count)
+            {
+              memcpy(network->multicast[index],
+                     network->multicast[network->multicast_count],
+                     SV6621_MAC_LENGTH);
+            }
+
+          break;
+        }
+    }
+
+  spin_unlock_irqrestore(&network->lock, flags);
+  return sv6621_network_queue_multicast(network);
 }
 #endif
 #endif
@@ -242,17 +336,26 @@ static int sv6621_network_rmmac(FAR struct net_driver_s *dev,
 
 int sv6621_network_init(FAR struct sv6621_network_s *network,
                         FAR struct sv6621_data_s *data,
+                        FAR struct sv6621_command_engine_s *command,
+                        uint8_t multicast_limit,
                         FAR const uint8_t mac[SV6621_MAC_LENGTH])
 {
   int ret;
 
-  if (network == NULL || data == NULL || mac == NULL)
+  if (network == NULL || data == NULL || command == NULL || mac == NULL ||
+      multicast_limit == 0)
     {
       return -EINVAL;
     }
 
   memset(network, 0, sizeof(*network));
   network->data = data;
+  network->command = command;
+  network->multicast_limit =
+      multicast_limit > SV6621_NETWORK_MULTICAST_CAPACITY ?
+      SV6621_NETWORK_MULTICAST_CAPACITY : multicast_limit;
+  network->multicast_count = 1;
+  memset(network->multicast[0], 0xff, SV6621_MAC_LENGTH);
   network->dev.d_ifup = sv6621_network_ifup;
   network->dev.d_ifdown = sv6621_network_ifdown;
   network->dev.d_txavail = sv6621_network_txavail;
@@ -282,9 +385,33 @@ void sv6621_network_deinit(FAR struct sv6621_network_s *network)
     {
       work_cancel(LPWORK, &network->rx_work);
       work_cancel(LPWORK, &network->tx_work);
+      work_cancel_sync(LPWORK, &network->multicast_work);
       netdev_unregister(&network->dev);
       network->registered = false;
     }
+}
+
+/****************************************************************************
+ * Name: sv6621_network_sync_multicast
+ ****************************************************************************/
+
+int sv6621_network_sync_multicast(FAR struct sv6621_network_s *network)
+{
+  uint8_t addresses[SV6621_NETWORK_MULTICAST_CAPACITY][SV6621_MAC_LENGTH];
+  irqstate_t flags;
+  uint8_t count;
+
+  if (network == NULL || network->command == NULL)
+    {
+      return -EINVAL;
+    }
+
+  flags = spin_lock_irqsave(&network->lock);
+  count = network->multicast_count;
+  memcpy(addresses, network->multicast, count * SV6621_MAC_LENGTH);
+  spin_unlock_irqrestore(&network->lock, flags);
+
+  return sv6621_filter_set_multicast(network->command, addresses, count);
 }
 
 void sv6621_network_set_link(

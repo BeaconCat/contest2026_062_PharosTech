@@ -708,7 +708,8 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
 #ifdef CONFIG_NET
   if (!dev->network.registered)
     {
-      ret = sv6621_network_init(&dev->network, &dev->data,
+      ret = sv6621_network_init(&dev->network, &dev->data, &dev->command,
+                                dev->wifi_info.max_multicast_addresses,
                                 dev->wifi_info.mac);
       if (ret < 0)
         {
@@ -746,6 +747,14 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
     }
 
   dev->station_open = true;
+
+#ifdef CONFIG_NET
+  ret = sv6621_network_sync_multicast(&dev->network);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+#endif
 
   ret = nxmutex_lock(&dev->status_lock);
   if (ret < 0)

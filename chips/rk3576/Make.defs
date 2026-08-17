@@ -46,6 +46,7 @@ CHIP_CSRCS += sv6621.c sv6621_netdev.c sv6621_wpa.c
 CHIP_CSRCS += sv6621_command.c sv6621_connection.c sv6621_core.c
 CHIP_CSRCS += sv6621_data.c
 CHIP_CSRCS += sv6621_firmware.c
+CHIP_CSRCS += sv6621_filter.c
 CHIP_CSRCS += sv6621_memory.c
 CHIP_CSRCS += sv6621_network.c
 CHIP_CSRCS += sv6621_packet.c
