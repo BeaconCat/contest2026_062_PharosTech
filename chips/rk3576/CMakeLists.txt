@@ -29,6 +29,7 @@ if(CONFIG_SV6621)
        ${SV6621_DIR}/sv6621_memory.c
        ${SV6621_DIR}/sv6621_packet.c
        ${SV6621_DIR}/sv6621_protocol.c
+       ${SV6621_DIR}/sv6621_service.c
        ${SV6621_DIR}/sv6621_transport.c)
 endif()
 
