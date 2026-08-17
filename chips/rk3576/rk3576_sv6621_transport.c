@@ -225,6 +225,11 @@ static uint32_t rk3576_sv6621_command(uint32_t command, uint32_t argument,
       up_udelay(5);
     }
 
+  if (index == RK3576_SV6621_POLL_LIMIT)
+    {
+      return RK3576_SV6621_INT_RTO;
+    }
+
   putreg32(UINT32_MAX, RK3576_SV6621_RINTSTS);
   putreg32(argument, RK3576_SV6621_CMDARG);
   putreg32(command, RK3576_SV6621_CMD);
@@ -235,6 +240,11 @@ static uint32_t rk3576_sv6621_command(uint32_t command, uint32_t argument,
        index++)
     ;
 
+  if (index == RK3576_SV6621_POLL_LIMIT)
+    {
+      return RK3576_SV6621_INT_RTO;
+    }
+
   for (index = 0; index < RK3576_SV6621_POLL_LIMIT; index++)
     {
       status = getreg32(RK3576_SV6621_RINTSTS);
@@ -244,6 +254,11 @@ static uint32_t rk3576_sv6621_command(uint32_t command, uint32_t argument,
         }
 
       up_udelay(5);
+    }
+
+  if (index == RK3576_SV6621_POLL_LIMIT)
+    {
+      return RK3576_SV6621_INT_RTO;
     }
 
   if (response != NULL)
@@ -260,12 +275,18 @@ static int rk3576_sv6621_direct(bool write, uint8_t function, uint32_t address,
   uint32_t argument;
   uint32_t response = 0;
   uint32_t status;
+  int ret;
 
   argument = (write ? (1u << 31) : 0) | ((function & 7) << 28) |
              (write ? (1u << 27) : 0) | ((address & 0x1ffff) << 9) |
              (write ? value : 0);
 
-  nxmutex_lock(&g_rk3576_sv6621_priv.lock);
+  ret = nxmutex_lock(&g_rk3576_sv6621_priv.lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   status = rk3576_sv6621_command(RK3576_SV6621_CMD52, argument, &response);
   nxmutex_unlock(&g_rk3576_sv6621_priv.lock);
 
@@ -636,8 +657,9 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
   uint32_t status;
   uint32_t fifo_count;
   size_t words = (length + 3) / 4;
-  int received = 0;
+  size_t received = 0;
   int index;
+  int ret;
   bool block = length >= RK3576_SV6621_BLOCK_SIZE &&
                (length % RK3576_SV6621_BLOCK_SIZE) == 0;
 
@@ -651,12 +673,23 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
       return -EINVAL;
     }
 
-  nxmutex_lock(&priv->lock);
+  ret = nxmutex_lock(&priv->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   modifyreg32(RK3576_SV6621_CTRL, 0, 1u << 1);
   for (index = 0;
        (getreg32(RK3576_SV6621_CTRL) & (1u << 1)) != 0 && index < 100000;
        index++)
     ;
+
+  if (index == 100000)
+    {
+      nxmutex_unlock(&priv->lock);
+      return -ETIMEDOUT;
+    }
 
   putreg32(block ? RK3576_SV6621_BLOCK_SIZE : (uint32_t)length,
            RK3576_SV6621_BLKSIZ);
@@ -681,7 +714,7 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
       while (fifo_count-- > 0 && received < words)
         {
           uint32_t word = getreg32(RK3576_SV6621_FIFO);
-          int byte;
+          size_t byte;
 
           for (byte = 0; byte < 4 && received * 4 + byte < length; byte++)
             {
@@ -712,8 +745,9 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
   uint32_t argument;
   uint32_t status;
   size_t words = (length + 3) / 4;
-  int sent = 0;
+  size_t sent = 0;
   int index;
+  int ret;
   bool block = length >= RK3576_SV6621_BLOCK_SIZE &&
                (length % RK3576_SV6621_BLOCK_SIZE) == 0;
 
@@ -727,12 +761,23 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
       return -EINVAL;
     }
 
-  nxmutex_lock(&priv->lock);
+  ret = nxmutex_lock(&priv->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   modifyreg32(RK3576_SV6621_CTRL, 0, 1u << 1);
   for (index = 0;
        (getreg32(RK3576_SV6621_CTRL) & (1u << 1)) != 0 && index < 100000;
        index++)
     ;
+
+  if (index == 100000)
+    {
+      nxmutex_unlock(&priv->lock);
+      return -ETIMEDOUT;
+    }
 
   putreg32(block ? RK3576_SV6621_BLOCK_SIZE : (uint32_t)length,
            RK3576_SV6621_BLKSIZ);
@@ -765,7 +810,7 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
       if ((getreg32(RK3576_SV6621_STATUS) & (1u << 3)) == 0)
         {
           uint32_t word = 0;
-          int byte;
+          size_t byte;
 
           for (byte = 0; byte < 4 && sent * 4 + byte < length; byte++)
             {

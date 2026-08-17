@@ -289,14 +289,21 @@ static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
       return;
     }
 
-  if (!dev->recovery_pending &&
-      dev->status.state != SV6621_STATE_OFF &&
+  if (dev->status.state != SV6621_STATE_OFF &&
       dev->status.state != SV6621_STATE_STOPPING &&
       dev->status.state != SV6621_STATE_FAILED)
     {
-      dev->recovery_pending = true;
-      dev->status.last_error = error;
-      queue = true;
+      if (!dev->recovery_pending)
+        {
+          dev->recovery_pending = true;
+          dev->status.last_error = error;
+        }
+
+      if (!dev->recovery_running)
+        {
+          dev->recovery_running = true;
+          queue = true;
+        }
     }
 
   nxmutex_unlock(&dev->status_lock);
@@ -312,6 +319,7 @@ static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
       if (nxmutex_lock(&dev->status_lock) >= 0)
         {
           dev->recovery_pending = false;
+          dev->recovery_running = false;
           dev->status.state = SV6621_STATE_FAILED;
           dev->status.last_error = ret;
           nxmutex_unlock(&dev->status_lock);
@@ -421,6 +429,22 @@ static void sv6621_core_signal_worker(FAR void *arg)
       event = dev->signal_events[dev->signal_tail];
       dev->signal_tail =
           (dev->signal_tail + 1) % SV6621_CORE_SIGNAL_EVENT_DEPTH;
+      if (!dev->station_connected ||
+          nxmutex_lock(&dev->station.lock) < 0)
+        {
+          nxmutex_unlock(&dev->status_lock);
+          continue;
+        }
+
+      if (memcmp(event.bssid, dev->station.target.bss.bssid,
+                 SV6621_MAC_LENGTH) != 0)
+        {
+          nxmutex_unlock(&dev->station.lock);
+          nxmutex_unlock(&dev->status_lock);
+          continue;
+        }
+
+      nxmutex_unlock(&dev->station.lock);
       dev->status.signal_dbm = event.signal_dbm;
       nxmutex_unlock(&dev->status_lock);
       sv6621_core_report(dev, SV6621_EVENT_SIGNAL_CHANGED, &event,
@@ -435,95 +459,120 @@ static void sv6621_core_signal_worker(FAR void *arg)
 static void sv6621_core_recovery_worker(FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
-  enum sv6621_state_e state = SV6621_STATE_RECOVERING;
-  uint16_t disconnect_reason = 0;
-  bool report_disconnect = false;
-  int error = -EIO;
   int ret;
 
-  ret = nxmutex_lock(&dev->lifecycle_lock);
-  if (ret < 0)
+  for (;;)
     {
-      return;
-    }
+      enum sv6621_state_e state = SV6621_STATE_RECOVERING;
+      uint16_t disconnect_reason = 0;
+      bool report_disconnect = false;
+      int error = -EIO;
 
-  if (nxmutex_lock(&dev->status_lock) < 0)
-    {
-      nxmutex_unlock(&dev->lifecycle_lock);
-      return;
-    }
+      ret = nxmutex_lock(&dev->lifecycle_lock);
+      if (ret < 0)
+        {
+          return;
+        }
 
-  if (!dev->recovery_pending || dev->status.state == SV6621_STATE_OFF ||
-      dev->status.state == SV6621_STATE_STOPPING)
-    {
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          nxmutex_unlock(&dev->lifecycle_lock);
+          return;
+        }
+
+      if (!dev->recovery_pending || dev->status.state == SV6621_STATE_OFF ||
+          dev->status.state == SV6621_STATE_STOPPING ||
+          dev->status.state == SV6621_STATE_FAILED)
+        {
+          dev->recovery_pending = false;
+          dev->recovery_running = false;
+          nxmutex_unlock(&dev->status_lock);
+          nxmutex_unlock(&dev->lifecycle_lock);
+          return;
+        }
+
+      error = dev->status.last_error;
       dev->recovery_pending = false;
+      dev->status.state = SV6621_STATE_RECOVERING;
+      dev->status.recovery_count++;
+      if (dev->station_connected || dev->status.connected)
+        {
+          report_disconnect = !dev->station_work_scheduled;
+          dev->station_connected = false;
+          dev->station_reason = disconnect_reason;
+          dev->station_generation++;
+        }
+
+      dev->status.connected = false;
+      memset(dev->status.bssid, 0, sizeof(dev->status.bssid));
+      memset(dev->status.ssid, 0, sizeof(dev->status.ssid));
+      dev->status.ssid_length = 0;
+      dev->status.channel = 0;
+      dev->status.signal_dbm = 0;
       nxmutex_unlock(&dev->status_lock);
-      nxmutex_unlock(&dev->lifecycle_lock);
-      return;
-    }
-
-  error = dev->status.last_error;
-  dev->recovery_pending = false;
-  dev->status.state = SV6621_STATE_RECOVERING;
-  dev->status.recovery_count++;
-  if (dev->station_connected || dev->status.connected)
-    {
-      report_disconnect = !dev->station_work_scheduled;
-      dev->station_connected = false;
-      dev->station_reason = disconnect_reason;
-      dev->station_generation++;
-    }
-
-  dev->status.connected = false;
-  memset(dev->status.bssid, 0, sizeof(dev->status.bssid));
-  memset(dev->status.ssid, 0, sizeof(dev->status.ssid));
-  dev->status.ssid_length = 0;
-  dev->status.channel = 0;
-  dev->status.signal_dbm = 0;
-  nxmutex_unlock(&dev->status_lock);
-  sv6621_core_report(dev, SV6621_EVENT_STATE_CHANGED, &state, sizeof(state));
-  sv6621_core_report(dev, SV6621_EVENT_RECOVERY_STARTED, &error,
-                     sizeof(error));
+      sv6621_core_report(dev, SV6621_EVENT_STATE_CHANGED, &state,
+                         sizeof(state));
+      sv6621_core_report(dev, SV6621_EVENT_RECOVERY_STARTED, &error,
+                         sizeof(error));
 
 #ifdef CONFIG_NET
-  sv6621_network_set_link(&dev->network, false, NULL);
+      sv6621_network_set_link(&dev->network, false, NULL);
 #endif
-  sv6621_scan_controller_cancel(&dev->scan);
-  sv6621_wpa_cancel(&dev->wpa, error);
-  sv6621_station_reset(&dev->station, error);
-  if (report_disconnect)
-    {
-      sv6621_core_report(dev, SV6621_EVENT_DISCONNECTED,
-                         &disconnect_reason, sizeof(disconnect_reason));
-    }
+      sv6621_scan_controller_cancel(&dev->scan);
+      sv6621_wpa_cancel(&dev->wpa, error);
+      sv6621_station_reset(&dev->station, error);
+      if (report_disconnect)
+        {
+          sv6621_core_report(dev, SV6621_EVENT_DISCONNECTED,
+                             &disconnect_reason,
+                             sizeof(disconnect_reason));
+        }
 
-  sv6621_command_cancel(&dev->command, error);
-  sv6621_data_reset_credits(&dev->data);
-  sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
-  sv6621_rx_stop(&dev->rx);
-  dev->suspended = false;
-  dev->station_open = false;
+      sv6621_command_cancel(&dev->command, error);
+      sv6621_data_reset_credits(&dev->data);
+      sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
+      sv6621_rx_stop(&dev->rx);
+      dev->suspended = false;
+      dev->station_open = false;
 
-  if (dev->transport_open)
-    {
-      dev->config.transport->ops->close(dev->config.transport);
-      dev->transport_open = false;
-    }
+      if (dev->transport_open)
+        {
+          dev->config.transport->ops->close(dev->config.transport);
+          dev->transport_open = false;
+        }
 
-  if (dev->powered)
-    {
-      dev->config.board_ops->power_off(dev->config.board_arg);
-      dev->powered = false;
-    }
+      if (dev->powered)
+        {
+          dev->config.board_ops->power_off(dev->config.board_arg);
+          dev->powered = false;
+        }
 
-  sv6621_service_reset(&dev->service);
-  sv6621_core_set_state(dev, SV6621_STATE_FAILED, error);
-  nxmutex_unlock(&dev->lifecycle_lock);
+      sv6621_service_reset(&dev->service);
+      sv6621_core_set_state(dev, SV6621_STATE_FAILED, error);
+      nxmutex_unlock(&dev->lifecycle_lock);
 
-  ret = sv6621_start(dev);
-  if (ret == 0)
-    {
-      sv6621_core_report(dev, SV6621_EVENT_RECOVERY_COMPLETE, NULL, 0);
+      ret = sv6621_start(dev);
+      if (ret == 0)
+        {
+          sv6621_core_report(dev, SV6621_EVENT_RECOVERY_COMPLETE, NULL, 0);
+        }
+
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          return;
+        }
+
+      if (!dev->recovery_pending || dev->status.state == SV6621_STATE_OFF ||
+          dev->status.state == SV6621_STATE_STOPPING ||
+          dev->status.state == SV6621_STATE_FAILED)
+        {
+          dev->recovery_pending = false;
+          dev->recovery_running = false;
+          nxmutex_unlock(&dev->status_lock);
+          return;
+        }
+
+      nxmutex_unlock(&dev->status_lock);
     }
 }
 
@@ -820,6 +869,28 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
           return;
         }
 
+      if (!dev->station_connected)
+        {
+          nxmutex_unlock(&dev->status_lock);
+          return;
+        }
+
+      ret = nxmutex_lock(&dev->station.lock);
+      if (ret < 0)
+        {
+          nxmutex_unlock(&dev->status_lock);
+          return;
+        }
+
+      if (memcmp(event.bssid, dev->station.target.bss.bssid,
+                 SV6621_MAC_LENGTH) != 0)
+        {
+          nxmutex_unlock(&dev->station.lock);
+          nxmutex_unlock(&dev->status_lock);
+          return;
+        }
+
+      nxmutex_unlock(&dev->station.lock);
       next = (dev->signal_head + 1) % SV6621_CORE_SIGNAL_EVENT_DEPTH;
       if (next == dev->signal_tail)
         {
