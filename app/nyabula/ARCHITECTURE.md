@@ -168,7 +168,7 @@ framebuffer、片选或左右声道式的板级映射。
 ### M2：Nyabula Core
 
 - [x] 固定容量 intent 队列、来源优先级、lease 和到期恢复；
-- [x] expression/scene 独立租约槽与 scene hide tombstone；
+- [x] expression/scene 独立租约槽，scene hide 释放本来源所有权；
 - 语音/触摸/系统状态接入；
 - LLM `ai_agent` Skill 和结构化工具；
 - [x] Core 主线程直接驱动 Eye Engine，网络线程只提交命令。

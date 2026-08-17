@@ -53,11 +53,15 @@ Core 提交语义命令，不能直接调用 LVGL renderer。HTTP 线程只负�
 | `eyes.iris` | `eyes`, `rgb`: 24 位十六进制 |
 | `eyes.scene.show` | `scene`, `style`, `payload` |
 | `eyes.scene.update` | 完整 `payload`，更新同一 source 的当前场景 |
-| `eyes.scene.hide` | 无 |
+| `eyes.scene.hide` | 无；结束当前 `source` 的 Scene，不阻塞其他来源 |
 | `core.release` | `domain`: `expression/scene/all` |
 | `core.reset` | 无 |
 
 表情和场景枚举以 `GET /api/v1/capabilities` 为协议真源。
+
+`eyes.scene.hide` 与 `core.release(domain=scene)` 都只释放命令信封中同一
+`source` 的 Scene。隐藏不是高优先级的永久黑名单；系统若需要临时压制 Scene，
+应提交一个有明确 lease 的策略意图，不能留下无限期 tombstone。
 
 ## Scene payload
 
