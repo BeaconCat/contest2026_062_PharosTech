@@ -188,7 +188,9 @@ int main(int argc, FAR char *argv[])
   lv_obj_t *screen;
   struct nyabula_demo_s demo;
   struct nyabula_core_s *core = NULL;
+#ifdef CONFIG_CONTEST2026_062_NYABULA_GATEWAY
   struct nyabula_gateway_s *gateway = NULL;
+#endif
   lv_timer_t *demo_timer = NULL;
   enum nyabula_demo_mode_e demo_mode =
       argc > 1 && strcmp(argv[1], "demo") == 0
