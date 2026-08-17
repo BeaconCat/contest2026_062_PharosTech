@@ -25,11 +25,16 @@ if(CONFIG_SV6621)
        sv6621_netdev.c
        sv6621_wpa.c
        ${SV6621_DIR}/sv6621_command.c
+       ${SV6621_DIR}/sv6621_core.c
        ${SV6621_DIR}/sv6621_firmware.c
        ${SV6621_DIR}/sv6621_memory.c
        ${SV6621_DIR}/sv6621_packet.c
        ${SV6621_DIR}/sv6621_protocol.c
-       ${SV6621_DIR}/sv6621_transport.c)
+       ${SV6621_DIR}/sv6621_rx.c
+       ${SV6621_DIR}/sv6621_service.c
+       ${SV6621_DIR}/sv6621_transport.c
+       ${SV6621_DIR}/sv6621_tx.c
+       ${SV6621_DIR}/sv6621_wifi.c)
 endif()
 
 if(CONFIG_RK3576_I2C)
