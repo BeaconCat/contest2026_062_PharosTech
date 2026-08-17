@@ -29,6 +29,7 @@ if(CONFIG_SV6621)
        ${SV6621_DIR}/sv6621_core.c
        ${SV6621_DIR}/sv6621_data.c
        ${SV6621_DIR}/sv6621_firmware.c
+       ${SV6621_DIR}/sv6621_filter.c
        ${SV6621_DIR}/sv6621_memory.c
        ${SV6621_DIR}/sv6621_network.c
        ${SV6621_DIR}/sv6621_packet.c
