@@ -48,6 +48,7 @@
 #define SV6621_CORE_EVENT_MIC_FAILURE   17
 #define SV6621_CORE_EVENT_THERMAL_WARN  18
 #define SV6621_CORE_EVENT_CQM           20
+#define SV6621_CORE_EVENT_UNPROTECTED_FRAME 21
 #define SV6621_CORE_EVENT_CHANNEL_SWITCH 22
 #define SV6621_CORE_EVENT_FW_RECOVERY   29
 #define SV6621_CORE_MIC_FAILURE_SIZE    9
@@ -579,6 +580,22 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
         {
           work_queue(LPWORK, &dev->signal_work,
                      sv6621_core_signal_worker, dev, 0);
+        }
+
+      return;
+    }
+
+  if (id == SV6621_CORE_EVENT_UNPROTECTED_FRAME)
+    {
+      /* This port does not negotiate PMF or WAPI.  Do not reinject an
+       * exceptional unprotected frame into either the network or station
+       * state machine.
+       */
+
+      if (nxmutex_lock(&dev->status_lock) >= 0)
+        {
+          dev->status.unprotected_frames++;
+          nxmutex_unlock(&dev->status_lock);
         }
 
       return;
