@@ -148,13 +148,12 @@ static void sv6621_station_association_worker(FAR void *arg)
       return;
     }
 
-  if (station->state != SV6621_STATION_AUTHENTICATING)
+  if (station->state != SV6621_STATION_ASSOCIATING)
     {
       nxmutex_unlock(&station->lock);
       return;
     }
 
-  station->state = SV6621_STATION_ASSOCIATING;
   nxmutex_unlock(&station->lock);
   ret = sv6621_connection_associate(
       station->command, station->target.bss.bssid,
@@ -293,9 +292,17 @@ int sv6621_station_init(FAR struct sv6621_station_s *station,
       return ret;
     }
 
+  ret = nxmutex_init(&station->connect_lock);
+  if (ret < 0)
+    {
+      nxmutex_destroy(&station->lock);
+      return ret;
+    }
+
   ret = nxsem_init(&station->completion, 0, 0);
   if (ret < 0)
     {
+      nxmutex_destroy(&station->connect_lock);
       nxmutex_destroy(&station->lock);
       return ret;
     }
@@ -313,12 +320,26 @@ int sv6621_station_init(FAR struct sv6621_station_s *station,
 
 void sv6621_station_deinit(FAR struct sv6621_station_s *station)
 {
-  if (station != NULL)
+  if (station == NULL)
     {
-      sv6621_station_reset(station, -ESHUTDOWN);
-      nxsem_destroy(&station->completion);
-      nxmutex_destroy(&station->lock);
+      return;
     }
+
+  if (nxmutex_lock(&station->lock) >= 0)
+    {
+      station->shutting_down = true;
+      nxmutex_unlock(&station->lock);
+    }
+
+  sv6621_station_reset(station, -ESHUTDOWN);
+  if (nxmutex_lock(&station->connect_lock) >= 0)
+    {
+      nxmutex_unlock(&station->connect_lock);
+    }
+
+  nxsem_destroy(&station->completion);
+  nxmutex_destroy(&station->connect_lock);
+  nxmutex_destroy(&station->lock);
 }
 
 /****************************************************************************
@@ -353,10 +374,17 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
       return -EINVAL;
     }
 
+  ret = nxmutex_lock(&station->connect_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   target = kmm_malloc(sizeof(*target));
   if (target == NULL)
     {
-      return -ENOMEM;
+      ret = -ENOMEM;
+      goto unlock_connect;
     }
 
   ret = sv6621_scan_cache_find(&station->scan->cache, request, target);
@@ -385,6 +413,13 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
       goto free_target;
     }
 
+  if (station->shutting_down)
+    {
+      nxmutex_unlock(&station->lock);
+      ret = -ESHUTDOWN;
+      goto free_target;
+    }
+
   ret = sv6621_connection_build_association_ies(
       target, request->security, station->association_ies,
       sizeof(station->association_ies), &station->association_ie_length);
@@ -401,6 +436,7 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
   station->state = SV6621_STATION_JOINING;
   nxmutex_unlock(&station->lock);
   kmm_free(target);
+  target = NULL;
 
   ret = sv6621_connection_join(station->command, &station->target,
                                &station->peer);
@@ -408,13 +444,21 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
     {
       sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
       nxsem_trywait(&station->completion);
-      return ret;
+      goto unlock_connect;
     }
 
   ret = nxmutex_lock(&station->lock);
   if (ret < 0)
     {
-      return ret;
+      goto unlock_connect;
+    }
+
+  if (station->state != SV6621_STATION_JOINING)
+    {
+      ret = station->result;
+      nxmutex_unlock(&station->lock);
+      nxsem_trywait(&station->completion);
+      goto unlock_connect;
     }
 
   station->state = SV6621_STATION_AUTHENTICATING;
@@ -425,32 +469,52 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
     {
       sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
       nxsem_trywait(&station->completion);
-      return ret;
+      goto unlock_connect;
     }
 
   ret = nxsem_tickwait(&station->completion, MSEC2TICK(timeout_ms));
   if (ret < 0)
     {
       work_cancel_sync(LPWORK, &station->association_work);
+      ret = nxmutex_lock(&station->lock);
+      if (ret < 0)
+        {
+          goto unlock_connect;
+        }
+
+      if (station->result != -EINPROGRESS)
+        {
+          ret = station->result;
+          nxmutex_unlock(&station->lock);
+          nxsem_trywait(&station->completion);
+          goto unlock_connect;
+        }
+
+      station->state = SV6621_STATION_IDLE;
+      station->result = -ETIMEDOUT;
+      nxmutex_unlock(&station->lock);
       sv6621_connection_disconnect(
           station->command, SV6621_CONNECTION_DISCONNECT_ONLY, true,
           SV6621_STATION_REASON_UNSPECIFIED, NULL, 0);
-      sv6621_station_reset(station, -ETIMEDOUT);
-      return -ETIMEDOUT;
+      ret = -ETIMEDOUT;
+      goto unlock_connect;
     }
 
   ret = nxmutex_lock(&station->lock);
   if (ret < 0)
     {
-      return ret;
+      goto unlock_connect;
     }
 
   ret = station->result;
   nxmutex_unlock(&station->lock);
-  return ret;
+  goto unlock_connect;
 
 free_target:
   kmm_free(target);
+
+unlock_connect:
+  nxmutex_unlock(&station->connect_lock);
   return ret;
 }
 
@@ -492,11 +556,22 @@ int sv6621_station_disconnect(FAR struct sv6621_station_s *station,
     {
       if (nxmutex_lock(&station->lock) >= 0)
         {
-          station->state = previous_state;
+          if (station->state == SV6621_STATION_DISCONNECTING)
+            {
+              station->state = previous_state;
+            }
+          else if (station->state == SV6621_STATION_IDLE)
+            {
+              ret = 0;
+            }
+
           nxmutex_unlock(&station->lock);
         }
 
-      return ret;
+      if (ret < 0)
+        {
+          return ret;
+        }
     }
 
   if (nxmutex_lock(&station->lock) >= 0)
@@ -667,6 +742,7 @@ void sv6621_station_command_event(uint8_t instance, uint8_t id,
             }
           else
             {
+              station->state = SV6621_STATION_ASSOCIATING;
               ret = work_queue(LPWORK, &station->association_work,
                                sv6621_station_association_worker, station, 0);
               if (ret < 0)
