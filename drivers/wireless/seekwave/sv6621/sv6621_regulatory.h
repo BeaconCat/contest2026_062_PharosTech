@@ -31,6 +31,13 @@
 
 #include "include/sv6621.h"
 #include "sv6621_command.h"
+#include "sv6621_scan.h"
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#define SV6621_REGULATORY_SCAN_CHANNEL_CAPACITY 64
 
 /****************************************************************************
  * Public Function Prototypes
@@ -39,5 +46,9 @@
 int sv6621_regulatory_set_domain(
     FAR struct sv6621_command_engine_s *command,
     FAR const struct sv6621_regulatory_domain_s *domain);
+int sv6621_regulatory_scan_channels(
+    FAR const struct sv6621_regulatory_domain_s *domain,
+    FAR struct sv6621_scan_channel_s *channels, size_t capacity,
+    FAR size_t *count);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_REGULATORY_H */

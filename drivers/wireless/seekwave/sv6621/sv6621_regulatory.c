@@ -46,6 +46,16 @@
    SV6621_REGULATORY_MAX_RULES * SV6621_REGULATORY_RULE_SIZE)
 
 /****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+static const uint8_t g_sv6621_regulatory_channels_5ghz[] = {
+  36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120,
+  124, 128, 132, 136, 140, 144, 149, 153, 157, 161, 165, 169,
+  173, 177
+};
+
+/****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
@@ -53,6 +63,8 @@ static void sv6621_regulatory_put_le32(FAR uint8_t *output, uint32_t value);
 static bool sv6621_regulatory_country_valid(FAR const char country[2]);
 static bool sv6621_regulatory_rule_valid(
     FAR const struct sv6621_regulatory_rule_s *rule);
+static bool sv6621_regulatory_channel_allowed(
+    FAR const struct sv6621_regulatory_domain_s *domain, uint8_t channel);
 
 /****************************************************************************
  * Private Functions
@@ -98,6 +110,32 @@ static bool sv6621_regulatory_rule_valid(
 
   last_channel = (uint16_t)rule->start_channel + rule->channel_span - 1;
   return last_channel <= UINT8_MAX;
+}
+
+/****************************************************************************
+ * Name: sv6621_regulatory_channel_allowed
+ ****************************************************************************/
+
+static bool sv6621_regulatory_channel_allowed(
+    FAR const struct sv6621_regulatory_domain_s *domain, uint8_t channel)
+{
+  size_t index;
+
+  for (index = 0; index < domain->rule_count; index++)
+    {
+      FAR const struct sv6621_regulatory_rule_s *rule =
+          &domain->rules[index];
+      uint16_t last_channel =
+          (uint16_t)rule->start_channel + rule->channel_span - 1;
+
+      if ((rule->flags & SV6621_REGULATORY_FLAG_NO_IR) == 0 &&
+          channel >= rule->start_channel && channel <= last_channel)
+        {
+          return true;
+        }
+    }
+
+  return false;
 }
 
 /****************************************************************************
@@ -154,4 +192,80 @@ int sv6621_regulatory_set_domain(
       SV6621_REGULATORY_COMMAND_SET_DOMAIN, payload, sizeof(payload), NULL,
       NULL, SV6621_REGULATORY_COMMAND_TIMEOUT_MS);
   return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
+}
+
+/****************************************************************************
+ * Name: sv6621_regulatory_scan_channels
+ ****************************************************************************/
+
+int sv6621_regulatory_scan_channels(
+    FAR const struct sv6621_regulatory_domain_s *domain,
+    FAR struct sv6621_scan_channel_s *channels, size_t capacity,
+    FAR size_t *count)
+{
+  size_t output = 0;
+  size_t index;
+  uint8_t channel;
+
+  if (domain == NULL || channels == NULL || count == NULL || capacity == 0 ||
+      !sv6621_regulatory_country_valid(domain->country) ||
+      domain->rule_count == 0 ||
+      domain->rule_count > SV6621_REGULATORY_MAX_RULES)
+    {
+      return -EINVAL;
+    }
+
+  for (index = 0; index < domain->rule_count; index++)
+    {
+      if (!sv6621_regulatory_rule_valid(&domain->rules[index]))
+        {
+          return -EINVAL;
+        }
+    }
+
+  for (channel = 1; channel <= 14; channel++)
+    {
+      if (!sv6621_regulatory_channel_allowed(domain, channel))
+        {
+          continue;
+        }
+
+      if (output >= capacity)
+        {
+          return -ENOSPC;
+        }
+
+      channels[output].number = channel;
+      channels[output].band = SV6621_SCAN_BAND_2GHZ;
+      channels[output].flags = SV6621_SCAN_FLAG_PASSIVE;
+      output++;
+    }
+
+  for (index = 0; index < sizeof(g_sv6621_regulatory_channels_5ghz);
+       index++)
+    {
+      channel = g_sv6621_regulatory_channels_5ghz[index];
+      if (!sv6621_regulatory_channel_allowed(domain, channel))
+        {
+          continue;
+        }
+
+      if (output >= capacity)
+        {
+          return -ENOSPC;
+        }
+
+      channels[output].number = channel;
+      channels[output].band = SV6621_SCAN_BAND_5GHZ;
+      channels[output].flags = SV6621_SCAN_FLAG_PASSIVE;
+      output++;
+    }
+
+  if (output == 0)
+    {
+      return -EINVAL;
+    }
+
+  *count = output;
+  return 0;
 }
