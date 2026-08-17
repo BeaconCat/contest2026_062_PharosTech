@@ -64,7 +64,8 @@ static bool sv6621_regulatory_country_valid(FAR const char country[2]);
 static bool sv6621_regulatory_rule_valid(
     FAR const struct sv6621_regulatory_rule_s *rule);
 static bool sv6621_regulatory_channel_allowed(
-    FAR const struct sv6621_regulatory_domain_s *domain, uint8_t channel);
+    FAR const struct sv6621_regulatory_domain_s *domain, uint8_t channel,
+    FAR uint8_t *scan_flags);
 
 /****************************************************************************
  * Private Functions
@@ -117,7 +118,8 @@ static bool sv6621_regulatory_rule_valid(
  ****************************************************************************/
 
 static bool sv6621_regulatory_channel_allowed(
-    FAR const struct sv6621_regulatory_domain_s *domain, uint8_t channel)
+    FAR const struct sv6621_regulatory_domain_s *domain, uint8_t channel,
+    FAR uint8_t *scan_flags)
 {
   size_t index;
 
@@ -128,9 +130,12 @@ static bool sv6621_regulatory_channel_allowed(
       uint16_t last_channel =
           (uint16_t)rule->start_channel + rule->channel_span - 1;
 
-      if ((rule->flags & SV6621_REGULATORY_FLAG_NO_IR) == 0 &&
-          channel >= rule->start_channel && channel <= last_channel)
+      if (channel >= rule->start_channel && channel <= last_channel)
         {
+          *scan_flags =
+              (rule->flags & (SV6621_REGULATORY_FLAG_DFS |
+                              SV6621_REGULATORY_FLAG_NO_IR)) != 0 ?
+              SV6621_SCAN_FLAG_PASSIVE : 0;
           return true;
         }
     }
@@ -206,6 +211,7 @@ int sv6621_regulatory_scan_channels(
   size_t output = 0;
   size_t index;
   uint8_t channel;
+  uint8_t flags;
 
   if (domain == NULL || channels == NULL || count == NULL || capacity == 0 ||
       !sv6621_regulatory_country_valid(domain->country) ||
@@ -225,7 +231,7 @@ int sv6621_regulatory_scan_channels(
 
   for (channel = 1; channel <= 14; channel++)
     {
-      if (!sv6621_regulatory_channel_allowed(domain, channel))
+      if (!sv6621_regulatory_channel_allowed(domain, channel, &flags))
         {
           continue;
         }
@@ -237,7 +243,7 @@ int sv6621_regulatory_scan_channels(
 
       channels[output].number = channel;
       channels[output].band = SV6621_SCAN_BAND_2GHZ;
-      channels[output].flags = SV6621_SCAN_FLAG_PASSIVE;
+      channels[output].flags = flags;
       output++;
     }
 
@@ -245,7 +251,7 @@ int sv6621_regulatory_scan_channels(
        index++)
     {
       channel = g_sv6621_regulatory_channels_5ghz[index];
-      if (!sv6621_regulatory_channel_allowed(domain, channel))
+      if (!sv6621_regulatory_channel_allowed(domain, channel, &flags))
         {
           continue;
         }
@@ -257,7 +263,7 @@ int sv6621_regulatory_scan_channels(
 
       channels[output].number = channel;
       channels[output].band = SV6621_SCAN_BAND_5GHZ;
-      channels[output].flags = SV6621_SCAN_FLAG_PASSIVE;
+      channels[output].flags = flags;
       output++;
     }
 
