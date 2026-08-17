@@ -21,7 +21,7 @@
 #include <nuttx/config.h>
 
 #include <errno.h>
-#include <pthread.h>
+#include <semaphore.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,7 +58,7 @@ struct nyabula_core_scene_slot_s
 struct nyabula_core_s
 {
   struct nyabula_eye_engine_s *eye_engine;
-  pthread_mutex_t lock;
+  sem_t lock;
   struct nyabula_core_command_s queue[NYABULA_CORE_QUEUE_SIZE];
   size_t queue_head;
   size_t queue_tail;
@@ -76,6 +76,19 @@ static uint64_t nyabula_core_now_ms(void)
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
   return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+}
+
+static int nyabula_core_lock(struct nyabula_core_s *core)
+{
+  int ret;
+
+  do
+    {
+      ret = sem_wait(&core->lock);
+    }
+  while (ret < 0 && errno == EINTR);
+
+  return ret < 0 ? -errno : 0;
 }
 
 static void nyabula_core_copy_string(char *dest, size_t size,
@@ -528,7 +541,7 @@ nyabula_core_create(struct nyabula_eye_engine_s *eye_engine)
       return NULL;
     }
 
-  if (pthread_mutex_init(&core->lock, NULL) != 0)
+  if (sem_init(&core->lock, 0, 1) < 0)
     {
       free(core);
       return NULL;
@@ -550,7 +563,7 @@ extern "C" void nyabula_core_destroy(struct nyabula_core_s *core)
 {
   if (core != NULL)
     {
-      pthread_mutex_destroy(&core->lock);
+      sem_destroy(&core->lock);
       free(core);
     }
 }
@@ -566,7 +579,11 @@ nyabula_core_submit(struct nyabula_core_s *core,
       return -EINVAL;
     }
 
-  pthread_mutex_lock(&core->lock);
+  ret = nyabula_core_lock(core);
+  if (ret < 0)
+    {
+      return ret;
+    }
   if (core->queue_depth >= NYABULA_CORE_QUEUE_SIZE)
     {
       ret = -EAGAIN;
@@ -579,7 +596,7 @@ nyabula_core_submit(struct nyabula_core_s *core,
       core->snapshot.queue_depth = core->queue_depth;
     }
 
-  pthread_mutex_unlock(&core->lock);
+  sem_post(&core->lock);
   return ret;
 }
 
@@ -593,7 +610,10 @@ extern "C" void nyabula_core_tick(struct nyabula_core_s *core)
       return;
     }
 
-  pthread_mutex_lock(&core->lock);
+  if (nyabula_core_lock(core) < 0)
+    {
+      return;
+    }
   now = nyabula_core_now_ms();
   core->snapshot.uptime_ms = now;
 
@@ -617,7 +637,7 @@ extern "C" void nyabula_core_tick(struct nyabula_core_s *core)
 
   core->snapshot.queue_depth = core->queue_depth;
   nyabula_core_apply_winners(core, now);
-  pthread_mutex_unlock(&core->lock);
+  sem_post(&core->lock);
 }
 
 extern "C" int
@@ -629,8 +649,12 @@ nyabula_core_get_snapshot(struct nyabula_core_s *core,
       return -EINVAL;
     }
 
-  pthread_mutex_lock(&core->lock);
+  int ret = nyabula_core_lock(core);
+  if (ret < 0)
+    {
+      return ret;
+    }
   *snapshot = core->snapshot;
-  pthread_mutex_unlock(&core->lock);
+  sem_post(&core->lock);
   return 0;
 }
