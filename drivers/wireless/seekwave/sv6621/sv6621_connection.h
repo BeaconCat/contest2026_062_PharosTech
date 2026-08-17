@@ -38,6 +38,7 @@
 
 #define SV6621_CONNECTION_HT_CAPABILITY_SIZE  26
 #define SV6621_CONNECTION_VHT_CAPABILITY_SIZE 12
+#define SV6621_CONNECTION_ASSOC_IE_CAPACITY   128
 
 /****************************************************************************
  * Public Types
@@ -88,5 +89,9 @@ int sv6621_connection_disconnect(
     FAR struct sv6621_command_engine_s *command,
     enum sv6621_connection_disconnect_mode_e mode, bool local_state_change,
     uint16_t reason, FAR const uint8_t *ies, size_t ies_length);
+int sv6621_connection_build_association_ies(
+    FAR const struct sv6621_scan_entry_s *entry,
+    enum sv6621_security_e security, FAR uint8_t *ies, size_t capacity,
+    FAR size_t *length);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_CONNECTION_H */
