@@ -91,6 +91,8 @@
 #define SV6621_DATA_BA_REQ_RX                 4
 #define SV6621_DATA_BA_MAX_WINDOW             256
 #define SV6621_DATA_BA_MIN_CAPACITY            64
+#define SV6621_DATA_SEQUENCE_MASK              0x0fff
+#define SV6621_DATA_SEQUENCE_HALF              0x0800
 
 /****************************************************************************
  * Private Function Prototypes
@@ -115,6 +117,21 @@ static void sv6621_data_free_ba_session(
 static int sv6621_data_configure_ba_session(
     FAR struct sv6621_data_ba_session_s *session, uint8_t peer_index,
     uint16_t window_start, uint16_t window_size);
+static bool sv6621_data_sequence_less(uint16_t left, uint16_t right);
+static uint16_t sv6621_data_sequence_add(uint16_t sequence, uint16_t value);
+static void sv6621_data_deliver(FAR struct sv6621_data_s *data,
+                                FAR const struct sv6621_data_rx_s *rx);
+static void sv6621_data_purge_reorder_slot(
+    FAR struct sv6621_data_reorder_slot_s *slot);
+static void sv6621_data_release_reorder_slot(
+    FAR struct sv6621_data_s *data,
+    FAR struct sv6621_data_ba_session_s *session,
+    FAR struct sv6621_data_reorder_slot_s *slot);
+static void sv6621_data_advance_reorder_window(
+    FAR struct sv6621_data_s *data,
+    FAR struct sv6621_data_ba_session_s *session, uint16_t new_start);
+static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
+                                FAR const struct sv6621_data_rx_s *rx);
 static int sv6621_data_reassemble(FAR struct sv6621_data_s *data,
                                   FAR struct sv6621_data_rx_s *rx);
 static bool sv6621_data_take_credit(FAR struct sv6621_data_s *data,
@@ -298,6 +315,223 @@ static int sv6621_data_configure_ba_session(
 }
 
 /****************************************************************************
+ * Name: sv6621_data_sequence_less
+ ****************************************************************************/
+
+static bool sv6621_data_sequence_less(uint16_t left, uint16_t right)
+{
+  return ((left - right) & SV6621_DATA_SEQUENCE_HALF) != 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_sequence_add
+ ****************************************************************************/
+
+static uint16_t sv6621_data_sequence_add(uint16_t sequence, uint16_t value)
+{
+  return (sequence + value) & SV6621_DATA_SEQUENCE_MASK;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_deliver
+ ****************************************************************************/
+
+static void sv6621_data_deliver(FAR struct sv6621_data_s *data,
+                                FAR const struct sv6621_data_rx_s *rx)
+{
+  data->stats.received++;
+  data->stats.received_bytes += rx->frame_length;
+  if ((rx->eapol ||
+       (((uint16_t)rx->frame[12] << 8) | rx->frame[13]) ==
+           SV6621_DATA_ETHERTYPE_EAPOL) &&
+      data->eapol_input != NULL)
+    {
+      data->eapol_input(rx, data->eapol_arg);
+    }
+  else
+    {
+      data->input(rx, data->input_arg);
+    }
+}
+
+/****************************************************************************
+ * Name: sv6621_data_purge_reorder_slot
+ ****************************************************************************/
+
+static void sv6621_data_purge_reorder_slot(
+    FAR struct sv6621_data_reorder_slot_s *slot)
+{
+  FAR struct sv6621_data_reorder_frame_s *frame;
+
+  while ((frame = slot->head) != NULL)
+    {
+      slot->head = frame->next;
+      kmm_free(frame);
+    }
+
+  memset(slot, 0, sizeof(*slot));
+}
+
+/****************************************************************************
+ * Name: sv6621_data_release_reorder_slot
+ ****************************************************************************/
+
+static void sv6621_data_release_reorder_slot(
+    FAR struct sv6621_data_s *data,
+    FAR struct sv6621_data_ba_session_s *session,
+    FAR struct sv6621_data_reorder_slot_s *slot)
+{
+  FAR struct sv6621_data_reorder_frame_s *frame;
+
+  while ((frame = slot->head) != NULL)
+    {
+      slot->head = frame->next;
+      sv6621_data_deliver(data, &frame->rx);
+      data->stats.reordered++;
+      kmm_free(frame);
+    }
+
+  if (slot->occupied && session->queued_sequences > 0)
+    {
+      session->queued_sequences--;
+    }
+
+  memset(slot, 0, sizeof(*slot));
+}
+
+/****************************************************************************
+ * Name: sv6621_data_advance_reorder_window
+ ****************************************************************************/
+
+static void sv6621_data_advance_reorder_window(
+    FAR struct sv6621_data_s *data,
+    FAR struct sv6621_data_ba_session_s *session, uint16_t new_start)
+{
+  while (session->window_start != new_start)
+    {
+      FAR struct sv6621_data_reorder_slot_s *slot =
+          &session->slots[session->window_start % session->capacity];
+
+      if (slot->occupied)
+        {
+          sv6621_data_release_reorder_slot(data, session, slot);
+        }
+
+      session->window_start =
+          sv6621_data_sequence_add(session->window_start, 1);
+    }
+
+  data->stats.reorder_window_moves++;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_reorder
+ ****************************************************************************/
+
+static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
+                                FAR const struct sv6621_data_rx_s *rx)
+{
+  FAR struct sv6621_data_ba_session_s *session;
+  FAR struct sv6621_data_reorder_slot_s *slot;
+  FAR struct sv6621_data_reorder_frame_s *frame;
+  uint16_t window_end;
+  uint16_t new_start;
+
+  if (!rx->qos_data || rx->multicast || rx->amsdu ||
+      rx->fragment != 0 || rx->more_fragments || !rx->peer_valid ||
+      rx->lmac_id >= SV6621_DATA_LMAC_COUNT ||
+      rx->tid >= SV6621_DATA_TID_COUNT)
+    {
+      return false;
+    }
+
+  session = &data->ba[rx->lmac_id][rx->tid];
+  if (!session->active || session->slots == NULL ||
+      session->peer_index != rx->peer_index)
+    {
+      return false;
+    }
+
+  if (sv6621_data_sequence_less(rx->sequence, session->window_start))
+    {
+      data->stats.reorder_stale++;
+      return true;
+    }
+
+  window_end = sv6621_data_sequence_add(session->window_start,
+                                        session->capacity);
+  if (!sv6621_data_sequence_less(rx->sequence, window_end))
+    {
+      new_start = sv6621_data_sequence_add(
+          rx->sequence, (SV6621_DATA_SEQUENCE_MASK + 1) -
+                            session->capacity + 1);
+      sv6621_data_advance_reorder_window(data, session, new_start);
+    }
+
+  slot = &session->slots[rx->sequence % session->capacity];
+  if (slot->occupied)
+    {
+      if (slot->sequence == rx->sequence)
+        {
+          data->stats.reorder_duplicates++;
+          return true;
+        }
+
+      sv6621_data_purge_reorder_slot(slot);
+      if (session->queued_sequences > 0)
+        {
+          session->queued_sequences--;
+        }
+    }
+
+  if (rx->frame_length > SIZE_MAX - sizeof(*frame))
+    {
+      data->stats.reorder_allocation_failures++;
+      return true;
+    }
+
+  frame = kmm_malloc(sizeof(*frame) + rx->frame_length);
+  if (frame == NULL)
+    {
+      data->stats.reorder_allocation_failures++;
+      return true;
+    }
+
+  frame->next = NULL;
+  frame->rx = *rx;
+  frame->rx.frame = frame->frame;
+  memcpy(frame->frame, rx->frame, rx->frame_length);
+  slot->head = frame;
+  slot->tail = frame;
+  slot->sequence = rx->sequence;
+  slot->occupied = true;
+  slot->complete = true;
+  session->queued_sequences++;
+
+  if (rx->sequence != session->window_start)
+    {
+      data->stats.reorder_buffered++;
+      return true;
+    }
+
+  do
+    {
+      slot = &session->slots[session->window_start % session->capacity];
+      if (!slot->occupied || !slot->complete)
+        {
+          break;
+        }
+
+      sv6621_data_release_reorder_slot(data, session, slot);
+      session->window_start =
+          sv6621_data_sequence_add(session->window_start, 1);
+    }
+  while (session->queued_sequences > 0);
+
+  return true;
+}
+
+/****************************************************************************
  * Name: sv6621_data_reassemble
  ****************************************************************************/
 
@@ -441,18 +675,9 @@ static void sv6621_data_packet(uint8_t channel, FAR const uint8_t *payload,
       goto unlock;
     }
 
-  data->stats.received++;
-  data->stats.received_bytes += rx.frame_length;
-  if ((rx.eapol ||
-       (((uint16_t)rx.frame[12] << 8) | rx.frame[13]) ==
-           SV6621_DATA_ETHERTYPE_EAPOL) &&
-      data->eapol_input != NULL)
+  if (!sv6621_data_reorder(data, &rx))
     {
-      data->eapol_input(&rx, data->eapol_arg);
-    }
-  else
-    {
-      data->input(&rx, data->input_arg);
+      sv6621_data_deliver(data, &rx);
     }
 
 unlock:

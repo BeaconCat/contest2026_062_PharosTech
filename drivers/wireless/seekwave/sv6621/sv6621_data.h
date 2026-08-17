@@ -145,6 +145,7 @@ struct sv6621_data_ba_session_s
   uint16_t window_start;
   uint16_t negotiated_window;
   uint16_t capacity;
+  uint16_t queued_sequences;
   uint8_t peer_index;
   bool active;
 };
@@ -169,6 +170,12 @@ struct sv6621_data_stats_s
   uint32_t fragment_pn_drops;
   uint32_t ba_events;
   uint32_t ba_event_errors;
+  uint32_t reordered;
+  uint32_t reorder_buffered;
+  uint32_t reorder_duplicates;
+  uint32_t reorder_stale;
+  uint32_t reorder_window_moves;
+  uint32_t reorder_allocation_failures;
 };
 
 struct sv6621_data_s
