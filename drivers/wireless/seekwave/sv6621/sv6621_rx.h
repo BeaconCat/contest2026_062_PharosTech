@@ -49,8 +49,10 @@ struct sv6621_rx_stats_s
   uint32_t drain_completions;
   uint32_t malformed_bursts;
   uint32_t transport_errors;
+  uint32_t duplicate_interrupts;
   uint32_t last_valid_length;
   uint32_t last_pending_count;
+  uint8_t last_fifo_indicator;
 };
 
 typedef void (*sv6621_rx_error_t)(int error, FAR void *arg);
@@ -66,6 +68,7 @@ struct sv6621_rx_s
   FAR void *error_arg;
   volatile bool running;
   volatile bool suspended;
+  bool fifo_indicator_valid;
 };
 
 /****************************************************************************
