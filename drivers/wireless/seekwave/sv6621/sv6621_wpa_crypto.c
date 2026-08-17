@@ -42,6 +42,15 @@
 #define SV6621_WPA_SSID_MAX        32
 #define SV6621_WPA_PBKDF_ROUNDS    4096
 #define SV6621_WPA_PBKDF_SALT_MAX  (SV6621_WPA_SSID_MAX + 4)
+#define SV6621_WPA_MAC_SIZE         6
+#define SV6621_WPA_PTK_SEED_SIZE \
+  (SV6621_WPA_MAC_SIZE * 2 + SV6621_WPA_NONCE_SIZE * 2)
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+static const uint8_t g_sv6621_wpa_ptk_label[] = "Pairwise key expansion";
 
 /****************************************************************************
  * Public Functions
@@ -163,5 +172,97 @@ int sv6621_wpa_derive_pmk(FAR const uint8_t *passphrase,
   memset(salt, 0, sizeof(salt));
   memset(digest, 0, sizeof(digest));
   memset(accumulator, 0, sizeof(accumulator));
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_derive_ptk
+ ****************************************************************************/
+
+int sv6621_wpa_derive_ptk(
+    FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE],
+    FAR const uint8_t authenticator[SV6621_WPA_MAC_SIZE],
+    FAR const uint8_t supplicant[SV6621_WPA_MAC_SIZE],
+    FAR const uint8_t anonce[SV6621_WPA_NONCE_SIZE],
+    FAR const uint8_t snonce[SV6621_WPA_NONCE_SIZE],
+    uint8_t ptk[SV6621_WPA_PTK_SIZE])
+{
+  uint8_t input[sizeof(g_sv6621_wpa_ptk_label) +
+                SV6621_WPA_PTK_SEED_SIZE + 1];
+  uint8_t digest[SV6621_WPA_SHA1_SIZE];
+  FAR const uint8_t *first;
+  FAR const uint8_t *second;
+  size_t offset = 0;
+  size_t produced = 0;
+  uint8_t counter = 0;
+  int ret;
+
+  if (pmk == NULL || authenticator == NULL || supplicant == NULL ||
+      anonce == NULL || snonce == NULL || ptk == NULL)
+    {
+      return -EINVAL;
+    }
+
+  memcpy(input, g_sv6621_wpa_ptk_label,
+         sizeof(g_sv6621_wpa_ptk_label) - 1);
+  offset = sizeof(g_sv6621_wpa_ptk_label) - 1;
+  input[offset++] = 0;
+
+  if (memcmp(authenticator, supplicant, SV6621_WPA_MAC_SIZE) <= 0)
+    {
+      first = authenticator;
+      second = supplicant;
+    }
+  else
+    {
+      first = supplicant;
+      second = authenticator;
+    }
+
+  memcpy(input + offset, first, SV6621_WPA_MAC_SIZE);
+  offset += SV6621_WPA_MAC_SIZE;
+  memcpy(input + offset, second, SV6621_WPA_MAC_SIZE);
+  offset += SV6621_WPA_MAC_SIZE;
+
+  if (memcmp(anonce, snonce, SV6621_WPA_NONCE_SIZE) <= 0)
+    {
+      first = anonce;
+      second = snonce;
+    }
+  else
+    {
+      first = snonce;
+      second = anonce;
+    }
+
+  memcpy(input + offset, first, SV6621_WPA_NONCE_SIZE);
+  offset += SV6621_WPA_NONCE_SIZE;
+  memcpy(input + offset, second, SV6621_WPA_NONCE_SIZE);
+  offset += SV6621_WPA_NONCE_SIZE;
+
+  while (produced < SV6621_WPA_PTK_SIZE)
+    {
+      size_t copy_length = SV6621_WPA_PTK_SIZE - produced;
+
+      input[offset] = counter++;
+      ret = sv6621_wpa_hmac_sha1(pmk, SV6621_WPA_PMK_SIZE, input,
+                                  offset + 1, digest);
+      if (ret < 0)
+        {
+          memset(input, 0, sizeof(input));
+          return ret;
+        }
+
+      if (copy_length > sizeof(digest))
+        {
+          copy_length = sizeof(digest);
+        }
+
+      memcpy(ptk + produced, digest, copy_length);
+      produced += copy_length;
+    }
+
+  memset(input, 0, sizeof(input));
+  memset(digest, 0, sizeof(digest));
   return 0;
 }
