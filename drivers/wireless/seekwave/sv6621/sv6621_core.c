@@ -665,6 +665,7 @@ static void sv6621_core_station_worker(FAR void *arg)
   bool link_ready = false;
 #endif
   uint16_t reason;
+  bool station_ready = false;
   bool connected;
 
   if (nxmutex_lock(&dev->status_lock) < 0)
@@ -681,6 +682,10 @@ static void sv6621_core_station_worker(FAR void *arg)
       dev->status.channel = dev->station.target.bss.channel;
       dev->status.band = dev->station.target.bss.band;
       dev->status.signal_dbm = dev->station.target.bss.signal_dbm;
+      memcpy(dev->status.ssid, dev->station.target.bss.ssid,
+             dev->station.target.bss.ssid_length);
+      dev->status.ssid_length = dev->station.target.bss.ssid_length;
+      station_ready = true;
 #ifdef CONFIG_NET
       context.peer_index = dev->station.peer.peer_index;
       context.multicast_index = dev->station.peer.multicast_index;
@@ -694,10 +699,13 @@ static void sv6621_core_station_worker(FAR void *arg)
   else if (!connected)
     {
       memset(dev->status.bssid, 0, sizeof(dev->status.bssid));
+      memset(dev->status.ssid, 0, sizeof(dev->status.ssid));
+      dev->status.ssid_length = 0;
       dev->status.channel = 0;
       dev->status.signal_dbm = 0;
     }
 
+  dev->status.connected = connected && station_ready;
   status = dev->status;
   nxmutex_unlock(&dev->status_lock);
 #ifdef CONFIG_NET
