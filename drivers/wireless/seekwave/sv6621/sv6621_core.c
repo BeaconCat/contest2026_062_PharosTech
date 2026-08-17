@@ -91,6 +91,10 @@ static int sv6621_core_channel_switch(FAR struct sv6621_dev_s *dev,
                                       size_t length);
 static int sv6621_core_set_state(FAR struct sv6621_dev_s *dev,
                                  enum sv6621_state_e state, int error);
+#ifdef CONFIG_SV6621_PM
+static int sv6621_core_pm_prepare(FAR struct pm_callback_s *callback,
+                                  int domain, enum pm_state_e state);
+#endif
 
 /****************************************************************************
  * Private Functions
@@ -130,6 +134,70 @@ static int sv6621_core_set_state(FAR struct sv6621_dev_s *dev,
   nxmutex_unlock(&dev->status_lock);
   return 0;
 }
+
+#ifdef CONFIG_SV6621_PM
+/****************************************************************************
+ * Name: sv6621_core_pm_prepare
+ ****************************************************************************/
+
+static int sv6621_core_pm_prepare(FAR struct pm_callback_s *callback,
+                                  int domain, enum pm_state_e state)
+{
+  FAR struct sv6621_dev_s *dev =
+      container_of(callback, struct sv6621_dev_s, pm_callback);
+  struct sv6621_status_s status;
+  int ret;
+
+  if (domain != PM_IDLE_DOMAIN)
+    {
+      return 0;
+    }
+
+  if (state == PM_SLEEP)
+    {
+      if (dev->pm_suspended)
+        {
+          return 0;
+        }
+
+      ret = sv6621_get_status(dev, &status);
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      if (status.state == SV6621_STATE_OFF ||
+          status.state == SV6621_STATE_FAILED)
+        {
+          return 0;
+        }
+
+      if (status.state == SV6621_STATE_SUSPENDED)
+        {
+          return 0;
+        }
+
+      ret = sv6621_suspend(dev, &dev->config.system_suspend);
+      if (ret == 0)
+        {
+          dev->pm_suspended = true;
+        }
+
+      return ret;
+    }
+
+  if (dev->pm_suspended)
+    {
+      ret = sv6621_resume(dev);
+      if (ret == 0)
+        {
+          dev->pm_suspended = false;
+        }
+    }
+
+  return 0;
+}
+#endif
 
 /****************************************************************************
  * Name: sv6621_core_event_worker
@@ -863,6 +931,15 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       return -EINVAL;
     }
 
+#ifdef CONFIG_SV6621_PM
+  if ((config->system_suspend.wake_flags & ~SV6621_WAKE_ALL) != 0 ||
+      (!config->system_suspend.wake_enabled &&
+       config->system_suspend.wake_flags != 0))
+    {
+      return -EINVAL;
+    }
+#endif
+
   ret = sv6621_transport_validate(config->transport);
   if (ret < 0)
     {
@@ -976,9 +1053,25 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       goto unsubscribe_service;
     }
 
+#ifdef CONFIG_SV6621_PM
+  dev->pm_callback.prepare = sv6621_core_pm_prepare;
+  ret = pm_register(&dev->pm_callback);
+  if (ret < 0)
+    {
+      goto unsubscribe_command;
+    }
+
+  dev->pm_registered = true;
+#endif
+
   *dev_out = dev;
   return 0;
 
+#ifdef CONFIG_SV6621_PM
+unsubscribe_command:
+  sv6621_packet_unsubscribe(&dev->router, SV6621_CHANNEL_WIFI_COMMAND,
+                            sv6621_command_channel_consumer, &dev->command);
+#endif
 unsubscribe_service:
   sv6621_packet_unsubscribe(&dev->router, SV6621_CHANNEL_LOOPCHECK,
                             sv6621_service_channel_consumer, &dev->service);
@@ -1016,6 +1109,14 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
     {
       return;
     }
+
+#ifdef CONFIG_SV6621_PM
+  if (dev->pm_registered)
+    {
+      pm_unregister(&dev->pm_callback);
+      dev->pm_registered = false;
+    }
+#endif
 
   dev->config.event = NULL;
   sv6621_stop(dev);
