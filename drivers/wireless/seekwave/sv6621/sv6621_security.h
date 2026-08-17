@@ -31,6 +31,7 @@
 
 #include "include/sv6621.h"
 #include "sv6621_command.h"
+#include "sv6621_data.h"
 
 /****************************************************************************
  * Public Types
@@ -60,5 +61,9 @@ int sv6621_security_add_key(
     FAR const uint8_t address[SV6621_MAC_LENGTH], uint8_t key_index,
     FAR const uint8_t *key, size_t key_length,
     FAR const uint8_t packet_number[6]);
+int sv6621_security_send_eapol(
+    FAR struct sv6621_command_engine_s *command,
+    FAR const struct sv6621_data_tx_context_s *context,
+    FAR const uint8_t *frame, size_t frame_length);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_SECURITY_H */
