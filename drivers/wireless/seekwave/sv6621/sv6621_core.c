@@ -45,6 +45,7 @@
 #define SV6621_CORE_CONNECT_TIMEOUT_MS 5000
 #define SV6621_CORE_HANDSHAKE_TIMEOUT_MS 10000
 #define SV6621_CORE_EVENT_CREDIT_UPDATE 16
+#define SV6621_CORE_EVENT_THERMAL_WARN  18
 
 /****************************************************************************
  * Private Function Prototypes
@@ -72,6 +73,7 @@ static void sv6621_core_queue_fatal(FAR struct sv6621_dev_s *dev);
 static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
                                        int error);
 static void sv6621_core_recovery_worker(FAR void *arg);
+static void sv6621_core_thermal_worker(FAR void *arg);
 static int sv6621_core_set_state(FAR struct sv6621_dev_s *dev,
                                  enum sv6621_state_e state, int error);
 
@@ -192,6 +194,26 @@ static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
 }
 
 /****************************************************************************
+ * Name: sv6621_core_thermal_worker
+ ****************************************************************************/
+
+static void sv6621_core_thermal_worker(FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+  struct sv6621_thermal_s thermal;
+
+  if (nxmutex_lock(&dev->status_lock) < 0)
+    {
+      return;
+    }
+
+  thermal.transmit_blocked = dev->thermal_blocked;
+  nxmutex_unlock(&dev->status_lock);
+  sv6621_core_report(dev, SV6621_EVENT_THERMAL_CHANGED, &thermal,
+                     sizeof(thermal));
+}
+
+/****************************************************************************
  * Name: sv6621_core_recovery_worker
  ****************************************************************************/
 
@@ -240,7 +262,7 @@ static void sv6621_core_recovery_worker(FAR void *arg)
   sv6621_station_reset(&dev->station, error);
   sv6621_command_cancel(&dev->command, error);
   sv6621_data_reset_credits(&dev->data);
-  sv6621_data_set_tx_blocked(&dev->data, false);
+  sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
   sv6621_rx_stop(&dev->rx);
   dev->suspended = false;
   dev->station_open = false;
@@ -319,6 +341,46 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
 #ifdef CONFIG_NET
       sv6621_network_credit_available(&dev->network);
 #endif
+      return;
+    }
+
+  if (id == SV6621_CORE_EVENT_THERMAL_WARN)
+    {
+      bool blocked;
+
+      if (length != 1)
+        {
+          sv6621_core_queue_recovery(dev, -EPROTO);
+          return;
+        }
+
+      blocked = payload[0] == 0;
+      if (sv6621_data_set_tx_block(&dev->data,
+                                   SV6621_DATA_TX_BLOCK_THERMAL,
+                                   blocked) < 0)
+        {
+          sv6621_core_queue_recovery(dev, -EIO);
+          return;
+        }
+
+      if (nxmutex_lock(&dev->status_lock) >= 0)
+        {
+          dev->thermal_blocked = blocked;
+          nxmutex_unlock(&dev->status_lock);
+        }
+
+#ifdef CONFIG_NET
+      if (!blocked)
+        {
+          sv6621_network_credit_available(&dev->network);
+        }
+#endif
+      if (work_available(&dev->thermal_work))
+        {
+          work_queue(LPWORK, &dev->thermal_work,
+                     sv6621_core_thermal_worker, dev, 0);
+        }
+
       return;
     }
 
@@ -689,6 +751,7 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
   dev->config.event = NULL;
   sv6621_stop(dev);
   work_cancel_sync(LPWORK, &dev->recovery_work);
+  work_cancel_sync(LPWORK, &dev->thermal_work);
   work_cancel_sync(LPWORK, &dev->event_work);
   work_cancel_sync(LPWORK, &dev->scan_work);
   work_cancel_sync(LPWORK, &dev->station_work);
@@ -757,6 +820,15 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       goto unlock_lifecycle;
     }
 
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
+  dev->thermal_blocked = false;
+  nxmutex_unlock(&dev->status_lock);
+
   ret = dev->config.transport->ops->open(dev->config.transport);
   if (ret < 0)
     {
@@ -790,7 +862,7 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
     }
 
   sv6621_data_reset_credits(&dev->data);
-  ret = sv6621_data_set_tx_blocked(&dev->data, false);
+  ret = sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
   if (ret < 0)
     {
       goto fail;
@@ -1015,7 +1087,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 
   sv6621_command_cancel(&dev->command, -ESHUTDOWN);
   sv6621_data_reset_credits(&dev->data);
-  sv6621_data_set_tx_blocked(&dev->data, false);
+  sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
   sv6621_rx_stop(&dev->rx);
   dev->suspended = false;
   if (dev->transport_open)
@@ -1037,6 +1109,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
       memset(&dev->status, 0, sizeof(dev->status));
       dev->status.state = SV6621_STATE_OFF;
       dev->status.recovery_count = recovery_count;
+      dev->thermal_blocked = false;
       nxmutex_unlock(&dev->status_lock);
     }
 
@@ -1410,7 +1483,20 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
       goto unlock_lifecycle;
     }
 
-  ret = sv6621_data_set_tx_blocked(&dev->data, true);
+#ifdef CONFIG_NET
+  if (dev->station_connected)
+    {
+      ret = sv6621_network_sync_addresses(&dev->network);
+      if (ret != 0)
+        {
+          ret = ret < 0 ? ret : -EREMOTEIO;
+          goto unlock_lifecycle;
+        }
+    }
+#endif
+
+  ret = sv6621_data_set_tx_block(&dev->data, SV6621_DATA_TX_BLOCK_SLEEP,
+                                 true);
   if (ret < 0)
     {
       goto unlock_lifecycle;
@@ -1419,7 +1505,8 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
   ret = sv6621_rx_suspend(&dev->rx);
   if (ret < 0)
     {
-      sv6621_data_set_tx_blocked(&dev->data, false);
+      sv6621_data_set_tx_block(&dev->data, SV6621_DATA_TX_BLOCK_SLEEP,
+                               false);
       goto unlock_lifecycle;
     }
 
@@ -1428,7 +1515,8 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
   if (ret < 0)
     {
       sv6621_rx_resume(&dev->rx);
-      sv6621_data_set_tx_blocked(&dev->data, false);
+      sv6621_data_set_tx_block(&dev->data, SV6621_DATA_TX_BLOCK_SLEEP,
+                               false);
       goto unlock_lifecycle;
     }
 
@@ -1505,7 +1593,8 @@ int sv6621_resume(FAR struct sv6621_dev_s *dev)
       goto unlock_lifecycle;
     }
 
-  ret = sv6621_data_set_tx_blocked(&dev->data, false);
+  ret = sv6621_data_set_tx_block(&dev->data, SV6621_DATA_TX_BLOCK_SLEEP,
+                                 false);
   if (ret < 0)
     {
       recover = true;

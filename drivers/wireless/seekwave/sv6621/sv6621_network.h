@@ -41,6 +41,7 @@
 #include "include/sv6621.h"
 #include "sv6621_command.h"
 #include "sv6621_data.h"
+#include "sv6621_offload.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -87,6 +88,7 @@ int sv6621_network_init(FAR struct sv6621_network_s *network,
                         FAR const uint8_t mac[SV6621_MAC_LENGTH]);
 void sv6621_network_deinit(FAR struct sv6621_network_s *network);
 int sv6621_network_sync_multicast(FAR struct sv6621_network_s *network);
+int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network);
 void sv6621_network_set_link(
     FAR struct sv6621_network_s *network, bool link_up,
     FAR const struct sv6621_data_tx_context_s *context);
