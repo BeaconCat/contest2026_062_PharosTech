@@ -33,6 +33,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "sv6621_packet.h"
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -59,11 +61,33 @@ struct sv6621_data_rx_s
   bool eapol;
 };
 
+typedef void (*sv6621_data_input_t)(FAR const struct sv6621_data_rx_s *rx,
+                                    FAR void *arg);
+
+struct sv6621_data_stats_s
+{
+  uint32_t received;
+  uint32_t bytes;
+  uint32_t malformed;
+};
+
+struct sv6621_data_s
+{
+  FAR struct sv6621_packet_router_s *router;
+  sv6621_data_input_t input;
+  FAR void *input_arg;
+  struct sv6621_data_stats_s stats;
+};
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
 int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
                           FAR struct sv6621_data_rx_s *rx);
+int sv6621_data_init(FAR struct sv6621_data_s *data,
+                     FAR struct sv6621_packet_router_s *router,
+                     sv6621_data_input_t input, FAR void *input_arg);
+void sv6621_data_deinit(FAR struct sv6621_data_s *data);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_DATA_H */
