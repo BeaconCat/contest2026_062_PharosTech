@@ -356,18 +356,31 @@ static void sv6621_core_security_worker(FAR void *arg)
 static void sv6621_core_signal_worker(FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
-  struct sv6621_signal_event_s event;
 
-  if (nxmutex_lock(&dev->status_lock) < 0)
+  for (;;)
     {
-      return;
-    }
+      struct sv6621_signal_event_s event;
 
-  event = dev->signal_event;
-  dev->status.signal_dbm = event.signal_dbm;
-  nxmutex_unlock(&dev->status_lock);
-  sv6621_core_report(dev, SV6621_EVENT_SIGNAL_CHANGED, &event,
-                     sizeof(event));
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          return;
+        }
+
+      if (dev->signal_tail == dev->signal_head)
+        {
+          dev->signal_work_scheduled = false;
+          nxmutex_unlock(&dev->status_lock);
+          return;
+        }
+
+      event = dev->signal_events[dev->signal_tail];
+      dev->signal_tail =
+          (dev->signal_tail + 1) % SV6621_CORE_SIGNAL_EVENT_DEPTH;
+      dev->status.signal_dbm = event.signal_dbm;
+      nxmutex_unlock(&dev->status_lock);
+      sv6621_core_report(dev, SV6621_EVENT_SIGNAL_CHANGED, &event,
+                         sizeof(event));
+    }
 }
 
 /****************************************************************************
@@ -710,7 +723,11 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
 
   if (id == SV6621_CORE_EVENT_CQM)
     {
+      struct sv6621_signal_event_s event;
+      uint8_t next;
+      bool queue = false;
       uint8_t status;
+      int ret;
 
       if (length != SV6621_CORE_CQM_EVENT_SIZE)
         {
@@ -725,22 +742,51 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
           return;
         }
 
+      event.status = (enum sv6621_signal_status_e)status;
+      event.signal_dbm =
+          (int16_t)(payload[1] | ((uint16_t)payload[2] << 8));
+      memcpy(event.bssid, payload + 3, SV6621_MAC_LENGTH);
+      event.channel = payload[9];
+      event.band = (enum sv6621_band_e)payload[10];
       if (nxmutex_lock(&dev->status_lock) < 0)
         {
           return;
         }
 
-      dev->signal_event.status = (enum sv6621_signal_status_e)status;
-      dev->signal_event.signal_dbm =
-          (int16_t)(payload[1] | ((uint16_t)payload[2] << 8));
-      memcpy(dev->signal_event.bssid, payload + 3, SV6621_MAC_LENGTH);
-      dev->signal_event.channel = payload[9];
-      dev->signal_event.band = (enum sv6621_band_e)payload[10];
-      nxmutex_unlock(&dev->status_lock);
-      if (work_available(&dev->signal_work))
+      next = (dev->signal_head + 1) % SV6621_CORE_SIGNAL_EVENT_DEPTH;
+      if (next == dev->signal_tail)
         {
-          work_queue(LPWORK, &dev->signal_work,
-                     sv6621_core_signal_worker, dev, 0);
+          dev->signal_tail =
+              (dev->signal_tail + 1) % SV6621_CORE_SIGNAL_EVENT_DEPTH;
+          dev->status.signal_events_dropped++;
+        }
+
+      dev->signal_events[dev->signal_head] = event;
+      dev->signal_head = next;
+      if (!dev->signal_work_scheduled)
+        {
+          dev->signal_work_scheduled = true;
+          queue = true;
+        }
+
+      nxmutex_unlock(&dev->status_lock);
+      if (queue)
+        {
+          ret = work_queue(LPWORK, &dev->signal_work,
+                           sv6621_core_signal_worker, dev, 0);
+          if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
+            {
+              uint8_t dropped =
+                  dev->signal_head >= dev->signal_tail ?
+                  dev->signal_head - dev->signal_tail :
+                  SV6621_CORE_SIGNAL_EVENT_DEPTH - dev->signal_tail +
+                      dev->signal_head;
+
+              dev->signal_work_scheduled = false;
+              dev->status.signal_events_dropped += dropped;
+              dev->signal_tail = dev->signal_head;
+              nxmutex_unlock(&dev->status_lock);
+            }
         }
 
       return;

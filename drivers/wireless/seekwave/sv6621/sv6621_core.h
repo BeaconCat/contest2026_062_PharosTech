@@ -55,6 +55,7 @@
  ****************************************************************************/
 
 #define SV6621_CORE_SECURITY_EVENT_DEPTH 8
+#define SV6621_CORE_SIGNAL_EVENT_DEPTH   8
 
 /****************************************************************************
  * Public Types
@@ -104,7 +105,11 @@ struct sv6621_dev_s
   uint8_t security_head;
   uint8_t security_tail;
   bool security_work_scheduled;
-  struct sv6621_signal_event_s signal_event;
+  struct sv6621_signal_event_s
+      signal_events[SV6621_CORE_SIGNAL_EVENT_DEPTH];
+  uint8_t signal_head;
+  uint8_t signal_tail;
+  bool signal_work_scheduled;
   bool suspended;
   bool powered;
   bool transport_open;
