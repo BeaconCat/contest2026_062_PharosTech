@@ -476,10 +476,26 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
   if (ret < 0)
     {
       work_cancel_sync(LPWORK, &station->association_work);
+      ret = nxmutex_lock(&station->lock);
+      if (ret < 0)
+        {
+          goto unlock_connect;
+        }
+
+      if (station->result != -EINPROGRESS)
+        {
+          ret = station->result;
+          nxmutex_unlock(&station->lock);
+          nxsem_trywait(&station->completion);
+          goto unlock_connect;
+        }
+
+      station->state = SV6621_STATION_IDLE;
+      station->result = -ETIMEDOUT;
+      nxmutex_unlock(&station->lock);
       sv6621_connection_disconnect(
           station->command, SV6621_CONNECTION_DISCONNECT_ONLY, true,
           SV6621_STATION_REASON_UNSPECIFIED, NULL, 0);
-      sv6621_station_reset(station, -ETIMEDOUT);
       ret = -ETIMEDOUT;
       goto unlock_connect;
     }
