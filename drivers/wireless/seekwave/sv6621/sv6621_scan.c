@@ -586,6 +586,11 @@ int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
           continue;
         }
 
+      if (request->channel != 0 && bss->channel != request->channel)
+        {
+          continue;
+        }
+
       if (ret == -ENOENT ||
           bss->signal_dbm > entry->bss.signal_dbm)
         {
