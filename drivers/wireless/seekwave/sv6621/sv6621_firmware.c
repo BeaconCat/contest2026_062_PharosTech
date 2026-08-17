@@ -26,6 +26,8 @@
 
 #include <nuttx/config.h>
 
+#include <nuttx/kmalloc.h>
+
 #include <errno.h>
 #include <string.h>
 
@@ -36,11 +38,14 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_FIRMWARE_METADATA_SIZE 0x200
-#define SV6621_FIRMWARE_ALIGNMENT     4
-#define SV6621_FIRMWARE_HEAD_SIZE     16
-#define SV6621_FIRMWARE_MARKER_SIZE   8
-#define SV6621_FIRMWARE_NV_MARK_SIZE  4
+#define SV6621_FIRMWARE_METADATA_SIZE  0x200
+#define SV6621_FIRMWARE_ALIGNMENT      4
+#define SV6621_FIRMWARE_HEAD_SIZE      16
+#define SV6621_FIRMWARE_MARKER_SIZE    8
+#define SV6621_FIRMWARE_NV_MARK_SIZE   4
+#define SV6621_FIRMWARE_NV_HEADER_SIZE 0x20
+#define SV6621_FIRMWARE_NV_OFFSET      0x08
+#define SV6621_FIRMWARE_NV_LENGTH      0x0c
 
 /****************************************************************************
  * Private Data
@@ -178,4 +183,70 @@ int sv6621_firmware_parse_iram(FAR const uint8_t *image, size_t length,
     }
 
   return 0;
+}
+
+int sv6621_firmware_prepare_iram(FAR const uint8_t *image,
+                                 size_t image_length,
+                                 FAR const uint8_t *nvram,
+                                 size_t nvram_length,
+                                 FAR uint8_t **prepared_image)
+{
+  struct sv6621_firmware_layout_s layout;
+  FAR uint8_t *copy;
+  uint32_t source_offset;
+  uint32_t source_length;
+  int ret;
+
+  if (image == NULL || nvram == NULL || prepared_image == NULL ||
+      nvram_length < SV6621_FIRMWARE_NV_HEADER_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  *prepared_image = NULL;
+  ret = sv6621_firmware_parse_iram(image, image_length, &layout);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (layout.nv_offset == SIZE_MAX || layout.nv_capacity == 0)
+    {
+      return -ENOENT;
+    }
+
+  source_offset =
+      sv6621_firmware_get_le32(nvram + SV6621_FIRMWARE_NV_OFFSET);
+  source_length =
+      sv6621_firmware_get_le32(nvram + SV6621_FIRMWARE_NV_LENGTH);
+  if (source_offset < SV6621_FIRMWARE_NV_HEADER_SIZE || source_length == 0 ||
+      source_offset > nvram_length ||
+      source_length > nvram_length - source_offset)
+    {
+      return -EPROTO;
+    }
+
+  if (source_length > layout.nv_capacity ||
+      layout.nv_offset > image_length ||
+      layout.nv_capacity > image_length - layout.nv_offset)
+    {
+      return -E2BIG;
+    }
+
+  copy = kmm_malloc(image_length);
+  if (copy == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  memcpy(copy, image, image_length);
+  memset(copy + layout.nv_offset, 0, layout.nv_capacity);
+  memcpy(copy + layout.nv_offset, nvram + source_offset, source_length);
+  *prepared_image = copy;
+  return 0;
+}
+
+void sv6621_firmware_release(FAR uint8_t *prepared_image)
+{
+  kmm_free(prepared_image);
 }

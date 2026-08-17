@@ -52,5 +52,11 @@ struct sv6621_firmware_layout_s
 
 int sv6621_firmware_parse_iram(FAR const uint8_t *image, size_t length,
                                FAR struct sv6621_firmware_layout_s *layout);
+int sv6621_firmware_prepare_iram(FAR const uint8_t *image,
+                                 size_t image_length,
+                                 FAR const uint8_t *nvram,
+                                 size_t nvram_length,
+                                 FAR uint8_t **prepared_image);
+void sv6621_firmware_release(FAR uint8_t *prepared_image);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_FIRMWARE_H */
