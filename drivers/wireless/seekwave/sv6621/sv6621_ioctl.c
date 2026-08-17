@@ -580,7 +580,8 @@ static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
     {
       required += IW_EV_LEN(ap_addr) + IW_EV_LEN(essid) +
                   ((results[index].ssid_length + 3) & ~3) +
-                  IW_EV_LEN(qual) + IW_EV_LEN(freq) + IW_EV_LEN(data);
+                  IW_EV_LEN(mode) + IW_EV_LEN(qual) + IW_EV_LEN(freq) +
+                  IW_EV_LEN(data);
     }
 
   if (request->u.data.pointer == NULL || request->u.data.length < required)
@@ -627,6 +628,13 @@ static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
       event->u.essid.pointer = (FAR void *)sizeof(event->u.essid);
       memcpy(&event->u.essid + 1, bss->ssid, bss->ssid_length);
       event->len = event_length;
+      cursor += event->len;
+
+      event = (FAR struct iw_event *)cursor;
+      memset(event, 0, IW_EV_LEN(mode));
+      event->cmd = SIOCGIWMODE;
+      event->u.mode = IW_MODE_INFRA;
+      event->len = IW_EV_LEN(mode);
       cursor += event->len;
 
       event = (FAR struct iw_event *)cursor;
