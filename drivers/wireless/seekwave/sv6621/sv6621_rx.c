@@ -40,7 +40,7 @@
  ****************************************************************************/
 
 #define SV6621_RX_MAX_SLOTS         8
-#define SV6621_RX_TRAILER_SIZE      1024
+#define SV6621_RX_TRAILER_SIZE      SV6621_SDIO_BLOCK_SIZE
 #define SV6621_RX_VALID_LENGTH_SIZE 8
 #define SV6621_RX_PENDING_SIZE      4
 #define SV6621_RX_MAX_DRAIN_BURSTS  32
