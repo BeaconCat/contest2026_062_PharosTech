@@ -42,6 +42,7 @@
 #define SV6621_CORE_BSP_TIMEOUT_MS  2000
 #define SV6621_CORE_WIFI_TIMEOUT_MS 2000
 #define SV6621_CORE_SCAN_TIMEOUT_MS 10000
+#define SV6621_CORE_CONNECT_TIMEOUT_MS 5000
 
 /****************************************************************************
  * Private Function Prototypes
@@ -56,6 +57,9 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
                                       size_t length, FAR void *arg);
 static void sv6621_core_scan_complete(int result, FAR void *arg);
 static void sv6621_core_scan_worker(FAR void *arg);
+static void sv6621_core_station_event(bool connected, uint16_t reason,
+                                      FAR void *arg);
+static void sv6621_core_station_worker(FAR void *arg);
 static void sv6621_core_report(FAR struct sv6621_dev_s *dev,
                                enum sv6621_event_e event, FAR const void *data,
                                size_t length);
@@ -190,6 +194,79 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
   FAR struct sv6621_dev_s *dev = arg;
 
   sv6621_scan_command_event(instance, id, payload, length, &dev->scan);
+  sv6621_station_command_event(instance, id, payload, length, &dev->station);
+}
+
+/****************************************************************************
+ * Name: sv6621_core_station_event
+ ****************************************************************************/
+
+static void sv6621_core_station_event(bool connected, uint16_t reason,
+                                      FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+
+  if (nxmutex_lock(&dev->status_lock) < 0)
+    {
+      return;
+    }
+
+  dev->station_connected = connected;
+  dev->station_reason = reason;
+  nxmutex_unlock(&dev->status_lock);
+  if (work_available(&dev->station_work))
+    {
+      work_queue(LPWORK, &dev->station_work, sv6621_core_station_worker, dev,
+                 0);
+    }
+}
+
+/****************************************************************************
+ * Name: sv6621_core_station_worker
+ ****************************************************************************/
+
+static void sv6621_core_station_worker(FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+  struct sv6621_status_s status;
+  uint16_t reason;
+  bool connected;
+
+  if (nxmutex_lock(&dev->status_lock) < 0)
+    {
+      return;
+    }
+
+  connected = dev->station_connected;
+  reason = dev->station_reason;
+  if (connected && nxmutex_lock(&dev->station.lock) >= 0)
+    {
+      memcpy(dev->status.bssid, dev->station.target.bss.bssid,
+             SV6621_MAC_LENGTH);
+      dev->status.channel = dev->station.target.bss.channel;
+      dev->status.band = dev->station.target.bss.band;
+      dev->status.signal_dbm = dev->station.target.bss.signal_dbm;
+      nxmutex_unlock(&dev->station.lock);
+    }
+  else if (!connected)
+    {
+      memset(dev->status.bssid, 0, sizeof(dev->status.bssid));
+      dev->status.channel = 0;
+      dev->status.signal_dbm = 0;
+    }
+
+  status = dev->status;
+  nxmutex_unlock(&dev->status_lock);
+  if (connected)
+    {
+      sv6621_core_report(dev, SV6621_EVENT_CONNECTED, &status,
+                         sizeof(status));
+    }
+  else
+    {
+      sv6621_core_report(dev, SV6621_EVENT_DISCONNECTED, &reason,
+                         sizeof(reason));
+    }
 }
 
 /****************************************************************************
@@ -350,10 +427,17 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       goto deinit_scan;
     }
 
-  ret = sv6621_service_init(&dev->service, sv6621_core_service_event, dev);
+  ret = sv6621_station_init(&dev->station, &dev->command, &dev->scan,
+                            sv6621_core_station_event, dev);
   if (ret < 0)
     {
       goto deinit_command;
+    }
+
+  ret = sv6621_service_init(&dev->service, sv6621_core_service_event, dev);
+  if (ret < 0)
+    {
+      goto deinit_station;
     }
 
   ret = sv6621_rx_init(&dev->rx, config->transport, &dev->router,
@@ -389,6 +473,8 @@ deinit_rx:
   sv6621_rx_deinit(&dev->rx);
 deinit_service:
   sv6621_service_deinit(&dev->service);
+deinit_station:
+  sv6621_station_deinit(&dev->station);
 deinit_command:
   sv6621_command_engine_deinit(&dev->command);
 deinit_scan:
@@ -417,12 +503,14 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
   sv6621_stop(dev);
   work_cancel_sync(LPWORK, &dev->event_work);
   work_cancel_sync(LPWORK, &dev->scan_work);
+  work_cancel_sync(LPWORK, &dev->station_work);
   sv6621_packet_unsubscribe(&dev->router, SV6621_CHANNEL_WIFI_COMMAND,
                             sv6621_command_channel_consumer, &dev->command);
   sv6621_packet_unsubscribe(&dev->router, SV6621_CHANNEL_LOOPCHECK,
                             sv6621_service_channel_consumer, &dev->service);
   sv6621_rx_deinit(&dev->rx);
   sv6621_service_deinit(&dev->service);
+  sv6621_station_deinit(&dev->station);
   sv6621_scan_controller_deinit(&dev->scan);
   sv6621_command_engine_deinit(&dev->command);
   sv6621_tx_deinit(&dev->tx);
@@ -675,6 +763,8 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 
   sv6621_core_set_state(dev, SV6621_STATE_STOPPING, 0);
   scan_ret = sv6621_scan_controller_cancel(&dev->scan);
+  sv6621_station_disconnect(&dev->station, 3);
+  sv6621_station_reset(&dev->station, -ESHUTDOWN);
   if (dev->station_open)
     {
       close_ret = sv6621_wifi_close_station(&dev->command);
@@ -786,6 +876,75 @@ int sv6621_scan(FAR struct sv6621_dev_s *dev)
                                      dev->scan_channel_count);
 
 unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
+}
+
+int sv6621_connect(FAR struct sv6621_dev_s *dev,
+                   FAR const struct sv6621_connect_s *request)
+{
+  int ret;
+
+  if (dev == NULL || request == NULL)
+    {
+      return -EINVAL;
+    }
+
+  if (request->security != SV6621_SECURITY_OPEN)
+    {
+      return -EOPNOTSUPP;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (dev->status.state != SV6621_STATE_WIFI_READY)
+    {
+      ret = -ENETDOWN;
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_scan_controller_cancel(&dev->scan);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_station_connect(&dev->station, request,
+                               SV6621_CORE_CONNECT_TIMEOUT_MS);
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
+}
+
+int sv6621_disconnect(FAR struct sv6621_dev_s *dev, uint16_t reason)
+{
+  int ret;
+
+  if (dev == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (dev->status.state != SV6621_STATE_WIFI_READY)
+    {
+      ret = -ENETDOWN;
+    }
+  else
+    {
+      ret = sv6621_station_disconnect(&dev->station, reason);
+    }
+
   nxmutex_unlock(&dev->lifecycle_lock);
   return ret;
 }

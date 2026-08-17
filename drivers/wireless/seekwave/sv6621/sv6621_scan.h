@@ -45,6 +45,7 @@
 #define SV6621_SCAN_FLAG_ACS            (1 << 1)
 #define SV6621_SCAN_FLAG_PASSIVE        (1 << 7)
 #define SV6621_SCAN_CACHE_CAPACITY      64
+#define SV6621_SCAN_IE_CAPACITY         512
 #define SV6621_SCAN_EVENT_COMPLETE      0
 #define SV6621_SCAN_EVENT_REPORT        11
 
@@ -65,10 +66,21 @@ struct sv6621_scan_channel_s
   uint8_t flags;
 };
 
+struct sv6621_scan_entry_s
+{
+  struct sv6621_bss_s bss;
+  uint16_t beacon_interval;
+  uint16_t capability;
+  uint8_t bssid_index;
+  uint8_t max_bssid_indicator;
+  uint16_t ie_length;
+  uint8_t ies[SV6621_SCAN_IE_CAPACITY];
+};
+
 struct sv6621_scan_cache_s
 {
   mutex_t lock;
-  struct sv6621_bss_s entries[SV6621_SCAN_CACHE_CAPACITY];
+  struct sv6621_scan_entry_s entries[SV6621_SCAN_CACHE_CAPACITY];
   size_t count;
   uint32_t replacements;
   uint32_t dropped;
@@ -108,16 +120,19 @@ int sv6621_scan_start(FAR struct sv6621_command_engine_s *command,
                       size_t channel_count);
 int sv6621_scan_stop(FAR struct sv6621_command_engine_s *command);
 int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
-                             FAR struct sv6621_bss_s *bss);
+                             FAR struct sv6621_scan_entry_s *entry);
 int sv6621_scan_cache_init(FAR struct sv6621_scan_cache_s *cache);
 void sv6621_scan_cache_deinit(FAR struct sv6621_scan_cache_s *cache);
 int sv6621_scan_cache_reset(FAR struct sv6621_scan_cache_s *cache);
 int sv6621_scan_cache_store(FAR struct sv6621_scan_cache_s *cache,
-                            FAR const struct sv6621_bss_s *bss,
+                            FAR const struct sv6621_scan_entry_s *entry,
                             FAR bool *inserted);
 int sv6621_scan_cache_snapshot(FAR struct sv6621_scan_cache_s *cache,
                                FAR struct sv6621_bss_s *entries,
                                FAR size_t *count);
+int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
+                           FAR const struct sv6621_connect_s *request,
+                           FAR struct sv6621_scan_entry_s *entry);
 int sv6621_scan_controller_init(FAR struct sv6621_scan_s *scan,
                                 FAR struct sv6621_command_engine_s *command,
                                 uint32_t timeout_ms,
