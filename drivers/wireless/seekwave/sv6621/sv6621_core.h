@@ -57,6 +57,7 @@ struct sv6621_dev_s
   struct work_s event_work;
   bool powered;
   bool transport_open;
+  bool station_open;
 };
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_CORE_H */
