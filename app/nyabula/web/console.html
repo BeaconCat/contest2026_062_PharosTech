@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Nyabula Core 控制台</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color-scheme:dark;background:#10151b;color:#e9f1f7}
+    *{box-sizing:border-box}body{margin:0;padding:16px}h1{margin:0 0 8px}h2{font-size:17px}
+    main{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
+    section{border:1px solid #34414d;border-radius:8px;padding:12px;background:#172029}
+    label{display:grid;gap:4px;font-size:12px;color:#b9c8d4}input,select,textarea,button{font:inherit}
+    input,select,textarea{width:100%;border:1px solid #465563;border-radius:5px;padding:7px;background:#0e151c;color:#fff}
+    button{border:1px solid #4f6879;border-radius:5px;padding:7px 10px;background:#243746;color:#fff;cursor:pointer}
+    button:hover{background:#315066}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .wide{grid-column:1/-1}.buttons{display:flex;flex-wrap:wrap;gap:6px}.status{padding:8px;border-radius:5px;background:#0e151c}
+    pre{white-space:pre-wrap;overflow:auto;max-height:300px;font-size:11px}.good{color:#69e6a6}.bad{color:#ff8d8d}
+    @media(max-width:520px){body{padding:8px}.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <h1>Nyabula Core 控制台</h1>
+  <div id="health" class="status">连接中…</div>
+  <p>所有操作均通过 Nyabula Core 仲裁；本页面协议将由 Flutter Client 复用。</p>
+  <main>
+    <section>
+      <h2>命令上下文</h2>
+      <div class="grid">
+        <label>来源<input id="source" value="web-console" maxlength="23"></label>
+        <label>优先级 0–255<input id="priority" type="number" min="0" max="255" value="50"></label>
+        <label>租约 ms（0=持久）<input id="lease" type="number" min="0" value="0"></label>
+        <label>过渡 ms<input id="transition" type="number" min="0" value="280"></label>
+      </div>
+      <div class="buttons" style="margin-top:8px">
+        <button onclick="release('expression')">释放表情</button>
+        <button onclick="release('scene')">释放场景</button>
+        <button onclick="release('all')">释放全部</button>
+        <button onclick="send('core.reset',{})">重置 Core</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>表情</h2>
+      <div id="expressions" class="buttons"></div>
+      <h2>眨眼与视线</h2>
+      <div class="buttons">
+        <button onclick="send('eyes.blink',{eyes:'left'})">左眼眨眼</button>
+        <button onclick="send('eyes.blink',{eyes:'right'})">右眼眨眼</button>
+        <button onclick="send('eyes.blink',{eyes:'both'})">双眼眨眼</button>
+      </div>
+      <div class="grid" style="margin-top:8px">
+        <label>视线 X (-1..1)<input id="gazeX" type="number" min="-1" max="1" step="0.1" value="0"></label>
+        <label>视线 Y (-1..1)<input id="gazeY" type="number" min="-1" max="1" step="0.1" value="0"></label>
+        <label>保持 ms<input id="gazeHold" type="number" min="0" value="1000"></label>
+        <button onclick="gaze()">设置视线</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>眼睛设置</h2>
+      <div class="grid">
+        <label>自动眨眼<select id="autoBlink"><option value="true">启用</option><option value="false">停用</option></select></label>
+        <button onclick="send('eyes.auto_blink',{enabled:val('autoBlink')==='true'})">应用</button>
+        <label>环境亮度 0–1<input id="ambient" type="number" min="0" max="1" step="0.05" value="1"></label>
+        <button onclick="send('eyes.ambient',{level:num('ambient')})">应用</button>
+        <label>虹膜目标<select id="irisEyes"><option>both</option><option>left</option><option>right</option></select></label>
+        <label>虹膜颜色<input id="iris" type="color" value="#56ffb2"></label>
+        <button class="wide" onclick="iris()">设置虹膜颜色</button>
+      </div>
+    </section>
+
+    <section class="wide">
+      <h2>场景与完整 Typed Payload</h2>
+      <div class="grid">
+        <label>Scene<select id="scene"></select></label>
+        <label>Style<select id="style"><option>full</option><option>minimal</option></select></label>
+        <label>天气<select id="weather"><option>sunny</option><option>cloudy</option><option>rain</option><option>storm</option><option>snow</option><option>fog</option></select></label>
+        <label>音乐视图<select id="music_view"><option>spectrum</option><option>lyrics</option></select></label>
+        <label>电池状态<select id="battery_state"><option>charging</option><option>low</option><option>full</option><option>hot</option><option>dock</option></select></label>
+        <label>闹钟文案<select id="alarm_copy"><option>name</option><option>reminder</option><option>none</option></select></label>
+        <label>通话状态<select id="call_state"><option>incoming</option><option>active</option><option>ended</option></select></label>
+        <label>任务状态<select id="task_state"><option>running</option><option>queued</option><option>confirm</option><option>done</option><option>failed</option></select></label>
+        <label>网络状态<select id="network_state"><option>wifi</option><option>bluetooth</option><option>offline</option></select></label>
+        <label>音频路由<select id="audio_route"><option>speaker</option><option>headphones</option><option>both</option><option>mute</option></select></label>
+        <label>EQ 视图<select id="eq_view"><option>profile</option><option>calibrating</option></select></label>
+        <label>duration_ms<input id="duration_ms" type="number" value="235000"></label>
+        <label>position_ms<input id="position_ms" type="number" value="60000"></label>
+        <label>remaining_ms<input id="remaining_ms" type="number" value="180000"></label>
+        <label>elapsed_ms<input id="elapsed_ms" type="number" value="30000"></label>
+        <label>日期<input id="date" type="date" value="2026-08-17"></label>
+        <label>时间<input id="time" type="time" value="07:30"></label>
+        <label>percent<input id="percent" type="number" min="0" max="100" value="68"></label>
+        <label>device_count<input id="device_count" type="number" min="0" max="255" value="2"></label>
+        <label>briefing_index<input id="briefing_index" type="number" min="0" max="255" value="1"></label>
+        <label>briefing_count<input id="briefing_count" type="number" min="0" max="255" value="3"></label>
+        <label>temperature_c<input id="temperature_c" type="number" step="0.1" value="23"></label>
+        <label>feels_like_c<input id="feels_like_c" type="number" step="0.1" value="22"></label>
+        <label>humidity_percent<input id="humidity_percent" type="number" step="0.1" value="78"></label>
+        <label>wind_kph<input id="wind_kph" type="number" step="0.1" value="24"></label>
+        <label>visibility_km<input id="visibility_km" type="number" step="0.1" value="0.8"></label>
+        <label>distance_m<input id="distance_m" type="number" step="0.1" value="0.8"></label>
+        <label>heart_rate_bpm<input id="heart_rate_bpm" type="number" step="0.1" value="72"></label>
+        <label>crossover_hz<input id="crossover_hz" type="number" step="0.1" value="80"></label>
+        <label>progress 0–1<input id="progress" type="number" min="0" max="1" step="0.01" value="0.5"></label>
+        <label>EQ 10 段（逗号）<input id="eq_bands" value="0,1,2,1,0,-1,-2,-1,0,1"></label>
+        <label>active<select id="active"><option>true</option><option>false</option></select></label>
+        <label>playing<select id="playing"><option>true</option><option>false</option></select></label>
+        <label>privacy_camera<select id="privacy_camera"><option>false</option><option>true</option></select></label>
+        <label>privacy_microphone<select id="privacy_microphone"><option>false</option><option>true</option></select></label>
+        <label>signal_good<select id="signal_good"><option>true</option><option>false</option></select></label>
+        <label>title<input id="title" value="Nyabula"></label>
+        <label>subtitle<input id="subtitle" value="局域网控制台"></label>
+        <label>detail<input id="detail" value="由 Nyabula Core 仲裁"></label>
+        <label>value<input id="value" value="在线"></label>
+        <label>previous_line<input id="previous_line" value="上一行"></label>
+        <label>current_line<input id="current_line" value="正在播放的歌词"></label>
+        <label>next_line<input id="next_line" value="下一行"></label>
+      </div>
+      <div class="buttons" style="margin-top:8px">
+        <button onclick="sceneCommand('eyes.scene.show')">显示场景</button>
+        <button onclick="sceneCommand('eyes.scene.update')">更新当前来源场景</button>
+        <button onclick="send('eyes.scene.hide',{})">隐藏场景</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Core 状态</h2>
+      <button onclick="refresh()">立即刷新</button>
+      <pre id="state"></pre>
+    </section>
+    <section>
+      <h2>原始 JSON 命令</h2>
+      <textarea id="raw" rows="10">{"source":"web-raw","priority":60,"lease_ms":2000,"action":"eyes.expression","params":{"expression":"curious","transition_ms":280}}</textarea>
+      <button onclick="rawCommand()">发送原始命令</button>
+      <h2>请求日志</h2><pre id="log"></pre>
+    </section>
+    <section>
+      <h2>能力清单</h2><pre id="caps"></pre>
+    </section>
+  </main>
+<script>
+const expressions=['idle','curious','happy','processing','star','heart','sleepy','sleep','angry','sad','surprise','dizzy','derp'];
+const scenes=['music','timer','weather','battery','alarm','call','task','stopwatch','calendar','sleep_timer','network','audio','eq','caption','briefing','privacy','identity','memory','devices','system','health','presence','companion','home','subwoofer'];
+const numeric=['duration_ms','position_ms','remaining_ms','elapsed_ms','percent','device_count','briefing_index','briefing_count','temperature_c','feels_like_c','humidity_percent','wind_kph','visibility_km','distance_m','heart_rate_bpm','crossover_hz','progress'];
+const enums=['weather','music_view','battery_state','alarm_copy','call_state','task_state','network_state','audio_route','eq_view'];
+const bools=['active','playing','privacy_camera','privacy_microphone','signal_good'];
+const texts=['title','subtitle','detail','value','previous_line','current_line','next_line'];
+let seq=0;
+function val(id){return document.getElementById(id).value} function num(id){return Number(val(id))}
+function context(action,params){return{id:'web-'+Date.now()+'-'+(++seq),source:val('source'),priority:num('priority'),lease_ms:num('lease'),action,params}}
+function log(value,bad=false){const e=document.getElementById('log');e.textContent=new Date().toLocaleTimeString()+' '+(typeof value==='string'?value:JSON.stringify(value))+'\n'+e.textContent;e.className=bad?'bad':''}
+async function api(path,options={}){try{const r=await fetch(path,options);const text=await r.text();let data;try{data=JSON.parse(text)}catch{data=text}if(!r.ok)throw new Error(r.status+' '+JSON.stringify(data));return data}catch(e){log(e.message,true);throw e}}
+async function send(action,params){const body=context(action,params);log(body);const result=await api('/api/v1/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});log(result);setTimeout(refresh,80)}
+function gaze(){send('eyes.gaze',{x:num('gazeX'),y:num('gazeY'),hold_ms:num('gazeHold')})}
+function iris(){send('eyes.iris',{eyes:val('irisEyes'),rgb:val('iris').slice(1)})}
+function release(domain){send('core.release',{domain})}
+function payload(){const p={};for(const k of numeric)p[k]=num(k);for(const k of enums)p[k]=val(k);for(const k of bools)p[k]=val(k)==='true';for(const k of texts)p[k]=val(k);const d=val('date').split('-').map(Number),t=val('time').split(':').map(Number);[p.year,p.month,p.day]=d;[p.hour,p.minute]=t;p.eq_bands=val('eq_bands').split(',').map(Number);return p}
+function sceneCommand(action){const p={payload:payload()};if(action.endsWith('show')){p.scene=val('scene');p.style=val('style')}send(action,p)}
+async function rawCommand(){let body;try{body=JSON.parse(val('raw'))}catch(e){return log('JSON 解析失败: '+e.message,true)}log(body);try{log(await api('/api/v1/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}));setTimeout(refresh,80)}catch{}}
+async function refresh(){try{const s=await api('/api/v1/state');document.getElementById('state').textContent=JSON.stringify(s,null,2)}catch{}}
+async function boot(){document.getElementById('expressions').innerHTML=expressions.map(x=>`<button onclick="send('eyes.expression',{expression:'${x}',transition_ms:num('transition')})">${x}</button>`).join('');document.getElementById('scene').innerHTML=scenes.map(x=>`<option>${x}</option>`).join('');try{const h=await api('/api/v1/health');document.getElementById('health').innerHTML='<span class="good">● 已连接</span> '+h.name+' / API '+h.api_version;document.getElementById('caps').textContent=JSON.stringify(await api('/api/v1/capabilities'),null,2);await refresh()}catch{document.getElementById('health').innerHTML='<span class="bad">● 连接失败</span>'}setInterval(refresh,500)}
+boot();
+</script>
+</body>
+</html>
