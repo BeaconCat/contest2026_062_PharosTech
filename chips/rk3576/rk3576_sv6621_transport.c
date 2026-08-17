@@ -28,6 +28,7 @@
 
 #include <debug.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -96,6 +97,10 @@
 #define RK3576_SV6621_BLOCK_SIZE   512
 #define RK3576_SV6621_BYTE_COUNT_MAX 511
 #define RK3576_SV6621_BLOCK_COUNT_MAX 511
+
+#define RK3576_SV6621_R4_FUNCTIONS_MASK  (7u << 28)
+#define RK3576_SV6621_R6_ERROR_MASK      (7u << 13)
+#define RK3576_SV6621_R1_ERROR_MASK      0xfff9a088
 
 #define RK3576_SV6621_CCCR_IO_ENABLE  0x02
 #define RK3576_SV6621_CCCR_IO_READY   0x03
@@ -596,6 +601,13 @@ static int rk3576_sv6621_enumerate(
       return rk3576_sv6621_open_failed(priv, -EOPNOTSUPP);
     }
 
+  if ((response & RK3576_SV6621_R4_FUNCTIONS_MASK) == 0)
+    {
+      wlerr("ERROR: SV6621 reported no SDIO functions: 0x%08" PRIx32
+            "\n", response);
+      return rk3576_sv6621_open_failed(priv, -ENODEV);
+    }
+
   ret = rk3576_sv6621_voltage_switch();
   if (ret < 0)
     {
@@ -609,12 +621,27 @@ static int rk3576_sv6621_enumerate(
       return rk3576_sv6621_open_failed(priv, ret);
     }
 
+  if ((response & RK3576_SV6621_R6_ERROR_MASK) != 0 ||
+      (response >> 16) == 0)
+    {
+      wlerr("ERROR: SV6621 CMD3 rejected RCA assignment: 0x%08" PRIx32
+            "\n", response);
+      return rk3576_sv6621_open_failed(priv, -EIO);
+    }
+
   rca = response >> 16;
   status = rk3576_sv6621_command(RK3576_SV6621_CMD7, rca << 16, &response);
   if ((status & RK3576_SV6621_INT_CMDERR) != 0)
     {
       ret = (status & RK3576_SV6621_INT_RTO) != 0 ? -ETIMEDOUT : -EIO;
       return rk3576_sv6621_open_failed(priv, ret);
+    }
+
+  if ((response & RK3576_SV6621_R1_ERROR_MASK) != 0)
+    {
+      wlerr("ERROR: SV6621 CMD7 selection failed: 0x%08" PRIx32 "\n",
+            response);
+      return rk3576_sv6621_open_failed(priv, -EIO);
     }
 
   ret = rk3576_sv6621_direct(true, 0, 0x16, 0x03, NULL);
