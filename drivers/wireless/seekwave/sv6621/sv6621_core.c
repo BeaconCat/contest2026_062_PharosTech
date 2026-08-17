@@ -1563,9 +1563,20 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
       return ret;
     }
 
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
   if (dev->status.state != SV6621_STATE_WIFI_READY)
     {
       ret = -ENETDOWN;
+    }
+
+  nxmutex_unlock(&dev->status_lock);
+  if (ret < 0)
+    {
       goto unlock_lifecycle;
     }
 
@@ -1667,11 +1678,20 @@ int sv6621_disconnect(FAR struct sv6621_dev_s *dev, uint16_t reason)
       return ret;
     }
 
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      nxmutex_unlock(&dev->lifecycle_lock);
+      return ret;
+    }
+
   if (dev->status.state != SV6621_STATE_WIFI_READY)
     {
       ret = -ENETDOWN;
     }
-  else
+
+  nxmutex_unlock(&dev->status_lock);
+  if (ret >= 0)
     {
       ret = sv6621_station_disconnect(&dev->station, reason);
       if (ret == 0)
@@ -1748,6 +1768,7 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
   enum sv6621_station_state_e station_state;
   enum sv6621_state_e state;
   bool scan_active;
+  bool connected;
   int ret;
 
   if (dev == NULL || config == NULL ||
@@ -1770,6 +1791,7 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
     }
 
   state = dev->status.state;
+  connected = dev->station_connected;
   nxmutex_unlock(&dev->status_lock);
   if (state == SV6621_STATE_SUSPENDED)
     {
@@ -1819,7 +1841,7 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
     }
 
 #ifdef CONFIG_NET
-  if (dev->station_connected)
+  if (connected)
     {
       ret = sv6621_network_sync_addresses(&dev->network);
       if (ret != 0)
