@@ -128,7 +128,13 @@ enum sv6621_event_e
   SV6621_EVENT_DISCONNECTED,
   SV6621_EVENT_RECOVERY_STARTED,
   SV6621_EVENT_RECOVERY_COMPLETE,
+  SV6621_EVENT_THERMAL_CHANGED,
   SV6621_EVENT_FATAL
+};
+
+struct sv6621_thermal_s
+{
+  bool transmit_blocked;
 };
 
 struct sv6621_firmware_s
