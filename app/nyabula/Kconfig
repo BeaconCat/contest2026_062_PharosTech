@@ -7,8 +7,17 @@ menuconfig CONTEST2026_062_NYABULA
 	bool "Nyabula companion application"
 	default n
 	depends on GRAPHICS_LVGL
+	select HAVE_CXX
+	select LIBCXX
+	select LIBCXXABI
+	select LV_USE_FLOAT
+	select LV_USE_VECTOR_GRAPHIC
+	select LV_USE_THORVG
+	select LV_USE_THORVG_INTERNAL
 	---help---
-		Enable the Nyabula companion application and its dual-eye UI.
+		Enable the Nyabula companion application and its dual-eye UI. The Eye
+		Engine uses LVGL vector draw tasks and the antialiased ThorVG software
+		backend; it does not contain a private framebuffer rasterizer.
 
 if CONTEST2026_062_NYABULA
 
