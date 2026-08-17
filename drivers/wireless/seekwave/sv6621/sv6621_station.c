@@ -623,7 +623,8 @@ void sv6621_station_command_event(uint8_t instance, uint8_t id,
           complete = state == SV6621_STATION_JOINING ||
                      state == SV6621_STATION_AUTHENTICATING ||
                      state == SV6621_STATION_ASSOCIATING;
-          notify = state == SV6621_STATION_CONNECTED;
+          notify = state == SV6621_STATION_ASSOCIATED ||
+                   state == SV6621_STATION_CONNECTED;
           notify_connected = false;
           station->state = SV6621_STATION_IDLE;
           station->result = -ECONNRESET;
@@ -701,7 +702,8 @@ void sv6621_station_command_event(uint8_t instance, uint8_t id,
           complete = state == SV6621_STATION_JOINING ||
                      state == SV6621_STATION_AUTHENTICATING ||
                      state == SV6621_STATION_ASSOCIATING;
-          notify = state == SV6621_STATION_CONNECTED;
+          notify = state == SV6621_STATION_ASSOCIATED ||
+                   state == SV6621_STATION_CONNECTED;
           notify_connected = false;
           station->state = SV6621_STATION_IDLE;
           station->result = -ECONNRESET;
