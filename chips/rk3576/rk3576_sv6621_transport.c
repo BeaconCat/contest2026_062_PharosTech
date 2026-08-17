@@ -719,8 +719,14 @@ static int rk3576_sv6621_enumerate(
       return rk3576_sv6621_open_failed(priv, ret);
     }
 
-  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_INTERRUPT, 0,
-                             NULL);
+  /* Keep the card-side interrupt path enabled while changing the bus
+   * timing.  The verified SV6621 enumeration trace enables IEN before
+   * entering SDR104; the host callback remains masked until attach_irq.
+   */
+
+  ret = rk3576_sv6621_direct(
+      true, 0, RK3576_SV6621_CCCR_INTERRUPT,
+      RK3576_SV6621_INTERRUPT_MASTER | RK3576_SV6621_FUNCTION1_BIT, NULL);
   if (ret < 0)
     {
       return rk3576_sv6621_open_failed(priv, ret);
