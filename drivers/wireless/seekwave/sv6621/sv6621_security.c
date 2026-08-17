@@ -41,7 +41,7 @@
 #define SV6621_SECURITY_COMMAND_TX_DATA      15
 #define SV6621_SECURITY_COMMAND_TIMEOUT_MS  5000
 #define SV6621_SECURITY_PACKET_NUMBER_SIZE  6
-#define SV6621_SECURITY_KEY_CAPACITY        32
+#define SV6621_SECURITY_CCMP_KEY_SIZE       16
 #define SV6621_SECURITY_KEY_PAYLOAD_SIZE    48
 #define SV6621_SECURITY_KEY_TYPE_OFFSET     6
 #define SV6621_SECURITY_CIPHER_OFFSET       7
@@ -69,8 +69,8 @@ int sv6621_security_add_key(
 {
   uint8_t payload[SV6621_SECURITY_KEY_PAYLOAD_SIZE];
 
-  if (command == NULL || address == NULL || key == NULL || key_length == 0 ||
-      key_length > SV6621_SECURITY_KEY_CAPACITY || key_index > 6 ||
+  if (command == NULL || address == NULL || key == NULL ||
+      key_length != SV6621_SECURITY_CCMP_KEY_SIZE || key_index > 6 ||
       type > SV6621_SECURITY_KEY_BEACON_INTEGRITY_GROUP ||
       cipher != SV6621_SECURITY_CIPHER_CCMP)
     {
