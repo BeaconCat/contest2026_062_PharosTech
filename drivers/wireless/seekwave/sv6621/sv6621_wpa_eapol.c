@@ -212,6 +212,14 @@ int sv6621_wpa_eapol_parse(FAR const uint8_t *frame, size_t frame_length,
     {
       eapol->message = SV6621_WPA_MESSAGE_3;
     }
+  else if ((key_info & (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK |
+                        SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_INSTALL |
+                        SV6621_WPA_KEY_SECURE)) ==
+           (SV6621_WPA_KEY_ACK | SV6621_WPA_KEY_MIC |
+            SV6621_WPA_KEY_SECURE))
+    {
+      eapol->message = SV6621_WPA_MESSAGE_GROUP_1;
+    }
 
   eapol->eapol = packet;
   eapol->eapol_length = packet_length;
@@ -247,7 +255,8 @@ int sv6621_wpa_eapol_build(
 
   if (replay == NULL || kck == NULL || output == NULL || written == NULL ||
       (response != SV6621_WPA_RESPONSE_2 &&
-       response != SV6621_WPA_RESPONSE_4) ||
+       response != SV6621_WPA_RESPONSE_4 &&
+       response != SV6621_WPA_RESPONSE_GROUP_2) ||
       version < SV6621_WPA_EAPOL_VERSION_MIN ||
       version > SV6621_WPA_EAPOL_VERSION_MAX ||
       (response == SV6621_WPA_RESPONSE_2 && snonce == NULL))
@@ -269,11 +278,16 @@ int sv6621_wpa_eapol_build(
   sv6621_wpa_eapol_put_be16(output + 2,
                              length - SV6621_WPA_EAPOL_HEADER_SIZE);
   output[4] = SV6621_WPA_KEY_DESCRIPTOR_RSN;
-  key_info = SV6621_WPA_KEY_VERSION_SHA1 | SV6621_WPA_KEY_PAIRWISE |
-             SV6621_WPA_KEY_MIC;
-  if (response == SV6621_WPA_RESPONSE_4)
+  key_info = SV6621_WPA_KEY_VERSION_SHA1 | SV6621_WPA_KEY_MIC;
+  if (response == SV6621_WPA_RESPONSE_4 ||
+      response == SV6621_WPA_RESPONSE_GROUP_2)
     {
       key_info |= SV6621_WPA_KEY_SECURE;
+    }
+
+  if (response != SV6621_WPA_RESPONSE_GROUP_2)
+    {
+      key_info |= SV6621_WPA_KEY_PAIRWISE;
     }
 
   sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_INFO_OFFSET, key_info);
