@@ -40,6 +40,7 @@
 
 #define SV6621_CORE_BSP_TIMEOUT_MS  2000
 #define SV6621_CORE_WIFI_TIMEOUT_MS 2000
+#define SV6621_CORE_SCAN_TIMEOUT_MS 10000
 
 /****************************************************************************
  * Private Function Prototypes
@@ -49,6 +50,9 @@ static void sv6621_core_service_event(enum sv6621_service_event_e event,
                                       FAR const uint8_t *payload,
                                       size_t length, FAR void *arg);
 static void sv6621_core_rx_error(int error, FAR void *arg);
+static void sv6621_core_command_event(uint8_t instance, uint8_t id,
+                                      FAR const uint8_t *payload,
+                                      size_t length, FAR void *arg);
 static void sv6621_core_report(FAR struct sv6621_dev_s *dev,
                                enum sv6621_event_e event, FAR const void *data,
                                size_t length);
@@ -173,6 +177,19 @@ static void sv6621_core_rx_error(int error, FAR void *arg)
 }
 
 /****************************************************************************
+ * Name: sv6621_core_command_event
+ ****************************************************************************/
+
+static void sv6621_core_command_event(uint8_t instance, uint8_t id,
+                                      FAR const uint8_t *payload,
+                                      size_t length, FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+
+  sv6621_scan_command_event(instance, id, payload, length, &dev->scan);
+}
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -234,11 +251,18 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       goto deinit_router;
     }
 
-  ret = sv6621_command_engine_init(&dev->command, sv6621_tx_command_sender,
-                                   &dev->tx, NULL, NULL);
+  ret = sv6621_scan_controller_init(&dev->scan, &dev->command,
+                                    SV6621_CORE_SCAN_TIMEOUT_MS, NULL, NULL);
   if (ret < 0)
     {
       goto deinit_tx;
+    }
+
+  ret = sv6621_command_engine_init(&dev->command, sv6621_tx_command_sender,
+                                   &dev->tx, sv6621_core_command_event, dev);
+  if (ret < 0)
+    {
+      goto deinit_scan;
     }
 
   ret = sv6621_service_init(&dev->service, sv6621_core_service_event, dev);
@@ -282,6 +306,8 @@ deinit_service:
   sv6621_service_deinit(&dev->service);
 deinit_command:
   sv6621_command_engine_deinit(&dev->command);
+deinit_scan:
+  sv6621_scan_controller_deinit(&dev->scan);
 deinit_tx:
   sv6621_tx_deinit(&dev->tx);
 deinit_router:
@@ -311,6 +337,7 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
                             sv6621_service_channel_consumer, &dev->service);
   sv6621_rx_deinit(&dev->rx);
   sv6621_service_deinit(&dev->service);
+  sv6621_scan_controller_deinit(&dev->scan);
   sv6621_command_engine_deinit(&dev->command);
   sv6621_tx_deinit(&dev->tx);
   sv6621_packet_router_deinit(&dev->router);
@@ -522,6 +549,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 {
   enum sv6621_state_e state;
   uint32_t recovery_count;
+  int scan_ret = 0;
   int close_ret = 0;
   int ret;
 
@@ -553,6 +581,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
     }
 
   sv6621_core_set_state(dev, SV6621_STATE_STOPPING, 0);
+  scan_ret = sv6621_scan_controller_cancel(&dev->scan);
   if (dev->station_open)
     {
       close_ret = sv6621_wifi_close_station(&dev->command);
@@ -591,6 +620,11 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 
   state = SV6621_STATE_OFF;
   sv6621_core_report(dev, SV6621_EVENT_STATE_CHANGED, &state, sizeof(state));
+  if (scan_ret < 0)
+    {
+      return scan_ret;
+    }
+
   return close_ret < 0 ? close_ret : 0;
 }
 
