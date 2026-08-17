@@ -79,6 +79,13 @@ static void sv6621_data_put_le16(FAR uint8_t *output, uint16_t value);
 static void sv6621_data_packet(uint8_t channel,
                                FAR const uint8_t *payload, size_t length,
                                FAR void *arg);
+static FAR struct sv6621_data_fragment_s *
+sv6621_data_find_fragment(FAR struct sv6621_data_s *data,
+                          FAR const struct sv6621_data_rx_s *rx);
+static FAR struct sv6621_data_fragment_s *
+sv6621_data_select_fragment(FAR struct sv6621_data_s *data);
+static int sv6621_data_reassemble(FAR struct sv6621_data_s *data,
+                                  FAR struct sv6621_data_rx_s *rx);
 static bool sv6621_data_take_credit(FAR struct sv6621_data_s *data,
                                     uint8_t lmac_id);
 static void sv6621_data_restore_credit(FAR struct sv6621_data_s *data,
@@ -108,6 +115,148 @@ static void sv6621_data_put_le16(FAR uint8_t *output, uint16_t value)
 }
 
 /****************************************************************************
+ * Name: sv6621_data_find_fragment
+ ****************************************************************************/
+
+static FAR struct sv6621_data_fragment_s *
+sv6621_data_find_fragment(FAR struct sv6621_data_s *data,
+                          FAR const struct sv6621_data_rx_s *rx)
+{
+  unsigned int index;
+
+  for (index = 0; index < SV6621_DATA_FRAGMENT_ENTRIES; index++)
+    {
+      FAR struct sv6621_data_fragment_s *entry = &data->fragments[index];
+
+      if (entry->active && entry->sequence == rx->sequence &&
+          entry->tid == rx->tid && entry->instance == rx->instance &&
+          entry->instance_valid == rx->instance_valid &&
+          entry->peer_index == rx->peer_index &&
+          entry->peer_valid == rx->peer_valid)
+        {
+          return entry;
+        }
+    }
+
+  return NULL;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_select_fragment
+ ****************************************************************************/
+
+static FAR struct sv6621_data_fragment_s *
+sv6621_data_select_fragment(FAR struct sv6621_data_s *data)
+{
+  FAR struct sv6621_data_fragment_s *oldest = &data->fragments[0];
+  unsigned int index;
+
+  for (index = 0; index < SV6621_DATA_FRAGMENT_ENTRIES; index++)
+    {
+      FAR struct sv6621_data_fragment_s *entry = &data->fragments[index];
+
+      if (!entry->active)
+        {
+          return entry;
+        }
+
+      if ((int32_t)(entry->age - oldest->age) < 0)
+        {
+          oldest = entry;
+        }
+    }
+
+  data->stats.fragment_evictions++;
+  return oldest;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_reassemble
+ ****************************************************************************/
+
+static int sv6621_data_reassemble(FAR struct sv6621_data_s *data,
+                                  FAR struct sv6621_data_rx_s *rx)
+{
+  FAR struct sv6621_data_fragment_s *entry;
+  size_t append_length;
+
+  if (rx->fragment == 0 && !rx->more_fragments)
+    {
+      return 0;
+    }
+
+  data->stats.fragments++;
+  if (rx->fragment == 0)
+    {
+      if (rx->frame_length > SV6621_DATA_MAX_FRAME_SIZE)
+        {
+          data->stats.fragment_drops++;
+          return -EMSGSIZE;
+        }
+
+      entry = sv6621_data_find_fragment(data, rx);
+      if (entry == NULL)
+        {
+          entry = sv6621_data_select_fragment(data);
+        }
+
+      memset(entry, 0, sizeof(*entry));
+      entry->first = *rx;
+      entry->age = ++data->fragment_age;
+      entry->length = rx->frame_length;
+      entry->sequence = rx->sequence;
+      entry->expected_fragment = 1;
+      entry->instance = rx->instance;
+      entry->instance_valid = rx->instance_valid;
+      entry->peer_index = rx->peer_index;
+      entry->peer_valid = rx->peer_valid;
+      entry->tid = rx->tid;
+      entry->active = true;
+      memcpy(entry->frame, rx->frame, rx->frame_length);
+      return -EINPROGRESS;
+    }
+
+  entry = sv6621_data_find_fragment(data, rx);
+  if (entry == NULL || entry->expected_fragment != rx->fragment ||
+      rx->frame_length <= 12)
+    {
+      if (entry != NULL)
+        {
+          entry->active = false;
+        }
+
+      data->stats.fragment_drops++;
+      return -EPROTO;
+    }
+
+  append_length = rx->frame_length - 12;
+  if (append_length > sizeof(entry->frame) - entry->length)
+    {
+      entry->active = false;
+      data->stats.fragment_drops++;
+      return -EMSGSIZE;
+    }
+
+  memcpy(entry->frame + entry->length, rx->frame + 12, append_length);
+  entry->length += append_length;
+  entry->expected_fragment++;
+  if (rx->more_fragments)
+    {
+      return -EINPROGRESS;
+    }
+
+  *rx = entry->first;
+  rx->frame = entry->frame;
+  rx->frame_length = entry->length;
+  rx->checksum = 0;
+  rx->checksum_valid = false;
+  rx->more_fragments = false;
+  entry->active = false;
+  data->stats.reassembled++;
+  return 0;
+}
+
+/****************************************************************************
  * Name: sv6621_data_packet
  ****************************************************************************/
 
@@ -116,8 +265,21 @@ static void sv6621_data_packet(uint8_t channel, FAR const uint8_t *payload,
 {
   FAR struct sv6621_data_s *data = arg;
   struct sv6621_data_rx_s rx;
+  int ret;
 
   if (sv6621_data_decode_rx(payload, length, &rx) < 0)
+    {
+      data->stats.malformed++;
+      return;
+    }
+
+  ret = sv6621_data_reassemble(data, &rx);
+  if (ret == -EINPROGRESS)
+    {
+      return;
+    }
+
+  if (ret < 0)
     {
       data->stats.malformed++;
       return;
@@ -380,6 +542,7 @@ void sv6621_data_deinit(FAR struct sv6621_data_s *data)
   sv6621_packet_unsubscribe(data->router, SV6621_CHANNEL_WIFI_DATA,
                             sv6621_data_packet, data);
   nxmutex_destroy(&data->tx_lock);
+  sv6621_data_reset_fragments(data);
   data->router = NULL;
   data->tx = NULL;
 }
@@ -442,6 +605,19 @@ void sv6621_data_reset_credits(FAR struct sv6621_data_s *data)
   flags = spin_lock_irqsave(&data->credit_lock);
   memset(data->credits, 0, sizeof(data->credits));
   spin_unlock_irqrestore(&data->credit_lock, flags);
+}
+
+/****************************************************************************
+ * Name: sv6621_data_reset_fragments
+ ****************************************************************************/
+
+void sv6621_data_reset_fragments(FAR struct sv6621_data_s *data)
+{
+  if (data != NULL)
+    {
+      memset(data->fragments, 0, sizeof(data->fragments));
+      data->fragment_age = 0;
+    }
 }
 
 /****************************************************************************
