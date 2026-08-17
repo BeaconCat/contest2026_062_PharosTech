@@ -55,6 +55,7 @@
 
 #define SV6621_SCAN_REPORT_HEADER_SIZE   8
 #define SV6621_SCAN_INFORMATION_OFFSET   36
+#define SV6621_SCAN_BEACON_INTERVAL_OFFSET 32
 #define SV6621_SCAN_BSSID_OFFSET         16
 #define SV6621_SCAN_CAPABILITY_OFFSET    34
 #define SV6621_SCAN_CAPABILITY_PRIVACY   (1 << 4)
@@ -163,8 +164,8 @@ sv6621_scan_cache_weakest(FAR const struct sv6621_scan_cache_s *cache)
 
   for (index = 1; index < cache->count; index++)
     {
-      if (cache->entries[index].signal_dbm <
-          cache->entries[weakest].signal_dbm)
+      if (cache->entries[index].bss.signal_dbm <
+          cache->entries[weakest].bss.signal_dbm)
         {
           weakest = index;
         }
@@ -282,8 +283,9 @@ int sv6621_scan_stop(FAR struct sv6621_command_engine_s *command)
 }
 
 int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
-                             FAR struct sv6621_bss_s *bss)
+                             FAR struct sv6621_scan_entry_s *entry)
 {
+  FAR struct sv6621_bss_s *bss;
   FAR const uint8_t *frame;
   uint16_t frame_length;
   uint16_t capability;
@@ -292,7 +294,7 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
   bool sae = false;
   bool privacy;
 
-  if (payload == NULL || bss == NULL ||
+  if (payload == NULL || entry == NULL ||
       length < SV6621_SCAN_REPORT_HEADER_SIZE + SV6621_SCAN_INFORMATION_OFFSET)
     {
       return -EINVAL;
@@ -319,13 +321,17 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
       return -EPROTO;
     }
 
-  memset(bss, 0, sizeof(*bss));
+  memset(entry, 0, sizeof(*entry));
+  bss = &entry->bss;
   memcpy(bss->bssid, frame + SV6621_SCAN_BSSID_OFFSET, SV6621_MAC_LENGTH);
   bss->channel = payload[0];
   bss->band = payload[1] == SV6621_SCAN_BAND_2GHZ ? SV6621_BAND_2GHZ
                                                   : SV6621_BAND_5GHZ;
   bss->signal_dbm = (int16_t)sv6621_scan_get_le16(payload + 2);
   capability = sv6621_scan_get_le16(frame + SV6621_SCAN_CAPABILITY_OFFSET);
+  entry->beacon_interval =
+      sv6621_scan_get_le16(frame + SV6621_SCAN_BEACON_INTERVAL_OFFSET);
+  entry->capability = capability;
   privacy = (capability & SV6621_SCAN_CAPABILITY_PRIVACY) != 0;
 
   for (offset = SV6621_SCAN_INFORMATION_OFFSET; offset < frame_length;)
@@ -364,6 +370,14 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
                sv6621_scan_is_wpa_ie(frame + offset, ie_length))
         {
           psk = true;
+        }
+
+      if (entry->ie_length + 2 + ie_length <= SV6621_SCAN_IE_CAPACITY)
+        {
+          entry->ies[entry->ie_length++] = id;
+          entry->ies[entry->ie_length++] = ie_length;
+          memcpy(entry->ies + entry->ie_length, frame + offset, ie_length);
+          entry->ie_length += ie_length;
         }
 
       offset += ie_length;
@@ -430,13 +444,13 @@ int sv6621_scan_cache_reset(FAR struct sv6621_scan_cache_s *cache)
 }
 
 int sv6621_scan_cache_store(FAR struct sv6621_scan_cache_s *cache,
-                            FAR const struct sv6621_bss_s *bss,
+                            FAR const struct sv6621_scan_entry_s *entry,
                             FAR bool *inserted)
 {
   size_t index;
   int ret;
 
-  if (cache == NULL || bss == NULL || inserted == NULL)
+  if (cache == NULL || entry == NULL || inserted == NULL)
     {
       return -EINVAL;
     }
@@ -450,21 +464,23 @@ int sv6621_scan_cache_store(FAR struct sv6621_scan_cache_s *cache,
   *inserted = false;
   for (index = 0; index < cache->count; index++)
     {
-      if (memcmp(cache->entries[index].bssid, bss->bssid, SV6621_MAC_LENGTH) ==
-          0)
+      if (memcmp(cache->entries[index].bss.bssid, entry->bss.bssid,
+                 SV6621_MAC_LENGTH) == 0)
         {
-          if (bss->ssid_length == 0 && cache->entries[index].ssid_length > 0)
+          if (entry->bss.ssid_length == 0 &&
+              cache->entries[index].bss.ssid_length > 0)
             {
-              struct sv6621_bss_s updated = *bss;
+              struct sv6621_scan_entry_s updated = *entry;
 
-              updated.ssid_length = cache->entries[index].ssid_length;
-              memcpy(updated.ssid, cache->entries[index].ssid,
-                     updated.ssid_length);
+              updated.bss.ssid_length =
+                  cache->entries[index].bss.ssid_length;
+              memcpy(updated.bss.ssid, cache->entries[index].bss.ssid,
+                     updated.bss.ssid_length);
               cache->entries[index] = updated;
             }
           else
             {
-              cache->entries[index] = *bss;
+              cache->entries[index] = *entry;
             }
 
           nxmutex_unlock(&cache->lock);
@@ -474,20 +490,20 @@ int sv6621_scan_cache_store(FAR struct sv6621_scan_cache_s *cache,
 
   if (cache->count < SV6621_SCAN_CACHE_CAPACITY)
     {
-      cache->entries[cache->count++] = *bss;
+      cache->entries[cache->count++] = *entry;
       *inserted = true;
     }
   else
     {
       index = sv6621_scan_cache_weakest(cache);
-      if (bss->signal_dbm <= cache->entries[index].signal_dbm)
+      if (entry->bss.signal_dbm <= cache->entries[index].bss.signal_dbm)
         {
           cache->dropped++;
           ret = -ENOSPC;
           goto unlock_cache;
         }
 
-      cache->entries[index] = *bss;
+      cache->entries[index] = *entry;
       cache->replacements++;
       *inserted = true;
     }
@@ -520,12 +536,71 @@ int sv6621_scan_cache_snapshot(FAR struct sv6621_scan_cache_s *cache,
   copy_count = *count < cache->count ? *count : cache->count;
   if (copy_count > 0)
     {
-      memcpy(entries, cache->entries, copy_count * sizeof(*entries));
+      size_t index;
+
+      for (index = 0; index < copy_count; index++)
+        {
+          entries[index] = cache->entries[index].bss;
+        }
     }
 
   *count = cache->count;
   nxmutex_unlock(&cache->lock);
   return copy_count < cache->count ? -ENOSPC : 0;
+}
+
+int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
+                           FAR const struct sv6621_connect_s *request,
+                           FAR struct sv6621_scan_entry_s *entry)
+{
+  size_t index;
+  int ret;
+
+  if (cache == NULL || request == NULL || entry == NULL ||
+      request->ssid_length == 0 ||
+      request->ssid_length > SV6621_SSID_MAX_LENGTH)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&cache->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = -ENOENT;
+  for (index = 0; index < cache->count; index++)
+    {
+      FAR const struct sv6621_bss_s *bss = &cache->entries[index].bss;
+
+      if (bss->ssid_length != request->ssid_length ||
+          memcmp(bss->ssid, request->ssid, request->ssid_length) != 0)
+        {
+          continue;
+        }
+
+      if (request->bssid_valid &&
+          memcmp(bss->bssid, request->bssid, SV6621_MAC_LENGTH) != 0)
+        {
+          continue;
+        }
+
+      if (ret == -ENOENT ||
+          bss->signal_dbm > entry->bss.signal_dbm)
+        {
+          *entry = cache->entries[index];
+          ret = 0;
+        }
+
+      if (request->bssid_valid)
+        {
+          break;
+        }
+    }
+
+  nxmutex_unlock(&cache->lock);
+  return ret;
 }
 
 int sv6621_scan_controller_init(FAR struct sv6621_scan_s *scan,
@@ -684,7 +759,7 @@ void sv6621_scan_command_event(uint8_t instance, uint8_t id,
                                FAR void *arg)
 {
   FAR struct sv6621_scan_s *scan = arg;
-  struct sv6621_bss_s bss;
+  FAR struct sv6621_scan_entry_s *entry;
   sv6621_scan_complete_t complete;
   FAR void *complete_arg;
   bool inserted;
@@ -732,7 +807,13 @@ void sv6621_scan_command_event(uint8_t instance, uint8_t id,
       return;
     }
 
-  if (sv6621_scan_parse_report(payload, length, &bss) < 0)
+  entry = kmm_malloc(sizeof(*entry));
+  if (entry == NULL)
+    {
+      return;
+    }
+
+  if (sv6621_scan_parse_report(payload, length, entry) < 0)
     {
       if (nxmutex_lock(&scan->lock) >= 0)
         {
@@ -740,8 +821,10 @@ void sv6621_scan_command_event(uint8_t instance, uint8_t id,
           nxmutex_unlock(&scan->lock);
         }
 
+      kmm_free(entry);
       return;
     }
 
-  sv6621_scan_cache_store(&scan->cache, &bss, &inserted);
+  sv6621_scan_cache_store(&scan->cache, entry, &inserted);
+  kmm_free(entry);
 }

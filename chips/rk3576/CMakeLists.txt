@@ -25,6 +25,7 @@ if(CONFIG_SV6621)
        sv6621_netdev.c
        sv6621_wpa.c
        ${SV6621_DIR}/sv6621_command.c
+       ${SV6621_DIR}/sv6621_connection.c
        ${SV6621_DIR}/sv6621_core.c
        ${SV6621_DIR}/sv6621_firmware.c
        ${SV6621_DIR}/sv6621_memory.c
@@ -34,6 +35,7 @@ if(CONFIG_SV6621)
        ${SV6621_DIR}/sv6621_rx.c
        ${SV6621_DIR}/sv6621_scan.c
        ${SV6621_DIR}/sv6621_service.c
+       ${SV6621_DIR}/sv6621_station.c
        ${SV6621_DIR}/sv6621_transport.c
        ${SV6621_DIR}/sv6621_tx.c
        ${SV6621_DIR}/sv6621_wifi.c)
