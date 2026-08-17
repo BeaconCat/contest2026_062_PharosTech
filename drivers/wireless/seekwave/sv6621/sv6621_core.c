@@ -755,13 +755,6 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       goto unlock_lifecycle;
     }
 
-  ret = dev->config.board_ops->power_on(dev->config.board_arg);
-  if (ret < 0)
-    {
-      goto fail;
-    }
-
-  dev->powered = true;
   ret = dev->config.transport->ops->open(dev->config.transport);
   if (ret < 0)
     {
@@ -769,6 +762,19 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
     }
 
   dev->transport_open = true;
+  ret = dev->config.board_ops->power_on(dev->config.board_arg);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
+  dev->powered = true;
+  ret = dev->config.transport->ops->enumerate(dev->config.transport);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
   ret = sv6621_service_reset(&dev->service);
   if (ret < 0)
     {
