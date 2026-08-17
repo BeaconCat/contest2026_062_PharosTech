@@ -43,6 +43,7 @@
 #define SV6621_SCAN_COMMAND_STOP         6
 #define SV6621_SCAN_FIXED_SIZE           32
 #define SV6621_SCAN_CHANNEL_SIZE         3
+#define SV6621_SCAN_SSID_SIZE            (SV6621_SSID_MAX_LENGTH + 1)
 #define SV6621_SCAN_MAX_CHANNELS         64
 #define SV6621_SCAN_COMMAND_TIMEOUT_MS   5000
 
@@ -219,21 +220,28 @@ static void sv6621_scan_timeout_worker(FAR void *arg)
 
 int sv6621_scan_start(FAR struct sv6621_command_engine_s *command,
                       FAR const struct sv6621_scan_channel_s *channels,
-                      size_t channel_count)
+                      size_t channel_count, FAR const uint8_t *ssid,
+                      size_t ssid_length)
 {
   FAR uint8_t *payload;
+  FAR uint8_t *ssid_entry;
   size_t payload_length;
+  size_t ssid_offset;
   size_t index;
   int ret;
 
   if (command == NULL || channels == NULL || channel_count == 0 ||
-      channel_count > SV6621_SCAN_MAX_CHANNELS)
+      channel_count > SV6621_SCAN_MAX_CHANNELS ||
+      ssid_length > SV6621_SSID_MAX_LENGTH ||
+      (ssid_length != 0 && ssid == NULL))
     {
       return -EINVAL;
     }
 
-  payload_length =
+  ssid_offset =
       SV6621_SCAN_FIXED_SIZE + channel_count * SV6621_SCAN_CHANNEL_SIZE;
+  payload_length = ssid_offset +
+                   (ssid_length != 0 ? SV6621_SCAN_SSID_SIZE : 0);
   payload = kmm_zalloc(payload_length);
   if (payload == NULL)
     {
@@ -244,8 +252,10 @@ int sv6621_scan_start(FAR struct sv6621_command_engine_s *command,
                        channel_count);
   sv6621_scan_put_le32(payload + SV6621_SCAN_CHANNEL_LIST_OFFSET,
                        SV6621_SCAN_FIXED_SIZE);
-  sv6621_scan_put_le32(payload + SV6621_SCAN_SSID_COUNT_OFFSET, 0);
-  sv6621_scan_put_le32(payload + SV6621_SCAN_SSID_LIST_OFFSET, 0);
+  sv6621_scan_put_le32(payload + SV6621_SCAN_SSID_COUNT_OFFSET,
+                       ssid_length != 0 ? 1 : 0);
+  sv6621_scan_put_le32(payload + SV6621_SCAN_SSID_LIST_OFFSET,
+                       ssid_length != 0 ? ssid_offset : 0);
   sv6621_scan_put_le32(payload + SV6621_SCAN_IE_LENGTH_OFFSET, 0);
   sv6621_scan_put_le32(payload + SV6621_SCAN_IE_OFFSET_OFFSET, 0);
 
@@ -264,6 +274,13 @@ int sv6621_scan_start(FAR struct sv6621_command_engine_s *command,
       encoded[0] = channels[index].number;
       encoded[1] = channels[index].band;
       encoded[2] = channels[index].flags;
+    }
+
+  if (ssid_length != 0)
+    {
+      ssid_entry = payload + ssid_offset;
+      memcpy(ssid_entry, ssid, ssid_length);
+      ssid_entry[SV6621_SSID_MAX_LENGTH] = ssid_length;
     }
 
   ret = sv6621_command_execute(
@@ -667,7 +684,8 @@ void sv6621_scan_controller_deinit(FAR struct sv6621_scan_s *scan)
 
 int sv6621_scan_controller_begin(
     FAR struct sv6621_scan_s *scan,
-    FAR const struct sv6621_scan_channel_s *channels, size_t channel_count)
+    FAR const struct sv6621_scan_channel_s *channels, size_t channel_count,
+    FAR const uint8_t *ssid, size_t ssid_length)
 {
   int ret;
 
@@ -698,7 +716,8 @@ int sv6621_scan_controller_begin(
   scan->active = true;
   scan->stats.started++;
   nxmutex_unlock(&scan->lock);
-  ret = sv6621_scan_start(scan->command, channels, channel_count);
+  ret = sv6621_scan_start(scan->command, channels, channel_count, ssid,
+                          ssid_length);
   if (ret < 0)
     {
       if (nxmutex_lock(&scan->lock) >= 0)

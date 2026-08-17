@@ -64,7 +64,8 @@ static int sv6621_ioctl_rate(FAR struct sv6621_ioctl_s *ioctl,
                              FAR struct iwreq *request);
 static int sv6621_ioctl_stats(FAR struct sv6621_ioctl_s *ioctl,
                               FAR struct iwreq *request);
-static int sv6621_ioctl_scan_start(FAR struct sv6621_ioctl_s *ioctl);
+static int sv6621_ioctl_scan_start(FAR struct sv6621_ioctl_s *ioctl,
+                                   FAR const struct iwreq *request);
 static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
                                      FAR struct iwreq *request);
 
@@ -561,9 +562,30 @@ static int sv6621_ioctl_stats(FAR struct sv6621_ioctl_s *ioctl,
  * Name: sv6621_ioctl_scan_start
  ****************************************************************************/
 
-static int sv6621_ioctl_scan_start(FAR struct sv6621_ioctl_s *ioctl)
+static int sv6621_ioctl_scan_start(FAR struct sv6621_ioctl_s *ioctl,
+                                   FAR const struct iwreq *request)
 {
-  return sv6621_scan(ioctl->owner);
+  FAR const struct iw_scan_req *scan_request = request->u.data.pointer;
+  FAR const uint8_t *ssid = NULL;
+  size_t ssid_length = 0;
+
+  if ((request->u.data.flags & IW_SCAN_THIS_ESSID) != 0)
+    {
+      if (scan_request == NULL ||
+          request->u.data.length < sizeof(*scan_request) ||
+          scan_request->essid_len == 0 ||
+          scan_request->essid_len > IW_ESSID_MAX_SIZE)
+        {
+          return -EINVAL;
+        }
+
+      ssid = scan_request->essid;
+      ssid_length = scan_request->essid_len;
+    }
+
+  return sv6621_scan_selected(ioctl->owner, ioctl->owner->scan_channels,
+                              ioctl->owner->scan_channel_count, ssid,
+                              ssid_length);
 }
 
 /****************************************************************************
@@ -799,7 +821,7 @@ int sv6621_ioctl_handle(FAR struct sv6621_ioctl_s *ioctl, int command,
         break;
 
       case SIOCSIWSCAN:
-        ret = sv6621_ioctl_scan_start(ioctl);
+        ret = sv6621_ioctl_scan_start(ioctl, request);
         break;
 
       case SIOCGIWSCAN:
