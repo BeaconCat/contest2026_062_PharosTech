@@ -48,6 +48,7 @@
 #define SV6621_DATA_INSTANCE_MASK           0x03
 #define SV6621_DATA_LMAC_MASK               0x03
 #define SV6621_DATA_TID_MASK                0x0f
+#define SV6621_DATA_ETHERTYPE_EAPOL         0x888e
 
 /****************************************************************************
  * Private Function Prototypes
@@ -100,7 +101,17 @@ static void sv6621_data_packet(uint8_t channel, FAR const uint8_t *payload,
 
   data->stats.received++;
   data->stats.received_bytes += rx.frame_length;
-  data->input(&rx, data->input_arg);
+  if ((rx.eapol ||
+       (((uint16_t)rx.frame[12] << 8) | rx.frame[13]) ==
+           SV6621_DATA_ETHERTYPE_EAPOL) &&
+      data->eapol_input != NULL)
+    {
+      data->eapol_input(&rx, data->eapol_arg);
+    }
+  else
+    {
+      data->input(&rx, data->input_arg);
+    }
   (void)channel;
 }
 
@@ -268,6 +279,20 @@ void sv6621_data_deinit(FAR struct sv6621_data_s *data)
   nxmutex_destroy(&data->tx_lock);
   data->router = NULL;
   data->tx = NULL;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_set_eapol_input
+ ****************************************************************************/
+
+void sv6621_data_set_eapol_input(FAR struct sv6621_data_s *data,
+                                  sv6621_data_input_t input, FAR void *arg)
+{
+  if (data != NULL)
+    {
+      data->eapol_input = input;
+      data->eapol_arg = arg;
+    }
 }
 
 /****************************************************************************

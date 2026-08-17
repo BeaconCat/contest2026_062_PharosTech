@@ -94,6 +94,8 @@ struct sv6621_data_s
   mutex_t tx_lock;
   sv6621_data_input_t input;
   FAR void *input_arg;
+  sv6621_data_input_t eapol_input;
+  FAR void *eapol_arg;
   struct sv6621_data_stats_s stats;
   uint8_t tx_buffer[SV6621_DATA_TX_BUFFER_SIZE];
 };
@@ -113,6 +115,8 @@ int sv6621_data_init(FAR struct sv6621_data_s *data,
                      FAR struct sv6621_tx_s *tx, sv6621_data_input_t input,
                      FAR void *input_arg);
 void sv6621_data_deinit(FAR struct sv6621_data_s *data);
+void sv6621_data_set_eapol_input(FAR struct sv6621_data_s *data,
+                                  sv6621_data_input_t input, FAR void *arg);
 int sv6621_data_send(FAR struct sv6621_data_s *data,
                      FAR const struct sv6621_data_tx_context_s *context,
                      FAR const uint8_t *frame, size_t frame_length);
