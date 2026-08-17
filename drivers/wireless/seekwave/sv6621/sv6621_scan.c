@@ -1,0 +1,747 @@
+/****************************************************************************
+ * drivers/wireless/seekwave/sv6621/sv6621_scan.c
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ ****************************************************************************/
+
+/****************************************************************************
+ * Included Files
+ ****************************************************************************/
+
+#include <nuttx/config.h>
+
+#include <nuttx/clock.h>
+#include <nuttx/kmalloc.h>
+
+#include <errno.h>
+#include <string.h>
+
+#include "sv6621_scan.h"
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#define SV6621_SCAN_INSTANCE             0
+#define SV6621_SCAN_COMMAND_START        5
+#define SV6621_SCAN_COMMAND_STOP         6
+#define SV6621_SCAN_FIXED_SIZE           32
+#define SV6621_SCAN_CHANNEL_SIZE         3
+#define SV6621_SCAN_MAX_CHANNELS         64
+#define SV6621_SCAN_COMMAND_TIMEOUT_MS   5000
+
+#define SV6621_SCAN_CHANNEL_COUNT_OFFSET 8
+#define SV6621_SCAN_CHANNEL_LIST_OFFSET  12
+#define SV6621_SCAN_SSID_COUNT_OFFSET    16
+#define SV6621_SCAN_SSID_LIST_OFFSET     20
+#define SV6621_SCAN_IE_LENGTH_OFFSET     24
+#define SV6621_SCAN_IE_OFFSET_OFFSET     28
+
+#define SV6621_SCAN_REPORT_HEADER_SIZE   8
+#define SV6621_SCAN_INFORMATION_OFFSET   36
+#define SV6621_SCAN_BSSID_OFFSET         16
+#define SV6621_SCAN_CAPABILITY_OFFSET    34
+#define SV6621_SCAN_CAPABILITY_PRIVACY   (1 << 4)
+#define SV6621_SCAN_FRAME_SUBTYPE_MASK   0xfc
+#define SV6621_SCAN_FRAME_BEACON         0x80
+#define SV6621_SCAN_FRAME_PROBE_RESPONSE 0x50
+#define SV6621_SCAN_IE_SSID              0
+#define SV6621_SCAN_IE_RSN               48
+#define SV6621_SCAN_IE_VENDOR            221
+#define SV6621_SCAN_RSN_SUITE_SIZE       4
+#define SV6621_SCAN_RSN_AKM_PSK          2
+#define SV6621_SCAN_RSN_AKM_SAE          8
+
+/****************************************************************************
+ * Private Function Prototypes
+ ****************************************************************************/
+
+static void sv6621_scan_put_le32(FAR uint8_t *value, uint32_t number);
+static uint16_t sv6621_scan_get_le16(FAR const uint8_t *value);
+static int sv6621_scan_parse_rsn(FAR const uint8_t *data, size_t length,
+                                 FAR bool *psk, FAR bool *sae);
+static bool sv6621_scan_is_wpa_ie(FAR const uint8_t *data, size_t length);
+static size_t
+sv6621_scan_cache_weakest(FAR const struct sv6621_scan_cache_s *cache);
+static void sv6621_scan_timeout_worker(FAR void *arg);
+
+/****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
+static void sv6621_scan_put_le32(FAR uint8_t *value, uint32_t number)
+{
+  value[0] = number & 0xff;
+  value[1] = number >> 8;
+  value[2] = number >> 16;
+  value[3] = number >> 24;
+}
+
+static uint16_t sv6621_scan_get_le16(FAR const uint8_t *value)
+{
+  return value[0] | ((uint16_t)value[1] << 8);
+}
+
+static int sv6621_scan_parse_rsn(FAR const uint8_t *data, size_t length,
+                                 FAR bool *psk, FAR bool *sae)
+{
+  uint16_t suite_count;
+  size_t offset;
+  unsigned int index;
+
+  if (length < 8 || sv6621_scan_get_le16(data) != 1)
+    {
+      return -EPROTO;
+    }
+
+  suite_count = sv6621_scan_get_le16(data + 6);
+  offset = 8 + (size_t)suite_count * SV6621_SCAN_RSN_SUITE_SIZE;
+  if (offset + 2 > length)
+    {
+      return -EPROTO;
+    }
+
+  suite_count = sv6621_scan_get_le16(data + offset);
+  offset += 2;
+  if (offset + (size_t)suite_count * SV6621_SCAN_RSN_SUITE_SIZE > length)
+    {
+      return -EPROTO;
+    }
+
+  for (index = 0; index < suite_count; index++)
+    {
+      FAR const uint8_t *suite =
+          data + offset + index * SV6621_SCAN_RSN_SUITE_SIZE;
+
+      if (suite[0] != 0x00 || suite[1] != 0x0f || suite[2] != 0xac)
+        {
+          continue;
+        }
+
+      if (suite[3] == SV6621_SCAN_RSN_AKM_PSK)
+        {
+          *psk = true;
+        }
+      else if (suite[3] == SV6621_SCAN_RSN_AKM_SAE)
+        {
+          *sae = true;
+        }
+    }
+
+  return 0;
+}
+
+static bool sv6621_scan_is_wpa_ie(FAR const uint8_t *data, size_t length)
+{
+  static const uint8_t wpa_type[] = { 0x00, 0x50, 0xf2, 0x01 };
+
+  return length >= sizeof(wpa_type) &&
+         memcmp(data, wpa_type, sizeof(wpa_type)) == 0;
+}
+
+static size_t
+sv6621_scan_cache_weakest(FAR const struct sv6621_scan_cache_s *cache)
+{
+  size_t weakest = 0;
+  size_t index;
+
+  for (index = 1; index < cache->count; index++)
+    {
+      if (cache->entries[index].signal_dbm <
+          cache->entries[weakest].signal_dbm)
+        {
+          weakest = index;
+        }
+    }
+
+  return weakest;
+}
+
+static void sv6621_scan_timeout_worker(FAR void *arg)
+{
+  FAR struct sv6621_scan_s *scan = arg;
+  sv6621_scan_complete_t complete = NULL;
+  FAR void *complete_arg = NULL;
+
+  if (nxmutex_lock(&scan->lock) < 0)
+    {
+      return;
+    }
+
+  if (scan->active)
+    {
+      scan->active = false;
+      scan->stats.timed_out++;
+      complete = scan->complete;
+      complete_arg = scan->complete_arg;
+    }
+
+  nxmutex_unlock(&scan->lock);
+  if (complete != NULL)
+    {
+      sv6621_scan_stop(scan->command);
+      complete(-ETIMEDOUT, complete_arg);
+    }
+}
+
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+int sv6621_scan_start(FAR struct sv6621_command_engine_s *command,
+                      FAR const struct sv6621_scan_channel_s *channels,
+                      size_t channel_count)
+{
+  FAR uint8_t *payload;
+  size_t payload_length;
+  size_t index;
+  int ret;
+
+  if (command == NULL || channels == NULL || channel_count == 0 ||
+      channel_count > SV6621_SCAN_MAX_CHANNELS)
+    {
+      return -EINVAL;
+    }
+
+  payload_length =
+      SV6621_SCAN_FIXED_SIZE + channel_count * SV6621_SCAN_CHANNEL_SIZE;
+  payload = kmm_zalloc(payload_length);
+  if (payload == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  sv6621_scan_put_le32(payload + SV6621_SCAN_CHANNEL_COUNT_OFFSET,
+                       channel_count);
+  sv6621_scan_put_le32(payload + SV6621_SCAN_CHANNEL_LIST_OFFSET,
+                       SV6621_SCAN_FIXED_SIZE);
+  sv6621_scan_put_le32(payload + SV6621_SCAN_SSID_COUNT_OFFSET, 0);
+  sv6621_scan_put_le32(payload + SV6621_SCAN_SSID_LIST_OFFSET, 0);
+  sv6621_scan_put_le32(payload + SV6621_SCAN_IE_LENGTH_OFFSET, 0);
+  sv6621_scan_put_le32(payload + SV6621_SCAN_IE_OFFSET_OFFSET, 0);
+
+  for (index = 0; index < channel_count; index++)
+    {
+      FAR uint8_t *encoded =
+          payload + SV6621_SCAN_FIXED_SIZE + index * SV6621_SCAN_CHANNEL_SIZE;
+
+      if (channels[index].number == 0 ||
+          channels[index].band > SV6621_SCAN_BAND_5GHZ)
+        {
+          ret = -EINVAL;
+          goto free_payload;
+        }
+
+      encoded[0] = channels[index].number;
+      encoded[1] = channels[index].band;
+      encoded[2] = channels[index].flags;
+    }
+
+  ret = sv6621_command_execute(
+      command, SV6621_SCAN_INSTANCE, SV6621_SCAN_COMMAND_START, payload,
+      payload_length, NULL, NULL, SV6621_SCAN_COMMAND_TIMEOUT_MS);
+  if (ret > 0)
+    {
+      ret = -EREMOTEIO;
+    }
+
+free_payload:
+  kmm_free(payload);
+  return ret;
+}
+
+int sv6621_scan_stop(FAR struct sv6621_command_engine_s *command)
+{
+  int ret;
+
+  if (command == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = sv6621_command_execute(command, SV6621_SCAN_INSTANCE,
+                               SV6621_SCAN_COMMAND_STOP, NULL, 0, NULL, NULL,
+                               SV6621_SCAN_COMMAND_TIMEOUT_MS);
+  return ret > 0 ? -EREMOTEIO : ret;
+}
+
+int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
+                             FAR struct sv6621_bss_s *bss)
+{
+  FAR const uint8_t *frame;
+  uint16_t frame_length;
+  uint16_t capability;
+  size_t offset;
+  bool psk = false;
+  bool sae = false;
+  bool privacy;
+
+  if (payload == NULL || bss == NULL ||
+      length < SV6621_SCAN_REPORT_HEADER_SIZE + SV6621_SCAN_INFORMATION_OFFSET)
+    {
+      return -EINVAL;
+    }
+
+  if (payload[1] > SV6621_SCAN_BAND_5GHZ || payload[0] == 0)
+    {
+      return -EPROTO;
+    }
+
+  frame_length = sv6621_scan_get_le16(payload + 4);
+  if (frame_length < SV6621_SCAN_INFORMATION_OFFSET ||
+      frame_length > length - SV6621_SCAN_REPORT_HEADER_SIZE)
+    {
+      return -EPROTO;
+    }
+
+  frame = payload + SV6621_SCAN_REPORT_HEADER_SIZE;
+  if ((frame[0] & SV6621_SCAN_FRAME_SUBTYPE_MASK) !=
+          SV6621_SCAN_FRAME_BEACON &&
+      (frame[0] & SV6621_SCAN_FRAME_SUBTYPE_MASK) !=
+          SV6621_SCAN_FRAME_PROBE_RESPONSE)
+    {
+      return -EPROTO;
+    }
+
+  memset(bss, 0, sizeof(*bss));
+  memcpy(bss->bssid, frame + SV6621_SCAN_BSSID_OFFSET, SV6621_MAC_LENGTH);
+  bss->channel = payload[0];
+  bss->band = payload[1] == SV6621_SCAN_BAND_2GHZ ? SV6621_BAND_2GHZ
+                                                  : SV6621_BAND_5GHZ;
+  bss->signal_dbm = (int16_t)sv6621_scan_get_le16(payload + 2);
+  capability = sv6621_scan_get_le16(frame + SV6621_SCAN_CAPABILITY_OFFSET);
+  privacy = (capability & SV6621_SCAN_CAPABILITY_PRIVACY) != 0;
+
+  for (offset = SV6621_SCAN_INFORMATION_OFFSET; offset < frame_length;)
+    {
+      uint8_t id;
+      uint8_t ie_length;
+
+      if (frame_length - offset < 2)
+        {
+          return -EPROTO;
+        }
+
+      id = frame[offset];
+      ie_length = frame[offset + 1];
+      offset += 2;
+      if (ie_length > frame_length - offset)
+        {
+          return -EPROTO;
+        }
+
+      if (id == SV6621_SCAN_IE_SSID)
+        {
+          bss->ssid_length = ie_length > SV6621_SSID_MAX_LENGTH
+                                 ? SV6621_SSID_MAX_LENGTH
+                                 : ie_length;
+          memcpy(bss->ssid, frame + offset, bss->ssid_length);
+        }
+      else if (id == SV6621_SCAN_IE_RSN)
+        {
+          if (sv6621_scan_parse_rsn(frame + offset, ie_length, &psk, &sae) < 0)
+            {
+              return -EPROTO;
+            }
+        }
+      else if (id == SV6621_SCAN_IE_VENDOR &&
+               sv6621_scan_is_wpa_ie(frame + offset, ie_length))
+        {
+          psk = true;
+        }
+
+      offset += ie_length;
+    }
+
+  if (sae && psk)
+    {
+      bss->security = SV6621_SECURITY_WPA2_WPA3_PSK;
+    }
+  else if (sae)
+    {
+      bss->security = SV6621_SECURITY_WPA3_SAE;
+    }
+  else if (psk || privacy)
+    {
+      bss->security = SV6621_SECURITY_WPA2_PSK;
+    }
+  else
+    {
+      bss->security = SV6621_SECURITY_OPEN;
+    }
+
+  return 0;
+}
+
+int sv6621_scan_cache_init(FAR struct sv6621_scan_cache_s *cache)
+{
+  if (cache == NULL)
+    {
+      return -EINVAL;
+    }
+
+  memset(cache, 0, sizeof(*cache));
+  return nxmutex_init(&cache->lock);
+}
+
+void sv6621_scan_cache_deinit(FAR struct sv6621_scan_cache_s *cache)
+{
+  if (cache != NULL)
+    {
+      nxmutex_destroy(&cache->lock);
+    }
+}
+
+int sv6621_scan_cache_reset(FAR struct sv6621_scan_cache_s *cache)
+{
+  int ret;
+
+  if (cache == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&cache->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  memset(cache->entries, 0, sizeof(cache->entries));
+  cache->count = 0;
+  nxmutex_unlock(&cache->lock);
+  return 0;
+}
+
+int sv6621_scan_cache_store(FAR struct sv6621_scan_cache_s *cache,
+                            FAR const struct sv6621_bss_s *bss,
+                            FAR bool *inserted)
+{
+  size_t index;
+  int ret;
+
+  if (cache == NULL || bss == NULL || inserted == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&cache->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  *inserted = false;
+  for (index = 0; index < cache->count; index++)
+    {
+      if (memcmp(cache->entries[index].bssid, bss->bssid, SV6621_MAC_LENGTH) ==
+          0)
+        {
+          if (bss->ssid_length == 0 && cache->entries[index].ssid_length > 0)
+            {
+              struct sv6621_bss_s updated = *bss;
+
+              updated.ssid_length = cache->entries[index].ssid_length;
+              memcpy(updated.ssid, cache->entries[index].ssid,
+                     updated.ssid_length);
+              cache->entries[index] = updated;
+            }
+          else
+            {
+              cache->entries[index] = *bss;
+            }
+
+          nxmutex_unlock(&cache->lock);
+          return 0;
+        }
+    }
+
+  if (cache->count < SV6621_SCAN_CACHE_CAPACITY)
+    {
+      cache->entries[cache->count++] = *bss;
+      *inserted = true;
+    }
+  else
+    {
+      index = sv6621_scan_cache_weakest(cache);
+      if (bss->signal_dbm <= cache->entries[index].signal_dbm)
+        {
+          cache->dropped++;
+          ret = -ENOSPC;
+          goto unlock_cache;
+        }
+
+      cache->entries[index] = *bss;
+      cache->replacements++;
+      *inserted = true;
+    }
+
+  ret = 0;
+
+unlock_cache:
+  nxmutex_unlock(&cache->lock);
+  return ret;
+}
+
+int sv6621_scan_cache_snapshot(FAR struct sv6621_scan_cache_s *cache,
+                               FAR struct sv6621_bss_s *entries,
+                               FAR size_t *count)
+{
+  size_t copy_count;
+  int ret;
+
+  if (cache == NULL || count == NULL || (entries == NULL && *count != 0))
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&cache->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  copy_count = *count < cache->count ? *count : cache->count;
+  if (copy_count > 0)
+    {
+      memcpy(entries, cache->entries, copy_count * sizeof(*entries));
+    }
+
+  *count = cache->count;
+  nxmutex_unlock(&cache->lock);
+  return copy_count < cache->count ? -ENOSPC : 0;
+}
+
+int sv6621_scan_controller_init(FAR struct sv6621_scan_s *scan,
+                                FAR struct sv6621_command_engine_s *command,
+                                uint32_t timeout_ms,
+                                sv6621_scan_complete_t complete,
+                                FAR void *complete_arg)
+{
+  int ret;
+
+  if (scan == NULL || command == NULL || timeout_ms == 0)
+    {
+      return -EINVAL;
+    }
+
+  memset(scan, 0, sizeof(*scan));
+  ret = nxmutex_init(&scan->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = sv6621_scan_cache_init(&scan->cache);
+  if (ret < 0)
+    {
+      nxmutex_destroy(&scan->lock);
+      return ret;
+    }
+
+  scan->command = command;
+  scan->timeout_ms = timeout_ms;
+  scan->complete = complete;
+  scan->complete_arg = complete_arg;
+  return 0;
+}
+
+void sv6621_scan_controller_deinit(FAR struct sv6621_scan_s *scan)
+{
+  if (scan != NULL)
+    {
+      work_cancel_sync(LPWORK, &scan->timeout_work);
+      sv6621_scan_cache_deinit(&scan->cache);
+      nxmutex_destroy(&scan->lock);
+    }
+}
+
+int sv6621_scan_controller_begin(
+    FAR struct sv6621_scan_s *scan,
+    FAR const struct sv6621_scan_channel_s *channels, size_t channel_count)
+{
+  int ret;
+
+  if (scan == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&scan->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (scan->active)
+    {
+      nxmutex_unlock(&scan->lock);
+      return -EBUSY;
+    }
+
+  ret = sv6621_scan_cache_reset(&scan->cache);
+  if (ret < 0)
+    {
+      nxmutex_unlock(&scan->lock);
+      return ret;
+    }
+
+  scan->active = true;
+  scan->stats.started++;
+  nxmutex_unlock(&scan->lock);
+  ret = sv6621_scan_start(scan->command, channels, channel_count);
+  if (ret < 0)
+    {
+      if (nxmutex_lock(&scan->lock) >= 0)
+        {
+          scan->active = false;
+          nxmutex_unlock(&scan->lock);
+        }
+
+      return ret;
+    }
+
+  ret = nxmutex_lock(&scan->lock);
+  if (ret < 0)
+    {
+      sv6621_scan_stop(scan->command);
+      return ret;
+    }
+
+  if (!scan->active)
+    {
+      nxmutex_unlock(&scan->lock);
+      return 0;
+    }
+
+  ret = work_queue(LPWORK, &scan->timeout_work, sv6621_scan_timeout_worker,
+                   scan, MSEC2TICK(scan->timeout_ms));
+  if (ret < 0)
+    {
+      scan->active = false;
+    }
+
+  nxmutex_unlock(&scan->lock);
+  if (ret < 0)
+    {
+      sv6621_scan_stop(scan->command);
+    }
+
+  return ret;
+}
+
+int sv6621_scan_controller_cancel(FAR struct sv6621_scan_s *scan)
+{
+  bool active;
+  int ret;
+
+  if (scan == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&scan->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  active = scan->active;
+  scan->active = false;
+  if (active)
+    {
+      scan->stats.cancelled++;
+    }
+
+  nxmutex_unlock(&scan->lock);
+  if (!active)
+    {
+      return 0;
+    }
+
+  work_cancel_sync(LPWORK, &scan->timeout_work);
+  return sv6621_scan_stop(scan->command);
+}
+
+void sv6621_scan_command_event(uint8_t instance, uint8_t id,
+                               FAR const uint8_t *payload, size_t length,
+                               FAR void *arg)
+{
+  FAR struct sv6621_scan_s *scan = arg;
+  struct sv6621_bss_s bss;
+  sv6621_scan_complete_t complete;
+  FAR void *complete_arg;
+  bool inserted;
+
+  if (scan == NULL || instance != SV6621_SCAN_INSTANCE)
+    {
+      return;
+    }
+
+  if (nxmutex_lock(&scan->lock) < 0)
+    {
+      return;
+    }
+
+  if (!scan->active)
+    {
+      if (id == SV6621_SCAN_EVENT_COMPLETE || id == SV6621_SCAN_EVENT_REPORT)
+        {
+          scan->stats.late_events++;
+        }
+
+      nxmutex_unlock(&scan->lock);
+      return;
+    }
+
+  if (id == SV6621_SCAN_EVENT_COMPLETE)
+    {
+      scan->active = false;
+      scan->stats.completed++;
+      complete = scan->complete;
+      complete_arg = scan->complete_arg;
+      nxmutex_unlock(&scan->lock);
+      work_cancel(LPWORK, &scan->timeout_work);
+      if (complete != NULL)
+        {
+          complete(0, complete_arg);
+        }
+
+      return;
+    }
+
+  nxmutex_unlock(&scan->lock);
+  if (id != SV6621_SCAN_EVENT_REPORT)
+    {
+      return;
+    }
+
+  if (sv6621_scan_parse_report(payload, length, &bss) < 0)
+    {
+      if (nxmutex_lock(&scan->lock) >= 0)
+        {
+          scan->stats.malformed_reports++;
+          nxmutex_unlock(&scan->lock);
+        }
+
+      return;
+    }
+
+  sv6621_scan_cache_store(&scan->cache, &bss, &inserted);
+}
