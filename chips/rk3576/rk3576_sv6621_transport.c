@@ -81,9 +81,14 @@
 #define RK3576_SV6621_INT_CMDDONE  (1u << 2)
 #define RK3576_SV6621_INT_DTO      (1u << 3)
 #define RK3576_SV6621_INT_RTO      (1u << 8)
+#define RK3576_SV6621_INT_DRTO     (1u << 9)
+#define RK3576_SV6621_INT_HTO      (1u << 10)
 #define RK3576_SV6621_INT_VOLTSW   (1u << 10)
 #define RK3576_SV6621_INT_CMDERR   0x00001142
 #define RK3576_SV6621_INT_DATAERR  0x0000ae80
+#define RK3576_SV6621_INT_TIMEOUT \
+  (RK3576_SV6621_INT_RTO | RK3576_SV6621_INT_DRTO | \
+   RK3576_SV6621_INT_HTO)
 
 #define RK3576_SV6621_CLK_UPDATE   0x80202000
 #define RK3576_SV6621_CLK_UPD_VOLT 0x90202000
@@ -523,7 +528,7 @@ static int rk3576_sv6621_tune_sdr104(void)
   if ((status & (RK3576_SV6621_INT_CMDERR |
                  RK3576_SV6621_INT_DATAERR)) != 0)
     {
-      return (status & RK3576_SV6621_INT_RTO) != 0 ? -ETIMEDOUT : -EIO;
+      return (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
     }
 
   for (index = 0; index < 200000 && received < 16; index++)
@@ -555,7 +560,12 @@ static int rk3576_sv6621_tune_sdr104(void)
       return -ETIMEDOUT;
     }
 
-  return (status & RK3576_SV6621_INT_DATAERR) != 0 ? -EIO : 0;
+  if ((status & RK3576_SV6621_INT_DATAERR) != 0)
+    {
+      return (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
+    }
+
+  return 0;
 }
 
 /****************************************************************************
@@ -915,7 +925,7 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
   if ((status & (RK3576_SV6621_INT_CMDERR |
                  RK3576_SV6621_INT_DATAERR)) != 0)
     {
-      ret = (status & RK3576_SV6621_INT_RTO) != 0 ? -ETIMEDOUT : -EIO;
+      ret = (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
     }
   else if (index == 400000 ||
            (status & RK3576_SV6621_INT_RTO) != 0 || received < words)
@@ -1055,7 +1065,7 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
   if ((status & (RK3576_SV6621_INT_CMDERR |
                  RK3576_SV6621_INT_DATAERR)) != 0)
     {
-      ret = (status & RK3576_SV6621_INT_RTO) != 0 ? -ETIMEDOUT : -EIO;
+      ret = (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
     }
   else if (index == 400000 ||
            (status & RK3576_SV6621_INT_RTO) != 0 || sent < words)
