@@ -283,17 +283,37 @@ static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
 static void sv6621_core_thermal_worker(FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
-  struct sv6621_thermal_s thermal;
+  uint32_t generation;
 
-  if (nxmutex_lock(&dev->status_lock) < 0)
+  for (;;)
     {
-      return;
-    }
+      struct sv6621_thermal_s thermal;
 
-  thermal.transmit_blocked = dev->thermal_blocked;
-  nxmutex_unlock(&dev->status_lock);
-  sv6621_core_report(dev, SV6621_EVENT_THERMAL_CHANGED, &thermal,
-                     sizeof(thermal));
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          return;
+        }
+
+      generation = dev->thermal_generation;
+      thermal.transmit_blocked = dev->thermal_blocked;
+      nxmutex_unlock(&dev->status_lock);
+      sv6621_core_report(dev, SV6621_EVENT_THERMAL_CHANGED, &thermal,
+                         sizeof(thermal));
+
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          return;
+        }
+
+      if (generation == dev->thermal_generation)
+        {
+          dev->thermal_work_scheduled = false;
+          nxmutex_unlock(&dev->status_lock);
+          return;
+        }
+
+      nxmutex_unlock(&dev->status_lock);
+    }
 }
 
 /****************************************************************************
@@ -550,7 +570,9 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
 
   if (id == SV6621_CORE_EVENT_THERMAL_WARN)
     {
+      bool queue = false;
       bool blocked;
+      int ret;
 
       if (length != 1)
         {
@@ -567,11 +589,20 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
           return;
         }
 
-      if (nxmutex_lock(&dev->status_lock) >= 0)
+      if (nxmutex_lock(&dev->status_lock) < 0)
         {
-          dev->thermal_blocked = blocked;
-          nxmutex_unlock(&dev->status_lock);
+          return;
         }
+
+      dev->thermal_blocked = blocked;
+      dev->thermal_generation++;
+      if (!dev->thermal_work_scheduled)
+        {
+          dev->thermal_work_scheduled = true;
+          queue = true;
+        }
+
+      nxmutex_unlock(&dev->status_lock);
 
 #ifdef CONFIG_NET
       if (!blocked)
@@ -579,10 +610,15 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
           sv6621_network_credit_available(&dev->network);
         }
 #endif
-      if (work_available(&dev->thermal_work))
+      if (queue)
         {
-          work_queue(LPWORK, &dev->thermal_work,
-                     sv6621_core_thermal_worker, dev, 0);
+          ret = work_queue(LPWORK, &dev->thermal_work,
+                           sv6621_core_thermal_worker, dev, 0);
+          if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
+            {
+              dev->thermal_work_scheduled = false;
+              nxmutex_unlock(&dev->status_lock);
+            }
         }
 
       return;
