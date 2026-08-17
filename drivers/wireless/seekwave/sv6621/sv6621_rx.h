@@ -28,6 +28,7 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/wqueue.h>
 
 #include <stdbool.h>
@@ -63,12 +64,15 @@ struct sv6621_rx_s
   FAR struct sv6621_packet_router_s *router;
   FAR uint8_t *buffer;
   struct work_s work;
+  spinlock_t schedule_lock;
   struct sv6621_rx_stats_s stats;
   sv6621_rx_error_t error;
   FAR void *error_arg;
   volatile bool running;
   volatile bool suspended;
   bool fifo_indicator_valid;
+  bool work_scheduled;
+  bool work_reschedule;
 };
 
 /****************************************************************************
