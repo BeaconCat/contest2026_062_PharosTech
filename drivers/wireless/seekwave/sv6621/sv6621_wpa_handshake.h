@@ -78,8 +78,11 @@ struct sv6621_wpa_s
   uint8_t frame[SV6621_WPA_FRAME_CAPACITY];
   size_t frame_length;
   int result;
+  uint8_t gtk_index;
   bool peer_ready;
   bool frame_pending;
+  bool pairwise_installed;
+  bool group_installed;
 };
 
 /****************************************************************************
