@@ -136,6 +136,8 @@ struct sv6621_data_reorder_slot_s
   uint16_t sequence;
   bool occupied;
   bool complete;
+  bool amsdu;
+  bool amsdu_last;
   bool tainted;
 };
 
@@ -176,6 +178,8 @@ struct sv6621_data_stats_s
   uint32_t reorder_stale;
   uint32_t reorder_window_moves;
   uint32_t reorder_allocation_failures;
+  uint32_t reorder_amsdu_completed;
+  uint32_t reorder_amsdu_drops;
 };
 
 struct sv6621_data_s
