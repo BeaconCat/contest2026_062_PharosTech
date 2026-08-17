@@ -108,6 +108,8 @@ sv6621_command_complete_ack(FAR struct sv6621_command_engine_s *engine,
              copy_length);
     }
 
+  engine->response = NULL;
+  engine->response_capacity = 0;
   engine->pending = false;
   nxsem_post(&engine->completion);
   nxmutex_unlock(&engine->state_lock);
@@ -301,6 +303,8 @@ void sv6621_command_engine_deinit(FAR struct sv6621_command_engine_s *engine)
         {
           engine->pending = false;
           engine->completion_result = -ESHUTDOWN;
+          engine->response = NULL;
+          engine->response_capacity = 0;
           engine->stats.cancelled++;
           nxsem_post(&engine->completion);
         }
@@ -509,6 +513,9 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
       else if (engine->pending)
         {
           engine->pending = false;
+          engine->completion_result = -ETIMEDOUT;
+          engine->response = NULL;
+          engine->response_capacity = 0;
           engine->stats.timeouts++;
           ret = -ETIMEDOUT;
           nxmutex_unlock(&engine->state_lock);
@@ -548,8 +555,6 @@ cancel_command:
   nxsem_wait_uninterruptible(&engine->completion);
 
 finish_command:
-  engine->response = NULL;
-  engine->response_capacity = 0;
   nxmutex_unlock(&engine->execute_lock);
   goto free_buffers;
 
@@ -689,6 +694,8 @@ int sv6621_command_cancel(FAR struct sv6621_command_engine_s *engine,
 
   engine->pending = false;
   engine->completion_result = result;
+  engine->response = NULL;
+  engine->response_capacity = 0;
   engine->stats.cancelled++;
   nxsem_post(&engine->completion);
   nxmutex_unlock(&engine->state_lock);
