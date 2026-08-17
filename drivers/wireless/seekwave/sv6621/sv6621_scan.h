@@ -74,6 +74,7 @@ struct sv6621_scan_entry_s
   uint8_t bssid_index;
   uint8_t max_bssid_indicator;
   uint16_t ie_length;
+  bool ies_truncated;
   uint8_t ies[SV6621_SCAN_IE_CAPACITY];
 };
 
@@ -93,6 +94,7 @@ struct sv6621_scan_stats_s
   uint32_t cancelled;
   uint32_t timed_out;
   uint32_t malformed_reports;
+  uint32_t truncated_reports;
   uint32_t late_events;
 };
 
@@ -108,6 +110,7 @@ struct sv6621_scan_s
   FAR void *complete_arg;
   uint32_t timeout_ms;
   bool active;
+  bool stopping;
   struct sv6621_scan_stats_s stats;
 };
 
@@ -117,7 +120,8 @@ struct sv6621_scan_s
 
 int sv6621_scan_start(FAR struct sv6621_command_engine_s *command,
                       FAR const struct sv6621_scan_channel_s *channels,
-                      size_t channel_count);
+                      size_t channel_count, FAR const uint8_t *ssid,
+                      size_t ssid_length);
 int sv6621_scan_stop(FAR struct sv6621_command_engine_s *command);
 int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
                              FAR struct sv6621_scan_entry_s *entry);
@@ -141,7 +145,8 @@ int sv6621_scan_controller_init(FAR struct sv6621_scan_s *scan,
 void sv6621_scan_controller_deinit(FAR struct sv6621_scan_s *scan);
 int sv6621_scan_controller_begin(
     FAR struct sv6621_scan_s *scan,
-    FAR const struct sv6621_scan_channel_s *channels, size_t channel_count);
+    FAR const struct sv6621_scan_channel_s *channels, size_t channel_count,
+    FAR const uint8_t *ssid, size_t ssid_length);
 int sv6621_scan_controller_cancel(FAR struct sv6621_scan_s *scan);
 void sv6621_scan_command_event(uint8_t instance, uint8_t id,
                                FAR const uint8_t *payload, size_t length,

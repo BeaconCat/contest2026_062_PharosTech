@@ -43,6 +43,7 @@
 #define SV6621_SCAN_COMMAND_STOP         6
 #define SV6621_SCAN_FIXED_SIZE           32
 #define SV6621_SCAN_CHANNEL_SIZE         3
+#define SV6621_SCAN_SSID_SIZE            (SV6621_SSID_MAX_LENGTH + 1)
 #define SV6621_SCAN_MAX_CHANNELS         64
 #define SV6621_SCAN_COMMAND_TIMEOUT_MS   5000
 
@@ -179,6 +180,7 @@ static void sv6621_scan_timeout_worker(FAR void *arg)
   FAR struct sv6621_scan_s *scan = arg;
   sv6621_scan_complete_t complete = NULL;
   FAR void *complete_arg = NULL;
+  bool timed_out = false;
 
   if (nxmutex_lock(&scan->lock) < 0)
     {
@@ -188,16 +190,27 @@ static void sv6621_scan_timeout_worker(FAR void *arg)
   if (scan->active)
     {
       scan->active = false;
+      scan->stopping = true;
       scan->stats.timed_out++;
       complete = scan->complete;
       complete_arg = scan->complete_arg;
+      timed_out = true;
     }
 
   nxmutex_unlock(&scan->lock);
-  if (complete != NULL)
+  if (timed_out)
     {
       sv6621_scan_stop(scan->command);
-      complete(-ETIMEDOUT, complete_arg);
+      if (nxmutex_lock(&scan->lock) >= 0)
+        {
+          scan->stopping = false;
+          nxmutex_unlock(&scan->lock);
+        }
+
+      if (complete != NULL)
+        {
+          complete(-ETIMEDOUT, complete_arg);
+        }
     }
 }
 
@@ -207,21 +220,28 @@ static void sv6621_scan_timeout_worker(FAR void *arg)
 
 int sv6621_scan_start(FAR struct sv6621_command_engine_s *command,
                       FAR const struct sv6621_scan_channel_s *channels,
-                      size_t channel_count)
+                      size_t channel_count, FAR const uint8_t *ssid,
+                      size_t ssid_length)
 {
   FAR uint8_t *payload;
+  FAR uint8_t *ssid_entry;
   size_t payload_length;
+  size_t ssid_offset;
   size_t index;
   int ret;
 
   if (command == NULL || channels == NULL || channel_count == 0 ||
-      channel_count > SV6621_SCAN_MAX_CHANNELS)
+      channel_count > SV6621_SCAN_MAX_CHANNELS ||
+      ssid_length > SV6621_SSID_MAX_LENGTH ||
+      (ssid_length != 0 && ssid == NULL))
     {
       return -EINVAL;
     }
 
-  payload_length =
+  ssid_offset =
       SV6621_SCAN_FIXED_SIZE + channel_count * SV6621_SCAN_CHANNEL_SIZE;
+  payload_length = ssid_offset +
+                   (ssid_length != 0 ? SV6621_SCAN_SSID_SIZE : 0);
   payload = kmm_zalloc(payload_length);
   if (payload == NULL)
     {
@@ -232,8 +252,10 @@ int sv6621_scan_start(FAR struct sv6621_command_engine_s *command,
                        channel_count);
   sv6621_scan_put_le32(payload + SV6621_SCAN_CHANNEL_LIST_OFFSET,
                        SV6621_SCAN_FIXED_SIZE);
-  sv6621_scan_put_le32(payload + SV6621_SCAN_SSID_COUNT_OFFSET, 0);
-  sv6621_scan_put_le32(payload + SV6621_SCAN_SSID_LIST_OFFSET, 0);
+  sv6621_scan_put_le32(payload + SV6621_SCAN_SSID_COUNT_OFFSET,
+                       ssid_length != 0 ? 1 : 0);
+  sv6621_scan_put_le32(payload + SV6621_SCAN_SSID_LIST_OFFSET,
+                       ssid_length != 0 ? ssid_offset : 0);
   sv6621_scan_put_le32(payload + SV6621_SCAN_IE_LENGTH_OFFSET, 0);
   sv6621_scan_put_le32(payload + SV6621_SCAN_IE_OFFSET_OFFSET, 0);
 
@@ -252,6 +274,13 @@ int sv6621_scan_start(FAR struct sv6621_command_engine_s *command,
       encoded[0] = channels[index].number;
       encoded[1] = channels[index].band;
       encoded[2] = channels[index].flags;
+    }
+
+  if (ssid_length != 0)
+    {
+      ssid_entry = payload + ssid_offset;
+      memcpy(ssid_entry, ssid, ssid_length);
+      ssid_entry[SV6621_SSID_MAX_LENGTH] = ssid_length;
     }
 
   ret = sv6621_command_execute(
@@ -378,6 +407,10 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
           entry->ies[entry->ie_length++] = ie_length;
           memcpy(entry->ies + entry->ie_length, frame + offset, ie_length);
           entry->ie_length += ie_length;
+        }
+      else
+        {
+          entry->ies_truncated = true;
         }
 
       offset += ie_length;
@@ -655,7 +688,8 @@ void sv6621_scan_controller_deinit(FAR struct sv6621_scan_s *scan)
 
 int sv6621_scan_controller_begin(
     FAR struct sv6621_scan_s *scan,
-    FAR const struct sv6621_scan_channel_s *channels, size_t channel_count)
+    FAR const struct sv6621_scan_channel_s *channels, size_t channel_count,
+    FAR const uint8_t *ssid, size_t ssid_length)
 {
   int ret;
 
@@ -670,7 +704,7 @@ int sv6621_scan_controller_begin(
       return ret;
     }
 
-  if (scan->active)
+  if (scan->active || scan->stopping)
     {
       nxmutex_unlock(&scan->lock);
       return -EBUSY;
@@ -686,7 +720,8 @@ int sv6621_scan_controller_begin(
   scan->active = true;
   scan->stats.started++;
   nxmutex_unlock(&scan->lock);
-  ret = sv6621_scan_start(scan->command, channels, channel_count);
+  ret = sv6621_scan_start(scan->command, channels, channel_count, ssid,
+                          ssid_length);
   if (ret < 0)
     {
       if (nxmutex_lock(&scan->lock) >= 0)
@@ -716,12 +751,18 @@ int sv6621_scan_controller_begin(
   if (ret < 0)
     {
       scan->active = false;
+      scan->stopping = true;
     }
 
   nxmutex_unlock(&scan->lock);
   if (ret < 0)
     {
       sv6621_scan_stop(scan->command);
+      if (nxmutex_lock(&scan->lock) >= 0)
+        {
+          scan->stopping = false;
+          nxmutex_unlock(&scan->lock);
+        }
     }
 
   return ret;
@@ -747,6 +788,7 @@ int sv6621_scan_controller_cancel(FAR struct sv6621_scan_s *scan)
   scan->active = false;
   if (active)
     {
+      scan->stopping = true;
       scan->stats.cancelled++;
     }
 
@@ -757,7 +799,14 @@ int sv6621_scan_controller_cancel(FAR struct sv6621_scan_s *scan)
     }
 
   work_cancel_sync(LPWORK, &scan->timeout_work);
-  return sv6621_scan_stop(scan->command);
+  ret = sv6621_scan_stop(scan->command);
+  if (nxmutex_lock(&scan->lock) >= 0)
+    {
+      scan->stopping = false;
+      nxmutex_unlock(&scan->lock);
+    }
+
+  return ret;
 }
 
 void sv6621_scan_command_event(uint8_t instance, uint8_t id,
@@ -794,11 +843,18 @@ void sv6621_scan_command_event(uint8_t instance, uint8_t id,
   if (id == SV6621_SCAN_EVENT_COMPLETE)
     {
       scan->active = false;
+      scan->stopping = true;
       scan->stats.completed++;
       complete = scan->complete;
       complete_arg = scan->complete_arg;
       nxmutex_unlock(&scan->lock);
-      work_cancel(LPWORK, &scan->timeout_work);
+      work_cancel_sync(LPWORK, &scan->timeout_work);
+      if (nxmutex_lock(&scan->lock) >= 0)
+        {
+          scan->stopping = false;
+          nxmutex_unlock(&scan->lock);
+        }
+
       if (complete != NULL)
         {
           complete(0, complete_arg);
@@ -829,6 +885,12 @@ void sv6621_scan_command_event(uint8_t instance, uint8_t id,
 
       kmm_free(entry);
       return;
+    }
+
+  if (entry->ies_truncated && nxmutex_lock(&scan->lock) >= 0)
+    {
+      scan->stats.truncated_reports++;
+      nxmutex_unlock(&scan->lock);
     }
 
   sv6621_scan_cache_store(&scan->cache, entry, &inserted);
