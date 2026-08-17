@@ -90,6 +90,7 @@ int sv6621_network_sync_multicast(FAR struct sv6621_network_s *network);
 void sv6621_network_set_link(
     FAR struct sv6621_network_s *network, bool link_up,
     FAR const struct sv6621_data_tx_context_s *context);
+void sv6621_network_credit_available(FAR struct sv6621_network_s *network);
 void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx,
                           FAR void *arg);
 

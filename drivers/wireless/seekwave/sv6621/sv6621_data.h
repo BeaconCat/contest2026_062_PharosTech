@@ -28,6 +28,7 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include <nuttx/spinlock.h>
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -45,6 +46,7 @@
 #define SV6621_DATA_TX_DESCRIPTOR_SIZE 8
 #define SV6621_DATA_MAX_FRAME_SIZE     1536
 #define SV6621_DATA_TX_BUFFER_SIZE     2048
+#define SV6621_DATA_LMAC_COUNT         2
 
 /****************************************************************************
  * Public Types
@@ -85,6 +87,8 @@ struct sv6621_data_stats_s
   uint32_t transmitted;
   uint32_t transmitted_bytes;
   uint32_t transmit_errors;
+  uint32_t credit_updates;
+  uint32_t credit_starvations;
 };
 
 struct sv6621_data_s
@@ -92,11 +96,13 @@ struct sv6621_data_s
   FAR struct sv6621_packet_router_s *router;
   FAR struct sv6621_tx_s *tx;
   mutex_t tx_lock;
+  spinlock_t credit_lock;
   sv6621_data_input_t input;
   FAR void *input_arg;
   sv6621_data_input_t eapol_input;
   FAR void *eapol_arg;
   struct sv6621_data_stats_s stats;
+  uint16_t credits[SV6621_DATA_LMAC_COUNT];
   uint8_t tx_buffer[SV6621_DATA_TX_BUFFER_SIZE];
 };
 
@@ -117,6 +123,9 @@ int sv6621_data_init(FAR struct sv6621_data_s *data,
 void sv6621_data_deinit(FAR struct sv6621_data_s *data);
 void sv6621_data_set_eapol_input(FAR struct sv6621_data_s *data,
                                   sv6621_data_input_t input, FAR void *arg);
+void sv6621_data_add_credits(FAR struct sv6621_data_s *data,
+                             uint16_t lmac0, uint16_t lmac1);
+void sv6621_data_reset_credits(FAR struct sv6621_data_s *data);
 int sv6621_data_send(FAR struct sv6621_data_s *data,
                      FAR const struct sv6621_data_tx_context_s *context,
                      FAR const uint8_t *frame, size_t frame_length);

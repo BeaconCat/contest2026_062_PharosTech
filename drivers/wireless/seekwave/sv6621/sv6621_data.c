@@ -59,6 +59,10 @@ static void sv6621_data_put_le16(FAR uint8_t *output, uint16_t value);
 static void sv6621_data_packet(uint8_t channel,
                                FAR const uint8_t *payload, size_t length,
                                FAR void *arg);
+static bool sv6621_data_take_credit(FAR struct sv6621_data_s *data,
+                                    uint8_t lmac_id);
+static void sv6621_data_restore_credit(FAR struct sv6621_data_s *data,
+                                       uint8_t lmac_id);
 
 /****************************************************************************
  * Private Functions
@@ -113,6 +117,51 @@ static void sv6621_data_packet(uint8_t channel, FAR const uint8_t *payload,
       data->input(&rx, data->input_arg);
     }
   (void)channel;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_take_credit
+ ****************************************************************************/
+
+static bool sv6621_data_take_credit(FAR struct sv6621_data_s *data,
+                                    uint8_t lmac_id)
+{
+  irqstate_t flags;
+  bool available;
+
+  flags = spin_lock_irqsave(&data->credit_lock);
+  available = lmac_id < SV6621_DATA_LMAC_COUNT &&
+              data->credits[lmac_id] > 0;
+  if (available)
+    {
+      data->credits[lmac_id]--;
+    }
+
+  spin_unlock_irqrestore(&data->credit_lock, flags);
+  return available;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_restore_credit
+ ****************************************************************************/
+
+static void sv6621_data_restore_credit(FAR struct sv6621_data_s *data,
+                                       uint8_t lmac_id)
+{
+  irqstate_t flags;
+
+  if (lmac_id >= SV6621_DATA_LMAC_COUNT)
+    {
+      return;
+    }
+
+  flags = spin_lock_irqsave(&data->credit_lock);
+  if (data->credits[lmac_id] < UINT16_MAX)
+    {
+      data->credits[lmac_id]++;
+    }
+
+  spin_unlock_irqrestore(&data->credit_lock, flags);
 }
 
 /****************************************************************************
@@ -296,6 +345,52 @@ void sv6621_data_set_eapol_input(FAR struct sv6621_data_s *data,
 }
 
 /****************************************************************************
+ * Name: sv6621_data_add_credits
+ ****************************************************************************/
+
+void sv6621_data_add_credits(FAR struct sv6621_data_s *data,
+                             uint16_t lmac0, uint16_t lmac1)
+{
+  const uint16_t added[SV6621_DATA_LMAC_COUNT] = { lmac0, lmac1 };
+  irqstate_t flags;
+  unsigned int index;
+
+  if (data == NULL)
+    {
+      return;
+    }
+
+  flags = spin_lock_irqsave(&data->credit_lock);
+  for (index = 0; index < SV6621_DATA_LMAC_COUNT; index++)
+    {
+      uint32_t total = (uint32_t)data->credits[index] + added[index];
+
+      data->credits[index] = total > UINT16_MAX ? UINT16_MAX : total;
+    }
+
+  data->stats.credit_updates++;
+  spin_unlock_irqrestore(&data->credit_lock, flags);
+}
+
+/****************************************************************************
+ * Name: sv6621_data_reset_credits
+ ****************************************************************************/
+
+void sv6621_data_reset_credits(FAR struct sv6621_data_s *data)
+{
+  irqstate_t flags;
+
+  if (data == NULL)
+    {
+      return;
+    }
+
+  flags = spin_lock_irqsave(&data->credit_lock);
+  memset(data->credits, 0, sizeof(data->credits));
+  spin_unlock_irqrestore(&data->credit_lock, flags);
+}
+
+/****************************************************************************
  * Name: sv6621_data_send
  ****************************************************************************/
 
@@ -336,9 +431,17 @@ int sv6621_data_send(FAR struct sv6621_data_s *data,
       goto unlock;
     }
 
+  if (!sv6621_data_take_credit(data, context->lmac_id))
+    {
+      data->stats.credit_starvations++;
+      ret = -EAGAIN;
+      goto unlock;
+    }
+
   ret = sv6621_tx_send(data->tx, data->tx_buffer, packet_length);
   if (ret < 0)
     {
+      sv6621_data_restore_credit(data, context->lmac_id);
       data->stats.transmit_errors++;
     }
   else
