@@ -556,11 +556,22 @@ int sv6621_station_disconnect(FAR struct sv6621_station_s *station,
     {
       if (nxmutex_lock(&station->lock) >= 0)
         {
-          station->state = previous_state;
+          if (station->state == SV6621_STATION_DISCONNECTING)
+            {
+              station->state = previous_state;
+            }
+          else if (station->state == SV6621_STATION_IDLE)
+            {
+              ret = 0;
+            }
+
           nxmutex_unlock(&station->lock);
         }
 
-      return ret;
+      if (ret < 0)
+        {
+          return ret;
+        }
     }
 
   if (nxmutex_lock(&station->lock) >= 0)
