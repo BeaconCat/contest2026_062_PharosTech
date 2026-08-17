@@ -65,6 +65,7 @@ struct sv6621_rx_s
   sv6621_rx_error_t error;
   FAR void *error_arg;
   volatile bool running;
+  volatile bool suspended;
 };
 
 /****************************************************************************
@@ -77,6 +78,8 @@ int sv6621_rx_init(FAR struct sv6621_rx_s *rx,
                    sv6621_rx_error_t error, FAR void *error_arg);
 void sv6621_rx_deinit(FAR struct sv6621_rx_s *rx);
 int sv6621_rx_start(FAR struct sv6621_rx_s *rx);
+int sv6621_rx_suspend(FAR struct sv6621_rx_s *rx);
+int sv6621_rx_resume(FAR struct sv6621_rx_s *rx);
 void sv6621_rx_stop(FAR struct sv6621_rx_s *rx);
 int sv6621_rx_parse_burst(FAR struct sv6621_rx_s *rx,
                           FAR const uint8_t *buffer, size_t length,

@@ -116,6 +116,7 @@ struct rk3576_sv6621_transport_priv_s
   mutex_t lock;
   sv6621_transport_irq_t handler;
   FAR void *handler_arg;
+  bool prepared;
   bool opened;
   bool irq_enabled;
 };
@@ -135,6 +136,7 @@ static int rk3576_sv6621_tune_sdr104(void);
 static int rk3576_sv6621_open_failed(
     FAR struct rk3576_sv6621_transport_priv_s *priv, int error);
 static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport);
+static int rk3576_sv6621_enumerate(FAR struct sv6621_transport_s *transport);
 static void rk3576_sv6621_close(FAR struct sv6621_transport_s *transport);
 static int rk3576_sv6621_read_byte(FAR struct sv6621_transport_s *transport,
                                    uint8_t function, uint32_t address,
@@ -167,6 +169,7 @@ static struct rk3576_sv6621_transport_priv_s g_rk3576_sv6621_priv = {
 
 static const struct sv6621_transport_ops_s g_rk3576_sv6621_ops = {
   .open = rk3576_sv6621_open,
+  .enumerate = rk3576_sv6621_enumerate,
   .close = rk3576_sv6621_close,
   .read_byte = rk3576_sv6621_read_byte,
   .write_byte = rk3576_sv6621_write_byte,
@@ -442,20 +445,15 @@ static int rk3576_sv6621_open_failed(
   SDIO_CLOCK(priv->sdio, CLOCK_SDIO_DISABLED);
   priv->irq_enabled = false;
   priv->opened = false;
+  priv->prepared = false;
   return error;
 }
 
 static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
 {
   FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
-  uint32_t response = 0;
-  uint32_t status;
-  uint32_t rca;
-  uint8_t value = 0;
-  int index;
-  int ret;
 
-  if (priv->opened)
+  if (priv->prepared || priv->opened)
     {
       return -EBUSY;
     }
@@ -474,13 +472,35 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
   putreg32(0, RK3576_SV6621_CLKDIV);
   putreg32(0x0ffe0002, RK3576_SV6621_TIMING0);
   putreg32((0x3fffu << 16) | 0x2f9d, RK3576_SV6621_CRU_SDIO_SEL);
+  putreg32(0, RK3576_SV6621_INTMASK);
+  modifyreg32(RK3576_SV6621_CTRL, 0, 1u << 4);
+  priv->prepared = true;
+  return 0;
+}
+
+/****************************************************************************
+ * Name: rk3576_sv6621_enumerate
+ ****************************************************************************/
+
+static int rk3576_sv6621_enumerate(
+    FAR struct sv6621_transport_s *transport)
+{
+  FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
+  uint32_t response = 0;
+  uint32_t status;
+  uint32_t rca;
+  uint8_t value = 0;
+  int index;
+  int ret;
+
+  if (!priv->prepared || priv->opened)
+    {
+      return -EINVAL;
+    }
 
   putreg32(1, RK3576_SV6621_CLKENA);
   rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPDATE);
   up_mdelay(10);
-
-  putreg32(0, RK3576_SV6621_INTMASK);
-  modifyreg32(RK3576_SV6621_CTRL, 0, 1u << 4);
 
   status = rk3576_sv6621_command(RK3576_SV6621_CMD5, 0x01300000, &response);
   if ((status & RK3576_SV6621_INT_RTO) != 0)
@@ -782,15 +802,21 @@ static void rk3576_sv6621_close(FAR struct sv6621_transport_s *transport)
 {
   FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
 
-  if (!priv->opened)
+  if (!priv->prepared)
     {
       return;
     }
 
-  rk3576_sv6621_enable_irq(transport, false);
+  if (priv->opened)
+    {
+      rk3576_sv6621_enable_irq(transport, false);
+    }
+
   rk3576_sdmmc_register_sdio_callback(priv->sdio, NULL, NULL);
   SDIO_CLOCK(priv->sdio, CLOCK_SDIO_DISABLED);
+  priv->irq_enabled = false;
   priv->opened = false;
+  priv->prepared = false;
 }
 
 static void rk3576_sv6621_host_interrupt(FAR void *arg)
@@ -921,6 +947,12 @@ static int rk3576_sv6621_recover(FAR struct sv6621_transport_s *transport)
   restore_irq = priv->irq_enabled;
   rk3576_sv6621_close(transport);
   ret = rk3576_sv6621_open(transport);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = rk3576_sv6621_enumerate(transport);
   if (ret < 0)
     {
       return ret;

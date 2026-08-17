@@ -48,6 +48,14 @@
 #define SV6621_REGULATORY_FLAG_NO_IR      (1 << 7)
 #define SV6621_REGULATORY_FLAG_AUTO_BW    (1 << 11)
 
+#define SV6621_WAKE_DISCONNECT            (1 << 0)
+#define SV6621_WAKE_MAGIC_PACKET          (1 << 1)
+#define SV6621_WAKE_GTK_REKEY_FAILURE     (1 << 2)
+#define SV6621_WAKE_EAP_IDENTITY_REQUEST  (1 << 3)
+#define SV6621_WAKE_FOUR_WAY_HANDSHAKE    (1 << 4)
+#define SV6621_WAKE_RFKILL_RELEASE        (1 << 5)
+#define SV6621_WAKE_ALL                    0x003f
+
 /****************************************************************************
  * Public Types
  ****************************************************************************/
@@ -60,6 +68,7 @@ typedef void (*sv6621_transport_irq_t)(FAR void *arg);
 struct sv6621_transport_ops_s
 {
   int (*open)(FAR struct sv6621_transport_s *transport);
+  int (*enumerate)(FAR struct sv6621_transport_s *transport);
   void (*close)(FAR struct sv6621_transport_s *transport);
   int (*read_byte)(FAR struct sv6621_transport_s *transport, uint8_t function,
                    uint32_t address, FAR uint8_t *value);
@@ -90,6 +99,7 @@ enum sv6621_state_e
   SV6621_STATE_BSP_READY,
   SV6621_STATE_WIFI_STARTING,
   SV6621_STATE_WIFI_READY,
+  SV6621_STATE_SUSPENDED,
   SV6621_STATE_RECOVERING,
   SV6621_STATE_STOPPING,
   SV6621_STATE_FAILED
@@ -163,6 +173,12 @@ struct sv6621_connect_s
   enum sv6621_security_e security;
   uint8_t credential[SV6621_KEY_MAX_LENGTH];
   uint8_t credential_length;
+};
+
+struct sv6621_suspend_s
+{
+  bool wake_enabled;
+  uint16_t wake_flags;
 };
 
 struct sv6621_tx_rate_s
@@ -262,6 +278,9 @@ int sv6621_scan(FAR struct sv6621_dev_s *dev);
 int sv6621_connect(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_connect_s *request);
 int sv6621_disconnect(FAR struct sv6621_dev_s *dev, uint16_t reason);
+int sv6621_suspend(FAR struct sv6621_dev_s *dev,
+                   FAR const struct sv6621_suspend_s *config);
+int sv6621_resume(FAR struct sv6621_dev_s *dev);
 
 #ifdef __cplusplus
 }

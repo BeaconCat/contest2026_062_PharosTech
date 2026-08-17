@@ -501,6 +501,102 @@ free_buffers:
   return ret;
 }
 
+/****************************************************************************
+ * Name: sv6621_command_send_noack
+ ****************************************************************************/
+
+int sv6621_command_send_noack(FAR struct sv6621_command_engine_s *engine,
+                              uint8_t instance, uint8_t id,
+                              FAR const void *payload,
+                              size_t payload_length)
+{
+  struct sv6621_message_header_s header;
+  FAR uint8_t *message;
+  FAR uint8_t *packet;
+  size_t message_length;
+  size_t packet_capacity;
+  size_t packet_length;
+  int ret;
+
+  if (engine == NULL || instance > 0x0f ||
+      (payload == NULL && payload_length != 0))
+    {
+      return -EINVAL;
+    }
+
+  message_length = SV6621_COMMAND_HEADER_SIZE + payload_length;
+  if (message_length > SV6621_COMMAND_MAX_MESSAGE_SIZE)
+    {
+      return -E2BIG;
+    }
+
+  packet_capacity = SV6621_PACKET_HEADER_SIZE + message_length +
+                    SV6621_PACKET_HEADER_SIZE + SV6621_SDIO_BLOCK_SIZE;
+  message = kmm_malloc(message_length);
+  packet = kmm_malloc(packet_capacity);
+  if (message == NULL || packet == NULL)
+    {
+      kmm_free(packet);
+      kmm_free(message);
+      return -ENOMEM;
+    }
+
+  ret = nxmutex_lock(&engine->execute_lock);
+  if (ret < 0)
+    {
+      goto free_buffers;
+    }
+
+  ret = nxmutex_lock(&engine->state_lock);
+  if (ret < 0)
+    {
+      goto unlock_execute;
+    }
+
+  if (engine->dispatching_event || engine->pending)
+    {
+      ret = engine->dispatching_event ? -EDEADLK : -EBUSY;
+      nxmutex_unlock(&engine->state_lock);
+      goto unlock_execute;
+    }
+
+  engine->next_sequence++;
+  header.instance = instance;
+  header.type = SV6621_MESSAGE_COMMAND;
+  header.id = id;
+  header.sequence = engine->next_sequence;
+  header.total_length = (uint16_t)message_length;
+  engine->stats.commands++;
+  nxmutex_unlock(&engine->state_lock);
+
+  ret = sv6621_command_encode_header(&header, message);
+  if (ret < 0)
+    {
+      goto unlock_execute;
+    }
+
+  if (payload_length > 0)
+    {
+      memcpy(message + SV6621_COMMAND_HEADER_SIZE, payload, payload_length);
+    }
+
+  ret = sv6621_packet_build(SV6621_CHANNEL_WIFI_COMMAND, message,
+                            message_length, packet, packet_capacity,
+                            &packet_length);
+  if (ret >= 0)
+    {
+      ret = engine->sender(packet, packet_length, engine->sender_arg);
+    }
+
+unlock_execute:
+  nxmutex_unlock(&engine->execute_lock);
+
+free_buffers:
+  kmm_free(packet);
+  kmm_free(message);
+  return ret;
+}
+
 int sv6621_command_cancel(FAR struct sv6621_command_engine_s *engine,
                           int result)
 {
