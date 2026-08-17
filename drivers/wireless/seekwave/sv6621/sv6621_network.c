@@ -169,6 +169,7 @@ static void sv6621_network_rx_worker(FAR void *arg)
       flags = spin_lock_irqsave(&network->lock);
       if (network->rx_tail == network->rx_head)
         {
+          network->rx_scheduled = false;
           spin_unlock_irqrestore(&network->lock, flags);
           break;
         }
@@ -554,7 +555,9 @@ void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx,
 {
   FAR struct sv6621_network_s *network = arg;
   irqstate_t flags;
+  bool schedule = false;
   uint8_t next;
+  int ret;
 
   if (network == NULL || rx == NULL ||
       rx->frame_length > MAX_NETDEV_PKTSIZE)
@@ -578,12 +581,24 @@ void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx,
   memcpy(network->rx_frame[network->rx_head], rx->frame, rx->frame_length);
   network->rx_length[network->rx_head] = rx->frame_length;
   network->rx_head = next;
+  if (!network->rx_scheduled)
+    {
+      network->rx_scheduled = true;
+      schedule = true;
+    }
+
   spin_unlock_irqrestore(&network->lock, flags);
 
-  if (work_available(&network->rx_work))
+  if (schedule)
     {
-      work_queue(LPWORK, &network->rx_work, sv6621_network_rx_worker, network,
-                 0);
+      ret = work_queue(LPWORK, &network->rx_work, sv6621_network_rx_worker,
+                       network, 0);
+      if (ret < 0)
+        {
+          flags = spin_lock_irqsave(&network->lock);
+          network->rx_scheduled = false;
+          spin_unlock_irqrestore(&network->lock, flags);
+        }
     }
 }
 
