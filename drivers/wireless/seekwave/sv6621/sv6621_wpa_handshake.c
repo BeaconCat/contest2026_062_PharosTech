@@ -56,6 +56,7 @@ static int sv6621_wpa_generate_nonce(
     uint8_t nonce[SV6621_WPA_NONCE_SIZE]);
 static int sv6621_wpa_compare_replay(FAR const uint8_t *left,
                                      FAR const uint8_t *right);
+static int sv6621_wpa_schedule_locked(FAR struct sv6621_wpa_s *wpa);
 static void sv6621_wpa_remove_keys(FAR struct sv6621_wpa_s *wpa);
 static void sv6621_wpa_finish(FAR struct sv6621_wpa_s *wpa, int result);
 static int sv6621_wpa_send_response(
@@ -129,6 +130,29 @@ static int sv6621_wpa_compare_replay(FAR const uint8_t *left,
     }
 
   return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_schedule_locked
+ ****************************************************************************/
+
+static int sv6621_wpa_schedule_locked(FAR struct sv6621_wpa_s *wpa)
+{
+  int ret;
+
+  if (!wpa->peer_ready || !wpa->frame_pending || wpa->work_scheduled)
+    {
+      return 0;
+    }
+
+  wpa->work_scheduled = true;
+  ret = work_queue(LPWORK, &wpa->work, sv6621_wpa_worker, wpa, 0);
+  if (ret < 0)
+    {
+      wpa->work_scheduled = false;
+    }
+
+  return ret;
 }
 
 /****************************************************************************
@@ -464,6 +488,7 @@ static void sv6621_wpa_worker(FAR void *arg)
 
       if (!wpa->frame_pending || !wpa->peer_ready)
         {
+          wpa->work_scheduled = false;
           nxmutex_unlock(&wpa->lock);
           return;
         }
@@ -488,7 +513,7 @@ static void sv6621_wpa_worker(FAR void *arg)
           if (ret == 0)
             {
               sv6621_wpa_finish(wpa, 0);
-              return;
+              continue;
             }
         }
       else if (ret == 0 && state == SV6621_WPA_COMPLETE &&
@@ -523,7 +548,7 @@ static void sv6621_wpa_worker(FAR void *arg)
 
           sv6621_wpa_remove_keys(wpa);
           sv6621_wpa_finish(wpa, ret);
-          return;
+          continue;
         }
     }
 }
@@ -681,15 +706,23 @@ int sv6621_wpa_run(FAR struct sv6621_wpa_s *wpa,
       return -EINVAL;
     }
 
+  if (wpa->canceling)
+    {
+      nxmutex_unlock(&wpa->lock);
+      return -EBUSY;
+    }
+
   wpa->tx_context.peer_index = peer->peer_index;
   wpa->tx_context.multicast_index = peer->multicast_index;
   wpa->tx_context.instance = peer->instance;
   wpa->tx_context.lmac_id = peer->lmac_id;
   wpa->tx_context.tid = 0;
   wpa->peer_ready = true;
-  if (wpa->frame_pending && work_available(&wpa->work))
+  ret = sv6621_wpa_schedule_locked(wpa);
+  if (ret < 0)
     {
-      work_queue(LPWORK, &wpa->work, sv6621_wpa_worker, wpa, 0);
+      nxmutex_unlock(&wpa->lock);
+      return ret;
     }
 
   nxmutex_unlock(&wpa->lock);
@@ -735,8 +768,6 @@ void sv6621_wpa_cancel(FAR struct sv6621_wpa_s *wpa, int result)
       return;
     }
 
-  work_cancel_sync(LPWORK, &wpa->work);
-  sv6621_wpa_remove_keys(wpa);
   if (nxmutex_lock(&wpa->lock) < 0)
     {
       return;
@@ -744,10 +775,24 @@ void sv6621_wpa_cancel(FAR struct sv6621_wpa_s *wpa, int result)
 
   pending = wpa->state == SV6621_WPA_WAIT_MESSAGE_1 ||
             wpa->state == SV6621_WPA_WAIT_MESSAGE_3;
+  wpa->canceling = true;
+  wpa->peer_ready = false;
+  wpa->frame_pending = false;
+  nxmutex_unlock(&wpa->lock);
+
+  work_cancel_sync(LPWORK, &wpa->work);
+  sv6621_wpa_remove_keys(wpa);
+  if (nxmutex_lock(&wpa->lock) < 0)
+    {
+      return;
+    }
+
   wpa->state = SV6621_WPA_IDLE;
   wpa->result = result;
   wpa->peer_ready = false;
   wpa->frame_pending = false;
+  wpa->work_scheduled = false;
+  wpa->canceling = false;
   wpa->gtk_index = 0;
   sv6621_wpa_clear(wpa->pmk, sizeof(wpa->pmk));
   sv6621_wpa_clear(wpa->ptk, sizeof(wpa->ptk));
@@ -765,6 +810,7 @@ void sv6621_wpa_cancel(FAR struct sv6621_wpa_s *wpa, int result)
 void sv6621_wpa_input(FAR const struct sv6621_data_rx_s *rx, FAR void *arg)
 {
   FAR struct sv6621_wpa_s *wpa = arg;
+  int ret = 0;
 
   if (wpa == NULL || rx == NULL || rx->frame_length > sizeof(wpa->frame) ||
       nxmutex_lock(&wpa->lock) < 0)
@@ -775,16 +821,20 @@ void sv6621_wpa_input(FAR const struct sv6621_data_rx_s *rx, FAR void *arg)
   if ((wpa->state == SV6621_WPA_WAIT_MESSAGE_1 ||
        wpa->state == SV6621_WPA_WAIT_MESSAGE_3 ||
        wpa->state == SV6621_WPA_COMPLETE) &&
-      !wpa->frame_pending)
+      !wpa->frame_pending && !wpa->canceling)
     {
       memcpy(wpa->frame, rx->frame, rx->frame_length);
       wpa->frame_length = rx->frame_length;
       wpa->frame_pending = true;
-      if (wpa->peer_ready && work_available(&wpa->work))
-        {
-          work_queue(LPWORK, &wpa->work, sv6621_wpa_worker, wpa, 0);
-        }
+      ret = sv6621_wpa_schedule_locked(wpa);
     }
 
   nxmutex_unlock(&wpa->lock);
+  if (ret < 0)
+    {
+      sv6621_station_disconnect(wpa->station,
+                                SV6621_WPA_REASON_UNSPECIFIED);
+      sv6621_wpa_remove_keys(wpa);
+      sv6621_wpa_finish(wpa, ret);
+    }
 }
