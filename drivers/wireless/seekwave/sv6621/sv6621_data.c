@@ -43,6 +43,7 @@
 #define SV6621_DATA_RX_SEQUENCE_OFFSET     8
 #define SV6621_DATA_RX_CONTEXT_OFFSET      10
 #define SV6621_DATA_RX_PN_OFFSET           12
+#define SV6621_DATA_RX_REUSED_LENGTH_OFFSET 16
 #define SV6621_DATA_RX_MSDU_OFFSET_OFFSET  18
 #define SV6621_DATA_RX_AMSDU_INDEX_OFFSET  19
 #define SV6621_DATA_RX_ETHERNET_HEADER_TAIL 6
@@ -267,7 +268,7 @@ static void sv6621_data_packet(uint8_t channel, FAR const uint8_t *payload,
   struct sv6621_data_rx_s rx;
   int ret;
 
-  if (sv6621_data_decode_rx(payload, length, &rx) < 0)
+  if (sv6621_data_decode_rx(payload, length, data->pn_reuse, &rx) < 0)
     {
       data->stats.malformed++;
       return;
@@ -355,7 +356,7 @@ static void sv6621_data_restore_credit(FAR struct sv6621_data_s *data,
  ****************************************************************************/
 
 int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
-                          FAR struct sv6621_data_rx_s *rx)
+                          bool pn_reuse, FAR struct sv6621_data_rx_s *rx)
 {
   uint16_t sequence;
   uint16_t context;
@@ -370,7 +371,9 @@ int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
 
   frame_offset = payload[SV6621_DATA_RX_MSDU_OFFSET_OFFSET];
   frame_length = sv6621_data_get_le16(
-                     payload + SV6621_DATA_RX_MSDU_LENGTH_OFFSET) +
+                     payload + (pn_reuse ?
+                       SV6621_DATA_RX_REUSED_LENGTH_OFFSET :
+                       SV6621_DATA_RX_MSDU_LENGTH_OFFSET)) +
                  SV6621_DATA_RX_ETHERNET_HEADER_TAIL;
   if (frame_offset < SV6621_DATA_RX_PREFIX_SIZE ||
       frame_length < 14 || frame_offset > length ||
@@ -401,6 +404,11 @@ int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
   rx->msdu_filter = payload[SV6621_DATA_RX_FILTER_OFFSET];
   memcpy(rx->packet_number, payload + SV6621_DATA_RX_PN_OFFSET,
          sizeof(rx->packet_number));
+  if (pn_reuse)
+    {
+      rx->packet_number[4] = 0;
+      rx->packet_number[5] = 0;
+    }
   rx->amsdu_index = payload[SV6621_DATA_RX_AMSDU_INDEX_OFFSET] &
                     SV6621_DATA_RX_AMSDU_INDEX_MASK;
   rx->eapol = (payload[SV6621_DATA_RX_STATUS_OFFSET + 1] &
@@ -617,6 +625,18 @@ void sv6621_data_reset_fragments(FAR struct sv6621_data_s *data)
     {
       memset(data->fragments, 0, sizeof(data->fragments));
       data->fragment_age = 0;
+    }
+}
+
+/****************************************************************************
+ * Name: sv6621_data_set_pn_reuse
+ ****************************************************************************/
+
+void sv6621_data_set_pn_reuse(FAR struct sv6621_data_s *data, bool enabled)
+{
+  if (data != NULL)
+    {
+      data->pn_reuse = enabled;
     }
 }
 
