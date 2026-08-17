@@ -79,7 +79,7 @@ static void sv6621_rx_interrupt(FAR void *arg)
 {
   FAR struct sv6621_rx_s *rx = arg;
 
-  if (rx == NULL || !rx->running)
+  if (rx == NULL || !rx->running || rx->suspended)
     {
       return;
     }
@@ -113,7 +113,9 @@ static void sv6621_rx_worker(FAR void *arg)
   unsigned int slots = 1;
   unsigned int burst;
 
-  for (burst = 0; burst < SV6621_RX_MAX_DRAIN_BURSTS && rx->running; burst++)
+  for (burst = 0;
+       burst < SV6621_RX_MAX_DRAIN_BURSTS && rx->running && !rx->suspended;
+       burst++)
     {
       size_t length = slots * SV6621_PACKET_SIZE + SV6621_RX_TRAILER_SIZE;
       uint32_t pending_count;
@@ -163,7 +165,7 @@ static void sv6621_rx_worker(FAR void *arg)
         }
     }
 
-  if (rx->running)
+  if (rx->running && !rx->suspended)
     {
       sv6621_rx_report_error(rx, -ELOOP);
     }
@@ -231,6 +233,7 @@ int sv6621_rx_start(FAR struct sv6621_rx_s *rx)
     }
 
   rx->running = true;
+  rx->suspended = false;
   ret = rx->transport->ops->enable_irq(rx->transport, true);
   if (ret < 0)
     {
@@ -242,6 +245,64 @@ int sv6621_rx_start(FAR struct sv6621_rx_s *rx)
   return 0;
 }
 
+/****************************************************************************
+ * Name: sv6621_rx_suspend
+ ****************************************************************************/
+
+int sv6621_rx_suspend(FAR struct sv6621_rx_s *rx)
+{
+  int ret;
+
+  if (rx == NULL || !rx->running)
+    {
+      return -EINVAL;
+    }
+
+  if (rx->suspended)
+    {
+      return 0;
+    }
+
+  rx->suspended = true;
+  ret = rx->transport->ops->enable_irq(rx->transport, false);
+  if (ret < 0)
+    {
+      rx->suspended = false;
+      return ret;
+    }
+
+  work_cancel_sync(HPWORK, &rx->work);
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_rx_resume
+ ****************************************************************************/
+
+int sv6621_rx_resume(FAR struct sv6621_rx_s *rx)
+{
+  int ret;
+
+  if (rx == NULL || !rx->running)
+    {
+      return -EINVAL;
+    }
+
+  if (!rx->suspended)
+    {
+      return 0;
+    }
+
+  rx->suspended = false;
+  ret = rx->transport->ops->enable_irq(rx->transport, true);
+  if (ret < 0)
+    {
+      rx->suspended = true;
+    }
+
+  return ret;
+}
+
 void sv6621_rx_stop(FAR struct sv6621_rx_s *rx)
 {
   if (rx == NULL || !rx->running)
@@ -250,6 +311,7 @@ void sv6621_rx_stop(FAR struct sv6621_rx_s *rx)
     }
 
   rx->running = false;
+  rx->suspended = false;
   rx->transport->ops->enable_irq(rx->transport, false);
   rx->transport->ops->attach_irq(rx->transport, NULL, NULL);
   work_cancel_sync(HPWORK, &rx->work);

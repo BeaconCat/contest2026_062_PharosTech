@@ -240,7 +240,9 @@ static void sv6621_core_recovery_worker(FAR void *arg)
   sv6621_station_reset(&dev->station, error);
   sv6621_command_cancel(&dev->command, error);
   sv6621_data_reset_credits(&dev->data);
+  sv6621_data_set_tx_blocked(&dev->data, false);
   sv6621_rx_stop(&dev->rx);
+  dev->suspended = false;
   dev->station_open = false;
 
   if (dev->transport_open)
@@ -755,13 +757,6 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       goto unlock_lifecycle;
     }
 
-  ret = dev->config.board_ops->power_on(dev->config.board_arg);
-  if (ret < 0)
-    {
-      goto fail;
-    }
-
-  dev->powered = true;
   ret = dev->config.transport->ops->open(dev->config.transport);
   if (ret < 0)
     {
@@ -769,6 +764,19 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
     }
 
   dev->transport_open = true;
+  ret = dev->config.board_ops->power_on(dev->config.board_arg);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
+  dev->powered = true;
+  ret = dev->config.transport->ops->enumerate(dev->config.transport);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
   ret = sv6621_service_reset(&dev->service);
   if (ret < 0)
     {
@@ -782,6 +790,11 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
     }
 
   sv6621_data_reset_credits(&dev->data);
+  ret = sv6621_data_set_tx_blocked(&dev->data, false);
+  if (ret < 0)
+    {
+      goto fail;
+    }
 
   ret = sv6621_rx_start(&dev->rx);
   if (ret < 0)
@@ -1002,7 +1015,9 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 
   sv6621_command_cancel(&dev->command, -ESHUTDOWN);
   sv6621_data_reset_credits(&dev->data);
+  sv6621_data_set_tx_blocked(&dev->data, false);
   sv6621_rx_stop(&dev->rx);
+  dev->suspended = false;
   if (dev->transport_open)
     {
       dev->config.transport->ops->close(dev->config.transport);
@@ -1311,5 +1326,213 @@ int sv6621_disconnect(FAR struct sv6621_dev_s *dev, uint16_t reason)
     }
 
   nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_suspend
+ ****************************************************************************/
+
+int sv6621_suspend(FAR struct sv6621_dev_s *dev,
+                   FAR const struct sv6621_suspend_s *config)
+{
+  enum sv6621_wpa_state_e wpa_state;
+  enum sv6621_station_state_e station_state;
+  enum sv6621_state_e state;
+  bool scan_active;
+  int ret;
+
+  if (dev == NULL || config == NULL ||
+      (config->wake_flags & ~SV6621_WAKE_ALL) != 0 ||
+      (!config->wake_enabled && config->wake_flags != 0))
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  state = dev->status.state;
+  nxmutex_unlock(&dev->status_lock);
+  if (state == SV6621_STATE_SUSPENDED)
+    {
+      ret = 0;
+      goto unlock_lifecycle;
+    }
+
+  if (state != SV6621_STATE_WIFI_READY)
+    {
+      ret = -EBUSY;
+      goto unlock_lifecycle;
+    }
+
+  ret = nxmutex_lock(&dev->scan.lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  scan_active = dev->scan.active;
+  nxmutex_unlock(&dev->scan.lock);
+
+  ret = nxmutex_lock(&dev->wpa.lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  wpa_state = dev->wpa.state;
+  nxmutex_unlock(&dev->wpa.lock);
+
+  ret = nxmutex_lock(&dev->station.lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  station_state = dev->station.state;
+  nxmutex_unlock(&dev->station.lock);
+  if (scan_active ||
+      (wpa_state != SV6621_WPA_IDLE && wpa_state != SV6621_WPA_COMPLETE) ||
+      (station_state != SV6621_STATION_IDLE &&
+       station_state != SV6621_STATION_CONNECTED))
+    {
+      ret = -EBUSY;
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_data_set_tx_blocked(&dev->data, true);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_rx_suspend(&dev->rx);
+  if (ret < 0)
+    {
+      sv6621_data_set_tx_blocked(&dev->data, false);
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_power_suspend(&dev->command, config->wake_enabled,
+                             config->wake_flags);
+  if (ret < 0)
+    {
+      sv6621_rx_resume(&dev->rx);
+      sv6621_data_set_tx_blocked(&dev->data, false);
+      goto unlock_lifecycle;
+    }
+
+  dev->suspended = true;
+  ret = sv6621_core_set_state(dev, SV6621_STATE_SUSPENDED, 0);
+  nxmutex_unlock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  state = SV6621_STATE_SUSPENDED;
+  sv6621_core_report(dev, SV6621_EVENT_STATE_CHANGED, &state, sizeof(state));
+  return 0;
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_resume
+ ****************************************************************************/
+
+int sv6621_resume(FAR struct sv6621_dev_s *dev)
+{
+  enum sv6621_state_e state;
+  bool recover = false;
+  int ret;
+
+  if (dev == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  state = dev->status.state;
+  nxmutex_unlock(&dev->status_lock);
+  if (state == SV6621_STATE_WIFI_READY)
+    {
+      ret = 0;
+      goto unlock_lifecycle;
+    }
+
+  if (state != SV6621_STATE_SUSPENDED || !dev->suspended)
+    {
+      ret = -EBUSY;
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_rx_resume(&dev->rx);
+  if (ret < 0)
+    {
+      recover = true;
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_power_resume(&dev->command);
+  if (ret != 0)
+    {
+      ret = ret < 0 ? ret : -EREMOTEIO;
+      recover = true;
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_data_set_tx_blocked(&dev->data, false);
+  if (ret < 0)
+    {
+      recover = true;
+      goto unlock_lifecycle;
+    }
+
+  dev->suspended = false;
+  ret = sv6621_core_set_state(dev, SV6621_STATE_WIFI_READY, 0);
+  nxmutex_unlock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+#ifdef CONFIG_NET
+  sv6621_network_credit_available(&dev->network);
+#endif
+  state = SV6621_STATE_WIFI_READY;
+  sv6621_core_report(dev, SV6621_EVENT_STATE_CHANGED, &state, sizeof(state));
+  return 0;
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  if (recover)
+    {
+      sv6621_core_queue_recovery(dev, ret);
+    }
+
   return ret;
 }

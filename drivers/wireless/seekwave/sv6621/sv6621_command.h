@@ -132,6 +132,10 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
                            FAR const void *payload, size_t payload_length,
                            FAR void *response, FAR size_t *response_length,
                            uint32_t timeout_ms);
+int sv6621_command_send_noack(FAR struct sv6621_command_engine_s *engine,
+                              uint8_t instance, uint8_t id,
+                              FAR const void *payload,
+                              size_t payload_length);
 int sv6621_command_cancel(FAR struct sv6621_command_engine_s *engine,
                           int result);
 int sv6621_command_receive(FAR struct sv6621_command_engine_s *engine,
