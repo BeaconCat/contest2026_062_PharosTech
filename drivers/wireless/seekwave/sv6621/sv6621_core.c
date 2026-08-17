@@ -48,9 +48,11 @@
 #define SV6621_CORE_EVENT_MIC_FAILURE   17
 #define SV6621_CORE_EVENT_THERMAL_WARN  18
 #define SV6621_CORE_EVENT_CQM           20
+#define SV6621_CORE_EVENT_CHANNEL_SWITCH 22
 #define SV6621_CORE_EVENT_FW_RECOVERY   29
 #define SV6621_CORE_MIC_FAILURE_SIZE    9
 #define SV6621_CORE_CQM_EVENT_SIZE      11
+#define SV6621_CORE_CHANNEL_EVENT_SIZE  11
 #define SV6621_CORE_CQM_THRESHOLD_DBM  -70
 #define SV6621_CORE_CQM_HYSTERESIS_DB   40
 
@@ -83,6 +85,9 @@ static void sv6621_core_recovery_worker(FAR void *arg);
 static void sv6621_core_thermal_worker(FAR void *arg);
 static void sv6621_core_security_worker(FAR void *arg);
 static void sv6621_core_signal_worker(FAR void *arg);
+static int sv6621_core_channel_switch(FAR struct sv6621_dev_s *dev,
+                                      FAR const uint8_t *payload,
+                                      size_t length);
 static int sv6621_core_set_state(FAR struct sv6621_dev_s *dev,
                                  enum sv6621_state_e state, int error);
 
@@ -373,6 +378,86 @@ static void sv6621_core_rx_error(int error, FAR void *arg)
 }
 
 /****************************************************************************
+ * Name: sv6621_core_channel_switch
+ ****************************************************************************/
+
+static int sv6621_core_channel_switch(FAR struct sv6621_dev_s *dev,
+                                      FAR const uint8_t *payload,
+                                      size_t length)
+{
+#ifdef CONFIG_NET
+  struct sv6621_data_tx_context_s context;
+#endif
+  uint8_t channel;
+  uint8_t band;
+  bool connected;
+  int ret;
+
+  if (length != SV6621_CORE_CHANNEL_EVENT_SIZE || payload[0] > 1 ||
+      payload[2] == 0 || payload[6] > SV6621_BAND_5GHZ)
+    {
+      return -EPROTO;
+    }
+
+  if (payload[0] != 0)
+    {
+      ret = sv6621_data_set_tx_block(&dev->data,
+                                     SV6621_DATA_TX_BLOCK_CHANNEL, true);
+#ifdef CONFIG_NET
+      if (ret >= 0)
+        {
+          sv6621_network_set_link(&dev->network, false, NULL);
+        }
+#endif
+      return ret;
+    }
+
+  channel = payload[2];
+  band = payload[6];
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  connected = dev->station_connected;
+  if (connected)
+    {
+      ret = nxmutex_lock(&dev->station.lock);
+      if (ret < 0)
+        {
+          nxmutex_unlock(&dev->status_lock);
+          return ret;
+        }
+
+      dev->status.channel = channel;
+      dev->status.band = (enum sv6621_band_e)band;
+      dev->station.target.bss.channel = channel;
+      dev->station.target.bss.band = (enum sv6621_band_e)band;
+#ifdef CONFIG_NET
+      context.peer_index = dev->station.peer.peer_index;
+      context.multicast_index = dev->station.peer.multicast_index;
+      context.instance = dev->station.peer.instance;
+      context.lmac_id = dev->station.peer.lmac_id;
+      context.tid = 0;
+#endif
+      nxmutex_unlock(&dev->station.lock);
+    }
+
+  nxmutex_unlock(&dev->status_lock);
+  ret = sv6621_data_set_tx_block(&dev->data,
+                                 SV6621_DATA_TX_BLOCK_CHANNEL, false);
+#ifdef CONFIG_NET
+  if (ret >= 0 && connected)
+    {
+      sv6621_network_set_link(&dev->network, true, &context);
+      sv6621_network_credit_available(&dev->network);
+    }
+#endif
+  return ret;
+}
+
+/****************************************************************************
  * Name: sv6621_core_command_event
  ****************************************************************************/
 
@@ -527,6 +612,18 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
       return;
     }
 
+  if (id == SV6621_CORE_EVENT_CHANNEL_SWITCH)
+    {
+      int ret = sv6621_core_channel_switch(dev, payload, length);
+
+      if (ret < 0)
+        {
+          sv6621_core_queue_recovery(dev, ret);
+        }
+
+      return;
+    }
+
   sv6621_scan_command_event(instance, id, payload, length, &dev->scan);
   sv6621_station_command_event(instance, id, payload, length, &dev->station);
 }
@@ -610,6 +707,8 @@ static void sv6621_core_station_worker(FAR void *arg)
   if (!connected)
     {
       sv6621_wpa_cancel(&dev->wpa, -ECONNRESET);
+      (void)sv6621_data_set_tx_block(&dev->data,
+                                     SV6621_DATA_TX_BLOCK_CHANNEL, false);
     }
 
   if (connected)
