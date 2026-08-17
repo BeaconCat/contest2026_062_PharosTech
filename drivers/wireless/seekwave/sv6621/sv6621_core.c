@@ -44,6 +44,7 @@
 #define SV6621_CORE_SCAN_TIMEOUT_MS 10000
 #define SV6621_CORE_CONNECT_TIMEOUT_MS 5000
 #define SV6621_CORE_HANDSHAKE_TIMEOUT_MS 10000
+#define SV6621_CORE_EVENT_CREDIT_UPDATE 16
 
 /****************************************************************************
  * Private Function Prototypes
@@ -68,6 +69,9 @@ static void sv6621_core_report(FAR struct sv6621_dev_s *dev,
                                size_t length);
 static void sv6621_core_event_worker(FAR void *arg);
 static void sv6621_core_queue_fatal(FAR struct sv6621_dev_s *dev);
+static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
+                                       int error);
+static void sv6621_core_recovery_worker(FAR void *arg);
 static int sv6621_core_set_state(FAR struct sv6621_dev_s *dev,
                                  enum sv6621_state_e state, int error);
 
@@ -141,6 +145,128 @@ static void sv6621_core_queue_fatal(FAR struct sv6621_dev_s *dev)
 }
 
 /****************************************************************************
+ * Name: sv6621_core_queue_recovery
+ ****************************************************************************/
+
+static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
+                                       int error)
+{
+  bool queue = false;
+  int ret;
+
+  if (nxmutex_lock(&dev->status_lock) < 0)
+    {
+      return;
+    }
+
+  if (!dev->recovery_pending &&
+      dev->status.state != SV6621_STATE_OFF &&
+      dev->status.state != SV6621_STATE_STOPPING &&
+      dev->status.state != SV6621_STATE_FAILED)
+    {
+      dev->recovery_pending = true;
+      dev->status.last_error = error;
+      queue = true;
+    }
+
+  nxmutex_unlock(&dev->status_lock);
+  if (!queue)
+    {
+      return;
+    }
+
+  ret = work_queue(LPWORK, &dev->recovery_work,
+                   sv6621_core_recovery_worker, dev, 0);
+  if (ret < 0)
+    {
+      if (nxmutex_lock(&dev->status_lock) >= 0)
+        {
+          dev->recovery_pending = false;
+          dev->status.state = SV6621_STATE_FAILED;
+          dev->status.last_error = ret;
+          nxmutex_unlock(&dev->status_lock);
+        }
+
+      sv6621_core_queue_fatal(dev);
+    }
+}
+
+/****************************************************************************
+ * Name: sv6621_core_recovery_worker
+ ****************************************************************************/
+
+static void sv6621_core_recovery_worker(FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+  enum sv6621_state_e state = SV6621_STATE_RECOVERING;
+  int error = -EIO;
+  int ret;
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return;
+    }
+
+  if (nxmutex_lock(&dev->status_lock) < 0)
+    {
+      nxmutex_unlock(&dev->lifecycle_lock);
+      return;
+    }
+
+  if (!dev->recovery_pending || dev->status.state == SV6621_STATE_OFF ||
+      dev->status.state == SV6621_STATE_STOPPING)
+    {
+      dev->recovery_pending = false;
+      nxmutex_unlock(&dev->status_lock);
+      nxmutex_unlock(&dev->lifecycle_lock);
+      return;
+    }
+
+  error = dev->status.last_error;
+  dev->recovery_pending = false;
+  dev->status.state = SV6621_STATE_RECOVERING;
+  dev->status.recovery_count++;
+  nxmutex_unlock(&dev->status_lock);
+  sv6621_core_report(dev, SV6621_EVENT_STATE_CHANGED, &state, sizeof(state));
+  sv6621_core_report(dev, SV6621_EVENT_RECOVERY_STARTED, &error,
+                     sizeof(error));
+
+#ifdef CONFIG_NET
+  sv6621_network_set_link(&dev->network, false, NULL);
+#endif
+  sv6621_scan_controller_cancel(&dev->scan);
+  sv6621_wpa_cancel(&dev->wpa, error);
+  sv6621_station_reset(&dev->station, error);
+  sv6621_command_cancel(&dev->command, error);
+  sv6621_data_reset_credits(&dev->data);
+  sv6621_rx_stop(&dev->rx);
+  dev->station_open = false;
+
+  if (dev->transport_open)
+    {
+      dev->config.transport->ops->close(dev->config.transport);
+      dev->transport_open = false;
+    }
+
+  if (dev->powered)
+    {
+      dev->config.board_ops->power_off(dev->config.board_arg);
+      dev->powered = false;
+    }
+
+  sv6621_service_reset(&dev->service);
+  sv6621_core_set_state(dev, SV6621_STATE_FAILED, error);
+  nxmutex_unlock(&dev->lifecycle_lock);
+
+  ret = sv6621_start(dev);
+  if (ret == 0)
+    {
+      sv6621_core_report(dev, SV6621_EVENT_RECOVERY_COMPLETE, NULL, 0);
+    }
+}
+
+/****************************************************************************
  * Name: sv6621_core_service_event
  ****************************************************************************/
 
@@ -156,14 +282,7 @@ static void sv6621_core_service_event(enum sv6621_service_event_e event,
       return;
     }
 
-  if (nxmutex_lock(&dev->status_lock) >= 0)
-    {
-      dev->status.state = SV6621_STATE_FAILED;
-      dev->status.last_error = -EIO;
-      nxmutex_unlock(&dev->status_lock);
-    }
-
-  sv6621_core_queue_fatal(dev);
+  sv6621_core_queue_recovery(dev, -EIO);
   (void)payload;
   (void)length;
 }
@@ -176,14 +295,7 @@ static void sv6621_core_rx_error(int error, FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
 
-  if (nxmutex_lock(&dev->status_lock) >= 0)
-    {
-      dev->status.state = SV6621_STATE_FAILED;
-      dev->status.last_error = error;
-      nxmutex_unlock(&dev->status_lock);
-    }
-
-  sv6621_core_queue_fatal(dev);
+  sv6621_core_queue_recovery(dev, error);
 }
 
 /****************************************************************************
@@ -195,6 +307,18 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
                                       size_t length, FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
+
+  if (id == SV6621_CORE_EVENT_CREDIT_UPDATE && length >= 4)
+    {
+      uint16_t lmac0 = payload[0] | ((uint16_t)payload[1] << 8);
+      uint16_t lmac1 = payload[2] | ((uint16_t)payload[3] << 8);
+
+      sv6621_data_add_credits(&dev->data, lmac0, lmac1);
+#ifdef CONFIG_NET
+      sv6621_network_credit_available(&dev->network);
+#endif
+      return;
+    }
 
   sv6621_scan_command_event(instance, id, payload, length, &dev->scan);
   sv6621_station_command_event(instance, id, payload, length, &dev->station);
@@ -469,7 +593,8 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
     }
 
   ret = sv6621_command_engine_init(&dev->command, sv6621_tx_command_sender,
-                                   &dev->tx, sv6621_core_command_event, dev);
+                                   &dev->tx, sv6621_core_command_event, dev,
+                                   sv6621_core_rx_error, dev);
   if (ret < 0)
     {
       goto deinit_scan;
@@ -561,6 +686,7 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
 
   dev->config.event = NULL;
   sv6621_stop(dev);
+  work_cancel_sync(LPWORK, &dev->recovery_work);
   work_cancel_sync(LPWORK, &dev->event_work);
   work_cancel_sync(LPWORK, &dev->scan_work);
   work_cancel_sync(LPWORK, &dev->station_work);
@@ -648,6 +774,14 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
     {
       goto fail;
     }
+
+  ret = sv6621_command_reset(&dev->command);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
+  sv6621_data_reset_credits(&dev->data);
 
   ret = sv6621_rx_start(&dev->rx);
   if (ret < 0)
@@ -844,6 +978,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 
   state = dev->status.state;
   recovery_count = dev->status.recovery_count;
+  dev->recovery_pending = false;
   nxmutex_unlock(&dev->status_lock);
   if (state == SV6621_STATE_OFF)
     {
@@ -866,6 +1001,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
     }
 
   sv6621_command_cancel(&dev->command, -ESHUTDOWN);
+  sv6621_data_reset_credits(&dev->data);
   sv6621_rx_stop(&dev->rx);
   if (dev->transport_open)
     {
@@ -924,6 +1060,65 @@ int sv6621_get_status(FAR struct sv6621_dev_s *dev,
   *status = dev->status;
   nxmutex_unlock(&dev->status_lock);
   return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_get_link_stats
+ ****************************************************************************/
+
+int sv6621_get_link_stats(FAR struct sv6621_dev_s *dev,
+                          FAR struct sv6621_link_stats_s *stats)
+{
+  uint8_t bssid[SV6621_MAC_LENGTH];
+  uint8_t instance;
+  int ret;
+
+  if (dev == NULL || stats == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  if (dev->status.state != SV6621_STATE_WIFI_READY ||
+      !dev->station_connected)
+    {
+      ret = -ENOTCONN;
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  memcpy(bssid, dev->status.bssid, sizeof(bssid));
+  nxmutex_unlock(&dev->status_lock);
+
+  ret = nxmutex_lock(&dev->station.lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  instance = dev->station.peer.instance;
+  nxmutex_unlock(&dev->station.lock);
+  ret = sv6621_stats_query(&dev->command, instance, bssid, stats);
+  if (ret == 0 && nxmutex_lock(&dev->status_lock) >= 0)
+    {
+      dev->status.signal_dbm = stats->signal_dbm;
+      nxmutex_unlock(&dev->status_lock);
+    }
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
 }
 
 int sv6621_scan(FAR struct sv6621_dev_s *dev)
