@@ -57,6 +57,9 @@ struct sv6621_dev_s
   struct sv6621_rx_s rx;
   struct sv6621_wifi_info_s wifi_info;
   struct work_s event_work;
+  struct work_s scan_work;
+  int scan_result;
+  bool scan_reporting;
   bool powered;
   bool transport_open;
   bool station_open;
