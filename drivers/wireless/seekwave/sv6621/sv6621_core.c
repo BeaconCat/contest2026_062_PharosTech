@@ -532,6 +532,7 @@ static void sv6621_core_recovery_worker(FAR void *arg)
       sv6621_data_reset_credits(&dev->data);
       sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
       sv6621_rx_stop(&dev->rx);
+      sv6621_data_reset_fragments(&dev->data);
       dev->suspended = false;
       dev->station_open = false;
 
@@ -1001,6 +1002,7 @@ static void sv6621_core_station_event(bool connected, uint16_t reason,
   bool queue = false;
   int ret;
 
+  sv6621_data_reset_fragments(&dev->data);
   if (nxmutex_lock(&dev->status_lock) < 0)
     {
       return;
@@ -1548,6 +1550,7 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
     }
 
   sv6621_data_reset_credits(&dev->data);
+  sv6621_data_reset_fragments(&dev->data);
   ret = sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
   if (ret < 0)
     {
@@ -1779,6 +1782,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
   sv6621_data_reset_credits(&dev->data);
   sv6621_data_set_tx_block(&dev->data, UINT8_MAX, false);
   sv6621_rx_stop(&dev->rx);
+  sv6621_data_reset_fragments(&dev->data);
   dev->suspended = false;
   if (dev->transport_open)
     {
