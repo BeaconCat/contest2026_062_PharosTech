@@ -118,7 +118,8 @@ struct sv6621_scan_s
 
 int sv6621_scan_start(FAR struct sv6621_command_engine_s *command,
                       FAR const struct sv6621_scan_channel_s *channels,
-                      size_t channel_count);
+                      size_t channel_count, FAR const uint8_t *ssid,
+                      size_t ssid_length);
 int sv6621_scan_stop(FAR struct sv6621_command_engine_s *command);
 int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
                              FAR struct sv6621_scan_entry_s *entry);
@@ -142,7 +143,8 @@ int sv6621_scan_controller_init(FAR struct sv6621_scan_s *scan,
 void sv6621_scan_controller_deinit(FAR struct sv6621_scan_s *scan);
 int sv6621_scan_controller_begin(
     FAR struct sv6621_scan_s *scan,
-    FAR const struct sv6621_scan_channel_s *channels, size_t channel_count);
+    FAR const struct sv6621_scan_channel_s *channels, size_t channel_count,
+    FAR const uint8_t *ssid, size_t ssid_length);
 int sv6621_scan_controller_cancel(FAR struct sv6621_scan_s *scan);
 void sv6621_scan_command_event(uint8_t instance, uint8_t id,
                                FAR const uint8_t *payload, size_t length,

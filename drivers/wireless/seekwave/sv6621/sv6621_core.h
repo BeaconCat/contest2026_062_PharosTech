@@ -94,4 +94,13 @@ struct sv6621_dev_s
   bool station_open;
 };
 
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
+
+int sv6621_scan_selected(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_scan_channel_s *channels, size_t channel_count,
+    FAR const uint8_t *ssid, size_t ssid_length);
+
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_CORE_H */
