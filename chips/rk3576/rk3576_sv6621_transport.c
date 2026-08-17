@@ -666,6 +666,7 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
   if (!priv->opened || buffer == NULL || length == 0 ||
       function > RK3576_SV6621_FUNCTION_MAX ||
       address > RK3576_SV6621_ADDRESS_MAX ||
+      (increment && length - 1 > RK3576_SV6621_ADDRESS_MAX - address) ||
       (!block && length > RK3576_SV6621_BYTE_COUNT_MAX) ||
       (block && length / RK3576_SV6621_BLOCK_SIZE >
                     RK3576_SV6621_BLOCK_COUNT_MAX))
@@ -774,6 +775,7 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
   if (!priv->opened || buffer == NULL || length == 0 ||
       function > RK3576_SV6621_FUNCTION_MAX ||
       address > RK3576_SV6621_ADDRESS_MAX ||
+      (increment && length - 1 > RK3576_SV6621_ADDRESS_MAX - address) ||
       (!block && length > RK3576_SV6621_BYTE_COUNT_MAX) ||
       (block && length / RK3576_SV6621_BLOCK_SIZE >
                     RK3576_SV6621_BLOCK_COUNT_MAX))
