@@ -408,6 +408,10 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
           memcpy(entry->ies + entry->ie_length, frame + offset, ie_length);
           entry->ie_length += ie_length;
         }
+      else
+        {
+          entry->ies_truncated = true;
+        }
 
       offset += ie_length;
     }
@@ -881,6 +885,12 @@ void sv6621_scan_command_event(uint8_t instance, uint8_t id,
 
       kmm_free(entry);
       return;
+    }
+
+  if (entry->ies_truncated && nxmutex_lock(&scan->lock) >= 0)
+    {
+      scan->stats.truncated_reports++;
+      nxmutex_unlock(&scan->lock);
     }
 
   sv6621_scan_cache_store(&scan->cache, entry, &inserted);
