@@ -264,6 +264,8 @@ struct sv6621_status_s
   int16_t signal_dbm;
   uint32_t recovery_count;
   uint32_t unprotected_frames;
+  uint32_t mic_failures;
+  uint32_t mic_failures_dropped;
   int last_error;
 };
 
