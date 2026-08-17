@@ -26,6 +26,8 @@
 
 #include <nuttx/config.h>
 
+#include <nuttx/kmalloc.h>
+
 #include <errno.h>
 #include <string.h>
 
@@ -88,6 +90,7 @@
 #define SV6621_DATA_BA_DEL_RX                 3
 #define SV6621_DATA_BA_REQ_RX                 4
 #define SV6621_DATA_BA_MAX_WINDOW             256
+#define SV6621_DATA_BA_MIN_CAPACITY            64
 
 /****************************************************************************
  * Private Function Prototypes
@@ -107,6 +110,11 @@ static bool sv6621_data_cipher_uses_pn(uint8_t cipher);
 static bool sv6621_data_pn_follows(FAR const uint8_t *previous,
                                    FAR const uint8_t *current,
                                    size_t length);
+static void sv6621_data_free_ba_session(
+    FAR struct sv6621_data_ba_session_s *session);
+static int sv6621_data_configure_ba_session(
+    FAR struct sv6621_data_ba_session_s *session, uint8_t peer_index,
+    uint16_t window_start, uint16_t window_size);
 static int sv6621_data_reassemble(FAR struct sv6621_data_s *data,
                                   FAR struct sv6621_data_rx_s *rx);
 static bool sv6621_data_take_credit(FAR struct sv6621_data_s *data,
@@ -229,6 +237,64 @@ static bool sv6621_data_pn_follows(FAR const uint8_t *previous,
     }
 
   return carry == 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_free_ba_session
+ ****************************************************************************/
+
+static void sv6621_data_free_ba_session(
+    FAR struct sv6621_data_ba_session_s *session)
+{
+  uint16_t index;
+
+  if (session->slots != NULL)
+    {
+      for (index = 0; index < session->capacity; index++)
+        {
+          FAR struct sv6621_data_reorder_frame_s *frame;
+
+          while ((frame = session->slots[index].head) != NULL)
+            {
+              session->slots[index].head = frame->next;
+              kmm_free(frame);
+            }
+        }
+
+      kmm_free(session->slots);
+    }
+
+  memset(session, 0, sizeof(*session));
+}
+
+/****************************************************************************
+ * Name: sv6621_data_configure_ba_session
+ ****************************************************************************/
+
+static int sv6621_data_configure_ba_session(
+    FAR struct sv6621_data_ba_session_s *session, uint8_t peer_index,
+    uint16_t window_start, uint16_t window_size)
+{
+  FAR struct sv6621_data_reorder_slot_s *slots;
+  uint16_t capacity = window_size < SV6621_DATA_BA_MIN_CAPACITY ?
+                      SV6621_DATA_BA_MIN_CAPACITY : window_size;
+
+  capacity *= 2;
+  slots = kmm_zalloc((size_t)capacity * sizeof(*slots));
+  if (slots == NULL)
+    {
+      sv6621_data_free_ba_session(session);
+      return -ENOMEM;
+    }
+
+  sv6621_data_free_ba_session(session);
+  session->slots = slots;
+  session->window_start = window_start;
+  session->negotiated_window = window_size;
+  session->capacity = capacity;
+  session->peer_index = peer_index;
+  session->active = true;
+  return 0;
 }
 
 /****************************************************************************
@@ -808,21 +874,24 @@ int sv6621_data_ba_event(FAR struct sv6621_data_s *data,
     {
       if (session->active && session->peer_index == peer_index)
         {
-          memset(session, 0, sizeof(*session));
+          sv6621_data_free_ba_session(session);
         }
     }
   else if (action == SV6621_DATA_BA_ADD_RX ||
            (session->active && session->peer_index == peer_index))
     {
-      session->window_start = window_start;
-      session->window_size = window_size;
-      session->peer_index = peer_index;
-      session->active = true;
+      ret = sv6621_data_configure_ba_session(
+          session, peer_index, window_start, window_size);
     }
 
   data->stats.ba_events++;
+  if (ret < 0)
+    {
+      data->stats.ba_event_errors++;
+    }
+
   nxmutex_unlock(&data->rx_lock);
-  return 0;
+  return ret;
 }
 
 /****************************************************************************
@@ -833,7 +902,17 @@ void sv6621_data_reset_ba(FAR struct sv6621_data_s *data)
 {
   if (data != NULL && nxmutex_lock(&data->rx_lock) >= 0)
     {
-      memset(data->ba, 0, sizeof(data->ba));
+      unsigned int lmac_id;
+      unsigned int tid;
+
+      for (lmac_id = 0; lmac_id < SV6621_DATA_LMAC_COUNT; lmac_id++)
+        {
+          for (tid = 0; tid < SV6621_DATA_TID_COUNT; tid++)
+            {
+              sv6621_data_free_ba_session(&data->ba[lmac_id][tid]);
+            }
+        }
+
       nxmutex_unlock(&data->rx_lock);
     }
 }

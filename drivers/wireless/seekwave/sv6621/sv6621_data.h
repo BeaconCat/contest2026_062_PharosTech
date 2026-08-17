@@ -120,10 +120,31 @@ struct sv6621_data_fragment_s
   uint8_t frame[SV6621_DATA_MAX_FRAME_SIZE];
 };
 
+struct sv6621_data_reorder_frame_s
+{
+  FAR struct sv6621_data_reorder_frame_s *next;
+  struct sv6621_data_rx_s rx;
+  uint8_t frame[];
+};
+
+struct sv6621_data_reorder_slot_s
+{
+  FAR struct sv6621_data_reorder_frame_s *head;
+  FAR struct sv6621_data_reorder_frame_s *tail;
+  uint64_t amsdu_bitmap;
+  uint64_t amsdu_mask;
+  uint16_t sequence;
+  bool occupied;
+  bool complete;
+  bool tainted;
+};
+
 struct sv6621_data_ba_session_s
 {
+  FAR struct sv6621_data_reorder_slot_s *slots;
   uint16_t window_start;
-  uint16_t window_size;
+  uint16_t negotiated_window;
+  uint16_t capacity;
   uint8_t peer_index;
   bool active;
 };
