@@ -76,6 +76,8 @@ static uint16_t sv6621_scan_get_le16(FAR const uint8_t *value);
 static int sv6621_scan_parse_rsn(FAR const uint8_t *data, size_t length,
                                  FAR bool *psk, FAR bool *sae);
 static bool sv6621_scan_is_wpa_ie(FAR const uint8_t *data, size_t length);
+static size_t
+sv6621_scan_cache_weakest(FAR const struct sv6621_scan_cache_s *cache);
 
 /****************************************************************************
  * Private Functions
@@ -149,6 +151,24 @@ static bool sv6621_scan_is_wpa_ie(FAR const uint8_t *data, size_t length)
 
   return length >= sizeof(wpa_type) &&
          memcmp(data, wpa_type, sizeof(wpa_type)) == 0;
+}
+
+static size_t
+sv6621_scan_cache_weakest(FAR const struct sv6621_scan_cache_s *cache)
+{
+  size_t weakest = 0;
+  size_t index;
+
+  for (index = 1; index < cache->count; index++)
+    {
+      if (cache->entries[index].signal_dbm <
+          cache->entries[weakest].signal_dbm)
+        {
+          weakest = index;
+        }
+    }
+
+  return weakest;
 }
 
 /****************************************************************************
@@ -338,4 +358,143 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
     }
 
   return 0;
+}
+
+int sv6621_scan_cache_init(FAR struct sv6621_scan_cache_s *cache)
+{
+  if (cache == NULL)
+    {
+      return -EINVAL;
+    }
+
+  memset(cache, 0, sizeof(*cache));
+  return nxmutex_init(&cache->lock);
+}
+
+void sv6621_scan_cache_deinit(FAR struct sv6621_scan_cache_s *cache)
+{
+  if (cache != NULL)
+    {
+      nxmutex_destroy(&cache->lock);
+    }
+}
+
+int sv6621_scan_cache_reset(FAR struct sv6621_scan_cache_s *cache)
+{
+  int ret;
+
+  if (cache == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&cache->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  memset(cache->entries, 0, sizeof(cache->entries));
+  cache->count = 0;
+  nxmutex_unlock(&cache->lock);
+  return 0;
+}
+
+int sv6621_scan_cache_store(FAR struct sv6621_scan_cache_s *cache,
+                            FAR const struct sv6621_bss_s *bss,
+                            FAR bool *inserted)
+{
+  size_t index;
+  int ret;
+
+  if (cache == NULL || bss == NULL || inserted == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&cache->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  *inserted = false;
+  for (index = 0; index < cache->count; index++)
+    {
+      if (memcmp(cache->entries[index].bssid, bss->bssid, SV6621_MAC_LENGTH) ==
+          0)
+        {
+          if (bss->ssid_length == 0 && cache->entries[index].ssid_length > 0)
+            {
+              struct sv6621_bss_s updated = *bss;
+
+              updated.ssid_length = cache->entries[index].ssid_length;
+              memcpy(updated.ssid, cache->entries[index].ssid,
+                     updated.ssid_length);
+              cache->entries[index] = updated;
+            }
+          else
+            {
+              cache->entries[index] = *bss;
+            }
+
+          nxmutex_unlock(&cache->lock);
+          return 0;
+        }
+    }
+
+  if (cache->count < SV6621_SCAN_CACHE_CAPACITY)
+    {
+      cache->entries[cache->count++] = *bss;
+      *inserted = true;
+    }
+  else
+    {
+      index = sv6621_scan_cache_weakest(cache);
+      if (bss->signal_dbm <= cache->entries[index].signal_dbm)
+        {
+          cache->dropped++;
+          ret = -ENOSPC;
+          goto unlock_cache;
+        }
+
+      cache->entries[index] = *bss;
+      cache->replacements++;
+      *inserted = true;
+    }
+
+  ret = 0;
+
+unlock_cache:
+  nxmutex_unlock(&cache->lock);
+  return ret;
+}
+
+int sv6621_scan_cache_snapshot(FAR struct sv6621_scan_cache_s *cache,
+                               FAR struct sv6621_bss_s *entries,
+                               FAR size_t *count)
+{
+  size_t copy_count;
+  int ret;
+
+  if (cache == NULL || count == NULL || (entries == NULL && *count != 0))
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&cache->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  copy_count = *count < cache->count ? *count : cache->count;
+  if (copy_count > 0)
+    {
+      memcpy(entries, cache->entries, copy_count * sizeof(*entries));
+    }
+
+  *count = cache->count;
+  nxmutex_unlock(&cache->lock);
+  return copy_count < cache->count ? -ENOSPC : 0;
 }
