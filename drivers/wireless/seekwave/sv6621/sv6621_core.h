@@ -99,6 +99,7 @@ struct sv6621_dev_s
   bool station_work_scheduled;
   bool scan_reporting;
   bool recovery_pending;
+  bool recovery_running;
   uint32_t thermal_generation;
   bool thermal_blocked;
   bool thermal_work_scheduled;
