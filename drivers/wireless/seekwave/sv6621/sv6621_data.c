@@ -26,6 +26,7 @@
 
 #include <nuttx/config.h>
 
+#include <nuttx/clock.h>
 #include <nuttx/kmalloc.h>
 
 #include <errno.h>
@@ -93,6 +94,7 @@
 #define SV6621_DATA_BA_MIN_CAPACITY            64
 #define SV6621_DATA_SEQUENCE_MASK              0x0fff
 #define SV6621_DATA_SEQUENCE_HALF              0x0800
+#define SV6621_DATA_REORDER_TIMEOUT_MS          100
 
 /****************************************************************************
  * Private Data
@@ -139,8 +141,14 @@ static void sv6621_data_release_reorder_slot(
 static void sv6621_data_advance_reorder_window(
     FAR struct sv6621_data_s *data,
     FAR struct sv6621_data_ba_session_s *session, uint16_t new_start);
+static void sv6621_data_release_ready(
+    FAR struct sv6621_data_s *data,
+    FAR struct sv6621_data_ba_session_s *session);
 static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
                                 FAR const struct sv6621_data_rx_s *rx);
+static void sv6621_data_schedule_reorder_locked(
+    FAR struct sv6621_data_s *data, clock_t delay);
+static void sv6621_data_reorder_worker(FAR void *arg);
 static int sv6621_data_reassemble(FAR struct sv6621_data_s *data,
                                   FAR struct sv6621_data_rx_s *rx);
 static bool sv6621_data_take_credit(FAR struct sv6621_data_s *data,
@@ -443,6 +451,30 @@ static void sv6621_data_advance_reorder_window(
 }
 
 /****************************************************************************
+ * Name: sv6621_data_release_ready
+ ****************************************************************************/
+
+static void sv6621_data_release_ready(
+    FAR struct sv6621_data_s *data,
+    FAR struct sv6621_data_ba_session_s *session)
+{
+  while (session->queued_sequences > 0)
+    {
+      FAR struct sv6621_data_reorder_slot_s *slot =
+          &session->slots[session->window_start % session->capacity];
+
+      if (!slot->occupied || !slot->complete)
+        {
+          break;
+        }
+
+      sv6621_data_release_reorder_slot(data, session, slot);
+      session->window_start =
+          sv6621_data_sequence_add(session->window_start, 1);
+    }
+}
+
+/****************************************************************************
  * Name: sv6621_data_reorder
  ****************************************************************************/
 
@@ -548,6 +580,7 @@ static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
   if (new_slot)
     {
       slot->sequence = rx->sequence;
+      slot->queued_at = clock_systime_ticks();
       slot->occupied = true;
       slot->amsdu = rx->amsdu;
       session->queued_sequences++;
@@ -620,24 +653,136 @@ static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
   if (rx->sequence != session->window_start || !slot->complete)
     {
       data->stats.reorder_buffered++;
+      sv6621_data_schedule_reorder_locked(
+          data, MSEC2TICK(SV6621_DATA_REORDER_TIMEOUT_MS));
       return true;
     }
 
-  do
-    {
-      slot = &session->slots[session->window_start % session->capacity];
-      if (!slot->occupied || !slot->complete)
-        {
-          break;
-        }
+  sv6621_data_release_ready(data, session);
 
-      sv6621_data_release_reorder_slot(data, session, slot);
-      session->window_start =
-          sv6621_data_sequence_add(session->window_start, 1);
+  if (session->queued_sequences > 0)
+    {
+      sv6621_data_schedule_reorder_locked(
+          data, MSEC2TICK(SV6621_DATA_REORDER_TIMEOUT_MS));
     }
-  while (session->queued_sequences > 0);
 
   return true;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_schedule_reorder_locked
+ ****************************************************************************/
+
+static void sv6621_data_schedule_reorder_locked(
+    FAR struct sv6621_data_s *data, clock_t delay)
+{
+  int ret;
+
+  if (data->reorder_work_scheduled)
+    {
+      return;
+    }
+
+  data->reorder_work_scheduled = true;
+  ret = work_queue(LPWORK, &data->reorder_work,
+                   sv6621_data_reorder_worker, data, delay);
+  if (ret < 0)
+    {
+      data->reorder_work_scheduled = false;
+      data->stats.reorder_schedule_errors++;
+    }
+}
+
+/****************************************************************************
+ * Name: sv6621_data_reorder_worker
+ ****************************************************************************/
+
+static void sv6621_data_reorder_worker(FAR void *arg)
+{
+  FAR struct sv6621_data_s *data = arg;
+  const clock_t timeout = MSEC2TICK(SV6621_DATA_REORDER_TIMEOUT_MS);
+  clock_t next_delay = timeout;
+  clock_t now;
+  unsigned int lmac_id;
+  unsigned int tid;
+  bool pending = false;
+
+  if (nxmutex_lock(&data->rx_lock) < 0)
+    {
+      return;
+    }
+
+  data->reorder_work_scheduled = false;
+  now = clock_systime_ticks();
+  for (lmac_id = 0; lmac_id < SV6621_DATA_LMAC_COUNT; lmac_id++)
+    {
+      for (tid = 0; tid < SV6621_DATA_TID_COUNT; tid++)
+        {
+          FAR struct sv6621_data_ba_session_s *session =
+              &data->ba[lmac_id][tid];
+
+          while (session->active && session->slots != NULL &&
+                 session->queued_sequences > 0)
+            {
+              FAR struct sv6621_data_reorder_slot_s *slot = NULL;
+              uint16_t offset;
+              clock_t elapsed;
+
+              for (offset = 0; offset < session->capacity; offset++)
+                {
+                  uint16_t sequence = sv6621_data_sequence_add(
+                      session->window_start, offset);
+                  FAR struct sv6621_data_reorder_slot_s *candidate =
+                      &session->slots[sequence % session->capacity];
+
+                  if (candidate->occupied &&
+                      candidate->sequence == sequence)
+                    {
+                      slot = candidate;
+                      break;
+                    }
+                }
+
+              if (slot == NULL)
+                {
+                  session->queued_sequences = 0;
+                  break;
+                }
+
+              elapsed = now - slot->queued_at;
+              if (elapsed < timeout)
+                {
+                  clock_t remaining = timeout - elapsed;
+
+                  if (!pending || remaining < next_delay)
+                    {
+                      next_delay = remaining;
+                    }
+
+                  pending = true;
+                  break;
+                }
+
+              sv6621_data_advance_reorder_window(
+                  data, session,
+                  sv6621_data_sequence_add(slot->sequence, 1));
+              sv6621_data_release_ready(data, session);
+              data->stats.reorder_timeouts++;
+            }
+
+          if (session->queued_sequences > 0)
+            {
+              pending = true;
+            }
+        }
+    }
+
+  if (pending)
+    {
+      sv6621_data_schedule_reorder_locked(data, next_delay);
+    }
+
+  nxmutex_unlock(&data->rx_lock);
 }
 
 /****************************************************************************
@@ -1051,6 +1196,8 @@ void sv6621_data_deinit(FAR struct sv6621_data_s *data)
                             sv6621_data_packet, data);
   sv6621_data_reset_fragments(data);
   sv6621_data_reset_ba(data);
+  work_cancel_sync(LPWORK, &data->reorder_work);
+  data->reorder_work_scheduled = false;
   nxmutex_destroy(&data->rx_lock);
   nxmutex_destroy(&data->tx_lock);
   data->router = NULL;
