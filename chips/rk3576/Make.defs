@@ -45,7 +45,7 @@ VPATH += :$(SV6621_SRCDIR)
 CHIP_CSRCS += sv6621.c sv6621_netdev.c sv6621_wpa.c
 CHIP_CSRCS += sv6621_command.c sv6621_firmware.c sv6621_memory.c
 CHIP_CSRCS += sv6621_packet.c
-CHIP_CSRCS += sv6621_protocol.c
+CHIP_CSRCS += sv6621_protocol.c sv6621_service.c
 CHIP_CSRCS += sv6621_transport.c
 endif
 

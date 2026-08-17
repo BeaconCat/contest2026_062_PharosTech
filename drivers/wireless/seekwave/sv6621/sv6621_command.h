@@ -41,7 +41,6 @@
 
 #define SV6621_COMMAND_HEADER_SIZE         8
 #define SV6621_COMMAND_ACK_STATUS_SIZE     2
-#define SV6621_COMMAND_RX_LINK_HEADER_SIZE 12
 #define SV6621_COMMAND_MAX_MESSAGE_SIZE    1588
 
 /****************************************************************************
