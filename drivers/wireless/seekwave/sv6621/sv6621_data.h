@@ -113,6 +113,7 @@ struct sv6621_data_fragment_s
   bool instance_valid;
   bool peer_valid;
   bool active;
+  uint8_t last_packet_number[6];
   uint8_t frame[SV6621_DATA_MAX_FRAME_SIZE];
 };
 
@@ -133,6 +134,7 @@ struct sv6621_data_stats_s
   uint32_t reassembled;
   uint32_t fragment_drops;
   uint32_t fragment_evictions;
+  uint32_t fragment_pn_drops;
 };
 
 struct sv6621_data_s
