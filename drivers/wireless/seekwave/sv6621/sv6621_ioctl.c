@@ -155,6 +155,7 @@ static int sv6621_ioctl_bssid(FAR struct sv6621_ioctl_s *ioctl,
 {
   static const uint8_t zero[SV6621_MAC_LENGTH];
   struct sv6621_status_s status;
+  int ret;
 
   if (set)
     {
@@ -162,7 +163,13 @@ static int sv6621_ioctl_bssid(FAR struct sv6621_ioctl_s *ioctl,
              SV6621_MAC_LENGTH);
       ioctl->connection.bssid_valid =
           memcmp(ioctl->connection.bssid, zero, sizeof(zero)) != 0;
-      return 0;
+      if (ioctl->connection.bssid_valid)
+        {
+          return sv6621_connect(ioctl->owner, &ioctl->connection);
+        }
+
+      ret = sv6621_disconnect(ioctl->owner, 3);
+      return ret == -ENOTCONN ? 0 : ret;
     }
 
   if (sv6621_get_status(ioctl->owner, &status) < 0)

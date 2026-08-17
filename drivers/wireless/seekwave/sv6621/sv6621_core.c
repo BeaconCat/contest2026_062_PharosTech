@@ -1374,6 +1374,8 @@ unlock_lifecycle:
 int sv6621_connect(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_connect_s *request)
 {
+  struct sv6621_connect_s resolved;
+  FAR const struct sv6621_connect_s *connection = request;
   FAR struct sv6621_scan_entry_s *target = NULL;
   bool wpa_prepared = false;
   int ret;
@@ -1387,6 +1389,40 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
       request->security != SV6621_SECURITY_WPA2_PSK)
     {
       return -EOPNOTSUPP;
+    }
+
+  if (request->ssid_length == 0)
+    {
+      if (!request->bssid_valid)
+        {
+          return -EINVAL;
+        }
+
+      target = kmm_malloc(sizeof(*target));
+      if (target == NULL)
+        {
+          return -ENOMEM;
+        }
+
+      ret = sv6621_scan_cache_find(&dev->scan.cache, request, target);
+      if (ret < 0)
+        {
+          kmm_free(target);
+          return ret;
+        }
+
+      if (target->bss.ssid_length == 0)
+        {
+          kmm_free(target);
+          return -ENOENT;
+        }
+
+      resolved = *request;
+      memcpy(resolved.ssid, target->bss.ssid, target->bss.ssid_length);
+      resolved.ssid_length = target->bss.ssid_length;
+      connection = &resolved;
+      kmm_free(target);
+      target = NULL;
     }
 
   ret = nxmutex_lock(&dev->lifecycle_lock);
@@ -1424,7 +1460,7 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
       goto unlock_lifecycle;
     }
 
-  if (request->security == SV6621_SECURITY_WPA2_PSK)
+  if (connection->security == SV6621_SECURITY_WPA2_PSK)
     {
       target = kmm_malloc(sizeof(*target));
       if (target == NULL)
@@ -1433,13 +1469,13 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
           goto unlock_lifecycle;
         }
 
-      ret = sv6621_scan_cache_find(&dev->scan.cache, request, target);
+      ret = sv6621_scan_cache_find(&dev->scan.cache, connection, target);
       if (ret < 0)
         {
           goto free_target;
         }
 
-      ret = sv6621_wpa_prepare(&dev->wpa, request, dev->wifi_info.mac,
+      ret = sv6621_wpa_prepare(&dev->wpa, connection, dev->wifi_info.mac,
                                target->bss.bssid);
       if (ret < 0)
         {
@@ -1451,7 +1487,7 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
       target = NULL;
     }
 
-  ret = sv6621_station_connect(&dev->station, request,
+  ret = sv6621_station_connect(&dev->station, connection,
                                SV6621_CORE_CONNECT_TIMEOUT_MS);
   if (ret < 0)
     {
