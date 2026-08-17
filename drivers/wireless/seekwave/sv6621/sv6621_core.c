@@ -60,6 +60,8 @@ static void sv6621_core_scan_worker(FAR void *arg);
 static void sv6621_core_station_event(bool connected, uint16_t reason,
                                       FAR void *arg);
 static void sv6621_core_station_worker(FAR void *arg);
+static void sv6621_core_data_input(FAR const struct sv6621_data_rx_s *rx,
+                                   FAR void *arg);
 static void sv6621_core_report(FAR struct sv6621_dev_s *dev,
                                enum sv6621_event_e event, FAR const void *data,
                                size_t length);
@@ -229,6 +231,10 @@ static void sv6621_core_station_worker(FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
   struct sv6621_status_s status;
+#ifdef CONFIG_NET
+  struct sv6621_data_tx_context_s context;
+  bool link_ready = false;
+#endif
   uint16_t reason;
   bool connected;
 
@@ -246,6 +252,14 @@ static void sv6621_core_station_worker(FAR void *arg)
       dev->status.channel = dev->station.target.bss.channel;
       dev->status.band = dev->station.target.bss.band;
       dev->status.signal_dbm = dev->station.target.bss.signal_dbm;
+#ifdef CONFIG_NET
+      context.peer_index = dev->station.peer.peer_index;
+      context.multicast_index = dev->station.peer.multicast_index;
+      context.instance = dev->station.peer.instance;
+      context.lmac_id = dev->station.peer.lmac_id;
+      context.tid = 0;
+      link_ready = true;
+#endif
       nxmutex_unlock(&dev->station.lock);
     }
   else if (!connected)
@@ -257,6 +271,10 @@ static void sv6621_core_station_worker(FAR void *arg)
 
   status = dev->status;
   nxmutex_unlock(&dev->status_lock);
+#ifdef CONFIG_NET
+  sv6621_network_set_link(&dev->network, connected && link_ready,
+                          link_ready ? &context : NULL);
+#endif
   if (connected)
     {
       sv6621_core_report(dev, SV6621_EVENT_CONNECTED, &status,
@@ -267,6 +285,23 @@ static void sv6621_core_station_worker(FAR void *arg)
       sv6621_core_report(dev, SV6621_EVENT_DISCONNECTED, &reason,
                          sizeof(reason));
     }
+}
+
+/****************************************************************************
+ * Name: sv6621_core_data_input
+ ****************************************************************************/
+
+static void sv6621_core_data_input(FAR const struct sv6621_data_rx_s *rx,
+                                   FAR void *arg)
+{
+#ifdef CONFIG_NET
+  FAR struct sv6621_dev_s *dev = arg;
+
+  sv6621_network_input(rx, &dev->network);
+#else
+  (void)rx;
+  (void)arg;
+#endif
 }
 
 /****************************************************************************
@@ -412,12 +447,19 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       goto deinit_router;
     }
 
+  ret = sv6621_data_init(&dev->data, &dev->router, &dev->tx,
+                         sv6621_core_data_input, dev);
+  if (ret < 0)
+    {
+      goto deinit_tx;
+    }
+
   ret = sv6621_scan_controller_init(&dev->scan, &dev->command,
                                     SV6621_CORE_SCAN_TIMEOUT_MS,
                                     sv6621_core_scan_complete, dev);
   if (ret < 0)
     {
-      goto deinit_tx;
+      goto deinit_data;
     }
 
   ret = sv6621_command_engine_init(&dev->command, sv6621_tx_command_sender,
@@ -479,6 +521,8 @@ deinit_command:
   sv6621_command_engine_deinit(&dev->command);
 deinit_scan:
   sv6621_scan_controller_deinit(&dev->scan);
+deinit_data:
+  sv6621_data_deinit(&dev->data);
 deinit_tx:
   sv6621_tx_deinit(&dev->tx);
 deinit_router:
@@ -509,10 +553,14 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
   sv6621_packet_unsubscribe(&dev->router, SV6621_CHANNEL_LOOPCHECK,
                             sv6621_service_channel_consumer, &dev->service);
   sv6621_rx_deinit(&dev->rx);
+#ifdef CONFIG_NET
+  sv6621_network_deinit(&dev->network);
+#endif
   sv6621_service_deinit(&dev->service);
   sv6621_station_deinit(&dev->station);
   sv6621_scan_controller_deinit(&dev->scan);
   sv6621_command_engine_deinit(&dev->command);
+  sv6621_data_deinit(&dev->data);
   sv6621_tx_deinit(&dev->tx);
   sv6621_packet_router_deinit(&dev->router);
   nxmutex_destroy(&dev->status_lock);
@@ -639,6 +687,18 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       goto fail;
     }
 
+#ifdef CONFIG_NET
+  if (!dev->network.registered)
+    {
+      ret = sv6621_network_init(&dev->network, &dev->data,
+                                dev->wifi_info.mac);
+      if (ret < 0)
+        {
+          goto fail;
+        }
+    }
+#endif
+
   ret = sv6621_wifi_configure_baseline(&dev->command);
   if (ret < 0)
     {
@@ -691,6 +751,9 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
   return 0;
 
 fail:
+#ifdef CONFIG_NET
+  sv6621_network_set_link(&dev->network, false, NULL);
+#endif
   if (dev->station_open)
     {
       sv6621_wifi_close_station(&dev->command);
@@ -762,6 +825,9 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
     }
 
   sv6621_core_set_state(dev, SV6621_STATE_STOPPING, 0);
+#ifdef CONFIG_NET
+  sv6621_network_set_link(&dev->network, false, NULL);
+#endif
   scan_ret = sv6621_scan_controller_cancel(&dev->scan);
   sv6621_station_disconnect(&dev->station, 3);
   sv6621_station_reset(&dev->station, -ESHUTDOWN);
