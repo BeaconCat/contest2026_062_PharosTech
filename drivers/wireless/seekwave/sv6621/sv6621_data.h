@@ -65,6 +65,7 @@ struct sv6621_data_rx_s
   uint16_t sequence;
   uint16_t checksum;
   uint8_t fragment;
+  uint8_t lmac_id;
   uint8_t instance;
   uint8_t peer_index;
   uint8_t tid;
@@ -107,6 +108,7 @@ struct sv6621_data_fragment_s
   size_t length;
   uint16_t sequence;
   uint8_t expected_fragment;
+  uint8_t lmac_id;
   uint8_t instance;
   uint8_t peer_index;
   uint8_t tid;

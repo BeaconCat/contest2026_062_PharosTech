@@ -138,7 +138,8 @@ sv6621_data_find_fragment(FAR struct sv6621_data_s *data,
       FAR struct sv6621_data_fragment_s *entry = &data->fragments[index];
 
       if (entry->active && entry->sequence == rx->sequence &&
-          entry->tid == rx->tid && entry->instance == rx->instance &&
+          entry->tid == rx->tid && entry->lmac_id == rx->lmac_id &&
+          entry->instance == rx->instance &&
           entry->instance_valid == rx->instance_valid &&
           entry->peer_index == rx->peer_index &&
           entry->peer_valid == rx->peer_valid)
@@ -252,6 +253,7 @@ static int sv6621_data_reassemble(FAR struct sv6621_data_s *data,
       entry->length = rx->frame_length;
       entry->sequence = rx->sequence;
       entry->expected_fragment = 1;
+      entry->lmac_id = rx->lmac_id;
       entry->instance = rx->instance;
       entry->instance_valid = rx->instance_valid;
       entry->peer_index = rx->peer_index;
@@ -345,6 +347,8 @@ static void sv6621_data_packet(uint8_t channel, FAR const uint8_t *payload,
       goto unlock;
     }
 
+  rx.lmac_id = channel == SV6621_CHANNEL_WIFI_DATA1 ? 1 : 0;
+
   ret = sv6621_data_reassemble(data, &rx);
   if (ret == -EINPROGRESS)
     {
@@ -373,7 +377,6 @@ static void sv6621_data_packet(uint8_t channel, FAR const uint8_t *payload,
 
 unlock:
   nxmutex_unlock(&data->rx_lock);
-  (void)channel;
 }
 
 /****************************************************************************
