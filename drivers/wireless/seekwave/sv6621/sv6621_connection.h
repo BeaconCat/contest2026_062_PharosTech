@@ -33,6 +33,13 @@
 #include "sv6621_scan.h"
 
 /****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#define SV6621_CONNECTION_HT_CAPABILITY_SIZE  26
+#define SV6621_CONNECTION_VHT_CAPABILITY_SIZE 12
+
+/****************************************************************************
  * Public Types
  ****************************************************************************/
 
@@ -64,5 +71,11 @@ int sv6621_connection_authenticate(
     enum sv6621_connection_auth_algorithm_e algorithm,
     FAR const uint8_t *auth_data, size_t auth_data_length,
     FAR const uint8_t *auth_ies, size_t auth_ies_length);
+int sv6621_connection_associate(
+    FAR struct sv6621_command_engine_s *command,
+    FAR const uint8_t bssid[SV6621_MAC_LENGTH],
+    FAR const uint8_t ht_capability[SV6621_CONNECTION_HT_CAPABILITY_SIZE],
+    FAR const uint8_t vht_capability[SV6621_CONNECTION_VHT_CAPABILITY_SIZE],
+    FAR const uint8_t *ies, size_t ies_length);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_CONNECTION_H */

@@ -40,12 +40,18 @@
 #define SV6621_CONNECTION_INSTANCE           0
 #define SV6621_CONNECTION_COMMAND_JOIN        9
 #define SV6621_CONNECTION_COMMAND_AUTH        10
+#define SV6621_CONNECTION_COMMAND_ASSOC       11
 #define SV6621_CONNECTION_COMMAND_TIMEOUT_MS  5000
 #define SV6621_CONNECTION_JOIN_HEADER_SIZE    25
 #define SV6621_CONNECTION_JOIN_RESPONSE_SIZE  4
 #define SV6621_CONNECTION_JOIN_BANDWIDTH_20MHZ 0
 #define SV6621_CONNECTION_AUTH_HEADER_SIZE     14
 #define SV6621_CONNECTION_AUTH_MAX_DATA_SIZE   512
+#define SV6621_CONNECTION_ASSOC_HEADER_SIZE    54
+#define SV6621_CONNECTION_ASSOC_BSSID_OFFSET   38
+#define SV6621_CONNECTION_ASSOC_IE_OFFSET_OFFSET  50
+#define SV6621_CONNECTION_ASSOC_IE_LENGTH_OFFSET  52
+#define SV6621_CONNECTION_ASSOC_MAX_IE_SIZE       1024
 
 /****************************************************************************
  * Private Function Prototypes
@@ -200,6 +206,58 @@ int sv6621_connection_authenticate(
 
   ret = sv6621_command_execute(
       command, SV6621_CONNECTION_INSTANCE, SV6621_CONNECTION_COMMAND_AUTH,
+      payload, payload_length, NULL, NULL,
+      SV6621_CONNECTION_COMMAND_TIMEOUT_MS);
+  kmm_free(payload);
+  return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
+}
+
+/****************************************************************************
+ * Name: sv6621_connection_associate
+ ****************************************************************************/
+
+int sv6621_connection_associate(
+    FAR struct sv6621_command_engine_s *command,
+    FAR const uint8_t bssid[SV6621_MAC_LENGTH],
+    FAR const uint8_t ht_capability[SV6621_CONNECTION_HT_CAPABILITY_SIZE],
+    FAR const uint8_t vht_capability[SV6621_CONNECTION_VHT_CAPABILITY_SIZE],
+    FAR const uint8_t *ies, size_t ies_length)
+{
+  FAR uint8_t *payload;
+  size_t payload_length;
+  int ret;
+
+  if (command == NULL || bssid == NULL || ht_capability == NULL ||
+      vht_capability == NULL || (ies == NULL && ies_length != 0) ||
+      ies_length > SV6621_CONNECTION_ASSOC_MAX_IE_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  payload_length = SV6621_CONNECTION_ASSOC_HEADER_SIZE + ies_length;
+  payload = kmm_zalloc(payload_length);
+  if (payload == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  memcpy(payload, ht_capability, SV6621_CONNECTION_HT_CAPABILITY_SIZE);
+  memcpy(payload + SV6621_CONNECTION_HT_CAPABILITY_SIZE, vht_capability,
+         SV6621_CONNECTION_VHT_CAPABILITY_SIZE);
+  memcpy(payload + SV6621_CONNECTION_ASSOC_BSSID_OFFSET, bssid,
+         SV6621_MAC_LENGTH);
+  sv6621_connection_put_le16(
+      payload + SV6621_CONNECTION_ASSOC_IE_OFFSET_OFFSET,
+      SV6621_CONNECTION_ASSOC_HEADER_SIZE);
+  sv6621_connection_put_le16(
+      payload + SV6621_CONNECTION_ASSOC_IE_LENGTH_OFFSET, ies_length);
+  if (ies_length > 0)
+    {
+      memcpy(payload + SV6621_CONNECTION_ASSOC_HEADER_SIZE, ies, ies_length);
+    }
+
+  ret = sv6621_command_execute(
+      command, SV6621_CONNECTION_INSTANCE, SV6621_CONNECTION_COMMAND_ASSOC,
       payload, payload_length, NULL, NULL,
       SV6621_CONNECTION_COMMAND_TIMEOUT_MS);
   kmm_free(payload);
