@@ -206,15 +206,36 @@ static int sv6621_core_pm_prepare(FAR struct pm_callback_s *callback,
 static void sv6621_core_event_worker(FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
-  int error = -EIO;
+  uint32_t generation;
 
-  if (nxmutex_lock(&dev->status_lock) >= 0)
+  for (;;)
     {
+      int error;
+
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          return;
+        }
+
+      generation = dev->fatal_generation;
       error = dev->status.last_error;
       nxmutex_unlock(&dev->status_lock);
-    }
+      sv6621_core_report(dev, SV6621_EVENT_FATAL, &error, sizeof(error));
 
-  sv6621_core_report(dev, SV6621_EVENT_FATAL, &error, sizeof(error));
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          return;
+        }
+
+      if (generation == dev->fatal_generation)
+        {
+          dev->fatal_work_scheduled = false;
+          nxmutex_unlock(&dev->status_lock);
+          return;
+        }
+
+      nxmutex_unlock(&dev->status_lock);
+    }
 }
 
 /****************************************************************************
@@ -223,9 +244,33 @@ static void sv6621_core_event_worker(FAR void *arg)
 
 static void sv6621_core_queue_fatal(FAR struct sv6621_dev_s *dev)
 {
-  if (work_available(&dev->event_work))
+  bool queue = false;
+  int ret;
+
+  if (nxmutex_lock(&dev->status_lock) < 0)
     {
-      work_queue(LPWORK, &dev->event_work, sv6621_core_event_worker, dev, 0);
+      return;
+    }
+
+  dev->fatal_generation++;
+  if (!dev->fatal_work_scheduled)
+    {
+      dev->fatal_work_scheduled = true;
+      queue = true;
+    }
+
+  nxmutex_unlock(&dev->status_lock);
+  if (!queue)
+    {
+      return;
+    }
+
+  ret = work_queue(LPWORK, &dev->event_work, sv6621_core_event_worker, dev,
+                   0);
+  if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
+    {
+      dev->fatal_work_scheduled = false;
+      nxmutex_unlock(&dev->status_lock);
     }
 }
 

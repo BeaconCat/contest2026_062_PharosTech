@@ -90,6 +90,8 @@ struct sv6621_dev_s
   struct work_s signal_work;
   struct work_s scan_work;
   struct work_s station_work;
+  uint32_t fatal_generation;
+  bool fatal_work_scheduled;
   int scan_result;
   uint16_t station_reason;
   uint32_t station_generation;
