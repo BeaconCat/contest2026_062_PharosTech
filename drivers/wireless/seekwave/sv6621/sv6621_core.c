@@ -721,6 +721,8 @@ static void sv6621_core_station_event(bool connected, uint16_t reason,
                                       FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
+  bool queue = false;
+  int ret;
 
   if (nxmutex_lock(&dev->status_lock) < 0)
     {
@@ -729,11 +731,25 @@ static void sv6621_core_station_event(bool connected, uint16_t reason,
 
   dev->station_connected = connected;
   dev->station_reason = reason;
-  nxmutex_unlock(&dev->status_lock);
-  if (work_available(&dev->station_work))
+  dev->station_generation++;
+  if (!dev->station_work_scheduled)
     {
-      work_queue(LPWORK, &dev->station_work, sv6621_core_station_worker, dev,
-                 0);
+      dev->station_work_scheduled = true;
+      queue = true;
+    }
+
+  nxmutex_unlock(&dev->status_lock);
+  if (!queue)
+    {
+      return;
+    }
+
+  ret = work_queue(LPWORK, &dev->station_work,
+                   sv6621_core_station_worker, dev, 0);
+  if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
+    {
+      dev->station_work_scheduled = false;
+      nxmutex_unlock(&dev->status_lock);
     }
 }
 
@@ -744,77 +760,98 @@ static void sv6621_core_station_event(bool connected, uint16_t reason,
 static void sv6621_core_station_worker(FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
-  struct sv6621_status_s status;
+  uint32_t generation;
+
+  for (;;)
+    {
+      struct sv6621_status_s status;
 #ifdef CONFIG_NET
-  struct sv6621_data_tx_context_s context;
-  bool link_ready = false;
+      struct sv6621_data_tx_context_s context;
+      bool link_ready = false;
 #endif
-  uint16_t reason;
-  bool station_ready = false;
-  bool connected;
+      uint16_t reason;
+      bool station_ready = false;
+      bool connected;
 
-  if (nxmutex_lock(&dev->status_lock) < 0)
-    {
-      return;
-    }
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          return;
+        }
 
-  connected = dev->station_connected;
-  reason = dev->station_reason;
-  if (connected && nxmutex_lock(&dev->station.lock) >= 0)
-    {
-      memcpy(dev->status.bssid, dev->station.target.bss.bssid,
-             SV6621_MAC_LENGTH);
-      dev->status.channel = dev->station.target.bss.channel;
-      dev->status.band = dev->station.target.bss.band;
-      dev->status.signal_dbm = dev->station.target.bss.signal_dbm;
-      memcpy(dev->status.ssid, dev->station.target.bss.ssid,
-             dev->station.target.bss.ssid_length);
-      dev->status.ssid_length = dev->station.target.bss.ssid_length;
-      station_ready = true;
+      generation = dev->station_generation;
+      connected = dev->station_connected;
+      reason = dev->station_reason;
+      if (connected && nxmutex_lock(&dev->station.lock) >= 0)
+        {
+          memcpy(dev->status.bssid, dev->station.target.bss.bssid,
+                 SV6621_MAC_LENGTH);
+          dev->status.channel = dev->station.target.bss.channel;
+          dev->status.band = dev->station.target.bss.band;
+          dev->status.signal_dbm = dev->station.target.bss.signal_dbm;
+          memcpy(dev->status.ssid, dev->station.target.bss.ssid,
+                 dev->station.target.bss.ssid_length);
+          dev->status.ssid_length = dev->station.target.bss.ssid_length;
+          station_ready = true;
 #ifdef CONFIG_NET
-      context.peer_index = dev->station.peer.peer_index;
-      context.multicast_index = dev->station.peer.multicast_index;
-      context.instance = dev->station.peer.instance;
-      context.lmac_id = dev->station.peer.lmac_id;
-      context.tid = 0;
-      link_ready = true;
+          context.peer_index = dev->station.peer.peer_index;
+          context.multicast_index = dev->station.peer.multicast_index;
+          context.instance = dev->station.peer.instance;
+          context.lmac_id = dev->station.peer.lmac_id;
+          context.tid = 0;
+          link_ready = true;
 #endif
-      nxmutex_unlock(&dev->station.lock);
-    }
-  else if (!connected)
-    {
-      memset(dev->status.bssid, 0, sizeof(dev->status.bssid));
-      memset(dev->status.ssid, 0, sizeof(dev->status.ssid));
-      dev->status.ssid_length = 0;
-      dev->status.channel = 0;
-      dev->status.signal_dbm = 0;
-    }
+          nxmutex_unlock(&dev->station.lock);
+        }
+      else if (!connected)
+        {
+          memset(dev->status.bssid, 0, sizeof(dev->status.bssid));
+          memset(dev->status.ssid, 0, sizeof(dev->status.ssid));
+          dev->status.ssid_length = 0;
+          dev->status.channel = 0;
+          dev->status.signal_dbm = 0;
+        }
 
-  dev->status.connected = connected && station_ready;
-  status = dev->status;
-  nxmutex_unlock(&dev->status_lock);
+      dev->status.connected = connected && station_ready;
+      status = dev->status;
+      nxmutex_unlock(&dev->status_lock);
 #ifdef CONFIG_NET
-  sv6621_network_set_link(&dev->network, connected && link_ready,
-                          link_ready ? &context : NULL);
+      sv6621_network_set_link(&dev->network, connected && link_ready,
+                              link_ready ? &context : NULL);
 #endif
-  if (!connected)
-    {
-      sv6621_wpa_cancel(&dev->wpa, -ECONNRESET);
-      (void)sv6621_data_set_tx_block(&dev->data,
-                                     SV6621_DATA_TX_BLOCK_CHANNEL, false);
-    }
+      if (!connected)
+        {
+          sv6621_wpa_cancel(&dev->wpa, -ECONNRESET);
+          (void)sv6621_data_set_tx_block(
+              &dev->data, SV6621_DATA_TX_BLOCK_CHANNEL, false);
+        }
 
-  if (connected)
-    {
-      (void)sv6621_set_signal_threshold(dev, SV6621_CORE_CQM_THRESHOLD_DBM,
-                                        SV6621_CORE_CQM_HYSTERESIS_DB);
-      sv6621_core_report(dev, SV6621_EVENT_CONNECTED, &status,
-                         sizeof(status));
-    }
-  else
-    {
-      sv6621_core_report(dev, SV6621_EVENT_DISCONNECTED, &reason,
-                         sizeof(reason));
+      if (connected)
+        {
+          (void)sv6621_set_signal_threshold(
+              dev, SV6621_CORE_CQM_THRESHOLD_DBM,
+              SV6621_CORE_CQM_HYSTERESIS_DB);
+          sv6621_core_report(dev, SV6621_EVENT_CONNECTED, &status,
+                             sizeof(status));
+        }
+      else
+        {
+          sv6621_core_report(dev, SV6621_EVENT_DISCONNECTED, &reason,
+                             sizeof(reason));
+        }
+
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          return;
+        }
+
+      if (generation == dev->station_generation)
+        {
+          dev->station_work_scheduled = false;
+          nxmutex_unlock(&dev->status_lock);
+          return;
+        }
+
+      nxmutex_unlock(&dev->status_lock);
     }
 }
 
