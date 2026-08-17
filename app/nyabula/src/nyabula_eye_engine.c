@@ -520,6 +520,18 @@ static void nyabula_eye_engine_update_scene_frame(
           frame->previous_alpha = 0.0f;
         }
     }
+  else if (engine->scene_phase == NYABULA_EYE_SCENE_PHASE_REOPENING_OUT &&
+           engine->scene.scene != NYABULA_EYE_SCENE_NONE &&
+           engine->scene.style == NYABULA_EYE_SCENE_STYLE_MINIMAL)
+    {
+      fade_elapsed = lv_tick_elaps(engine->scene_phase_start);
+      frame->alpha = 1.0f - nyabula_eye_engine_bezier(
+          nyabula_eye_engine_clamp(
+              (float)fade_elapsed /
+                  (NYABULA_EYE_SCENE_OPEN_MS * 0.86f),
+              0.0f, 1.0f));
+      frame->previous_alpha = 0.0f;
+    }
   else if (engine->scene_phase == NYABULA_EYE_SCENE_PHASE_VISIBLE &&
            engine->scene.style == NYABULA_EYE_SCENE_STYLE_MINIMAL)
     {
@@ -913,7 +925,6 @@ int nyabula_eye_engine_hide_scene(struct nyabula_eye_engine_s *engine)
   memset(&engine->pending_scene, 0, sizeof(engine->pending_scene));
   if (engine->scene.style == NYABULA_EYE_SCENE_STYLE_MINIMAL)
     {
-      memset(&engine->scene, 0, sizeof(engine->scene));
       memset(&engine->previous_scene, 0, sizeof(engine->previous_scene));
       engine->scene_phase = NYABULA_EYE_SCENE_PHASE_REOPENING_OUT;
     }
