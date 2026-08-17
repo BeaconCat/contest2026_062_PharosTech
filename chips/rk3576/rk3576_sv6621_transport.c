@@ -651,7 +651,7 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
   uint32_t status;
   uint32_t fifo_count;
   size_t words = (length + 3) / 4;
-  int received = 0;
+  size_t received = 0;
   int index;
   bool block = length >= RK3576_SV6621_BLOCK_SIZE &&
                (length % RK3576_SV6621_BLOCK_SIZE) == 0;
@@ -696,7 +696,7 @@ static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
       while (fifo_count-- > 0 && received < words)
         {
           uint32_t word = getreg32(RK3576_SV6621_FIFO);
-          int byte;
+          size_t byte;
 
           for (byte = 0; byte < 4 && received * 4 + byte < length; byte++)
             {
@@ -727,7 +727,7 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
   uint32_t argument;
   uint32_t status;
   size_t words = (length + 3) / 4;
-  int sent = 0;
+  size_t sent = 0;
   int index;
   bool block = length >= RK3576_SV6621_BLOCK_SIZE &&
                (length % RK3576_SV6621_BLOCK_SIZE) == 0;
@@ -780,7 +780,7 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
       if ((getreg32(RK3576_SV6621_STATUS) & (1u << 3)) == 0)
         {
           uint32_t word = 0;
-          int byte;
+          size_t byte;
 
           for (byte = 0; byte < 4 && sent * 4 + byte < length; byte++)
             {
