@@ -40,6 +40,13 @@
 #define SV6621_MAC_LENGTH      6
 #define SV6621_SSID_MAX_LENGTH 32
 #define SV6621_KEY_MAX_LENGTH  64
+#define SV6621_REGULATORY_MAX_RULES 8
+
+#define SV6621_REGULATORY_FLAG_NO_OFDM    (1 << 0)
+#define SV6621_REGULATORY_FLAG_NO_OUTDOOR (1 << 3)
+#define SV6621_REGULATORY_FLAG_DFS        (1 << 4)
+#define SV6621_REGULATORY_FLAG_NO_IR      (1 << 7)
+#define SV6621_REGULATORY_FLAG_AUTO_BW    (1 << 11)
 
 /****************************************************************************
  * Public Types
@@ -90,6 +97,22 @@ struct sv6621_firmware_s
 {
   FAR const uint8_t *data;
   size_t length;
+};
+
+struct sv6621_regulatory_rule_s
+{
+  uint8_t start_channel;
+  uint8_t channel_span;
+  int8_t max_power_dbm;
+  int8_t max_antenna_gain_dbi;
+  uint32_t flags;
+};
+
+struct sv6621_regulatory_domain_s
+{
+  char country[2];
+  uint8_t rule_count;
+  struct sv6621_regulatory_rule_s rules[SV6621_REGULATORY_MAX_RULES];
 };
 
 struct sv6621_bss_s
@@ -148,6 +171,7 @@ struct sv6621_config_s
   struct sv6621_firmware_s dram;
   struct sv6621_firmware_s nvram;
   struct sv6621_firmware_s calibration;
+  FAR const struct sv6621_regulatory_domain_s *regulatory;
   sv6621_event_t event;
   FAR void *event_arg;
 };
