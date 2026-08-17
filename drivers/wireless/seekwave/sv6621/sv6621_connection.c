@@ -39,10 +39,13 @@
 
 #define SV6621_CONNECTION_INSTANCE           0
 #define SV6621_CONNECTION_COMMAND_JOIN        9
+#define SV6621_CONNECTION_COMMAND_AUTH        10
 #define SV6621_CONNECTION_COMMAND_TIMEOUT_MS  5000
 #define SV6621_CONNECTION_JOIN_HEADER_SIZE    25
 #define SV6621_CONNECTION_JOIN_RESPONSE_SIZE  4
 #define SV6621_CONNECTION_JOIN_BANDWIDTH_20MHZ 0
+#define SV6621_CONNECTION_AUTH_HEADER_SIZE     14
+#define SV6621_CONNECTION_AUTH_MAX_DATA_SIZE   512
 
 /****************************************************************************
  * Private Function Prototypes
@@ -143,4 +146,62 @@ int sv6621_connection_join(FAR struct sv6621_command_engine_s *command,
   peer->instance = response[2];
   peer->multicast_index = response[3];
   return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_connection_authenticate
+ ****************************************************************************/
+
+int sv6621_connection_authenticate(
+    FAR struct sv6621_command_engine_s *command,
+    enum sv6621_connection_auth_algorithm_e algorithm,
+    FAR const uint8_t *auth_data, size_t auth_data_length,
+    FAR const uint8_t *auth_ies, size_t auth_ies_length)
+{
+  FAR uint8_t *payload;
+  size_t payload_length;
+  size_t offset;
+  int ret;
+
+  if (command == NULL || algorithm < SV6621_CONNECTION_AUTH_OPEN ||
+      algorithm > SV6621_CONNECTION_AUTH_SAE ||
+      (auth_data == NULL && auth_data_length != 0) ||
+      (auth_ies == NULL && auth_ies_length != 0) ||
+      auth_data_length > SV6621_CONNECTION_AUTH_MAX_DATA_SIZE ||
+      auth_ies_length > SV6621_CONNECTION_AUTH_MAX_DATA_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  payload_length = SV6621_CONNECTION_AUTH_HEADER_SIZE + auth_data_length +
+                   auth_ies_length;
+  payload = kmm_zalloc(payload_length);
+  if (payload == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  sv6621_connection_put_le16(payload, algorithm);
+  offset = SV6621_CONNECTION_AUTH_HEADER_SIZE;
+  if (auth_data_length > 0)
+    {
+      sv6621_connection_put_le16(payload + 6, offset);
+      sv6621_connection_put_le16(payload + 8, auth_data_length);
+      memcpy(payload + offset, auth_data, auth_data_length);
+      offset += auth_data_length;
+    }
+
+  if (auth_ies_length > 0)
+    {
+      sv6621_connection_put_le16(payload + 10, offset);
+      sv6621_connection_put_le16(payload + 12, auth_ies_length);
+      memcpy(payload + offset, auth_ies, auth_ies_length);
+    }
+
+  ret = sv6621_command_execute(
+      command, SV6621_CONNECTION_INSTANCE, SV6621_CONNECTION_COMMAND_AUTH,
+      payload, payload_length, NULL, NULL,
+      SV6621_CONNECTION_COMMAND_TIMEOUT_MS);
+  kmm_free(payload);
+  return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
 }
