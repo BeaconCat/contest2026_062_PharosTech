@@ -74,6 +74,7 @@ struct sv6621_scan_entry_s
   uint8_t bssid_index;
   uint8_t max_bssid_indicator;
   uint16_t ie_length;
+  bool ies_truncated;
   uint8_t ies[SV6621_SCAN_IE_CAPACITY];
 };
 
@@ -93,6 +94,7 @@ struct sv6621_scan_stats_s
   uint32_t cancelled;
   uint32_t timed_out;
   uint32_t malformed_reports;
+  uint32_t truncated_reports;
   uint32_t late_events;
 };
 
