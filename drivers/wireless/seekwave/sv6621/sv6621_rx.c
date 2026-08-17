@@ -44,7 +44,9 @@
 #define SV6621_RX_VALID_LENGTH_SIZE 8
 #define SV6621_RX_PENDING_SIZE      4
 #define SV6621_RX_MAX_DRAIN_BURSTS  32
+#define SV6621_RX_FIFO_INDICATOR    0x181
 #define SV6621_RX_EXT_INTERRUPT     0x182
+#define SV6621_RX_FIFO_ASSERT       0xff
 #define SV6621_RX_BUFFER_SIZE \
   (SV6621_PACKET_SIZE * SV6621_RX_MAX_SLOTS + SV6621_RX_TRAILER_SIZE)
 
@@ -112,6 +114,35 @@ static void sv6621_rx_worker(FAR void *arg)
   FAR struct sv6621_rx_s *rx = arg;
   unsigned int slots = 1;
   unsigned int burst;
+  uint8_t fifo_indicator;
+  int ret;
+
+  ret = rx->transport->ops->read_byte(rx->transport,
+                                      SV6621_SDIO_FUNCTION_CONTROL,
+                                      SV6621_RX_FIFO_INDICATOR,
+                                      &fifo_indicator);
+  if (ret < 0)
+    {
+      rx->stats.transport_errors++;
+      sv6621_rx_report_error(rx, ret);
+      return;
+    }
+
+  if (fifo_indicator == SV6621_RX_FIFO_ASSERT)
+    {
+      sv6621_rx_report_error(rx, -EIO);
+      return;
+    }
+
+  if (rx->fifo_indicator_valid &&
+      fifo_indicator == rx->stats.last_fifo_indicator)
+    {
+      rx->stats.duplicate_interrupts++;
+      return;
+    }
+
+  rx->stats.last_fifo_indicator = fifo_indicator;
+  rx->fifo_indicator_valid = true;
 
   for (burst = 0;
        burst < SV6621_RX_MAX_DRAIN_BURSTS && rx->running && !rx->suspended;
@@ -119,8 +150,6 @@ static void sv6621_rx_worker(FAR void *arg)
     {
       size_t length = slots * SV6621_PACKET_SIZE + SV6621_RX_TRAILER_SIZE;
       uint32_t pending_count;
-      int ret;
-
       ret = rx->transport->ops->read(rx->transport, SV6621_SDIO_FUNCTION_DATA,
                                      SV6621_SDIO_PACKET_WINDOW, false,
                                      rx->buffer, length);
@@ -234,6 +263,7 @@ int sv6621_rx_start(FAR struct sv6621_rx_s *rx)
 
   rx->running = true;
   rx->suspended = false;
+  rx->fifo_indicator_valid = false;
   ret = rx->transport->ops->enable_irq(rx->transport, true);
   if (ret < 0)
     {

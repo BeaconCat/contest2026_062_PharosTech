@@ -45,7 +45,11 @@
 #define SV6621_CORE_CONNECT_TIMEOUT_MS 5000
 #define SV6621_CORE_HANDSHAKE_TIMEOUT_MS 10000
 #define SV6621_CORE_EVENT_CREDIT_UPDATE 16
+#define SV6621_CORE_EVENT_MIC_FAILURE   17
 #define SV6621_CORE_EVENT_THERMAL_WARN  18
+#define SV6621_CORE_EVENT_CQM           20
+#define SV6621_CORE_MIC_FAILURE_SIZE    9
+#define SV6621_CORE_CQM_EVENT_SIZE      11
 
 /****************************************************************************
  * Private Function Prototypes
@@ -74,6 +78,8 @@ static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
                                        int error);
 static void sv6621_core_recovery_worker(FAR void *arg);
 static void sv6621_core_thermal_worker(FAR void *arg);
+static void sv6621_core_security_worker(FAR void *arg);
+static void sv6621_core_signal_worker(FAR void *arg);
 static int sv6621_core_set_state(FAR struct sv6621_dev_s *dev,
                                  enum sv6621_state_e state, int error);
 
@@ -211,6 +217,47 @@ static void sv6621_core_thermal_worker(FAR void *arg)
   nxmutex_unlock(&dev->status_lock);
   sv6621_core_report(dev, SV6621_EVENT_THERMAL_CHANGED, &thermal,
                      sizeof(thermal));
+}
+
+/****************************************************************************
+ * Name: sv6621_core_security_worker
+ ****************************************************************************/
+
+static void sv6621_core_security_worker(FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+  struct sv6621_mic_failure_s failure;
+
+  if (nxmutex_lock(&dev->status_lock) < 0)
+    {
+      return;
+    }
+
+  failure = dev->mic_failure;
+  nxmutex_unlock(&dev->status_lock);
+  sv6621_core_report(dev, SV6621_EVENT_MIC_FAILURE, &failure,
+                     sizeof(failure));
+}
+
+/****************************************************************************
+ * Name: sv6621_core_signal_worker
+ ****************************************************************************/
+
+static void sv6621_core_signal_worker(FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+  struct sv6621_signal_event_s event;
+
+  if (nxmutex_lock(&dev->status_lock) < 0)
+    {
+      return;
+    }
+
+  event = dev->signal_event;
+  dev->status.signal_dbm = event.signal_dbm;
+  nxmutex_unlock(&dev->status_lock);
+  sv6621_core_report(dev, SV6621_EVENT_SIGNAL_CHANGED, &event,
+                     sizeof(event));
 }
 
 /****************************************************************************
@@ -379,6 +426,71 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
         {
           work_queue(LPWORK, &dev->thermal_work,
                      sv6621_core_thermal_worker, dev, 0);
+        }
+
+      return;
+    }
+
+  if (id == SV6621_CORE_EVENT_MIC_FAILURE)
+    {
+      if (length != SV6621_CORE_MIC_FAILURE_SIZE)
+        {
+          sv6621_core_queue_recovery(dev, -EPROTO);
+          return;
+        }
+
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          return;
+        }
+
+      dev->mic_failure.group_key = payload[0] != 0;
+      dev->mic_failure.key_index = payload[1];
+      dev->mic_failure.lmac_id = payload[2];
+      memcpy(dev->mic_failure.address, payload + 3, SV6621_MAC_LENGTH);
+      nxmutex_unlock(&dev->status_lock);
+      if (work_available(&dev->security_work))
+        {
+          work_queue(LPWORK, &dev->security_work,
+                     sv6621_core_security_worker, dev, 0);
+        }
+
+      return;
+    }
+
+  if (id == SV6621_CORE_EVENT_CQM)
+    {
+      uint8_t status;
+
+      if (length != SV6621_CORE_CQM_EVENT_SIZE)
+        {
+          sv6621_core_queue_recovery(dev, -EPROTO);
+          return;
+        }
+
+      status = payload[0];
+      if (status < SV6621_SIGNAL_LOW || status > SV6621_SIGNAL_TDLS_LOSS ||
+          payload[10] > SV6621_BAND_5GHZ)
+        {
+          return;
+        }
+
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          return;
+        }
+
+      dev->signal_event.status = (enum sv6621_signal_status_e)status;
+      dev->signal_event.signal_dbm =
+          (int16_t)(payload[1] | ((uint16_t)payload[2] << 8));
+      memcpy(dev->signal_event.bssid, payload + 3, SV6621_MAC_LENGTH);
+      dev->signal_event.channel = payload[9];
+      dev->signal_event.band = (enum sv6621_band_e)payload[10];
+      nxmutex_unlock(&dev->status_lock);
+      if (work_available(&dev->signal_work))
+        {
+          work_queue(LPWORK, &dev->signal_work,
+                     sv6621_core_signal_worker, dev, 0);
         }
 
       return;
@@ -752,6 +864,8 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
   sv6621_stop(dev);
   work_cancel_sync(LPWORK, &dev->recovery_work);
   work_cancel_sync(LPWORK, &dev->thermal_work);
+  work_cancel_sync(LPWORK, &dev->security_work);
+  work_cancel_sync(LPWORK, &dev->signal_work);
   work_cancel_sync(LPWORK, &dev->event_work);
   work_cancel_sync(LPWORK, &dev->scan_work);
   work_cancel_sync(LPWORK, &dev->station_work);
@@ -927,7 +1041,7 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
 #ifdef CONFIG_NET
   if (!dev->network.registered)
     {
-      ret = sv6621_network_init(&dev->network, &dev->data, &dev->command,
+      ret = sv6621_network_init(&dev->network, dev, &dev->data, &dev->command,
                                 dev->wifi_info.max_multicast_addresses,
                                 dev->wifi_info.mac);
       if (ret < 0)
@@ -1398,6 +1512,59 @@ int sv6621_disconnect(FAR struct sv6621_dev_s *dev, uint16_t reason)
         }
     }
 
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_set_signal_threshold
+ ****************************************************************************/
+
+int sv6621_set_signal_threshold(FAR struct sv6621_dev_s *dev,
+                                int32_t threshold_dbm,
+                                uint8_t hysteresis_db)
+{
+  uint8_t instance;
+  int ret;
+
+  if (dev == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  if (dev->status.state != SV6621_STATE_WIFI_READY ||
+      !dev->station_connected)
+    {
+      ret = -ENOTCONN;
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  nxmutex_unlock(&dev->status_lock);
+  ret = nxmutex_lock(&dev->station.lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  instance = dev->station.peer.instance;
+  nxmutex_unlock(&dev->station.lock);
+  ret = sv6621_signal_configure(&dev->command, instance, threshold_dbm,
+                                hysteresis_db);
+
+unlock_lifecycle:
   nxmutex_unlock(&dev->lifecycle_lock);
   return ret;
 }

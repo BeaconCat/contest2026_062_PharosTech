@@ -42,6 +42,7 @@
 #include "sv6621_command.h"
 #include "sv6621_data.h"
 #include "sv6621_offload.h"
+#include "sv6621_ioctl.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -63,6 +64,7 @@ struct sv6621_network_s
   struct work_s multicast_work;
   FAR struct sv6621_data_s *data;
   FAR struct sv6621_command_engine_s *command;
+  struct sv6621_ioctl_s ioctl;
   struct sv6621_data_tx_context_s tx_context;
   bool registered;
   bool interface_up;
@@ -82,6 +84,7 @@ struct sv6621_network_s
  ****************************************************************************/
 
 int sv6621_network_init(FAR struct sv6621_network_s *network,
+                        FAR struct sv6621_dev_s *owner,
                         FAR struct sv6621_data_s *data,
                         FAR struct sv6621_command_engine_s *command,
                         uint8_t multicast_limit,

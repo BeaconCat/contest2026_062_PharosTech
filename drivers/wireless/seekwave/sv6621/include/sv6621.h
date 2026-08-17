@@ -129,12 +129,39 @@ enum sv6621_event_e
   SV6621_EVENT_RECOVERY_STARTED,
   SV6621_EVENT_RECOVERY_COMPLETE,
   SV6621_EVENT_THERMAL_CHANGED,
+  SV6621_EVENT_MIC_FAILURE,
+  SV6621_EVENT_SIGNAL_CHANGED,
   SV6621_EVENT_FATAL
+};
+
+enum sv6621_signal_status_e
+{
+  SV6621_SIGNAL_LOW = 1,
+  SV6621_SIGNAL_HIGH,
+  SV6621_SIGNAL_BEACON_LOSS,
+  SV6621_SIGNAL_TDLS_LOSS
+};
+
+struct sv6621_signal_event_s
+{
+  enum sv6621_signal_status_e status;
+  int16_t signal_dbm;
+  uint8_t bssid[SV6621_MAC_LENGTH];
+  uint8_t channel;
+  enum sv6621_band_e band;
 };
 
 struct sv6621_thermal_s
 {
   bool transmit_blocked;
+};
+
+struct sv6621_mic_failure_s
+{
+  uint8_t address[SV6621_MAC_LENGTH];
+  uint8_t key_index;
+  uint8_t lmac_id;
+  bool group_key;
 };
 
 struct sv6621_firmware_s
@@ -284,6 +311,9 @@ int sv6621_scan(FAR struct sv6621_dev_s *dev);
 int sv6621_connect(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_connect_s *request);
 int sv6621_disconnect(FAR struct sv6621_dev_s *dev, uint16_t reason);
+int sv6621_set_signal_threshold(FAR struct sv6621_dev_s *dev,
+                                int32_t threshold_dbm,
+                                uint8_t hysteresis_db);
 int sv6621_suspend(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_suspend_s *config);
 int sv6621_resume(FAR struct sv6621_dev_s *dev);
