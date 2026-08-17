@@ -263,6 +263,7 @@ struct sv6621_status_s
   enum sv6621_band_e band;
   int16_t signal_dbm;
   uint32_t recovery_count;
+  uint32_t unprotected_frames;
   int last_error;
 };
 
