@@ -50,6 +50,8 @@ static int sv6621_ioctl_essid(FAR struct sv6621_ioctl_s *ioctl,
                               FAR struct iwreq *request, bool set);
 static int sv6621_ioctl_frequency(FAR struct sv6621_ioctl_s *ioctl,
                                   FAR struct iwreq *request);
+static int sv6621_ioctl_frequency_set(FAR struct sv6621_ioctl_s *ioctl,
+                                      FAR const struct iwreq *request);
 static int sv6621_ioctl_range(FAR struct sv6621_ioctl_s *ioctl,
                               FAR struct iwreq *request);
 static int sv6621_ioctl_auth_query(FAR struct sv6621_ioctl_s *ioctl,
@@ -254,6 +256,77 @@ static int sv6621_ioctl_frequency(FAR struct sv6621_ioctl_s *ioctl,
   request->u.freq.e = 0;
   request->u.freq.i = status.channel;
   request->u.freq.flags = status.channel == 0 ? IW_FREQ_AUTO : IW_FREQ_FIXED;
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_ioctl_frequency_set
+ ****************************************************************************/
+
+static int sv6621_ioctl_frequency_set(FAR struct sv6621_ioctl_s *ioctl,
+                                      FAR const struct iwreq *request)
+{
+  int64_t frequency;
+  int exponent;
+  int channel;
+
+  if (request->u.freq.flags == IW_FREQ_AUTO || request->u.freq.m == 0)
+    {
+      ioctl->connection.channel = 0;
+      return 0;
+    }
+
+  if (request->u.freq.e == 0 && request->u.freq.m <= UINT8_MAX)
+    {
+      channel = request->u.freq.m;
+    }
+  else
+    {
+      frequency = request->u.freq.m;
+      exponent = request->u.freq.e;
+      while (exponent > 6)
+        {
+          if (frequency > INT64_MAX / 10)
+            {
+              return -ERANGE;
+            }
+
+          frequency *= 10;
+          exponent--;
+        }
+
+      while (exponent < 6)
+        {
+          frequency /= 10;
+          exponent++;
+        }
+
+      if (frequency == 2484)
+        {
+          channel = 14;
+        }
+      else if (frequency >= 2412 && frequency <= 2472 &&
+               (frequency - 2407) % 5 == 0)
+        {
+          channel = (frequency - 2407) / 5;
+        }
+      else if (frequency >= 5000 && frequency <= 5900 &&
+               (frequency - 5000) % 5 == 0)
+        {
+          channel = (frequency - 5000) / 5;
+        }
+      else
+        {
+          return -EINVAL;
+        }
+    }
+
+  if (channel <= 0 || channel > UINT8_MAX)
+    {
+      return -EINVAL;
+    }
+
+  ioctl->connection.channel = channel;
   return 0;
 }
 
@@ -692,6 +765,10 @@ int sv6621_ioctl_handle(FAR struct sv6621_ioctl_s *ioctl, int command,
 
       case SIOCGIWFREQ:
         ret = sv6621_ioctl_frequency(ioctl, request);
+        break;
+
+      case SIOCSIWFREQ:
+        ret = sv6621_ioctl_frequency_set(ioctl, request);
         break;
 
       case SIOCGIWRANGE:
