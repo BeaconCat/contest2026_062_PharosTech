@@ -55,6 +55,18 @@
 #define SV6621_CONNECTION_ASSOC_MAX_IE_SIZE       1024
 #define SV6621_CONNECTION_DISCONNECT_HEADER_SIZE  8
 #define SV6621_CONNECTION_DISCONNECT_MAX_IE_SIZE  512
+#define SV6621_CONNECTION_IE_SUPPORTED_RATES       1
+#define SV6621_CONNECTION_IE_RSN                   48
+#define SV6621_CONNECTION_IE_EXT_SUPPORTED_RATES   50
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+static const uint8_t g_sv6621_connection_rsn_psk_ccmp[] = {
+  SV6621_CONNECTION_IE_RSN, 20, 1, 0, 0x00, 0x0f, 0xac, 4,
+  1, 0, 0x00, 0x0f, 0xac, 4, 1, 0, 0x00, 0x0f, 0xac, 2, 0, 0
+};
 
 /****************************************************************************
  * Private Function Prototypes
@@ -313,4 +325,89 @@ int sv6621_connection_disconnect(
       NULL, SV6621_CONNECTION_COMMAND_TIMEOUT_MS);
   kmm_free(payload);
   return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
+}
+
+/****************************************************************************
+ * Name: sv6621_connection_build_association_ies
+ ****************************************************************************/
+
+int sv6621_connection_build_association_ies(
+    FAR const struct sv6621_scan_entry_s *entry,
+    enum sv6621_security_e security, FAR uint8_t *ies, size_t capacity,
+    FAR size_t *length)
+{
+  size_t input = 0;
+  size_t output = 0;
+
+  if (entry == NULL || ies == NULL || length == NULL || capacity == 0 ||
+      entry->ie_length > SV6621_SCAN_IE_CAPACITY)
+    {
+      return -EINVAL;
+    }
+
+  if (security == SV6621_SECURITY_WPA3_SAE)
+    {
+      return -EOPNOTSUPP;
+    }
+
+  if (security != SV6621_SECURITY_OPEN &&
+      security != SV6621_SECURITY_WPA2_PSK &&
+      security != SV6621_SECURITY_WPA2_WPA3_PSK)
+    {
+      return -EINVAL;
+    }
+
+  while (input < entry->ie_length)
+    {
+      uint8_t id;
+      uint8_t ie_length;
+      size_t encoded_length;
+
+      if (entry->ie_length - input < 2)
+        {
+          return -EPROTO;
+        }
+
+      id = entry->ies[input];
+      ie_length = entry->ies[input + 1];
+      encoded_length = (size_t)ie_length + 2;
+      if (encoded_length > entry->ie_length - input)
+        {
+          return -EPROTO;
+        }
+
+      if (id == SV6621_CONNECTION_IE_SUPPORTED_RATES ||
+          id == SV6621_CONNECTION_IE_EXT_SUPPORTED_RATES)
+        {
+          if (encoded_length > capacity - output)
+            {
+              return -ENOSPC;
+            }
+
+          memcpy(ies + output, entry->ies + input, encoded_length);
+          output += encoded_length;
+        }
+
+      input += encoded_length;
+    }
+
+  if (security != SV6621_SECURITY_OPEN)
+    {
+      if (sizeof(g_sv6621_connection_rsn_psk_ccmp) > capacity - output)
+        {
+          return -ENOSPC;
+        }
+
+      memcpy(ies + output, g_sv6621_connection_rsn_psk_ccmp,
+             sizeof(g_sv6621_connection_rsn_psk_ccmp));
+      output += sizeof(g_sv6621_connection_rsn_psk_ccmp);
+    }
+
+  if (output == 0)
+    {
+      return -EPROTO;
+    }
+
+  *length = output;
+  return 0;
 }
