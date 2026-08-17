@@ -1,0 +1,59 @@
+#
+# For a description of the syntax of this file, see kconfig-language.txt in the
+# NuttX tools repository.
+#
+
+menuconfig CONTEST2026_062_NYABULA
+	bool "Nyabula companion application"
+	default n
+	depends on GRAPHICS_LVGL
+	---help---
+		Enable the Nyabula companion application and its dual-eye UI.
+
+if CONTEST2026_062_NYABULA
+
+config CONTEST2026_062_NYABULA_PRIORITY
+	int "Nyabula task priority"
+	default 100
+
+config CONTEST2026_062_NYABULA_STACKSIZE
+	int "Nyabula task stack size"
+	default 8192
+
+config CONTEST2026_062_NYABULA_GATEWAY
+	bool "Nyabula HTTP/JSON control gateway"
+	default y
+	depends on NET && NET_TCP && NETUTILS_CJSON
+	---help---
+		Expose the Nyabula Core v1 control API and embedded debug console.
+		The gateway only validates and enqueues commands; Eye Engine calls stay
+		on the LVGL owner thread.
+
+config CONTEST2026_062_NYABULA_GATEWAY_PORT
+	int "Nyabula control gateway port"
+	default 8080
+	range 1 65535
+	depends on CONTEST2026_062_NYABULA_GATEWAY
+
+config CONTEST2026_062_NYABULA_GATEWAY_STACKSIZE
+	int "Nyabula control gateway stack size"
+	default 16384
+	range 4096 65536
+	depends on CONTEST2026_062_NYABULA_GATEWAY
+
+config CONTEST2026_062_NYABULA_DYNAMIC_FONTS
+	bool "Load the complete Nyabula fonts with FreeType"
+	default y
+	select LIB_FREETYPE
+	select LV_USE_FREETYPE
+	---help---
+		Load complete TTF assets at runtime so scene payloads are not limited to
+		a build-time glyph subset. The generated fonts remain as a boot-safe
+		fallback when the resource filesystem is unavailable.
+
+config CONTEST2026_062_NYABULA_FONT_ROOT
+	string "Nyabula complete font directory"
+	default "/data/nyabula/fonts"
+	depends on CONTEST2026_062_NYABULA_DYNAMIC_FONTS
+
+endif
