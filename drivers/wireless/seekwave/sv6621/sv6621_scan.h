@@ -29,6 +29,7 @@
 
 #include <nuttx/config.h>
 #include <nuttx/mutex.h>
+#include <nuttx/wqueue.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -44,6 +45,8 @@
 #define SV6621_SCAN_FLAG_ACS            (1 << 1)
 #define SV6621_SCAN_FLAG_PASSIVE        (1 << 7)
 #define SV6621_SCAN_CACHE_CAPACITY      64
+#define SV6621_SCAN_EVENT_COMPLETE      0
+#define SV6621_SCAN_EVENT_REPORT        11
 
 /****************************************************************************
  * Public Types
@@ -71,6 +74,31 @@ struct sv6621_scan_cache_s
   uint32_t dropped;
 };
 
+struct sv6621_scan_stats_s
+{
+  uint32_t started;
+  uint32_t completed;
+  uint32_t cancelled;
+  uint32_t timed_out;
+  uint32_t malformed_reports;
+  uint32_t late_events;
+};
+
+typedef void (*sv6621_scan_complete_t)(int result, FAR void *arg);
+
+struct sv6621_scan_s
+{
+  mutex_t lock;
+  FAR struct sv6621_command_engine_s *command;
+  struct sv6621_scan_cache_s cache;
+  struct work_s timeout_work;
+  sv6621_scan_complete_t complete;
+  FAR void *complete_arg;
+  uint32_t timeout_ms;
+  bool active;
+  struct sv6621_scan_stats_s stats;
+};
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
@@ -90,5 +118,18 @@ int sv6621_scan_cache_store(FAR struct sv6621_scan_cache_s *cache,
 int sv6621_scan_cache_snapshot(FAR struct sv6621_scan_cache_s *cache,
                                FAR struct sv6621_bss_s *entries,
                                FAR size_t *count);
+int sv6621_scan_controller_init(FAR struct sv6621_scan_s *scan,
+                                FAR struct sv6621_command_engine_s *command,
+                                uint32_t timeout_ms,
+                                sv6621_scan_complete_t complete,
+                                FAR void *complete_arg);
+void sv6621_scan_controller_deinit(FAR struct sv6621_scan_s *scan);
+int sv6621_scan_controller_begin(
+    FAR struct sv6621_scan_s *scan,
+    FAR const struct sv6621_scan_channel_s *channels, size_t channel_count);
+int sv6621_scan_controller_cancel(FAR struct sv6621_scan_s *scan);
+void sv6621_scan_command_event(uint8_t instance, uint8_t id,
+                               FAR const uint8_t *payload, size_t length,
+                               FAR void *arg);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_SCAN_H */

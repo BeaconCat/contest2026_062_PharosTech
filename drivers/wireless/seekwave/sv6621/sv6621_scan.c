@@ -26,6 +26,7 @@
 
 #include <nuttx/config.h>
 
+#include <nuttx/clock.h>
 #include <nuttx/kmalloc.h>
 
 #include <errno.h>
@@ -78,6 +79,7 @@ static int sv6621_scan_parse_rsn(FAR const uint8_t *data, size_t length,
 static bool sv6621_scan_is_wpa_ie(FAR const uint8_t *data, size_t length);
 static size_t
 sv6621_scan_cache_weakest(FAR const struct sv6621_scan_cache_s *cache);
+static void sv6621_scan_timeout_worker(FAR void *arg);
 
 /****************************************************************************
  * Private Functions
@@ -169,6 +171,33 @@ sv6621_scan_cache_weakest(FAR const struct sv6621_scan_cache_s *cache)
     }
 
   return weakest;
+}
+
+static void sv6621_scan_timeout_worker(FAR void *arg)
+{
+  FAR struct sv6621_scan_s *scan = arg;
+  sv6621_scan_complete_t complete = NULL;
+  FAR void *complete_arg = NULL;
+
+  if (nxmutex_lock(&scan->lock) < 0)
+    {
+      return;
+    }
+
+  if (scan->active)
+    {
+      scan->active = false;
+      scan->stats.timed_out++;
+      complete = scan->complete;
+      complete_arg = scan->complete_arg;
+    }
+
+  nxmutex_unlock(&scan->lock);
+  if (complete != NULL)
+    {
+      sv6621_scan_stop(scan->command);
+      complete(-ETIMEDOUT, complete_arg);
+    }
 }
 
 /****************************************************************************
@@ -497,4 +526,222 @@ int sv6621_scan_cache_snapshot(FAR struct sv6621_scan_cache_s *cache,
   *count = cache->count;
   nxmutex_unlock(&cache->lock);
   return copy_count < cache->count ? -ENOSPC : 0;
+}
+
+int sv6621_scan_controller_init(FAR struct sv6621_scan_s *scan,
+                                FAR struct sv6621_command_engine_s *command,
+                                uint32_t timeout_ms,
+                                sv6621_scan_complete_t complete,
+                                FAR void *complete_arg)
+{
+  int ret;
+
+  if (scan == NULL || command == NULL || timeout_ms == 0)
+    {
+      return -EINVAL;
+    }
+
+  memset(scan, 0, sizeof(*scan));
+  ret = nxmutex_init(&scan->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = sv6621_scan_cache_init(&scan->cache);
+  if (ret < 0)
+    {
+      nxmutex_destroy(&scan->lock);
+      return ret;
+    }
+
+  scan->command = command;
+  scan->timeout_ms = timeout_ms;
+  scan->complete = complete;
+  scan->complete_arg = complete_arg;
+  return 0;
+}
+
+void sv6621_scan_controller_deinit(FAR struct sv6621_scan_s *scan)
+{
+  if (scan != NULL)
+    {
+      work_cancel_sync(LPWORK, &scan->timeout_work);
+      sv6621_scan_cache_deinit(&scan->cache);
+      nxmutex_destroy(&scan->lock);
+    }
+}
+
+int sv6621_scan_controller_begin(
+    FAR struct sv6621_scan_s *scan,
+    FAR const struct sv6621_scan_channel_s *channels, size_t channel_count)
+{
+  int ret;
+
+  if (scan == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&scan->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (scan->active)
+    {
+      nxmutex_unlock(&scan->lock);
+      return -EBUSY;
+    }
+
+  ret = sv6621_scan_cache_reset(&scan->cache);
+  if (ret < 0)
+    {
+      nxmutex_unlock(&scan->lock);
+      return ret;
+    }
+
+  scan->active = true;
+  scan->stats.started++;
+  nxmutex_unlock(&scan->lock);
+  ret = sv6621_scan_start(scan->command, channels, channel_count);
+  if (ret < 0)
+    {
+      if (nxmutex_lock(&scan->lock) >= 0)
+        {
+          scan->active = false;
+          nxmutex_unlock(&scan->lock);
+        }
+
+      return ret;
+    }
+
+  ret = nxmutex_lock(&scan->lock);
+  if (ret < 0)
+    {
+      sv6621_scan_stop(scan->command);
+      return ret;
+    }
+
+  if (!scan->active)
+    {
+      nxmutex_unlock(&scan->lock);
+      return 0;
+    }
+
+  ret = work_queue(LPWORK, &scan->timeout_work, sv6621_scan_timeout_worker,
+                   scan, MSEC2TICK(scan->timeout_ms));
+  if (ret < 0)
+    {
+      scan->active = false;
+    }
+
+  nxmutex_unlock(&scan->lock);
+  if (ret < 0)
+    {
+      sv6621_scan_stop(scan->command);
+    }
+
+  return ret;
+}
+
+int sv6621_scan_controller_cancel(FAR struct sv6621_scan_s *scan)
+{
+  bool active;
+  int ret;
+
+  if (scan == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&scan->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  active = scan->active;
+  scan->active = false;
+  if (active)
+    {
+      scan->stats.cancelled++;
+    }
+
+  nxmutex_unlock(&scan->lock);
+  if (!active)
+    {
+      return 0;
+    }
+
+  work_cancel_sync(LPWORK, &scan->timeout_work);
+  return sv6621_scan_stop(scan->command);
+}
+
+void sv6621_scan_command_event(uint8_t instance, uint8_t id,
+                               FAR const uint8_t *payload, size_t length,
+                               FAR void *arg)
+{
+  FAR struct sv6621_scan_s *scan = arg;
+  struct sv6621_bss_s bss;
+  sv6621_scan_complete_t complete;
+  FAR void *complete_arg;
+  bool inserted;
+
+  if (scan == NULL || instance != SV6621_SCAN_INSTANCE)
+    {
+      return;
+    }
+
+  if (nxmutex_lock(&scan->lock) < 0)
+    {
+      return;
+    }
+
+  if (!scan->active)
+    {
+      if (id == SV6621_SCAN_EVENT_COMPLETE || id == SV6621_SCAN_EVENT_REPORT)
+        {
+          scan->stats.late_events++;
+        }
+
+      nxmutex_unlock(&scan->lock);
+      return;
+    }
+
+  if (id == SV6621_SCAN_EVENT_COMPLETE)
+    {
+      scan->active = false;
+      scan->stats.completed++;
+      complete = scan->complete;
+      complete_arg = scan->complete_arg;
+      nxmutex_unlock(&scan->lock);
+      work_cancel(LPWORK, &scan->timeout_work);
+      if (complete != NULL)
+        {
+          complete(0, complete_arg);
+        }
+
+      return;
+    }
+
+  nxmutex_unlock(&scan->lock);
+  if (id != SV6621_SCAN_EVENT_REPORT)
+    {
+      return;
+    }
+
+  if (sv6621_scan_parse_report(payload, length, &bss) < 0)
+    {
+      if (nxmutex_lock(&scan->lock) >= 0)
+        {
+          scan->stats.malformed_reports++;
+          nxmutex_unlock(&scan->lock);
+        }
+
+      return;
+    }
+
+  sv6621_scan_cache_store(&scan->cache, &bss, &inserted);
 }
