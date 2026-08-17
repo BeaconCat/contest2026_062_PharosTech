@@ -165,6 +165,41 @@ struct sv6621_connect_s
   uint8_t credential_length;
 };
 
+struct sv6621_tx_rate_s
+{
+  uint8_t flags;
+  uint8_t mcs;
+  uint16_t legacy_100kbps;
+  uint8_t nss;
+  uint8_t bandwidth;
+  uint8_t guard_interval;
+};
+
+struct sv6621_rx_rate_s
+{
+  uint8_t mode;
+  uint8_t rate;
+  uint8_t nss;
+  uint8_t bandwidth;
+  uint8_t guard_interval;
+  uint8_t resource_unit;
+  uint8_t dcm;
+  uint8_t snr_db;
+  uint16_t rssi;
+};
+
+struct sv6621_link_stats_s
+{
+  struct sv6621_tx_rate_s tx;
+  struct sv6621_rx_rate_s rx;
+  int8_t signal_dbm;
+  int8_t noise_dbm;
+  uint8_t tx_success_percent;
+  uint8_t tx_airtime_percent;
+  uint8_t rx_airtime_percent;
+  uint32_t tx_failed;
+};
+
 struct sv6621_status_s
 {
   enum sv6621_state_e state;
@@ -221,6 +256,8 @@ int sv6621_start(FAR struct sv6621_dev_s *dev);
 int sv6621_stop(FAR struct sv6621_dev_s *dev);
 int sv6621_get_status(FAR struct sv6621_dev_s *dev,
                       FAR struct sv6621_status_s *status);
+int sv6621_get_link_stats(FAR struct sv6621_dev_s *dev,
+                          FAR struct sv6621_link_stats_s *stats);
 int sv6621_scan(FAR struct sv6621_dev_s *dev);
 int sv6621_connect(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_connect_s *request);

@@ -124,7 +124,10 @@ sv6621_command_dispatch_event(FAR struct sv6621_command_engine_s *engine,
                               FAR const uint8_t *payload, size_t length)
 {
   sv6621_command_event_t callback;
+  sv6621_command_error_t error_callback;
   FAR void *arg;
+  FAR void *error_arg;
+  uint16_t expected;
   int ret;
 
   ret = nxmutex_lock(&engine->state_lock);
@@ -133,6 +136,27 @@ sv6621_command_dispatch_event(FAR struct sv6621_command_engine_s *engine,
       return ret;
     }
 
+  error_callback = engine->error;
+  error_arg = engine->error_arg;
+  if (engine->event_sequence_valid)
+    {
+      expected = engine->event_sequence + 1;
+      if (header->sequence != expected)
+        {
+          engine->event_sequence = header->sequence;
+          engine->stats.missed_events++;
+          nxmutex_unlock(&engine->state_lock);
+          if (error_callback != NULL)
+            {
+              error_callback(-EILSEQ, error_arg);
+            }
+
+          return -EILSEQ;
+        }
+    }
+
+  engine->event_sequence = header->sequence;
+  engine->event_sequence_valid = true;
   callback = engine->event;
   arg = engine->event_arg;
   engine->dispatching_event = true;
@@ -209,7 +233,9 @@ int sv6621_command_engine_init(FAR struct sv6621_command_engine_s *engine,
                                sv6621_command_sender_t sender,
                                FAR void *sender_arg,
                                sv6621_command_event_t event,
-                               FAR void *event_arg)
+                               FAR void *event_arg,
+                               sv6621_command_error_t error,
+                               FAR void *error_arg)
 {
   int ret;
 
@@ -244,6 +270,8 @@ int sv6621_command_engine_init(FAR struct sv6621_command_engine_s *engine,
   engine->sender_arg = sender_arg;
   engine->event = event;
   engine->event_arg = event_arg;
+  engine->error = error;
+  engine->error_arg = error_arg;
   return 0;
 }
 
@@ -256,6 +284,40 @@ void sv6621_command_engine_deinit(FAR struct sv6621_command_engine_s *engine)
       nxmutex_destroy(&engine->state_lock);
       nxsem_destroy(&engine->completion);
     }
+}
+
+/****************************************************************************
+ * Name: sv6621_command_reset
+ ****************************************************************************/
+
+int sv6621_command_reset(FAR struct sv6621_command_engine_s *engine)
+{
+  int ret;
+
+  if (engine == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&engine->state_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (engine->pending || engine->dispatching_event)
+    {
+      ret = -EBUSY;
+    }
+  else
+    {
+      engine->event_sequence = 0;
+      engine->event_sequence_valid = false;
+      ret = 0;
+    }
+
+  nxmutex_unlock(&engine->state_lock);
+  return ret;
 }
 
 int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
