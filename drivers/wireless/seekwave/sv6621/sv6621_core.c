@@ -48,6 +48,7 @@
 #define SV6621_CORE_EVENT_MIC_FAILURE   17
 #define SV6621_CORE_EVENT_THERMAL_WARN  18
 #define SV6621_CORE_EVENT_CQM           20
+#define SV6621_CORE_EVENT_FW_RECOVERY   29
 #define SV6621_CORE_MIC_FAILURE_SIZE    9
 #define SV6621_CORE_CQM_EVENT_SIZE      11
 #define SV6621_CORE_CQM_THRESHOLD_DBM  -70
@@ -495,6 +496,34 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
                      sv6621_core_signal_worker, dev, 0);
         }
 
+      return;
+    }
+
+  if (id == SV6621_CORE_EVENT_FW_RECOVERY)
+    {
+      bool blocked;
+
+      if (length != 1)
+        {
+          sv6621_core_queue_recovery(dev, -EPROTO);
+          return;
+        }
+
+      blocked = payload[0] == 0;
+      if (sv6621_data_set_tx_block(&dev->data,
+                                   SV6621_DATA_TX_BLOCK_RECOVERY,
+                                   blocked) < 0)
+        {
+          sv6621_core_queue_recovery(dev, -EIO);
+          return;
+        }
+
+#ifdef CONFIG_NET
+      if (!blocked)
+        {
+          sv6621_network_credit_available(&dev->network);
+        }
+#endif
       return;
     }
 
