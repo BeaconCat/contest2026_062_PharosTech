@@ -203,6 +203,7 @@ struct sv6621_connect_s
   uint8_t ssid_length;
   uint8_t bssid[SV6621_MAC_LENGTH];
   bool bssid_valid;
+  uint8_t channel;
   enum sv6621_security_e security;
   uint8_t credential[SV6621_KEY_MAX_LENGTH];
   uint8_t credential_length;
