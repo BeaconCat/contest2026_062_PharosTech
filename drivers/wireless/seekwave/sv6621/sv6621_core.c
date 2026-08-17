@@ -820,6 +820,28 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
           return;
         }
 
+      if (!dev->station_connected)
+        {
+          nxmutex_unlock(&dev->status_lock);
+          return;
+        }
+
+      ret = nxmutex_lock(&dev->station.lock);
+      if (ret < 0)
+        {
+          nxmutex_unlock(&dev->status_lock);
+          return;
+        }
+
+      if (memcmp(event.bssid, dev->station.target.bss.bssid,
+                 SV6621_MAC_LENGTH) != 0)
+        {
+          nxmutex_unlock(&dev->station.lock);
+          nxmutex_unlock(&dev->status_lock);
+          return;
+        }
+
+      nxmutex_unlock(&dev->station.lock);
       next = (dev->signal_head + 1) % SV6621_CORE_SIGNAL_EVENT_DEPTH;
       if (next == dev->signal_tail)
         {
