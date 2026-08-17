@@ -50,13 +50,15 @@ enum sv6621_wpa_message_e
 {
   SV6621_WPA_MESSAGE_UNKNOWN = 0,
   SV6621_WPA_MESSAGE_1,
-  SV6621_WPA_MESSAGE_3
+  SV6621_WPA_MESSAGE_3,
+  SV6621_WPA_MESSAGE_GROUP_1
 };
 
 enum sv6621_wpa_response_e
 {
   SV6621_WPA_RESPONSE_2 = 2,
-  SV6621_WPA_RESPONSE_4 = 4
+  SV6621_WPA_RESPONSE_4 = 4,
+  SV6621_WPA_RESPONSE_GROUP_2 = 6
 };
 
 struct sv6621_wpa_eapol_s
@@ -64,6 +66,7 @@ struct sv6621_wpa_eapol_s
   enum sv6621_wpa_message_e message;
   FAR const uint8_t *eapol;
   size_t eapol_length;
+  uint8_t version;
   uint16_t key_info;
   uint16_t key_length;
   FAR const uint8_t *replay;
@@ -82,7 +85,7 @@ struct sv6621_wpa_eapol_s
 int sv6621_wpa_eapol_parse(FAR const uint8_t *frame, size_t frame_length,
                             FAR struct sv6621_wpa_eapol_s *eapol);
 int sv6621_wpa_eapol_build(
-    enum sv6621_wpa_response_e response,
+    enum sv6621_wpa_response_e response, uint8_t version,
     FAR const uint8_t replay[SV6621_WPA_REPLAY_SIZE],
     FAR const uint8_t snonce[SV6621_WPA_NONCE_SIZE],
     FAR const uint8_t kck[SV6621_WPA_MIC_SIZE], FAR uint8_t *output,

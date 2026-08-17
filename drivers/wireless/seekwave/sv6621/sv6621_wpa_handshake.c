@@ -52,16 +52,25 @@
  ****************************************************************************/
 
 static void sv6621_wpa_clear(FAR void *buffer, size_t length);
+static int sv6621_wpa_generate_nonce(
+    uint8_t nonce[SV6621_WPA_NONCE_SIZE]);
 static int sv6621_wpa_compare_replay(FAR const uint8_t *left,
                                      FAR const uint8_t *right);
 static void sv6621_wpa_remove_keys(FAR struct sv6621_wpa_s *wpa);
 static void sv6621_wpa_finish(FAR struct sv6621_wpa_s *wpa, int result);
 static int sv6621_wpa_send_response(
     FAR struct sv6621_wpa_s *wpa, enum sv6621_wpa_response_e response);
+static int sv6621_wpa_decode_gtk(
+    FAR struct sv6621_wpa_s *wpa,
+    FAR const struct sv6621_wpa_eapol_s *eapol, FAR uint8_t *key_index,
+    FAR uint8_t *gtk, FAR size_t *gtk_length);
 static int sv6621_wpa_process_message_1(
     FAR struct sv6621_wpa_s *wpa,
     FAR const struct sv6621_wpa_eapol_s *eapol);
 static int sv6621_wpa_process_message_3(
+    FAR struct sv6621_wpa_s *wpa,
+    FAR const struct sv6621_wpa_eapol_s *eapol);
+static int sv6621_wpa_process_group_message_1(
     FAR struct sv6621_wpa_s *wpa,
     FAR const struct sv6621_wpa_eapol_s *eapol);
 static void sv6621_wpa_worker(FAR void *arg);
@@ -82,6 +91,24 @@ static void sv6621_wpa_clear(FAR void *buffer, size_t length)
     {
       *bytes++ = 0;
     }
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_generate_nonce
+ ****************************************************************************/
+
+static int sv6621_wpa_generate_nonce(
+    uint8_t nonce[SV6621_WPA_NONCE_SIZE])
+{
+  ssize_t random_length;
+
+  random_length = getrandom(nonce, SV6621_WPA_NONCE_SIZE, 0);
+  if (random_length < 0)
+    {
+      return -errno;
+    }
+
+  return random_length == SV6621_WPA_NONCE_SIZE ? 0 : -EIO;
 }
 
 /****************************************************************************
@@ -164,7 +191,7 @@ static int sv6621_wpa_send_response(
   frame[12] = SV6621_WPA_ETHERTYPE_EAPOL >> 8;
   frame[13] = SV6621_WPA_ETHERTYPE_EAPOL & 0xff;
   ret = sv6621_wpa_eapol_build(
-      response, wpa->replay, wpa->snonce,
+      response, wpa->eapol_version, wpa->replay, wpa->snonce,
       wpa->ptk + SV6621_WPA_KCK_OFFSET,
       frame + SV6621_WPA_ETHERNET_HEADER_SIZE,
       sizeof(frame) - SV6621_WPA_ETHERNET_HEADER_SIZE, &eapol_length);
@@ -179,6 +206,38 @@ static int sv6621_wpa_send_response(
 }
 
 /****************************************************************************
+ * Name: sv6621_wpa_decode_gtk
+ ****************************************************************************/
+
+static int sv6621_wpa_decode_gtk(
+    FAR struct sv6621_wpa_s *wpa,
+    FAR const struct sv6621_wpa_eapol_s *eapol, FAR uint8_t *key_index,
+    FAR uint8_t *gtk, FAR size_t *gtk_length)
+{
+  uint8_t plain[SV6621_WPA_FRAME_CAPACITY];
+  size_t plain_length;
+  int ret;
+
+  if ((eapol->key_info & SV6621_WPA_KEY_ENCRYPTED) == 0)
+    {
+      return -EOPNOTSUPP;
+    }
+
+  ret = sv6621_wpa_unwrap_key(
+      wpa->ptk + SV6621_WPA_KEK_OFFSET, eapol->key_data,
+      eapol->key_data_length, plain, sizeof(plain), &plain_length);
+  if (ret == 0)
+    {
+      ret = sv6621_wpa_eapol_extract_gtk(
+          plain, plain_length, key_index, gtk, SV6621_WPA_GTK_MAX_SIZE,
+          gtk_length);
+    }
+
+  sv6621_wpa_clear(plain, sizeof(plain));
+  return ret;
+}
+
+/****************************************************************************
  * Name: sv6621_wpa_process_message_1
  ****************************************************************************/
 
@@ -189,10 +248,11 @@ static int sv6621_wpa_process_message_1(
   int ret;
 
   ret = sv6621_wpa_compare_replay(eapol->replay, wpa->replay);
-  if (ret == 0 &&
-      memcmp(eapol->nonce, wpa->anonce, sizeof(wpa->anonce)) == 0)
+  if (ret == 0)
     {
-      return sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_2);
+      return memcmp(eapol->nonce, wpa->anonce, sizeof(wpa->anonce)) == 0 ?
+             sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_2) :
+             -EKEYREJECTED;
     }
 
   if (ret < 0)
@@ -200,8 +260,19 @@ static int sv6621_wpa_process_message_1(
       return -EALREADY;
     }
 
+  if (wpa->state == SV6621_WPA_WAIT_MESSAGE_3 &&
+      memcmp(eapol->nonce, wpa->anonce, sizeof(wpa->anonce)) != 0)
+    {
+      ret = sv6621_wpa_generate_nonce(wpa->snonce);
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+
   memcpy(wpa->anonce, eapol->nonce, sizeof(wpa->anonce));
   memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
+  wpa->eapol_version = eapol->version;
   ret = sv6621_wpa_derive_ptk(
       wpa->pmk, wpa->authenticator, wpa->supplicant, wpa->anonce,
       wpa->snonce, wpa->ptk);
@@ -232,10 +303,8 @@ static int sv6621_wpa_process_message_3(
     FAR struct sv6621_wpa_s *wpa,
     FAR const struct sv6621_wpa_eapol_s *eapol)
 {
-  uint8_t plain[SV6621_WPA_FRAME_CAPACITY];
   uint8_t gtk[SV6621_WPA_GTK_MAX_SIZE];
   uint8_t broadcast[SV6621_MAC_LENGTH];
-  size_t plain_length;
   size_t gtk_length;
   uint8_t gtk_index;
   int ret;
@@ -253,22 +322,7 @@ static int sv6621_wpa_process_message_3(
       return ret;
     }
 
-  if ((eapol->key_info & SV6621_WPA_KEY_ENCRYPTED) == 0)
-    {
-      return -EOPNOTSUPP;
-    }
-
-  ret = sv6621_wpa_unwrap_key(
-      wpa->ptk + SV6621_WPA_KEK_OFFSET, eapol->key_data,
-      eapol->key_data_length, plain, sizeof(plain), &plain_length);
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  ret = sv6621_wpa_eapol_extract_gtk(plain, plain_length, &gtk_index, gtk,
-                                      sizeof(gtk), &gtk_length);
-  sv6621_wpa_clear(plain, sizeof(plain));
+  ret = sv6621_wpa_decode_gtk(wpa, eapol, &gtk_index, gtk, &gtk_length);
   if (ret < 0)
     {
       return ret;
@@ -299,11 +353,89 @@ static int sv6621_wpa_process_message_3(
   wpa->group_installed = true;
 
   memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
+  wpa->eapol_version = eapol->version;
   ret = sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_4);
   if (ret == 0)
     {
       ret = sv6621_station_mark_connected(wpa->station);
     }
+
+clear_gtk:
+  sv6621_wpa_clear(gtk, sizeof(gtk));
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_process_group_message_1
+ ****************************************************************************/
+
+static int sv6621_wpa_process_group_message_1(
+    FAR struct sv6621_wpa_s *wpa,
+    FAR const struct sv6621_wpa_eapol_s *eapol)
+{
+  uint8_t gtk[SV6621_WPA_GTK_MAX_SIZE];
+  uint8_t broadcast[SV6621_MAC_LENGTH];
+  size_t gtk_length;
+  uint8_t gtk_index;
+  int comparison;
+  int ret;
+
+  ret = sv6621_wpa_eapol_verify_mic(
+      eapol, wpa->ptk + SV6621_WPA_KCK_OFFSET);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  comparison = sv6621_wpa_compare_replay(eapol->replay, wpa->replay);
+  if (comparison == 0)
+    {
+      wpa->eapol_version = eapol->version;
+      return sv6621_wpa_send_response(
+          wpa, SV6621_WPA_RESPONSE_GROUP_2);
+    }
+
+  if (comparison < 0)
+    {
+      return -EALREADY;
+    }
+
+  ret = sv6621_wpa_decode_gtk(wpa, eapol, &gtk_index, gtk, &gtk_length);
+  if (ret < 0)
+    {
+      goto clear_gtk;
+    }
+
+  memset(broadcast, 0xff, sizeof(broadcast));
+  ret = sv6621_security_add_key(
+      wpa->command, SV6621_SECURITY_KEY_GROUP,
+      SV6621_SECURITY_CIPHER_CCMP, broadcast, gtk_index, gtk, gtk_length,
+      eapol->rsc);
+  if (ret < 0)
+    {
+      goto clear_gtk;
+    }
+
+  memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
+  wpa->eapol_version = eapol->version;
+  ret = sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_GROUP_2);
+  if (ret < 0)
+    {
+      sv6621_security_delete_key(
+          wpa->command, SV6621_SECURITY_KEY_GROUP,
+          SV6621_SECURITY_CIPHER_CCMP, broadcast, gtk_index);
+      goto clear_gtk;
+    }
+
+  if (wpa->group_installed && wpa->gtk_index != gtk_index)
+    {
+      sv6621_security_delete_key(
+          wpa->command, SV6621_SECURITY_KEY_GROUP,
+          SV6621_SECURITY_CIPHER_CCMP, broadcast, wpa->gtk_index);
+    }
+
+  wpa->gtk_index = gtk_index;
+  wpa->group_installed = true;
 
 clear_gtk:
   sv6621_wpa_clear(gtk, sizeof(gtk));
@@ -371,13 +503,24 @@ static void sv6621_wpa_worker(FAR void *arg)
               ret = sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_4);
             }
         }
+      else if (ret == 0 && state == SV6621_WPA_COMPLETE &&
+               eapol.message == SV6621_WPA_MESSAGE_GROUP_1)
+        {
+          ret = sv6621_wpa_process_group_message_1(wpa, &eapol);
+        }
       else if (ret == 0)
         {
-          ret = -EPROTO;
+          ret = state == SV6621_WPA_COMPLETE ? -EALREADY : -EPROTO;
         }
 
       if (ret < 0 && ret != -EALREADY)
         {
+          if (state == SV6621_WPA_COMPLETE)
+            {
+              sv6621_station_disconnect(wpa->station,
+                                         SV6621_WPA_REASON_UNSPECIFIED);
+            }
+
           sv6621_wpa_remove_keys(wpa);
           sv6621_wpa_finish(wpa, ret);
           return;
@@ -451,7 +594,6 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
 {
   uint8_t pmk[SV6621_WPA_PMK_SIZE];
   uint8_t snonce[SV6621_WPA_NONCE_SIZE];
-  ssize_t random_length;
   int ret;
 
   if (wpa == NULL || request == NULL || supplicant == NULL ||
@@ -469,11 +611,11 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
       return ret;
     }
 
-  random_length = getrandom(snonce, sizeof(snonce), 0);
-  if (random_length != sizeof(snonce))
+  ret = sv6621_wpa_generate_nonce(snonce);
+  if (ret < 0)
     {
       sv6621_wpa_clear(pmk, sizeof(pmk));
-      return random_length < 0 ? -errno : -EIO;
+      return ret;
     }
 
   sv6621_wpa_cancel(wpa, -ECANCELED);
@@ -502,6 +644,7 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
   memcpy(wpa->authenticator, authenticator, sizeof(wpa->authenticator));
   memset(wpa->replay, 0, sizeof(wpa->replay));
   wpa->result = -EINPROGRESS;
+  wpa->eapol_version = 0;
   wpa->peer_ready = false;
   wpa->frame_pending = false;
   wpa->state = SV6621_WPA_WAIT_MESSAGE_1;
