@@ -214,6 +214,95 @@ int sv6621_firmware_verify_device(
   return 0;
 }
 
+int sv6621_firmware_download(FAR struct sv6621_transport_s *transport,
+                             FAR const uint8_t *iram, size_t iram_length,
+                             FAR const uint8_t *dram, size_t dram_length,
+                             FAR const uint8_t *nvram, size_t nvram_length)
+{
+  struct sv6621_firmware_layout_s layout;
+  FAR uint8_t *prepared_iram = NULL;
+  int ret;
+
+  if (transport == NULL || iram == NULL || iram_length == 0 || dram == NULL ||
+      dram_length == 0 || nvram == NULL || nvram_length == 0)
+    {
+      return -EINVAL;
+    }
+
+  ret = sv6621_firmware_verify_device(transport);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = sv6621_firmware_parse_iram(iram, iram_length, &layout);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = sv6621_firmware_prepare_iram(iram, iram_length, nvram, nvram_length,
+                                     &prepared_iram);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = transport->ops->write_byte(transport,
+                                   SV6621_SDIO_FUNCTION_CONTROL,
+                                   SV6621_SDIO_DMA_TYPE, 0x01);
+  if (ret < 0)
+    {
+      goto release_image;
+    }
+
+  ret = transport->ops->write_byte(transport,
+                                   SV6621_SDIO_FUNCTION_CONTROL,
+                                   SV6621_SDIO_SLEEP_CONTROL, 0x01);
+  if (ret < 0)
+    {
+      goto release_image;
+    }
+
+  ret = transport->ops->write_byte(transport,
+                                   SV6621_SDIO_FUNCTION_CONTROL,
+                                   SV6621_SDIO_RX_FLOW_LOW, 0x00);
+  if (ret < 0)
+    {
+      goto release_image;
+    }
+
+  ret = transport->ops->write_byte(transport,
+                                   SV6621_SDIO_FUNCTION_CONTROL,
+                                   SV6621_SDIO_RX_FLOW_HIGH, 0x00);
+  if (ret < 0)
+    {
+      goto release_image;
+    }
+
+  ret = sv6621_memory_write(transport, layout.dram_address, dram,
+                            dram_length);
+  if (ret < 0)
+    {
+      goto release_image;
+    }
+
+  ret = sv6621_memory_write(transport, layout.iram_address, prepared_iram,
+                            iram_length);
+  if (ret < 0)
+    {
+      goto release_image;
+    }
+
+  ret = transport->ops->write_byte(transport,
+                                   SV6621_SDIO_FUNCTION_CONTROL,
+                                   SV6621_SDIO_DOWNLOAD_STATUS, 0x01);
+
+release_image:
+  sv6621_firmware_release(prepared_iram);
+  return ret;
+}
+
 int sv6621_firmware_prepare_iram(FAR const uint8_t *image,
                                  size_t image_length,
                                  FAR const uint8_t *nvram,
