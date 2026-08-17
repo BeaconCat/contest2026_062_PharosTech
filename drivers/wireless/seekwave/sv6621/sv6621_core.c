@@ -43,6 +43,28 @@
 #define SV6621_CORE_SCAN_TIMEOUT_MS 10000
 
 /****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+static const struct sv6621_scan_channel_s g_sv6621_core_scan_channels[] = {
+  { 1, SV6621_SCAN_BAND_2GHZ, SV6621_SCAN_FLAG_PASSIVE },
+  { 2, SV6621_SCAN_BAND_2GHZ, SV6621_SCAN_FLAG_PASSIVE },
+  { 3, SV6621_SCAN_BAND_2GHZ, SV6621_SCAN_FLAG_PASSIVE },
+  { 4, SV6621_SCAN_BAND_2GHZ, SV6621_SCAN_FLAG_PASSIVE },
+  { 5, SV6621_SCAN_BAND_2GHZ, SV6621_SCAN_FLAG_PASSIVE },
+  { 6, SV6621_SCAN_BAND_2GHZ, SV6621_SCAN_FLAG_PASSIVE },
+  { 7, SV6621_SCAN_BAND_2GHZ, SV6621_SCAN_FLAG_PASSIVE },
+  { 8, SV6621_SCAN_BAND_2GHZ, SV6621_SCAN_FLAG_PASSIVE },
+  { 9, SV6621_SCAN_BAND_2GHZ, SV6621_SCAN_FLAG_PASSIVE },
+  { 10, SV6621_SCAN_BAND_2GHZ, SV6621_SCAN_FLAG_PASSIVE },
+  { 11, SV6621_SCAN_BAND_2GHZ, SV6621_SCAN_FLAG_PASSIVE },
+  { 36, SV6621_SCAN_BAND_5GHZ, SV6621_SCAN_FLAG_PASSIVE },
+  { 40, SV6621_SCAN_BAND_5GHZ, SV6621_SCAN_FLAG_PASSIVE },
+  { 44, SV6621_SCAN_BAND_5GHZ, SV6621_SCAN_FLAG_PASSIVE },
+  { 48, SV6621_SCAN_BAND_5GHZ, SV6621_SCAN_FLAG_PASSIVE },
+};
+
+/****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
@@ -724,4 +746,54 @@ int sv6621_get_status(FAR struct sv6621_dev_s *dev,
   *status = dev->status;
   nxmutex_unlock(&dev->status_lock);
   return 0;
+}
+
+int sv6621_scan(FAR struct sv6621_dev_s *dev)
+{
+  size_t channel_count = sizeof(g_sv6621_core_scan_channels) /
+                         sizeof(g_sv6621_core_scan_channels[0]);
+  int ret;
+
+  if (dev == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  if (dev->status.state != SV6621_STATE_WIFI_READY)
+    {
+      ret = -ENETDOWN;
+    }
+  else if (dev->scan_reporting)
+    {
+      ret = -EBUSY;
+    }
+  else
+    {
+      ret = 0;
+    }
+
+  nxmutex_unlock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_scan_controller_begin(&dev->scan, g_sv6621_core_scan_channels,
+                                     channel_count);
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
 }
