@@ -1041,7 +1041,7 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
 #ifdef CONFIG_NET
   if (!dev->network.registered)
     {
-      ret = sv6621_network_init(&dev->network, &dev->data, &dev->command,
+      ret = sv6621_network_init(&dev->network, dev, &dev->data, &dev->command,
                                 dev->wifi_info.max_multicast_addresses,
                                 dev->wifi_info.mac);
       if (ret < 0)
