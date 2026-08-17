@@ -44,6 +44,15 @@
 #define SV6621_DATA_RX_EAPOL_MASK          (1 << 6)
 
 /****************************************************************************
+ * Private Function Prototypes
+ ****************************************************************************/
+
+static uint16_t sv6621_data_get_le16(FAR const uint8_t *value);
+static void sv6621_data_packet(uint8_t channel,
+                               FAR const uint8_t *payload, size_t length,
+                               FAR void *arg);
+
+/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
@@ -54,6 +63,28 @@
 static uint16_t sv6621_data_get_le16(FAR const uint8_t *value)
 {
   return value[0] | ((uint16_t)value[1] << 8);
+}
+
+/****************************************************************************
+ * Name: sv6621_data_packet
+ ****************************************************************************/
+
+static void sv6621_data_packet(uint8_t channel, FAR const uint8_t *payload,
+                               size_t length, FAR void *arg)
+{
+  FAR struct sv6621_data_s *data = arg;
+  struct sv6621_data_rx_s rx;
+
+  if (sv6621_data_decode_rx(payload, length, &rx) < 0)
+    {
+      data->stats.malformed++;
+      return;
+    }
+
+  data->stats.received++;
+  data->stats.bytes += rx.frame_length;
+  data->input(&rx, data->input_arg);
+  (void)channel;
 }
 
 /****************************************************************************
@@ -107,4 +138,60 @@ int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
   rx->eapol =
       (payload[SV6621_DATA_RX_EAPOL_OFFSET] & SV6621_DATA_RX_EAPOL_MASK) != 0;
   return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_init
+ ****************************************************************************/
+
+int sv6621_data_init(FAR struct sv6621_data_s *data,
+                     FAR struct sv6621_packet_router_s *router,
+                     sv6621_data_input_t input, FAR void *input_arg)
+{
+  int ret;
+
+  if (data == NULL || router == NULL || input == NULL)
+    {
+      return -EINVAL;
+    }
+
+  memset(data, 0, sizeof(*data));
+  data->router = router;
+  data->input = input;
+  data->input_arg = input_arg;
+
+  ret = sv6621_packet_subscribe(router, SV6621_CHANNEL_WIFI_DATA,
+                                sv6621_data_packet, data);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = sv6621_packet_subscribe(router, SV6621_CHANNEL_WIFI_DATA1,
+                                sv6621_data_packet, data);
+  if (ret < 0)
+    {
+      sv6621_packet_unsubscribe(router, SV6621_CHANNEL_WIFI_DATA,
+                                sv6621_data_packet, data);
+    }
+
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_deinit
+ ****************************************************************************/
+
+void sv6621_data_deinit(FAR struct sv6621_data_s *data)
+{
+  if (data == NULL || data->router == NULL)
+    {
+      return;
+    }
+
+  sv6621_packet_unsubscribe(data->router, SV6621_CHANNEL_WIFI_DATA1,
+                            sv6621_data_packet, data);
+  sv6621_packet_unsubscribe(data->router, SV6621_CHANNEL_WIFI_DATA,
+                            sv6621_data_packet, data);
+  data->router = NULL;
 }
