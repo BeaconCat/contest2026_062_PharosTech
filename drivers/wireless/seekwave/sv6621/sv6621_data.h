@@ -48,6 +48,7 @@
 #define SV6621_DATA_TX_BUFFER_SIZE     2048
 #define SV6621_DATA_LMAC_COUNT         2
 #define SV6621_DATA_FRAGMENT_ENTRIES   4
+#define SV6621_DATA_TID_COUNT          16
 
 #define SV6621_DATA_TX_BLOCK_SLEEP     (1 << 0)
 #define SV6621_DATA_TX_BLOCK_THERMAL   (1 << 1)
@@ -119,6 +120,14 @@ struct sv6621_data_fragment_s
   uint8_t frame[SV6621_DATA_MAX_FRAME_SIZE];
 };
 
+struct sv6621_data_ba_session_s
+{
+  uint16_t window_start;
+  uint16_t window_size;
+  uint8_t peer_index;
+  bool active;
+};
+
 typedef void (*sv6621_data_input_t)(FAR const struct sv6621_data_rx_s *rx,
                                     FAR void *arg);
 
@@ -137,6 +146,8 @@ struct sv6621_data_stats_s
   uint32_t fragment_drops;
   uint32_t fragment_evictions;
   uint32_t fragment_pn_drops;
+  uint32_t ba_events;
+  uint32_t ba_event_errors;
 };
 
 struct sv6621_data_s
@@ -156,6 +167,8 @@ struct sv6621_data_s
   uint8_t tx_block_reasons;
   bool pn_reuse;
   struct sv6621_data_fragment_s fragments[SV6621_DATA_FRAGMENT_ENTRIES];
+  struct sv6621_data_ba_session_s
+      ba[SV6621_DATA_LMAC_COUNT][SV6621_DATA_TID_COUNT];
   uint8_t tx_buffer[SV6621_DATA_TX_BUFFER_SIZE];
 };
 
@@ -181,6 +194,9 @@ void sv6621_data_add_credits(FAR struct sv6621_data_s *data,
 void sv6621_data_reset_credits(FAR struct sv6621_data_s *data);
 void sv6621_data_reset_fragments(FAR struct sv6621_data_s *data);
 void sv6621_data_set_pn_reuse(FAR struct sv6621_data_s *data, bool enabled);
+int sv6621_data_ba_event(FAR struct sv6621_data_s *data,
+                         FAR const uint8_t *payload, size_t length);
+void sv6621_data_reset_ba(FAR struct sv6621_data_s *data);
 int sv6621_data_set_tx_block(FAR struct sv6621_data_s *data, uint8_t reason,
                              bool blocked);
 int sv6621_data_send(FAR struct sv6621_data_s *data,

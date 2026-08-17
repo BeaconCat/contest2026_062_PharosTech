@@ -75,6 +75,20 @@
 #define SV6621_DATA_CIPHER_GCMP              10
 #define SV6621_DATA_CIPHER_GCMP_256          11
 
+#define SV6621_DATA_BA_EVENT_SIZE             12
+#define SV6621_DATA_BA_ACTION_OFFSET          0
+#define SV6621_DATA_BA_LMAC_OFFSET            1
+#define SV6621_DATA_BA_PEER_OFFSET            2
+#define SV6621_DATA_BA_TID_OFFSET             3
+#define SV6621_DATA_BA_WINDOW_START_OFFSET    8
+#define SV6621_DATA_BA_WINDOW_SIZE_OFFSET     10
+#define SV6621_DATA_BA_ADD_TX                 0
+#define SV6621_DATA_BA_DEL_TX                 1
+#define SV6621_DATA_BA_ADD_RX                 2
+#define SV6621_DATA_BA_DEL_RX                 3
+#define SV6621_DATA_BA_REQ_RX                 4
+#define SV6621_DATA_BA_MAX_WINDOW             256
+
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
@@ -636,6 +650,7 @@ void sv6621_data_deinit(FAR struct sv6621_data_s *data)
   sv6621_packet_unsubscribe(data->router, SV6621_CHANNEL_WIFI_DATA,
                             sv6621_data_packet, data);
   sv6621_data_reset_fragments(data);
+  sv6621_data_reset_ba(data);
   nxmutex_destroy(&data->rx_lock);
   nxmutex_destroy(&data->tx_lock);
   data->router = NULL;
@@ -725,6 +740,100 @@ void sv6621_data_set_pn_reuse(FAR struct sv6621_data_s *data, bool enabled)
   if (data != NULL && nxmutex_lock(&data->rx_lock) >= 0)
     {
       data->pn_reuse = enabled;
+      nxmutex_unlock(&data->rx_lock);
+    }
+}
+
+/****************************************************************************
+ * Name: sv6621_data_ba_event
+ ****************************************************************************/
+
+int sv6621_data_ba_event(FAR struct sv6621_data_s *data,
+                         FAR const uint8_t *payload, size_t length)
+{
+  FAR struct sv6621_data_ba_session_s *session;
+  uint16_t window_start;
+  uint16_t window_size;
+  uint8_t action;
+  uint8_t lmac_id;
+  uint8_t peer_index;
+  uint8_t tid;
+  int ret;
+
+  if (data == NULL || payload == NULL || length != SV6621_DATA_BA_EVENT_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  action = payload[SV6621_DATA_BA_ACTION_OFFSET];
+  if (action == SV6621_DATA_BA_ADD_TX || action == SV6621_DATA_BA_DEL_TX)
+    {
+      data->stats.ba_events++;
+      return 0;
+    }
+
+  lmac_id = payload[SV6621_DATA_BA_LMAC_OFFSET];
+  peer_index = payload[SV6621_DATA_BA_PEER_OFFSET];
+  tid = payload[SV6621_DATA_BA_TID_OFFSET];
+  window_start = sv6621_data_get_le16(
+      payload + SV6621_DATA_BA_WINDOW_START_OFFSET) & 0x0fff;
+  window_size = sv6621_data_get_le16(
+      payload + SV6621_DATA_BA_WINDOW_SIZE_OFFSET);
+  if (lmac_id >= SV6621_DATA_LMAC_COUNT ||
+      peer_index > SV6621_DATA_PEER_INDEX_MASK ||
+      tid >= SV6621_DATA_TID_COUNT ||
+      (action != SV6621_DATA_BA_ADD_RX &&
+       action != SV6621_DATA_BA_DEL_RX &&
+       action != SV6621_DATA_BA_REQ_RX))
+    {
+      data->stats.ba_event_errors++;
+      return -EPROTO;
+    }
+
+  if (action != SV6621_DATA_BA_DEL_RX &&
+      (window_size == 0 || window_size > SV6621_DATA_BA_MAX_WINDOW))
+    {
+      data->stats.ba_event_errors++;
+      return -ERANGE;
+    }
+
+  ret = nxmutex_lock(&data->rx_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  session = &data->ba[lmac_id][tid];
+  if (action == SV6621_DATA_BA_DEL_RX)
+    {
+      if (session->active && session->peer_index == peer_index)
+        {
+          memset(session, 0, sizeof(*session));
+        }
+    }
+  else if (action == SV6621_DATA_BA_ADD_RX ||
+           (session->active && session->peer_index == peer_index))
+    {
+      session->window_start = window_start;
+      session->window_size = window_size;
+      session->peer_index = peer_index;
+      session->active = true;
+    }
+
+  data->stats.ba_events++;
+  nxmutex_unlock(&data->rx_lock);
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_data_reset_ba
+ ****************************************************************************/
+
+void sv6621_data_reset_ba(FAR struct sv6621_data_s *data)
+{
+  if (data != NULL && nxmutex_lock(&data->rx_lock) >= 0)
+    {
+      memset(data->ba, 0, sizeof(data->ba));
       nxmutex_unlock(&data->rx_lock);
     }
 }
