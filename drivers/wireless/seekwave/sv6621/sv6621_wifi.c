@@ -43,6 +43,8 @@
 #define SV6621_WIFI_INSTANCE                0
 #define SV6621_WIFI_COMMAND_GET_INFO        1
 #define SV6621_WIFI_COMMAND_SYNC_VERSION    2
+#define SV6621_WIFI_COMMAND_OPEN_DEVICE     3
+#define SV6621_WIFI_COMMAND_CLOSE_DEVICE    4
 #define SV6621_WIFI_COMMAND_PHY_BB_CONFIG   50
 #define SV6621_WIFI_COMMAND_VERSION         1
 #define SV6621_WIFI_LAST_SUPPORTED_COMMAND  61
@@ -67,6 +69,9 @@
 #define SV6621_WIFI_CALIBRATION_HEADER_SIZE 4
 #define SV6621_WIFI_CALIBRATION_CHUNK_SIZE  512
 #define SV6621_WIFI_CALIBRATION_MAX_SIZE    (256 * 512)
+
+#define SV6621_WIFI_OPEN_MODE_STATION       1
+#define SV6621_WIFI_OPEN_PAYLOAD_SIZE       10
 
 /****************************************************************************
  * Private Function Prototypes
@@ -335,4 +340,42 @@ int sv6621_wifi_download_calibration(
     }
 
   return 0;
+}
+
+int sv6621_wifi_open_station(FAR struct sv6621_command_engine_s *command,
+                             FAR const uint8_t address[SV6621_MAC_LENGTH])
+{
+  uint8_t payload[SV6621_WIFI_OPEN_PAYLOAD_SIZE];
+  int ret;
+
+  if (command == NULL || address == NULL ||
+      !sv6621_wifi_address_valid(address))
+    {
+      return -EINVAL;
+    }
+
+  payload[0] = SV6621_WIFI_OPEN_MODE_STATION;
+  payload[1] = 0;
+  payload[2] = 0;
+  payload[3] = 0;
+  memcpy(payload + 4, address, SV6621_MAC_LENGTH);
+  ret = sv6621_command_execute(
+      command, SV6621_WIFI_INSTANCE, SV6621_WIFI_COMMAND_OPEN_DEVICE, payload,
+      sizeof(payload), NULL, NULL, SV6621_WIFI_COMMAND_TIMEOUT_MS);
+  return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
+}
+
+int sv6621_wifi_close_station(FAR struct sv6621_command_engine_s *command)
+{
+  int ret;
+
+  if (command == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = sv6621_command_execute(command, SV6621_WIFI_INSTANCE,
+                               SV6621_WIFI_COMMAND_CLOSE_DEVICE, NULL, 0, NULL,
+                               NULL, SV6621_WIFI_COMMAND_TIMEOUT_MS);
+  return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
 }
