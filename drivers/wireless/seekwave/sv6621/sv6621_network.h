@@ -70,10 +70,15 @@ struct sv6621_network_s
   bool interface_up;
   bool link_up;
   bool rx_scheduled;
+  bool tx_scheduled;
+  bool tx_reschedule;
+  bool multicast_scheduled;
   uint8_t rx_head;
   uint8_t rx_tail;
   uint8_t multicast_count;
   uint8_t multicast_limit;
+  uint32_t multicast_generation;
+  uint32_t multicast_applied_generation;
   uint8_t multicast[SV6621_NETWORK_MULTICAST_CAPACITY][SV6621_MAC_LENGTH];
   uint16_t rx_length[SV6621_NETWORK_RX_DEPTH];
   uint8_t rx_frame[SV6621_NETWORK_RX_DEPTH][MAX_NETDEV_PKTSIZE];

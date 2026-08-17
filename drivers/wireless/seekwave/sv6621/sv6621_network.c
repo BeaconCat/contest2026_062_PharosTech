@@ -55,6 +55,7 @@ static int sv6621_network_queue_multicast(
     FAR struct sv6621_network_s *network);
 #endif
 static void sv6621_network_reply(FAR struct sv6621_network_s *network);
+static int sv6621_network_queue_tx(FAR struct sv6621_network_s *network);
 static bool sv6621_network_tx_snapshot(
     FAR struct sv6621_network_s *network,
     FAR struct sv6621_data_tx_context_s *context);
@@ -143,18 +144,81 @@ static int sv6621_network_tx_poll(FAR struct net_driver_s *dev)
   return sv6621_network_transmit(network);
 }
 
+/****************************************************************************
+ * Name: sv6621_network_queue_tx
+ ****************************************************************************/
+
+static int sv6621_network_queue_tx(FAR struct sv6621_network_s *network)
+{
+  irqstate_t flags;
+  bool schedule = false;
+  int ret;
+
+  flags = spin_lock_irqsave(&network->lock);
+  if (network->registered && network->interface_up && network->link_up)
+    {
+      if (!network->tx_scheduled)
+        {
+          network->tx_scheduled = true;
+          schedule = true;
+        }
+      else
+        {
+          network->tx_reschedule = true;
+        }
+    }
+
+  spin_unlock_irqrestore(&network->lock, flags);
+  if (!schedule)
+    {
+      return 0;
+    }
+
+  ret = work_queue(LPWORK, &network->tx_work, sv6621_network_tx_worker,
+                   network, 0);
+  if (ret < 0)
+    {
+      flags = spin_lock_irqsave(&network->lock);
+      network->tx_scheduled = false;
+      network->tx_reschedule = false;
+      spin_unlock_irqrestore(&network->lock, flags);
+    }
+
+  return ret;
+}
+
 static void sv6621_network_tx_worker(FAR void *arg)
 {
   FAR struct sv6621_network_s *network = arg;
+  irqstate_t flags;
+  bool retry;
 
-  net_lock();
-  if (sv6621_network_tx_snapshot(network, NULL))
+  do
     {
-      network->dev.d_buf = network->tx_frame;
-      devif_poll(&network->dev, sv6621_network_tx_poll);
-    }
+      flags = spin_lock_irqsave(&network->lock);
+      network->tx_reschedule = false;
+      spin_unlock_irqrestore(&network->lock, flags);
 
-  net_unlock();
+      net_lock();
+      if (sv6621_network_tx_snapshot(network, NULL))
+        {
+          network->dev.d_buf = network->tx_frame;
+          devif_poll(&network->dev, sv6621_network_tx_poll);
+        }
+
+      net_unlock();
+
+      flags = spin_lock_irqsave(&network->lock);
+      retry = network->tx_reschedule && network->registered &&
+              network->interface_up && network->link_up;
+      if (!retry)
+        {
+          network->tx_scheduled = false;
+        }
+
+      spin_unlock_irqrestore(&network->lock, flags);
+    }
+  while (retry);
 }
 
 #if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
@@ -165,8 +229,25 @@ static void sv6621_network_tx_worker(FAR void *arg)
 static void sv6621_network_multicast_worker(FAR void *arg)
 {
   FAR struct sv6621_network_s *network = arg;
+  irqstate_t flags;
+  bool retry;
+  int ret;
 
-  sv6621_network_sync_multicast(network);
+  do
+    {
+      ret = sv6621_network_sync_multicast(network);
+
+      flags = spin_lock_irqsave(&network->lock);
+      retry = ret == 0 && network->multicast_applied_generation !=
+                            network->multicast_generation;
+      if (!retry)
+        {
+          network->multicast_scheduled = false;
+        }
+
+      spin_unlock_irqrestore(&network->lock, flags);
+    }
+  while (retry);
 }
 
 /****************************************************************************
@@ -176,13 +257,35 @@ static void sv6621_network_multicast_worker(FAR void *arg)
 static int sv6621_network_queue_multicast(
     FAR struct sv6621_network_s *network)
 {
-  if (work_available(&network->multicast_work))
+  irqstate_t flags;
+  bool schedule = false;
+  int ret;
+
+  flags = spin_lock_irqsave(&network->lock);
+  if (!network->multicast_scheduled &&
+      network->multicast_applied_generation !=
+          network->multicast_generation)
     {
-      return work_queue(LPWORK, &network->multicast_work,
-                        sv6621_network_multicast_worker, network, 0);
+      network->multicast_scheduled = true;
+      schedule = true;
     }
 
-  return 0;
+  spin_unlock_irqrestore(&network->lock, flags);
+  if (!schedule)
+    {
+      return 0;
+    }
+
+  ret = work_queue(LPWORK, &network->multicast_work,
+                   sv6621_network_multicast_worker, network, 0);
+  if (ret < 0)
+    {
+      flags = spin_lock_irqsave(&network->lock);
+      network->multicast_scheduled = false;
+      spin_unlock_irqrestore(&network->lock, flags);
+    }
+
+  return ret;
 }
 #endif
 
@@ -281,12 +384,7 @@ static int sv6621_network_txavail(FAR struct net_driver_s *dev)
 {
   FAR struct sv6621_network_s *network = dev->d_private;
 
-  if (work_available(&network->tx_work))
-    {
-      work_queue(LPWORK, &network->tx_work, sv6621_network_tx_worker, network,
-                 0);
-    }
-
+  sv6621_network_queue_tx(network);
   return 0;
 }
 
@@ -324,7 +422,7 @@ static int sv6621_network_addmac(FAR struct net_driver_s *dev,
       if (memcmp(network->multicast[index], mac, SV6621_MAC_LENGTH) == 0)
         {
           spin_unlock_irqrestore(&network->lock, flags);
-          return 0;
+          return sv6621_network_queue_multicast(network);
         }
     }
 
@@ -337,6 +435,7 @@ static int sv6621_network_addmac(FAR struct net_driver_s *dev,
       memcpy(network->multicast[network->multicast_count], mac,
              SV6621_MAC_LENGTH);
       network->multicast_count++;
+      network->multicast_generation++;
     }
 
   spin_unlock_irqrestore(&network->lock, flags);
@@ -369,6 +468,7 @@ static int sv6621_network_rmmac(FAR struct net_driver_s *dev,
                      SV6621_MAC_LENGTH);
             }
 
+          network->multicast_generation++;
           break;
         }
     }
@@ -406,6 +506,7 @@ int sv6621_network_init(FAR struct sv6621_network_s *network,
       multicast_limit > SV6621_NETWORK_MULTICAST_CAPACITY ?
       SV6621_NETWORK_MULTICAST_CAPACITY : multicast_limit;
   network->multicast_count = 1;
+  network->multicast_generation = 1;
   memset(network->multicast[0], 0xff, SV6621_MAC_LENGTH);
   network->dev.d_ifup = sv6621_network_ifup;
   network->dev.d_ifdown = sv6621_network_ifdown;
@@ -445,15 +546,31 @@ int sv6621_network_init(FAR struct sv6621_network_s *network,
 
 void sv6621_network_deinit(FAR struct sv6621_network_s *network)
 {
-  if (network != NULL && network->registered)
+  irqstate_t flags;
+  bool registered;
+
+  if (network == NULL)
     {
-      work_cancel(LPWORK, &network->rx_work);
-      work_cancel(LPWORK, &network->tx_work);
-      work_cancel_sync(LPWORK, &network->multicast_work);
-      netdev_unregister(&network->dev);
-      sv6621_ioctl_deinit(&network->ioctl);
-      network->registered = false;
+      return;
     }
+
+  flags = spin_lock_irqsave(&network->lock);
+  registered = network->registered;
+  network->registered = false;
+  network->interface_up = false;
+  network->link_up = false;
+  spin_unlock_irqrestore(&network->lock, flags);
+  if (!registered)
+    {
+      return;
+    }
+
+  work_cancel_sync(LPWORK, &network->rx_work);
+  work_cancel_sync(LPWORK, &network->tx_work);
+  work_cancel_sync(LPWORK, &network->multicast_work);
+  netdev_carrier_off(&network->dev);
+  netdev_unregister(&network->dev);
+  sv6621_ioctl_deinit(&network->ioctl);
 }
 
 /****************************************************************************
@@ -464,7 +581,9 @@ int sv6621_network_sync_multicast(FAR struct sv6621_network_s *network)
 {
   uint8_t addresses[SV6621_NETWORK_MULTICAST_CAPACITY][SV6621_MAC_LENGTH];
   irqstate_t flags;
+  uint32_t generation;
   uint8_t count;
+  int ret;
 
   if (network == NULL || network->command == NULL)
     {
@@ -473,10 +592,23 @@ int sv6621_network_sync_multicast(FAR struct sv6621_network_s *network)
 
   flags = spin_lock_irqsave(&network->lock);
   count = network->multicast_count;
+  generation = network->multicast_generation;
   memcpy(addresses, network->multicast, count * SV6621_MAC_LENGTH);
   spin_unlock_irqrestore(&network->lock, flags);
 
-  return sv6621_filter_set_multicast(network->command, addresses, count);
+  ret = sv6621_filter_set_multicast(network->command, addresses, count);
+  if (ret == 0)
+    {
+      flags = spin_lock_irqsave(&network->lock);
+      if (generation == network->multicast_generation)
+        {
+          network->multicast_applied_generation = generation;
+        }
+
+      spin_unlock_irqrestore(&network->lock, flags);
+    }
+
+  return ret;
 }
 
 /****************************************************************************
@@ -565,6 +697,10 @@ void sv6621_network_set_link(
   if (link_up)
     {
       netdev_carrier_on(&network->dev);
+      sv6621_network_queue_tx(network);
+#if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
+      sv6621_network_queue_multicast(network);
+#endif
     }
   else
     {
@@ -578,11 +714,9 @@ void sv6621_network_set_link(
 
 void sv6621_network_credit_available(FAR struct sv6621_network_s *network)
 {
-  if (network != NULL && network->registered && network->interface_up &&
-      network->link_up && work_available(&network->tx_work))
+  if (network != NULL)
     {
-      work_queue(LPWORK, &network->tx_work, sv6621_network_tx_worker,
-                 network, 0);
+      sv6621_network_queue_tx(network);
     }
 }
 
