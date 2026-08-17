@@ -130,11 +130,11 @@ static bool sv6621_regulatory_channel_allowed(
       uint16_t last_channel =
           (uint16_t)rule->start_channel + rule->channel_span - 1;
 
-      if ((rule->flags & SV6621_REGULATORY_FLAG_NO_IR) == 0 &&
-          channel >= rule->start_channel && channel <= last_channel)
+      if (channel >= rule->start_channel && channel <= last_channel)
         {
           *scan_flags =
-              (rule->flags & SV6621_REGULATORY_FLAG_DFS) != 0 ?
+              (rule->flags & (SV6621_REGULATORY_FLAG_DFS |
+                              SV6621_REGULATORY_FLAG_NO_IR)) != 0 ?
               SV6621_SCAN_FLAG_PASSIVE : 0;
           return true;
         }
