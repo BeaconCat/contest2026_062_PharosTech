@@ -48,10 +48,13 @@
 #define SV6621_CONNECTION_JOIN_BANDWIDTH_20MHZ 0
 #define SV6621_CONNECTION_JOIN_BANDWIDTH_40MHZ 1
 #define SV6621_CONNECTION_JOIN_BANDWIDTH_80MHZ 2
+#define SV6621_CONNECTION_JOIN_BANDWIDTH_160MHZ 4
 #define SV6621_CONNECTION_HT_SECONDARY_NONE    0
 #define SV6621_CONNECTION_HT_SECONDARY_ABOVE   1
 #define SV6621_CONNECTION_HT_SECONDARY_BELOW   3
 #define SV6621_CONNECTION_VHT_WIDTH_80MHZ       1
+#define SV6621_CONNECTION_VHT_WIDTH_160MHZ      2
+#define SV6621_CONNECTION_VHT_160_SEGMENT_DELTA 8
 #define SV6621_CONNECTION_AUTH_HEADER_SIZE     14
 #define SV6621_CONNECTION_AUTH_MAX_DATA_SIZE   512
 #define SV6621_CONNECTION_ASSOC_HEADER_SIZE    54
@@ -163,10 +166,44 @@ static void sv6621_connection_select_vht_channel(
     uint32_t bandwidth_capabilities, FAR uint8_t *center_channel,
     FAR uint8_t *bandwidth)
 {
+  uint8_t segment_delta;
+
   if (entry->bss.band != SV6621_BAND_5GHZ ||
       !entry->vht_operation_present ||
-      entry->vht_channel_width != SV6621_CONNECTION_VHT_WIDTH_80MHZ ||
-      entry->vht_center_segment0 == 0 ||
+      entry->vht_center_segment0 == 0)
+    {
+      return;
+    }
+
+  if ((bandwidth_capabilities &
+       SV6621_CONNECTION_BW_CAP_5GHZ_160MHZ) != 0)
+    {
+      if (entry->vht_channel_width ==
+          SV6621_CONNECTION_VHT_WIDTH_160MHZ)
+        {
+          *center_channel = entry->vht_center_segment0;
+          *bandwidth = SV6621_CONNECTION_JOIN_BANDWIDTH_160MHZ;
+          return;
+        }
+
+      segment_delta = entry->vht_center_segment0 >
+                              entry->vht_center_segment1 ?
+                          entry->vht_center_segment0 -
+                              entry->vht_center_segment1 :
+                          entry->vht_center_segment1 -
+                              entry->vht_center_segment0;
+      if (entry->vht_channel_width ==
+              SV6621_CONNECTION_VHT_WIDTH_80MHZ &&
+          entry->vht_center_segment1 != 0 &&
+          segment_delta == SV6621_CONNECTION_VHT_160_SEGMENT_DELTA)
+        {
+          *center_channel = entry->vht_center_segment1;
+          *bandwidth = SV6621_CONNECTION_JOIN_BANDWIDTH_160MHZ;
+          return;
+        }
+    }
+
+  if (entry->vht_channel_width != SV6621_CONNECTION_VHT_WIDTH_80MHZ ||
       (bandwidth_capabilities &
        SV6621_CONNECTION_BW_CAP_5GHZ_80MHZ) == 0)
     {
