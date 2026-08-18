@@ -325,6 +325,7 @@ int sv6621_service_start_wifi(FAR struct sv6621_service_s *service,
 }
 
 void sv6621_service_channel_consumer(uint8_t channel,
+                                     FAR const uint8_t encoded[4],
                                      FAR const uint8_t *payload, size_t length,
                                      FAR void *arg)
 {
@@ -335,6 +336,8 @@ void sv6621_service_channel_consumer(uint8_t channel,
   FAR sem_t *completion = NULL;
   FAR bool *ready = NULL;
   bool failure = false;
+
+  (void)encoded;
 
   if (service == NULL || payload == NULL ||
       channel != SV6621_CHANNEL_LOOPCHECK ||
