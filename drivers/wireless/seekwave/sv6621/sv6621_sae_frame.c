@@ -207,6 +207,28 @@ int sv6621_sae_commit_build(
   return 0;
 }
 
+int sv6621_sae_token_parse(FAR const struct sv6621_sae_auth_frame_s *auth,
+                           FAR const uint8_t **token,
+                           FAR size_t *token_length)
+{
+  if (auth == NULL || token == NULL || token_length == NULL ||
+      auth->transaction != SV6621_SAE_COMMIT_TRANSACTION ||
+      auth->status != SV6621_SAE_STATUS_ANTI_CLOGGING_TOKEN ||
+      auth->body_length <= 2)
+    {
+      return -EINVAL;
+    }
+
+  if (sv6621_sae_frame_get_le16(auth->body) != SV6621_SAE_GROUP_19)
+    {
+      return -EOPNOTSUPP;
+    }
+
+  *token = auth->body + 2;
+  *token_length = auth->body_length - 2;
+  return 0;
+}
+
 int sv6621_sae_confirm_parse(FAR const struct sv6621_sae_auth_frame_s *auth,
                              FAR struct sv6621_sae_confirm_s *confirm)
 {
