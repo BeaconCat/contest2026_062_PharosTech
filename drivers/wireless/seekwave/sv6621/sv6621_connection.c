@@ -46,6 +46,10 @@
 #define SV6621_CONNECTION_JOIN_HEADER_SIZE    25
 #define SV6621_CONNECTION_JOIN_RESPONSE_SIZE  4
 #define SV6621_CONNECTION_JOIN_BANDWIDTH_20MHZ 0
+#define SV6621_CONNECTION_JOIN_BANDWIDTH_40MHZ 1
+#define SV6621_CONNECTION_HT_SECONDARY_NONE    0
+#define SV6621_CONNECTION_HT_SECONDARY_ABOVE   1
+#define SV6621_CONNECTION_HT_SECONDARY_BELOW   3
 #define SV6621_CONNECTION_AUTH_HEADER_SIZE     14
 #define SV6621_CONNECTION_AUTH_MAX_DATA_SIZE   512
 #define SV6621_CONNECTION_ASSOC_HEADER_SIZE    54
@@ -74,6 +78,10 @@ static const uint8_t g_sv6621_connection_rsn_psk_ccmp[] = {
 
 static void sv6621_connection_put_le16(FAR uint8_t *output, uint16_t value);
 static void sv6621_connection_put_le32(FAR uint8_t *output, uint32_t value);
+static void sv6621_connection_select_ht_channel(
+    FAR const struct sv6621_scan_entry_s *entry,
+    uint32_t bandwidth_capabilities, FAR uint8_t *center_channel,
+    FAR uint8_t *bandwidth);
 
 /****************************************************************************
  * Private Functions
@@ -102,6 +110,45 @@ static void sv6621_connection_put_le32(FAR uint8_t *output, uint32_t value)
 }
 
 /****************************************************************************
+ * Name: sv6621_connection_select_ht_channel
+ ****************************************************************************/
+
+static void sv6621_connection_select_ht_channel(
+    FAR const struct sv6621_scan_entry_s *entry,
+    uint32_t bandwidth_capabilities, FAR uint8_t *center_channel,
+    FAR uint8_t *bandwidth)
+{
+  uint32_t required_capability;
+
+  *center_channel = entry->bss.channel;
+  *bandwidth = SV6621_CONNECTION_JOIN_BANDWIDTH_20MHZ;
+  required_capability = entry->bss.band == SV6621_BAND_2GHZ ?
+      SV6621_CONNECTION_BW_CAP_2GHZ_40MHZ :
+      SV6621_CONNECTION_BW_CAP_5GHZ_40MHZ;
+  if (!entry->ht_operation_present ||
+      entry->ht_primary_channel != entry->bss.channel ||
+      (bandwidth_capabilities & required_capability) == 0 ||
+      entry->ht_secondary_offset == SV6621_CONNECTION_HT_SECONDARY_NONE)
+    {
+      return;
+    }
+
+  if (entry->ht_secondary_offset == SV6621_CONNECTION_HT_SECONDARY_ABOVE &&
+      entry->ht_primary_channel <= UINT8_MAX - 2)
+    {
+      *center_channel = entry->ht_primary_channel + 2;
+      *bandwidth = SV6621_CONNECTION_JOIN_BANDWIDTH_40MHZ;
+    }
+  else if (entry->ht_secondary_offset ==
+               SV6621_CONNECTION_HT_SECONDARY_BELOW &&
+           entry->ht_primary_channel > 2)
+    {
+      *center_channel = entry->ht_primary_channel - 2;
+      *bandwidth = SV6621_CONNECTION_JOIN_BANDWIDTH_40MHZ;
+    }
+}
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -111,12 +158,15 @@ static void sv6621_connection_put_le32(FAR uint8_t *output, uint32_t value)
 
 int sv6621_connection_join(FAR struct sv6621_command_engine_s *command,
                            FAR const struct sv6621_scan_entry_s *entry,
+                           uint32_t bandwidth_capabilities,
                            FAR struct sv6621_connection_peer_s *peer)
 {
   uint8_t response[SV6621_CONNECTION_JOIN_RESPONSE_SIZE];
   FAR uint8_t *payload;
   size_t payload_length;
   size_t response_length = sizeof(response);
+  uint8_t center_channel;
+  uint8_t bandwidth;
   int ret;
 
   if (command == NULL || entry == NULL || peer == NULL ||
@@ -132,9 +182,11 @@ int sv6621_connection_join(FAR struct sv6621_command_engine_s *command,
       return -ENOMEM;
     }
 
+  sv6621_connection_select_ht_channel(entry, bandwidth_capabilities,
+                                      &center_channel, &bandwidth);
   payload[0] = entry->bss.channel;
-  payload[1] = entry->bss.channel;
-  payload[3] = SV6621_CONNECTION_JOIN_BANDWIDTH_20MHZ;
+  payload[1] = center_channel;
+  payload[3] = bandwidth;
   payload[4] = entry->bss.band == SV6621_BAND_2GHZ ? 0 : 1;
   sv6621_connection_put_le16(payload + 5, entry->beacon_interval);
   sv6621_connection_put_le16(payload + 7, entry->capability);
