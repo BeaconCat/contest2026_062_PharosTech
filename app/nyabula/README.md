@@ -1,5 +1,8 @@
 # Nyabula openvela APP
 
+Windows 本地 Core/Service/Mock Eye 开发入口见
+[`host/README.md`](host/README.md)。原始 HTML 视觉 Demo 保持为金标准，Windows Mock 是独立复制文件。
+
 Nyabula 的产品代码从模拟器阶段起就在 openvela/NuttX 中运行。Eye Engine 使用 LVGL 9 Vector Graphic API 与 ThorVG 抗锯齿软件后端，并始终渲染到左、右两个独立 `360×360` surface。sim 的 `720×360` framebuffer 只负责并排展示这两个 surface，不属于 Eye Engine 的内部画布。
 
 ## 当前边界
