@@ -34,6 +34,7 @@
 #include "sv6621_core.h"
 #include "sv6621_firmware.h"
 #include "sv6621_regulatory.h"
+#include "sv6621_sae_crypto.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -2154,6 +2155,8 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
   struct sv6621_connect_s resolved;
   FAR const struct sv6621_connect_s *connection = request;
   FAR struct sv6621_scan_entry_s *target = NULL;
+  uint8_t sae_pmk[SV6621_SAE_PMK_SIZE];
+  uint8_t sae_pmkid[SV6621_SAE_PMKID_SIZE];
   bool wpa_prepared = false;
   int ret;
 
@@ -2164,7 +2167,8 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
 
   if (request->security != SV6621_SECURITY_OPEN &&
       request->security != SV6621_SECURITY_WPA2_PSK &&
-      request->security != SV6621_SECURITY_WPA2_WPA3_PSK)
+      request->security != SV6621_SECURITY_WPA2_WPA3_PSK &&
+      request->security != SV6621_SECURITY_WPA3_SAE)
     {
       return -EOPNOTSUPP;
     }
@@ -2249,6 +2253,13 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
       goto unlock_lifecycle;
     }
 
+  ret = sv6621_station_set_local_address(&dev->station,
+                                         dev->wifi_info.mac);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
   if (connection->security == SV6621_SECURITY_WPA2_PSK ||
       connection->security == SV6621_SECURITY_WPA2_WPA3_PSK)
     {
@@ -2282,6 +2293,29 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
   if (ret < 0)
     {
       goto cancel_wpa;
+    }
+
+  if (connection->security == SV6621_SECURITY_WPA3_SAE)
+    {
+      ret = sv6621_station_get_sae_pmk(&dev->station, sae_pmk,
+                                       sae_pmkid);
+      if (ret < 0)
+        {
+          goto cancel_wpa;
+        }
+
+      ret = sv6621_wpa_prepare_pmk(&dev->wpa, sae_pmk,
+                                   SV6621_WPA_KEY_MGMT_SAE,
+                                   dev->wifi_info.mac,
+                                   dev->station.target.bss.bssid);
+      sv6621_sae_zeroize(sae_pmk, sizeof(sae_pmk));
+      sv6621_sae_zeroize(sae_pmkid, sizeof(sae_pmkid));
+      if (ret < 0)
+        {
+          goto cancel_wpa;
+        }
+
+      wpa_prepared = true;
     }
 
   if (wpa_prepared)

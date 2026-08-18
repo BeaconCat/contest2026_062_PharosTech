@@ -32,6 +32,7 @@
 
 #include <mbedtls/md.h>
 #include <mbedtls/aes.h>
+#include <mbedtls/cmac.h>
 
 #include "sv6621_wpa_crypto.h"
 
@@ -137,6 +138,76 @@ int sv6621_wpa_hmac_sha1(FAR const uint8_t *key, size_t key_length,
     }
 
   mbedtls_md_free(&context);
+  return ret == 0 ? 0 : -EIO;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_hmac_sha256
+ ****************************************************************************/
+
+int sv6621_wpa_hmac_sha256(FAR const uint8_t *key, size_t key_length,
+                            FAR const uint8_t *data, size_t data_length,
+                            uint8_t output[SV6621_WPA_SHA256_SIZE])
+{
+  FAR const mbedtls_md_info_t *info;
+  mbedtls_md_context_t context;
+  int ret;
+
+  if (key == NULL || key_length == 0 || data == NULL || output == NULL)
+    {
+      return -EINVAL;
+    }
+
+  info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+  if (info == NULL)
+    {
+      return -ENOSYS;
+    }
+
+  mbedtls_md_init(&context);
+  ret = mbedtls_md_setup(&context, info, 1);
+  if (ret == 0)
+    {
+      ret = mbedtls_md_hmac_starts(&context, key, key_length);
+    }
+
+  if (ret == 0)
+    {
+      ret = mbedtls_md_hmac_update(&context, data, data_length);
+    }
+
+  if (ret == 0)
+    {
+      ret = mbedtls_md_hmac_finish(&context, output);
+    }
+
+  mbedtls_md_free(&context);
+  return ret == 0 ? 0 : -EIO;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_aes_cmac
+ ****************************************************************************/
+
+int sv6621_wpa_aes_cmac(FAR const uint8_t key[16],
+                         FAR const uint8_t *data, size_t data_length,
+                         uint8_t output[16])
+{
+  FAR const mbedtls_cipher_info_t *info;
+  int ret;
+
+  if (key == NULL || data == NULL || output == NULL)
+    {
+      return -EINVAL;
+    }
+
+  info = mbedtls_cipher_info_from_type(MBEDTLS_CIPHER_AES_128_ECB);
+  if (info == NULL)
+    {
+      return -ENOSYS;
+    }
+
+  ret = mbedtls_cipher_cmac(info, key, 128, data, data_length, output);
   return ret == 0 ? 0 : -EIO;
 }
 
@@ -330,6 +401,105 @@ int sv6621_wpa_derive_ptk(
       produced += copy_length;
     }
 
+  memset(input, 0, sizeof(input));
+  memset(digest, 0, sizeof(digest));
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_derive_ptk_sha256
+ ****************************************************************************/
+
+int sv6621_wpa_derive_ptk_sha256(
+    FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE],
+    FAR const uint8_t authenticator[SV6621_WPA_MAC_SIZE],
+    FAR const uint8_t supplicant[SV6621_WPA_MAC_SIZE],
+    FAR const uint8_t anonce[SV6621_WPA_NONCE_SIZE],
+    FAR const uint8_t snonce[SV6621_WPA_NONCE_SIZE],
+    uint8_t ptk[SV6621_WPA_PTK_SIZE])
+{
+  uint8_t data[SV6621_WPA_PTK_SEED_SIZE];
+  uint8_t input[2 + sizeof(g_sv6621_wpa_ptk_label) - 1 +
+                SV6621_WPA_PTK_SEED_SIZE + 2];
+  uint8_t digest[SV6621_WPA_SHA256_SIZE];
+  FAR const uint8_t *first;
+  FAR const uint8_t *second;
+  size_t produced = 0;
+  size_t offset = 0;
+  uint16_t counter = 1;
+  int ret;
+
+  if (pmk == NULL || authenticator == NULL || supplicant == NULL ||
+      anonce == NULL || snonce == NULL || ptk == NULL)
+    {
+      return -EINVAL;
+    }
+
+  if (memcmp(authenticator, supplicant, SV6621_WPA_MAC_SIZE) <= 0)
+    {
+      first = authenticator;
+      second = supplicant;
+    }
+  else
+    {
+      first = supplicant;
+      second = authenticator;
+    }
+
+  memcpy(data + offset, first, SV6621_WPA_MAC_SIZE);
+  offset += SV6621_WPA_MAC_SIZE;
+  memcpy(data + offset, second, SV6621_WPA_MAC_SIZE);
+  offset += SV6621_WPA_MAC_SIZE;
+
+  if (memcmp(anonce, snonce, SV6621_WPA_NONCE_SIZE) <= 0)
+    {
+      first = anonce;
+      second = snonce;
+    }
+  else
+    {
+      first = snonce;
+      second = anonce;
+    }
+
+  memcpy(data + offset, first, SV6621_WPA_NONCE_SIZE);
+  offset += SV6621_WPA_NONCE_SIZE;
+  memcpy(data + offset, second, SV6621_WPA_NONCE_SIZE);
+
+  memcpy(input + 2, g_sv6621_wpa_ptk_label,
+         sizeof(g_sv6621_wpa_ptk_label) - 1);
+  memcpy(input + 2 + sizeof(g_sv6621_wpa_ptk_label) - 1, data,
+         sizeof(data));
+  input[sizeof(input) - 2] = (SV6621_WPA_PTK_SIZE * 8) & 0xff;
+  input[sizeof(input) - 1] = (SV6621_WPA_PTK_SIZE * 8) >> 8;
+
+  while (produced < SV6621_WPA_PTK_SIZE)
+    {
+      size_t copy_length = SV6621_WPA_PTK_SIZE - produced;
+
+      input[0] = counter & 0xff;
+      input[1] = counter >> 8;
+      ret = sv6621_wpa_hmac_sha256(pmk, SV6621_WPA_PMK_SIZE, input,
+                                    sizeof(input), digest);
+      if (ret < 0)
+        {
+          memset(data, 0, sizeof(data));
+          memset(input, 0, sizeof(input));
+          memset(digest, 0, sizeof(digest));
+          return ret;
+        }
+
+      if (copy_length > sizeof(digest))
+        {
+          copy_length = sizeof(digest);
+        }
+
+      memcpy(ptk + produced, digest, copy_length);
+      produced += copy_length;
+      counter++;
+    }
+
+  memset(data, 0, sizeof(data));
   memset(input, 0, sizeof(input));
   memset(digest, 0, sizeof(digest));
   return 0;

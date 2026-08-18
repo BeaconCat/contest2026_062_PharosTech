@@ -54,6 +54,7 @@
 #define SV6621_WPA_KEY_DATA_LEN_OFFSET  97
 #define SV6621_WPA_KEY_DATA_OFFSET      99
 #define SV6621_WPA_KEY_VERSION_MASK     0x0007
+#define SV6621_WPA_KEY_VERSION_AKM      0x0000
 #define SV6621_WPA_KEY_VERSION_SHA1     0x0002
 #define SV6621_WPA_KEY_PAIRWISE         0x0008
 #define SV6621_WPA_KEY_INSTALL          0x0040
@@ -76,6 +77,12 @@ static const uint8_t g_sv6621_wpa_rsn_psk_ccmp[] = {
   0x00, 0x0f, 0xac, 0x02, 0x00, 0x00
 };
 
+static const uint8_t g_sv6621_wpa_rsn_sae_ccmp[] = {
+  0x30, 0x14, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04,
+  0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00,
+  0x00, 0x0f, 0xac, 0x08, 0xc0, 0x00
+};
+
 static const uint8_t g_sv6621_wpa_gtk_selector[] = {
   0x00, 0x0f, 0xac, 0x01
 };
@@ -88,6 +95,7 @@ static uint16_t sv6621_wpa_eapol_get_be16(FAR const uint8_t *value);
 static void sv6621_wpa_eapol_put_be16(FAR uint8_t *output, uint16_t value);
 static int sv6621_wpa_eapol_mic(
     FAR const uint8_t *eapol, size_t length,
+    enum sv6621_wpa_key_mgmt_e key_mgmt,
     FAR const uint8_t kck[SV6621_WPA_MIC_SIZE],
     uint8_t mic[SV6621_WPA_MIC_SIZE]);
 
@@ -116,6 +124,7 @@ static void sv6621_wpa_eapol_put_be16(FAR uint8_t *output, uint16_t value)
 
 static int sv6621_wpa_eapol_mic(
     FAR const uint8_t *eapol, size_t length,
+    enum sv6621_wpa_key_mgmt_e key_mgmt,
     FAR const uint8_t kck[SV6621_WPA_MIC_SIZE],
     uint8_t mic[SV6621_WPA_MIC_SIZE])
 {
@@ -131,11 +140,18 @@ static int sv6621_wpa_eapol_mic(
 
   memcpy(copy, eapol, length);
   memset(copy + SV6621_WPA_KEY_MIC_OFFSET, 0, SV6621_WPA_MIC_SIZE);
-  ret = sv6621_wpa_hmac_sha1(kck, SV6621_WPA_MIC_SIZE, copy, length,
-                              digest);
-  if (ret == 0)
+  if (key_mgmt == SV6621_WPA_KEY_MGMT_SAE)
     {
-      memcpy(mic, digest, SV6621_WPA_MIC_SIZE);
+      ret = sv6621_wpa_aes_cmac(kck, copy, length, mic);
+    }
+  else
+    {
+      ret = sv6621_wpa_hmac_sha1(kck, SV6621_WPA_MIC_SIZE, copy, length,
+                                  digest);
+      if (ret == 0)
+        {
+          memcpy(mic, digest, SV6621_WPA_MIC_SIZE);
+        }
     }
 
   memset(copy, 0, sizeof(copy));
@@ -151,8 +167,10 @@ static int sv6621_wpa_eapol_mic(
  * Name: sv6621_wpa_eapol_parse
  ****************************************************************************/
 
-int sv6621_wpa_eapol_parse(FAR const uint8_t *frame, size_t frame_length,
-                            FAR struct sv6621_wpa_eapol_s *eapol)
+int sv6621_wpa_eapol_parse(
+    FAR const uint8_t *frame, size_t frame_length,
+    enum sv6621_wpa_key_mgmt_e key_mgmt,
+    FAR struct sv6621_wpa_eapol_s *eapol)
 {
   FAR const uint8_t *packet;
   size_t packet_length;
@@ -160,6 +178,7 @@ int sv6621_wpa_eapol_parse(FAR const uint8_t *frame, size_t frame_length,
   uint16_t key_info;
 
   if (frame == NULL || eapol == NULL ||
+      key_mgmt > SV6621_WPA_KEY_MGMT_SAE ||
       frame_length < SV6621_WPA_ETHERNET_HEADER_SIZE +
                          SV6621_WPA_KEY_FIXED_SIZE ||
       sv6621_wpa_eapol_get_be16(frame + SV6621_WPA_ETHERTYPE_OFFSET) !=
@@ -184,7 +203,9 @@ int sv6621_wpa_eapol_parse(FAR const uint8_t *frame, size_t frame_length,
   key_info = sv6621_wpa_eapol_get_be16(
       packet + SV6621_WPA_KEY_INFO_OFFSET);
   if ((key_info & SV6621_WPA_KEY_VERSION_MASK) !=
-          SV6621_WPA_KEY_VERSION_SHA1 ||
+          (key_mgmt == SV6621_WPA_KEY_MGMT_SAE ?
+               SV6621_WPA_KEY_VERSION_AKM :
+               SV6621_WPA_KEY_VERSION_SHA1) ||
       (key_info & (SV6621_WPA_KEY_ERROR | SV6621_WPA_KEY_REQUEST)) != 0)
     {
       return -EOPNOTSUPP;
@@ -242,7 +263,8 @@ int sv6621_wpa_eapol_parse(FAR const uint8_t *frame, size_t frame_length,
  ****************************************************************************/
 
 int sv6621_wpa_eapol_build(
-    enum sv6621_wpa_response_e response, uint8_t version,
+    enum sv6621_wpa_response_e response,
+    enum sv6621_wpa_key_mgmt_e key_mgmt, uint8_t version,
     FAR const uint8_t replay[SV6621_WPA_REPLAY_SIZE],
     FAR const uint8_t snonce[SV6621_WPA_NONCE_SIZE],
     FAR const uint8_t kck[SV6621_WPA_MIC_SIZE], FAR uint8_t *output,
@@ -254,6 +276,7 @@ int sv6621_wpa_eapol_build(
   int ret;
 
   if (replay == NULL || kck == NULL || output == NULL || written == NULL ||
+      key_mgmt > SV6621_WPA_KEY_MGMT_SAE ||
       (response != SV6621_WPA_RESPONSE_2 &&
        response != SV6621_WPA_RESPONSE_4 &&
        response != SV6621_WPA_RESPONSE_GROUP_2) ||
@@ -264,8 +287,10 @@ int sv6621_wpa_eapol_build(
       return -EINVAL;
     }
 
-  key_data_length = response == SV6621_WPA_RESPONSE_2 ?
-                    sizeof(g_sv6621_wpa_rsn_psk_ccmp) : 0;
+  key_data_length = response != SV6621_WPA_RESPONSE_2 ? 0 :
+                    key_mgmt == SV6621_WPA_KEY_MGMT_SAE ?
+                    sizeof(g_sv6621_wpa_rsn_sae_ccmp) :
+                    sizeof(g_sv6621_wpa_rsn_psk_ccmp);
   length = SV6621_WPA_KEY_FIXED_SIZE + key_data_length;
   if (capacity < length)
     {
@@ -278,7 +303,10 @@ int sv6621_wpa_eapol_build(
   sv6621_wpa_eapol_put_be16(output + 2,
                              length - SV6621_WPA_EAPOL_HEADER_SIZE);
   output[4] = SV6621_WPA_KEY_DESCRIPTOR_RSN;
-  key_info = SV6621_WPA_KEY_VERSION_SHA1 | SV6621_WPA_KEY_MIC;
+  key_info = (key_mgmt == SV6621_WPA_KEY_MGMT_SAE ?
+                  SV6621_WPA_KEY_VERSION_AKM :
+                  SV6621_WPA_KEY_VERSION_SHA1) |
+             SV6621_WPA_KEY_MIC;
   if (response == SV6621_WPA_RESPONSE_4 ||
       response == SV6621_WPA_RESPONSE_GROUP_2)
     {
@@ -301,10 +329,13 @@ int sv6621_wpa_eapol_build(
       sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_DATA_LEN_OFFSET,
                                  key_data_length);
       memcpy(output + SV6621_WPA_KEY_DATA_OFFSET,
-             g_sv6621_wpa_rsn_psk_ccmp, key_data_length);
+             key_mgmt == SV6621_WPA_KEY_MGMT_SAE ?
+                 g_sv6621_wpa_rsn_sae_ccmp :
+                 g_sv6621_wpa_rsn_psk_ccmp,
+             key_data_length);
     }
 
-  ret = sv6621_wpa_eapol_mic(output, length, kck,
+  ret = sv6621_wpa_eapol_mic(output, length, key_mgmt, kck,
                               output + SV6621_WPA_KEY_MIC_OFFSET);
   if (ret < 0)
     {
@@ -321,6 +352,7 @@ int sv6621_wpa_eapol_build(
 
 int sv6621_wpa_eapol_verify_mic(
     FAR const struct sv6621_wpa_eapol_s *eapol,
+    enum sv6621_wpa_key_mgmt_e key_mgmt,
     FAR const uint8_t kck[SV6621_WPA_MIC_SIZE])
 {
   uint8_t expected[SV6621_WPA_MIC_SIZE];
@@ -333,8 +365,8 @@ int sv6621_wpa_eapol_verify_mic(
       return -EINVAL;
     }
 
-  ret = sv6621_wpa_eapol_mic(eapol->eapol, eapol->eapol_length, kck,
-                              expected);
+  ret = sv6621_wpa_eapol_mic(eapol->eapol, eapol->eapol_length, key_mgmt,
+                              kck, expected);
   if (ret < 0)
     {
       return ret;
