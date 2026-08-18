@@ -88,6 +88,8 @@ static uint16_t sv6621_scan_get_le16(FAR const uint8_t *value);
 static int sv6621_scan_parse_rsn(FAR const uint8_t *data, size_t length,
                                  FAR bool *psk, FAR bool *sae);
 static bool sv6621_scan_is_wpa_ie(FAR const uint8_t *data, size_t length);
+static bool sv6621_scan_security_matches(
+    enum sv6621_security_e requested, enum sv6621_security_e advertised);
 static size_t
 sv6621_scan_cache_weakest(FAR const struct sv6621_scan_cache_s *cache);
 static void sv6621_scan_timeout_worker(FAR void *arg);
@@ -164,6 +166,28 @@ static bool sv6621_scan_is_wpa_ie(FAR const uint8_t *data, size_t length)
 
   return length >= sizeof(wpa_type) &&
          memcmp(data, wpa_type, sizeof(wpa_type)) == 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_scan_security_matches
+ ****************************************************************************/
+
+static bool sv6621_scan_security_matches(
+    enum sv6621_security_e requested, enum sv6621_security_e advertised)
+{
+  if (requested == SV6621_SECURITY_OPEN)
+    {
+      return advertised == SV6621_SECURITY_OPEN;
+    }
+
+  if (requested == SV6621_SECURITY_WPA2_PSK ||
+      requested == SV6621_SECURITY_WPA2_WPA3_PSK)
+    {
+      return advertised == SV6621_SECURITY_WPA2_PSK ||
+             advertised == SV6621_SECURITY_WPA2_WPA3_PSK;
+    }
+
+  return false;
 }
 
 static size_t
@@ -661,6 +685,11 @@ int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
         }
 
       if (request->channel != 0 && bss->channel != request->channel)
+        {
+          continue;
+        }
+
+      if (!sv6621_scan_security_matches(request->security, bss->security))
         {
           continue;
         }
