@@ -848,7 +848,7 @@ void sv6621_scan_command_event(uint8_t instance, uint8_t id,
       complete = scan->complete;
       complete_arg = scan->complete_arg;
       nxmutex_unlock(&scan->lock);
-      work_cancel_sync(LPWORK, &scan->timeout_work);
+      work_cancel(LPWORK, &scan->timeout_work);
       if (nxmutex_lock(&scan->lock) >= 0)
         {
           scan->stopping = false;

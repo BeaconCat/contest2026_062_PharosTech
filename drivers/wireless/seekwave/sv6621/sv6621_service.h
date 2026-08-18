@@ -88,6 +88,7 @@ int sv6621_service_start_wifi(FAR struct sv6621_service_s *service,
                               FAR struct sv6621_transport_s *transport,
                               uint32_t timeout_ms);
 void sv6621_service_channel_consumer(uint8_t channel,
+                                     FAR const uint8_t encoded[4],
                                      FAR const uint8_t *payload, size_t length,
                                      FAR void *arg);
 

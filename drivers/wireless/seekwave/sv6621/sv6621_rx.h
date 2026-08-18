@@ -48,6 +48,7 @@ struct sv6621_rx_stats_s
   uint32_t bursts;
   uint32_t packets;
   uint32_t drain_completions;
+  uint32_t drain_yields;
   uint32_t malformed_bursts;
   uint32_t transport_errors;
   uint32_t duplicate_interrupts;
@@ -73,6 +74,7 @@ struct sv6621_rx_s
   bool fifo_indicator_valid;
   bool work_scheduled;
   bool work_reschedule;
+  uint8_t pending_slots;
 };
 
 /****************************************************************************

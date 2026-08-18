@@ -1194,6 +1194,8 @@ static int rk3576_sv6621_enable_irq(FAR struct sv6621_transport_s *transport,
     }
   else
     {
+      int rollback;
+
       ret = rk3576_sdmmc_enable_sdio_interrupt(priv->sdio, false);
       if (ret < 0)
         {
@@ -1213,6 +1215,13 @@ static int rk3576_sv6621_enable_irq(FAR struct sv6621_transport_s *transport,
 
       if (ret < 0)
         {
+          rollback = rk3576_sdmmc_enable_sdio_interrupt(priv->sdio, true);
+          if (rollback < 0)
+            {
+              priv->irq_enabled = false;
+              return rollback;
+            }
+
           return ret;
         }
     }

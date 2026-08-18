@@ -181,7 +181,7 @@ int sv6621_packet_dispatch(FAR struct sv6621_packet_router_s *router,
       return -ENOSYS;
     }
 
-  callback(header.channel, payload, header.length, arg);
+  callback(header.channel, encoded, payload, header.length, arg);
   return OK;
 }
 
