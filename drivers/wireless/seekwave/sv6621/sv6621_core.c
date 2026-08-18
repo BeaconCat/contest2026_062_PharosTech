@@ -1060,6 +1060,9 @@ static void sv6621_core_station_worker(FAR void *arg)
       uint16_t reason;
       bool station_ready = false;
       bool connected;
+#ifdef CONFIG_NET
+      int network_ret = 0;
+#endif
 
       if (nxmutex_lock(&dev->status_lock) < 0)
         {
@@ -1105,6 +1108,21 @@ static void sv6621_core_station_worker(FAR void *arg)
 #ifdef CONFIG_NET
       sv6621_network_set_link(&dev->network, connected && link_ready,
                               link_ready ? &context : NULL);
+      if (connected && link_ready)
+        {
+          network_ret = sv6621_network_sync_multicast(&dev->network);
+          if (network_ret == 0)
+            {
+              network_ret = sv6621_network_sync_addresses(&dev->network);
+            }
+
+          if (network_ret < 0)
+            {
+              sv6621_network_set_link(&dev->network, false, NULL);
+              sv6621_core_queue_recovery(dev, network_ret);
+              return;
+            }
+        }
 #endif
       if (!connected)
         {
