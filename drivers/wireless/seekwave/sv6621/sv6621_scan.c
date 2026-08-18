@@ -80,6 +80,7 @@
 #define SV6621_SCAN_RSN_AKM_PSK          2
 #define SV6621_SCAN_RSN_AKM_SAE          8
 #define SV6621_SCAN_RSN_CAP_MFPR         (1 << 6)
+#define SV6621_SCAN_RSN_CAP_MFPC         (1 << 7)
 
 /****************************************************************************
  * Private Function Prototypes
@@ -235,6 +236,12 @@ static bool sv6621_scan_security_matches(
              advertised == SV6621_SECURITY_WPA2_WPA3_PSK;
     }
 
+  if (requested == SV6621_SECURITY_WPA3_SAE)
+    {
+      return advertised == SV6621_SECURITY_WPA3_SAE ||
+             advertised == SV6621_SECURITY_WPA2_WPA3_PSK;
+    }
+
   return false;
 }
 
@@ -247,10 +254,21 @@ static bool sv6621_scan_connection_supported(
       return true;
     }
 
-  return entry->rsn_present &&
-         entry->rsn_group_cipher == SV6621_SCAN_RSN_CIPHER_CCMP &&
-         entry->rsn_pairwise_ccmp &&
-         (entry->rsn_capabilities & SV6621_SCAN_RSN_CAP_MFPR) == 0;
+  if (!entry->rsn_present ||
+      entry->rsn_group_cipher != SV6621_SCAN_RSN_CIPHER_CCMP ||
+      !entry->rsn_pairwise_ccmp)
+    {
+      return false;
+    }
+
+  if (requested == SV6621_SECURITY_WPA3_SAE)
+    {
+      return (entry->rsn_capabilities &
+              (SV6621_SCAN_RSN_CAP_MFPR | SV6621_SCAN_RSN_CAP_MFPC)) ==
+             (SV6621_SCAN_RSN_CAP_MFPR | SV6621_SCAN_RSN_CAP_MFPC);
+    }
+
+  return (entry->rsn_capabilities & SV6621_SCAN_RSN_CAP_MFPR) == 0;
 }
 
 static size_t

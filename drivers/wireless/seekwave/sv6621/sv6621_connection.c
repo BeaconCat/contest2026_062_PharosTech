@@ -79,6 +79,11 @@ static const uint8_t g_sv6621_connection_rsn_psk_ccmp[] = {
   1, 0, 0x00, 0x0f, 0xac, 4, 1, 0, 0x00, 0x0f, 0xac, 2, 0, 0
 };
 
+static const uint8_t g_sv6621_connection_rsn_sae_ccmp[] = {
+  SV6621_CONNECTION_IE_RSN, 20, 1, 0, 0x00, 0x0f, 0xac, 4,
+  1, 0, 0x00, 0x0f, 0xac, 4, 1, 0, 0x00, 0x0f, 0xac, 8, 0xc0, 0
+};
+
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
@@ -486,14 +491,10 @@ int sv6621_connection_build_association_ies(
       return -EINVAL;
     }
 
-  if (security == SV6621_SECURITY_WPA3_SAE)
-    {
-      return -EOPNOTSUPP;
-    }
-
   if (security != SV6621_SECURITY_OPEN &&
       security != SV6621_SECURITY_WPA2_PSK &&
-      security != SV6621_SECURITY_WPA2_WPA3_PSK)
+      security != SV6621_SECURITY_WPA2_WPA3_PSK &&
+      security != SV6621_SECURITY_WPA3_SAE)
     {
       return -EINVAL;
     }
@@ -534,14 +535,20 @@ int sv6621_connection_build_association_ies(
 
   if (security != SV6621_SECURITY_OPEN)
     {
-      if (sizeof(g_sv6621_connection_rsn_psk_ccmp) > capacity - output)
+      FAR const uint8_t *rsn = security == SV6621_SECURITY_WPA3_SAE ?
+                                   g_sv6621_connection_rsn_sae_ccmp :
+                                   g_sv6621_connection_rsn_psk_ccmp;
+      size_t rsn_length = security == SV6621_SECURITY_WPA3_SAE ?
+                              sizeof(g_sv6621_connection_rsn_sae_ccmp) :
+                              sizeof(g_sv6621_connection_rsn_psk_ccmp);
+
+      if (rsn_length > capacity - output)
         {
           return -ENOSPC;
         }
 
-      memcpy(ies + output, g_sv6621_connection_rsn_psk_ccmp,
-             sizeof(g_sv6621_connection_rsn_psk_ccmp));
-      output += sizeof(g_sv6621_connection_rsn_psk_ccmp);
+      memcpy(ies + output, rsn, rsn_length);
+      output += rsn_length;
     }
 
   if (output == 0)
