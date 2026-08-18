@@ -58,6 +58,9 @@ static int sv6621_wpa_compare_replay(FAR const uint8_t *left,
                                      FAR const uint8_t *right);
 static int sv6621_wpa_schedule_locked(FAR struct sv6621_wpa_s *wpa);
 static void sv6621_wpa_remove_keys(FAR struct sv6621_wpa_s *wpa);
+static bool sv6621_wpa_group_key_matches(
+    FAR const struct sv6621_wpa_s *wpa, uint8_t key_index,
+    FAR const uint8_t *gtk, size_t gtk_length);
 static void sv6621_wpa_finish(FAR struct sv6621_wpa_s *wpa, int result);
 static int sv6621_wpa_send_response(
     FAR struct sv6621_wpa_s *wpa, enum sv6621_wpa_response_e response);
@@ -172,6 +175,9 @@ static void sv6621_wpa_remove_keys(FAR struct sv6621_wpa_s *wpa)
       wpa->group_installed = false;
     }
 
+  sv6621_wpa_clear(wpa->gtk, sizeof(wpa->gtk));
+  wpa->gtk_length = 0;
+
   if (wpa->pairwise_installed)
     {
       sv6621_security_delete_key(
@@ -179,6 +185,19 @@ static void sv6621_wpa_remove_keys(FAR struct sv6621_wpa_s *wpa)
           SV6621_SECURITY_CIPHER_CCMP, wpa->authenticator, 0);
       wpa->pairwise_installed = false;
     }
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_group_key_matches
+ ****************************************************************************/
+
+static bool sv6621_wpa_group_key_matches(
+    FAR const struct sv6621_wpa_s *wpa, uint8_t key_index,
+    FAR const uint8_t *gtk, size_t gtk_length)
+{
+  return wpa->group_installed && wpa->gtk_index == key_index &&
+         wpa->gtk_length == gtk_length &&
+         memcmp(wpa->gtk, gtk, gtk_length) == 0;
 }
 
 /****************************************************************************
@@ -335,6 +354,7 @@ static int sv6621_wpa_process_message_3(
   uint8_t broadcast[SV6621_MAC_LENGTH];
   size_t gtk_length;
   uint8_t gtk_index;
+  bool install_group;
   int ret;
 
   if (sv6621_wpa_compare_replay(eapol->replay, wpa->replay) <= 0 ||
@@ -368,13 +388,21 @@ static int sv6621_wpa_process_message_3(
   wpa->pairwise_installed = true;
 
   memset(broadcast, 0xff, sizeof(broadcast));
-  ret = sv6621_security_add_key(
-      wpa->command, SV6621_SECURITY_KEY_GROUP,
-      SV6621_SECURITY_CIPHER_CCMP, broadcast, gtk_index, gtk, gtk_length,
-      eapol->rsc);
-  if (ret < 0)
+  install_group = !sv6621_wpa_group_key_matches(
+      wpa, gtk_index, gtk, gtk_length);
+  if (install_group)
     {
-      goto clear_gtk;
+      ret = sv6621_security_add_key(
+          wpa->command, SV6621_SECURITY_KEY_GROUP,
+          SV6621_SECURITY_CIPHER_CCMP, broadcast, gtk_index, gtk,
+          gtk_length, eapol->rsc);
+      if (ret < 0)
+        {
+          goto clear_gtk;
+        }
+
+      memcpy(wpa->gtk, gtk, gtk_length);
+      wpa->gtk_length = gtk_length;
     }
 
   wpa->gtk_index = gtk_index;
@@ -406,6 +434,7 @@ static int sv6621_wpa_process_group_message_1(
   size_t gtk_length;
   uint8_t gtk_index;
   int comparison;
+  bool install_group;
   int ret;
 
   ret = sv6621_wpa_eapol_verify_mic(
@@ -435,13 +464,18 @@ static int sv6621_wpa_process_group_message_1(
     }
 
   memset(broadcast, 0xff, sizeof(broadcast));
-  ret = sv6621_security_add_key(
-      wpa->command, SV6621_SECURITY_KEY_GROUP,
-      SV6621_SECURITY_CIPHER_CCMP, broadcast, gtk_index, gtk, gtk_length,
-      eapol->rsc);
-  if (ret < 0)
+  install_group = !sv6621_wpa_group_key_matches(
+      wpa, gtk_index, gtk, gtk_length);
+  if (install_group)
     {
-      goto clear_gtk;
+      ret = sv6621_security_add_key(
+          wpa->command, SV6621_SECURITY_KEY_GROUP,
+          SV6621_SECURITY_CIPHER_CCMP, broadcast, gtk_index, gtk,
+          gtk_length, eapol->rsc);
+      if (ret < 0)
+        {
+          goto clear_gtk;
+        }
     }
 
   memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
@@ -449,17 +483,28 @@ static int sv6621_wpa_process_group_message_1(
   ret = sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_GROUP_2);
   if (ret < 0)
     {
-      sv6621_security_delete_key(
-          wpa->command, SV6621_SECURITY_KEY_GROUP,
-          SV6621_SECURITY_CIPHER_CCMP, broadcast, gtk_index);
+      if (install_group)
+        {
+          sv6621_security_delete_key(
+              wpa->command, SV6621_SECURITY_KEY_GROUP,
+              SV6621_SECURITY_CIPHER_CCMP, broadcast, gtk_index);
+        }
+
       goto clear_gtk;
     }
 
-  if (wpa->group_installed && wpa->gtk_index != gtk_index)
+  if (install_group && wpa->group_installed &&
+      wpa->gtk_index != gtk_index)
     {
       sv6621_security_delete_key(
           wpa->command, SV6621_SECURITY_KEY_GROUP,
           SV6621_SECURITY_CIPHER_CCMP, broadcast, wpa->gtk_index);
+    }
+
+  if (install_group)
+    {
+      memcpy(wpa->gtk, gtk, gtk_length);
+      wpa->gtk_length = gtk_length;
     }
 
   wpa->gtk_index = gtk_index;
