@@ -91,6 +91,7 @@ struct sv6621_station_s
   struct sv6621_connect_s request;
   struct sv6621_connection_peer_s peer;
   uint8_t ht_capability[SV6621_CONNECTION_HT_CAPABILITY_SIZE];
+  uint8_t vht_capability[SV6621_CONNECTION_VHT_CAPABILITY_SIZE];
   uint8_t association_ies[SV6621_CONNECTION_ASSOC_IE_CAPACITY];
   size_t association_ie_length;
   int result;
@@ -115,6 +116,9 @@ int sv6621_station_configure_ht(FAR struct sv6621_station_s *station,
                                 uint16_t extended_capabilities,
                                 uint16_t ampdu_parameters,
                                 uint32_t tx_mcs, uint32_t rx_mcs);
+int sv6621_station_configure_vht(FAR struct sv6621_station_s *station,
+                                 uint32_t capabilities,
+                                 uint16_t tx_mcs, uint16_t rx_mcs);
 void sv6621_station_deinit(FAR struct sv6621_station_s *station);
 int sv6621_station_connect(FAR struct sv6621_station_s *station,
                            FAR const struct sv6621_connect_s *request,
