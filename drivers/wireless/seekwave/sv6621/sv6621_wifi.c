@@ -62,6 +62,14 @@
 #define SV6621_WIFI_INFO_CAPABILITY_OFFSET  14
 #define SV6621_WIFI_INFO_MAX_STA_OFFSET     18
 #define SV6621_WIFI_INFO_MAX_MC_OFFSET      19
+#define SV6621_WIFI_INFO_HT_CAP_OFFSET      20
+#define SV6621_WIFI_INFO_HT_EXT_CAP_OFFSET  22
+#define SV6621_WIFI_INFO_HT_AMPDU_OFFSET    24
+#define SV6621_WIFI_INFO_HT_TX_MCS_OFFSET   26
+#define SV6621_WIFI_INFO_HT_RX_MCS_OFFSET   30
+#define SV6621_WIFI_INFO_VHT_CAP_OFFSET     34
+#define SV6621_WIFI_INFO_VHT_TX_MCS_OFFSET  38
+#define SV6621_WIFI_INFO_VHT_RX_MCS_OFFSET  40
 #define SV6621_WIFI_INFO_MAX_SCAN_OFFSET    42
 #define SV6621_WIFI_INFO_MAC_OFFSET         64
 #define SV6621_WIFI_INFO_BANDWIDTH_OFFSET   86
@@ -288,6 +296,22 @@ int sv6621_wifi_get_info(FAR struct sv6621_command_engine_s *command,
       sv6621_wifi_get_le32(response + SV6621_WIFI_INFO_CAPABILITY_OFFSET);
   info->max_stations = response[SV6621_WIFI_INFO_MAX_STA_OFFSET];
   info->max_multicast_addresses = response[SV6621_WIFI_INFO_MAX_MC_OFFSET];
+  info->ht_capabilities =
+      sv6621_wifi_get_le16(response + SV6621_WIFI_INFO_HT_CAP_OFFSET);
+  info->ht_extended_capabilities =
+      sv6621_wifi_get_le16(response + SV6621_WIFI_INFO_HT_EXT_CAP_OFFSET);
+  info->ht_ampdu_parameters =
+      sv6621_wifi_get_le16(response + SV6621_WIFI_INFO_HT_AMPDU_OFFSET);
+  info->ht_tx_mcs =
+      sv6621_wifi_get_le32(response + SV6621_WIFI_INFO_HT_TX_MCS_OFFSET);
+  info->ht_rx_mcs =
+      sv6621_wifi_get_le32(response + SV6621_WIFI_INFO_HT_RX_MCS_OFFSET);
+  info->vht_capabilities =
+      sv6621_wifi_get_le32(response + SV6621_WIFI_INFO_VHT_CAP_OFFSET);
+  info->vht_tx_mcs =
+      sv6621_wifi_get_le16(response + SV6621_WIFI_INFO_VHT_TX_MCS_OFFSET);
+  info->vht_rx_mcs =
+      sv6621_wifi_get_le16(response + SV6621_WIFI_INFO_VHT_RX_MCS_OFFSET);
   info->max_scan_ssids = response[SV6621_WIFI_INFO_MAX_SCAN_OFFSET];
   if (response_length >= SV6621_WIFI_INFO_PRIVATE_OFFSET + 4)
     {

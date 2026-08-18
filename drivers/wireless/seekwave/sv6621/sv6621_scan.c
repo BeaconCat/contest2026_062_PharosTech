@@ -65,7 +65,16 @@
 #define SV6621_SCAN_FRAME_PROBE_RESPONSE 0x50
 #define SV6621_SCAN_IE_SSID              0
 #define SV6621_SCAN_IE_RSN               48
+#define SV6621_SCAN_IE_HT_OPERATION      61
+#define SV6621_SCAN_IE_VHT_OPERATION     192
 #define SV6621_SCAN_IE_VENDOR            221
+#define SV6621_SCAN_HT_OPERATION_MIN_SIZE 2
+#define SV6621_SCAN_HT_SECONDARY_MASK     0x03
+#define SV6621_SCAN_HT_SECONDARY_NONE     0
+#define SV6621_SCAN_HT_SECONDARY_ABOVE    1
+#define SV6621_SCAN_HT_SECONDARY_BELOW    3
+#define SV6621_SCAN_VHT_OPERATION_MIN_SIZE 3
+#define SV6621_SCAN_VHT_WIDTH_MAX          3
 #define SV6621_SCAN_RSN_SUITE_SIZE       4
 #define SV6621_SCAN_RSN_AKM_PSK          2
 #define SV6621_SCAN_RSN_AKM_SAE          8
@@ -393,6 +402,37 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
           if (sv6621_scan_parse_rsn(frame + offset, ie_length, &psk, &sae) < 0)
             {
               return -EPROTO;
+            }
+        }
+      else if (id == SV6621_SCAN_IE_HT_OPERATION &&
+               ie_length >= SV6621_SCAN_HT_OPERATION_MIN_SIZE)
+        {
+          uint8_t secondary =
+              frame[offset + 1] & SV6621_SCAN_HT_SECONDARY_MASK;
+
+          if (frame[offset] != 0 &&
+              (secondary == SV6621_SCAN_HT_SECONDARY_NONE ||
+               secondary == SV6621_SCAN_HT_SECONDARY_ABOVE ||
+               secondary == SV6621_SCAN_HT_SECONDARY_BELOW))
+            {
+              entry->ht_primary_channel = frame[offset];
+              entry->ht_secondary_offset = secondary;
+              entry->ht_operation_present = true;
+            }
+        }
+      else if (id == SV6621_SCAN_IE_VHT_OPERATION &&
+               ie_length >= SV6621_SCAN_VHT_OPERATION_MIN_SIZE)
+        {
+          uint8_t width = frame[offset];
+          uint8_t segment0 = frame[offset + 1];
+
+          if (width <= SV6621_SCAN_VHT_WIDTH_MAX &&
+              (width == 0 || segment0 != 0))
+            {
+              entry->vht_channel_width = width;
+              entry->vht_center_segment0 = segment0;
+              entry->vht_center_segment1 = frame[offset + 2];
+              entry->vht_operation_present = true;
             }
         }
       else if (id == SV6621_SCAN_IE_VENDOR &&
