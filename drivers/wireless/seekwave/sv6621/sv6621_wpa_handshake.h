@@ -64,6 +64,7 @@ struct sv6621_wpa_s
   mutex_t lock;
   sem_t completion;
   struct work_s work;
+  struct work_s rekey_timeout_work;
   FAR struct sv6621_command_engine_s *command;
   FAR struct sv6621_station_s *station;
   enum sv6621_wpa_state_e state;
@@ -75,8 +76,10 @@ struct sv6621_wpa_s
   uint8_t anonce[SV6621_WPA_NONCE_SIZE];
   uint8_t snonce[SV6621_WPA_NONCE_SIZE];
   uint8_t replay[SV6621_WPA_REPLAY_SIZE];
+  uint8_t gtk[SV6621_WPA_GTK_MAX_SIZE];
   uint8_t frame[SV6621_WPA_FRAME_CAPACITY];
   size_t frame_length;
+  size_t gtk_length;
   int result;
   uint8_t eapol_version;
   uint8_t gtk_index;
@@ -85,6 +88,7 @@ struct sv6621_wpa_s
   bool work_scheduled;
   bool canceling;
   bool replay_valid;
+  bool rekeying;
   bool pairwise_installed;
   bool group_installed;
 };
