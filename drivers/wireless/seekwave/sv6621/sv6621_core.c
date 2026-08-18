@@ -72,7 +72,9 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
 static void sv6621_core_scan_complete(int result, FAR void *arg);
 static void sv6621_core_scan_worker(FAR void *arg);
 static void sv6621_core_station_event(bool connected, uint16_t reason,
-                                      FAR void *arg);
+                                       FAR void *arg);
+static bool sv6621_core_station_worker_stop(
+    FAR struct sv6621_dev_s *dev, uint32_t generation);
 static void sv6621_core_station_worker(FAR void *arg);
 static void sv6621_core_data_input(FAR const struct sv6621_data_rx_s *rx,
                                    FAR void *arg);
@@ -1042,6 +1044,29 @@ static void sv6621_core_station_event(bool connected, uint16_t reason,
 }
 
 /****************************************************************************
+ * Name: sv6621_core_station_worker_stop
+ ****************************************************************************/
+
+static bool sv6621_core_station_worker_stop(
+    FAR struct sv6621_dev_s *dev, uint32_t generation)
+{
+  if (nxmutex_lock(&dev->status_lock) < 0)
+    {
+      return true;
+    }
+
+  if (generation != dev->station_generation)
+    {
+      nxmutex_unlock(&dev->status_lock);
+      return false;
+    }
+
+  dev->station_work_scheduled = false;
+  nxmutex_unlock(&dev->status_lock);
+  return true;
+}
+
+/****************************************************************************
  * Name: sv6621_core_station_worker
  ****************************************************************************/
 
@@ -1117,7 +1142,12 @@ static void sv6621_core_station_worker(FAR void *arg)
         {
           sv6621_core_queue_recovery(
               dev, station_ret < 0 ? station_ret : -EIO);
-          return;
+          if (sv6621_core_station_worker_stop(dev, generation))
+            {
+              return;
+            }
+
+          continue;
         }
 #endif
 #ifdef CONFIG_NET
@@ -1137,7 +1167,10 @@ static void sv6621_core_station_worker(FAR void *arg)
               if (event_current)
                 {
                   sv6621_core_queue_recovery(dev, network_ret);
-                  return;
+                  if (sv6621_core_station_worker_stop(dev, generation))
+                    {
+                      return;
+                    }
                 }
 
               continue;
@@ -1162,7 +1195,10 @@ static void sv6621_core_station_worker(FAR void *arg)
               if (event_current)
                 {
                   sv6621_core_queue_recovery(dev, network_ret);
-                  return;
+                  if (sv6621_core_station_worker_stop(dev, generation))
+                    {
+                      return;
+                    }
                 }
 
               continue;
