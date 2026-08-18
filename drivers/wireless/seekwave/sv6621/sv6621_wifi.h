@@ -51,6 +51,14 @@ struct sv6621_wifi_info_s
   uint32_t firmware_capabilities;
   uint32_t bandwidth_capabilities;
   uint32_t private_capabilities;
+  uint32_t ht_tx_mcs;
+  uint32_t ht_rx_mcs;
+  uint32_t vht_capabilities;
+  uint16_t ht_capabilities;
+  uint16_t ht_extended_capabilities;
+  uint16_t ht_ampdu_parameters;
+  uint16_t vht_tx_mcs;
+  uint16_t vht_rx_mcs;
   uint8_t max_stations;
   uint8_t max_multicast_addresses;
   uint8_t max_scan_ssids;

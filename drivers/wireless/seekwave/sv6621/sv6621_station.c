@@ -55,6 +55,17 @@
 #define SV6621_STATION_EVENT_RX_MGMT           4
 #define SV6621_STATION_AUTH_SUCCESS_TRANSACTION 2
 #define SV6621_STATION_REASON_UNSPECIFIED       1
+#define SV6621_STATION_HT_CAPABILITY_OFFSET     0
+#define SV6621_STATION_HT_AMPDU_OFFSET          2
+#define SV6621_STATION_HT_RX_MCS_OFFSET         3
+#define SV6621_STATION_HT_TX_PARAMETERS_OFFSET 15
+#define SV6621_STATION_HT_EXT_CAPABILITY_OFFSET 19
+#define SV6621_STATION_HT_TX_DEFINED            (1 << 0)
+#define SV6621_STATION_HT_TX_RX_DIFFERENT        (1 << 1)
+#define SV6621_STATION_HT_TX_STREAMS_SHIFT       2
+#define SV6621_STATION_VHT_CAPABILITY_OFFSET      0
+#define SV6621_STATION_VHT_RX_MCS_OFFSET          4
+#define SV6621_STATION_VHT_TX_MCS_OFFSET          8
 
 /****************************************************************************
  * Private Data
@@ -64,9 +75,6 @@ static const uint8_t g_sv6621_station_ht_capability
     [SV6621_CONNECTION_HT_CAPABILITY_SIZE] = {
       0x6e, 0x00, 0x17, 0xff
     };
-static const uint8_t g_sv6621_station_vht_capability
-    [SV6621_CONNECTION_VHT_CAPABILITY_SIZE] = { 0 };
-
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
@@ -157,7 +165,7 @@ static void sv6621_station_association_worker(FAR void *arg)
   nxmutex_unlock(&station->lock);
   ret = sv6621_connection_associate(
       station->command, station->target.bss.bssid,
-      g_sv6621_station_ht_capability, g_sv6621_station_vht_capability,
+      station->ht_capability, station->vht_capability,
       station->association_ies, station->association_ie_length);
   if (ret < 0)
     {
@@ -311,6 +319,156 @@ int sv6621_station_init(FAR struct sv6621_station_s *station,
   station->scan = scan;
   station->event = event;
   station->event_arg = event_arg;
+  memcpy(station->ht_capability, g_sv6621_station_ht_capability,
+         sizeof(station->ht_capability));
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_station_configure_ht
+ ****************************************************************************/
+
+int sv6621_station_configure_ht(FAR struct sv6621_station_s *station,
+                                uint16_t capabilities,
+                                uint16_t extended_capabilities,
+                                uint16_t ampdu_parameters,
+                                uint32_t tx_mcs, uint32_t rx_mcs)
+{
+  uint8_t tx_streams = 0;
+  uint8_t rx_streams = 0;
+  uint8_t tx_parameters = 0;
+  unsigned int index;
+  int ret;
+
+  if (station == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&station->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (station->state != SV6621_STATION_IDLE)
+    {
+      nxmutex_unlock(&station->lock);
+      return -EBUSY;
+    }
+
+  memset(station->ht_capability, 0, sizeof(station->ht_capability));
+  station->ht_capability[SV6621_STATION_HT_CAPABILITY_OFFSET] =
+      capabilities & 0xff;
+  station->ht_capability[SV6621_STATION_HT_CAPABILITY_OFFSET + 1] =
+      capabilities >> 8;
+  station->ht_capability[SV6621_STATION_HT_AMPDU_OFFSET] =
+      ampdu_parameters & 0xff;
+  station->ht_capability[SV6621_STATION_HT_EXT_CAPABILITY_OFFSET] =
+      extended_capabilities & 0xff;
+  station->ht_capability[SV6621_STATION_HT_EXT_CAPABILITY_OFFSET + 1] =
+      extended_capabilities >> 8;
+
+  for (index = 0; index < sizeof(rx_mcs); index++)
+    {
+      uint8_t rx_map = rx_mcs >> (index * 8);
+      uint8_t tx_map = tx_mcs >> (index * 8);
+
+      station->ht_capability[SV6621_STATION_HT_RX_MCS_OFFSET + index] =
+          rx_map;
+      rx_streams += rx_map != 0;
+      tx_streams += tx_map != 0;
+    }
+
+  if (tx_streams != 0)
+    {
+      tx_parameters = SV6621_STATION_HT_TX_DEFINED;
+      if (tx_mcs != rx_mcs)
+        {
+          tx_parameters |= SV6621_STATION_HT_TX_RX_DIFFERENT;
+          tx_parameters |= (tx_streams - 1) <<
+                           SV6621_STATION_HT_TX_STREAMS_SHIFT;
+        }
+    }
+
+  station->ht_capability[SV6621_STATION_HT_TX_PARAMETERS_OFFSET] =
+      tx_parameters;
+  nxmutex_unlock(&station->lock);
+  return rx_streams == 0 ? -EPROTO : 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_station_configure_vht
+ ****************************************************************************/
+
+int sv6621_station_configure_vht(FAR struct sv6621_station_s *station,
+                                 uint32_t capabilities,
+                                 uint16_t tx_mcs, uint16_t rx_mcs)
+{
+  int ret;
+
+  if (station == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&station->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (station->state != SV6621_STATION_IDLE)
+    {
+      nxmutex_unlock(&station->lock);
+      return -EBUSY;
+    }
+
+  memset(station->vht_capability, 0, sizeof(station->vht_capability));
+  station->vht_capability[SV6621_STATION_VHT_CAPABILITY_OFFSET] =
+      capabilities & 0xff;
+  station->vht_capability[SV6621_STATION_VHT_CAPABILITY_OFFSET + 1] =
+      (capabilities >> 8) & 0xff;
+  station->vht_capability[SV6621_STATION_VHT_CAPABILITY_OFFSET + 2] =
+      (capabilities >> 16) & 0xff;
+  station->vht_capability[SV6621_STATION_VHT_CAPABILITY_OFFSET + 3] =
+      capabilities >> 24;
+  station->vht_capability[SV6621_STATION_VHT_RX_MCS_OFFSET] = rx_mcs & 0xff;
+  station->vht_capability[SV6621_STATION_VHT_RX_MCS_OFFSET + 1] = rx_mcs >> 8;
+  station->vht_capability[SV6621_STATION_VHT_TX_MCS_OFFSET] = tx_mcs & 0xff;
+  station->vht_capability[SV6621_STATION_VHT_TX_MCS_OFFSET + 1] = tx_mcs >> 8;
+  nxmutex_unlock(&station->lock);
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_station_configure_bandwidth
+ ****************************************************************************/
+
+int sv6621_station_configure_bandwidth(FAR struct sv6621_station_s *station,
+                                       uint32_t capabilities)
+{
+  int ret;
+
+  if (station == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&station->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (station->state != SV6621_STATION_IDLE)
+    {
+      nxmutex_unlock(&station->lock);
+      return -EBUSY;
+    }
+
+  station->bandwidth_capabilities = capabilities;
+  nxmutex_unlock(&station->lock);
   return 0;
 }
 
@@ -438,8 +596,9 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
   kmm_free(target);
   target = NULL;
 
-  ret = sv6621_connection_join(station->command, &station->target,
-                               &station->peer);
+  ret = sv6621_connection_join(
+      station->command, &station->target, station->bandwidth_capabilities,
+      &station->peer);
   if (ret < 0)
     {
       sv6621_station_finish(station, SV6621_STATION_IDLE, ret);

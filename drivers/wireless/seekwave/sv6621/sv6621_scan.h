@@ -71,9 +71,16 @@ struct sv6621_scan_entry_s
   struct sv6621_bss_s bss;
   uint16_t beacon_interval;
   uint16_t capability;
+  uint8_t ht_primary_channel;
+  uint8_t ht_secondary_offset;
+  uint8_t vht_channel_width;
+  uint8_t vht_center_segment0;
+  uint8_t vht_center_segment1;
   uint8_t bssid_index;
   uint8_t max_bssid_indicator;
   uint16_t ie_length;
+  bool ht_operation_present;
+  bool vht_operation_present;
   bool ies_truncated;
   uint8_t ies[SV6621_SCAN_IE_CAPACITY];
 };
