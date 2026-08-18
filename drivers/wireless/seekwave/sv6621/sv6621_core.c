@@ -1771,6 +1771,14 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       goto fail;
     }
 
+  ret = sv6621_station_configure_vht(
+      &dev->station, dev->wifi_info.vht_capabilities,
+      dev->wifi_info.vht_tx_mcs, dev->wifi_info.vht_rx_mcs);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
   sv6621_data_set_pn_reuse(
       &dev->data, (dev->wifi_info.private_capabilities &
                    SV6621_WIFI_PRIVATE_PN_REUSE) != 0);
