@@ -662,6 +662,25 @@ int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network)
           addresses.ipv6_count++;
         }
     }
+
+  if (addresses.ipv6_count == 0)
+    {
+      FAR const uint8_t *mac =
+          network->dev.d_mac.ether.ether_addr_octet;
+      FAR uint8_t *link_local = addresses.ipv6[0];
+
+      link_local[0] = 0xfe;
+      link_local[1] = 0x80;
+      link_local[8] = mac[0] ^ 0x02;
+      link_local[9] = mac[1];
+      link_local[10] = mac[2];
+      link_local[11] = 0xff;
+      link_local[12] = 0xfe;
+      link_local[13] = mac[3];
+      link_local[14] = mac[4];
+      link_local[15] = mac[5];
+      addresses.ipv6_count = 1;
+    }
 #endif
   net_unlock();
 
