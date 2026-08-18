@@ -735,7 +735,6 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
                         FAR const uint8_t authenticator[SV6621_MAC_LENGTH])
 {
   uint8_t pmk[SV6621_WPA_PMK_SIZE];
-  uint8_t snonce[SV6621_WPA_NONCE_SIZE];
   int ret;
 
   if (wpa == NULL || request == NULL || supplicant == NULL ||
@@ -754,10 +753,33 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
       return ret;
     }
 
+  ret = sv6621_wpa_prepare_pmk(wpa, pmk, supplicant, authenticator);
+  sv6621_wpa_clear(pmk, sizeof(pmk));
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_prepare_pmk
+ ****************************************************************************/
+
+int sv6621_wpa_prepare_pmk(
+    FAR struct sv6621_wpa_s *wpa,
+    FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE],
+    FAR const uint8_t supplicant[SV6621_MAC_LENGTH],
+    FAR const uint8_t authenticator[SV6621_MAC_LENGTH])
+{
+  uint8_t snonce[SV6621_WPA_NONCE_SIZE];
+  int ret;
+
+  if (wpa == NULL || pmk == NULL || supplicant == NULL ||
+      authenticator == NULL)
+    {
+      return -EINVAL;
+    }
+
   ret = sv6621_wpa_generate_nonce(snonce);
   if (ret < 0)
     {
-      sv6621_wpa_clear(pmk, sizeof(pmk));
       return ret;
     }
 
@@ -765,7 +787,6 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
   ret = nxmutex_lock(&wpa->lock);
   if (ret < 0)
     {
-      sv6621_wpa_clear(pmk, sizeof(pmk));
       sv6621_wpa_clear(snonce, sizeof(snonce));
       return ret;
     }
@@ -774,7 +795,6 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
       wpa->state != SV6621_WPA_FAILED)
     {
       nxmutex_unlock(&wpa->lock);
-      sv6621_wpa_clear(pmk, sizeof(pmk));
       sv6621_wpa_clear(snonce, sizeof(snonce));
       return -EBUSY;
     }
@@ -794,7 +814,6 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
   wpa->frame_pending = false;
   wpa->state = SV6621_WPA_WAIT_MESSAGE_1;
   nxmutex_unlock(&wpa->lock);
-  sv6621_wpa_clear(pmk, sizeof(pmk));
   sv6621_wpa_clear(snonce, sizeof(snonce));
   return 0;
 }
