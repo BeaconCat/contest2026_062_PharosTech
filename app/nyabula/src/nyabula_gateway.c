@@ -909,6 +909,17 @@ static void nyabula_gateway_handle_client(int fd,
           "\"briefing\",\"privacy\",\"identity\",\"memory\",\"devices\","
           "\"system\",\"health\",\"presence\",\"companion\",\"home\","
           "\"subwoofer\"],\"styles\":[\"full\",\"minimal\"],"
+          "\"renderer_contract\":{\"version\":2,"
+          "\"state_transition_ms\":420,\"numeric_transition_ms\":520,"
+          "\"continuous_fields\":[\"duration_ms\",\"position_ms\","
+          "\"remaining_ms\",\"elapsed_ms\",\"percent\",\"device_count\","
+          "\"briefing_index\",\"briefing_count\",\"temperature_c\","
+          "\"feels_like_c\",\"humidity_percent\",\"wind_kph\","
+          "\"visibility_km\",\"distance_m\",\"heart_rate_bpm\","
+          "\"crossover_hz\",\"progress\",\"eq_bands\"],"
+          "\"clock_fields\":[],"
+          "\"semantic_fallback\":"
+          "\"center_scale_crossfade_all_other_fields\"},"
           "\"limits\":{\"priority_min\":0,\"priority_max\":255,"
           "\"queue_depth\":32,\"source_length\":23}}";
       nyabula_gateway_response(fd, 200, "OK",
