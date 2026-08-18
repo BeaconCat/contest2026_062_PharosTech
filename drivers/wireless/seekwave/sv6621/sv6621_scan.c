@@ -79,6 +79,7 @@
 #define SV6621_SCAN_RSN_CIPHER_CCMP      4
 #define SV6621_SCAN_RSN_AKM_PSK          2
 #define SV6621_SCAN_RSN_AKM_SAE          8
+#define SV6621_SCAN_RSN_CAP_MFPR         (1 << 6)
 
 /****************************************************************************
  * Private Function Prototypes
@@ -248,7 +249,8 @@ static bool sv6621_scan_connection_supported(
 
   return entry->rsn_present &&
          entry->rsn_group_cipher == SV6621_SCAN_RSN_CIPHER_CCMP &&
-         entry->rsn_pairwise_ccmp;
+         entry->rsn_pairwise_ccmp &&
+         (entry->rsn_capabilities & SV6621_SCAN_RSN_CAP_MFPR) == 0;
 }
 
 static size_t
