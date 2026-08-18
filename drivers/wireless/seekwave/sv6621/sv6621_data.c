@@ -121,9 +121,9 @@ sv6621_data_find_fragment(FAR struct sv6621_data_s *data,
 static FAR struct sv6621_data_fragment_s *
 sv6621_data_select_fragment(FAR struct sv6621_data_s *data);
 static bool sv6621_data_cipher_uses_pn(uint8_t cipher);
-static bool sv6621_data_pn_follows(FAR const uint8_t *previous,
-                                   FAR const uint8_t *current,
-                                   size_t length);
+static bool sv6621_data_pn_after(FAR const uint8_t *previous,
+                                 FAR const uint8_t *current,
+                                 size_t length);
 static void sv6621_data_free_ba_session(
     FAR struct sv6621_data_ba_session_s *session);
 static int sv6621_data_configure_ba_session(
@@ -254,28 +254,25 @@ static bool sv6621_data_cipher_uses_pn(uint8_t cipher)
 }
 
 /****************************************************************************
- * Name: sv6621_data_pn_follows
+ * Name: sv6621_data_pn_after
  ****************************************************************************/
 
-static bool sv6621_data_pn_follows(FAR const uint8_t *previous,
-                                   FAR const uint8_t *current,
-                                   size_t length)
+static bool sv6621_data_pn_after(FAR const uint8_t *previous,
+                                 FAR const uint8_t *current,
+                                 size_t length)
 {
-  unsigned int carry = 1;
-  size_t index;
+  size_t index = length;
 
-  for (index = 0; index < length; index++)
+  while (index > 0)
     {
-      uint8_t expected = previous[index] + carry;
-
-      carry = carry != 0 && previous[index] == UINT8_MAX;
-      if (current[index] != expected)
+      index--;
+      if (current[index] != previous[index])
         {
-          return false;
+          return current[index] > previous[index];
         }
     }
 
-  return carry == 0;
+  return false;
 }
 
 /****************************************************************************
@@ -878,8 +875,8 @@ static int sv6621_data_reassemble(FAR struct sv6621_data_s *data,
       size_t pn_length = data->pn_reuse ? 4 : 6;
 
       if (rx->cipher != entry->first.cipher ||
-          !sv6621_data_pn_follows(entry->last_packet_number,
-                                  rx->packet_number, pn_length))
+          !sv6621_data_pn_after(entry->last_packet_number,
+                                rx->packet_number, pn_length))
         {
           entry->active = false;
           data->stats.fragment_drops++;
