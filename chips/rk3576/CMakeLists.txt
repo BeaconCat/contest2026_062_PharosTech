@@ -38,6 +38,7 @@ if(CONFIG_SV6621)
        ${SV6621_DIR}/sv6621_protocol.c
        ${SV6621_DIR}/sv6621_regulatory.c
        ${SV6621_DIR}/sv6621_rx.c
+       ${SV6621_DIR}/sv6621_sae_frame.c
        ${SV6621_DIR}/sv6621_scan.c
        ${SV6621_DIR}/sv6621_security.c
        ${SV6621_DIR}/sv6621_signal.c
