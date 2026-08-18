@@ -152,6 +152,8 @@ struct nyabula_core_snapshot_s
   enum nyabula_eye_scene_style_e scene_style;
   struct nyabula_eye_scene_payload_s scene_payload;
   struct nyabula_core_owner_s scene_owner;
+  uint64_t blink_nonce;
+  enum nyabula_eye_mask_e blink_eyes;
   bool auto_blink;
   float ambient_light;
   uint32_t iris_rgb[NYABULA_EYE_COUNT];

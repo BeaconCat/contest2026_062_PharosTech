@@ -390,8 +390,19 @@ static int nyabula_core_process(struct nyabula_core_s *core,
         break;
 
       case NYABULA_CORE_ACTION_BLINK:
-        return nyabula_eye_engine_blink(core->eye_engine,
-                                        command->data.blink.eyes);
+        {
+          int ret = nyabula_eye_engine_blink(core->eye_engine,
+                                             command->data.blink.eyes);
+          if (ret < 0)
+            {
+              return ret;
+            }
+
+          core->snapshot.blink_eyes = command->data.blink.eyes;
+          core->snapshot.blink_nonce++;
+          core->snapshot.revision++;
+          break;
+        }
 
       case NYABULA_CORE_ACTION_GAZE:
         return nyabula_eye_engine_set_gaze(core->eye_engine,
@@ -499,6 +510,7 @@ static int nyabula_core_process(struct nyabula_core_s *core,
         nyabula_eye_engine_set_iris_color(core->eye_engine,
                                           NYABULA_EYE_MASK_BOTH, 0x56ffb2);
         core->snapshot.auto_blink = true;
+        core->snapshot.blink_eyes = NYABULA_EYE_MASK_BOTH;
         core->snapshot.ambient_light = 1.0f;
         core->snapshot.iris_rgb[NYABULA_EYE_LEFT] = 0x56ffb2;
         core->snapshot.iris_rgb[NYABULA_EYE_RIGHT] = 0x56ffb2;
@@ -540,6 +552,7 @@ nyabula_core_create(struct nyabula_eye_engine_s *eye_engine)
   core->scene_winner = -1;
   core->snapshot.expression = NYABULA_EYE_EXPRESSION_IDLE;
   core->snapshot.scene = NYABULA_EYE_SCENE_NONE;
+  core->snapshot.blink_eyes = NYABULA_EYE_MASK_BOTH;
   core->snapshot.auto_blink = true;
   core->snapshot.ambient_light = 1.0f;
   core->snapshot.iris_rgb[NYABULA_EYE_LEFT] = 0x56ffb2;

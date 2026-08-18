@@ -716,6 +716,7 @@ static void nyabula_gateway_state(int fd, struct nyabula_core_s *core)
   cJSON *json = cJSON_CreateObject();
   cJSON *expression = cJSON_AddObjectToObject(json, "expression");
   cJSON *scene = cJSON_AddObjectToObject(json, "scene");
+  cJSON *blink = cJSON_AddObjectToObject(json, "blink");
   cJSON *settings = cJSON_AddObjectToObject(json, "settings");
   cJSON *last = cJSON_AddObjectToObject(json, "last_command");
 
@@ -745,6 +746,12 @@ static void nyabula_gateway_state(int fd, struct nyabula_core_s *core)
                         nyabula_gateway_payload_json(&snapshot.scene_payload));
   cJSON_AddItemToObject(scene, "owner",
                         nyabula_gateway_owner_json(&snapshot.scene_owner));
+  cJSON_AddNumberToObject(blink, "nonce", snapshot.blink_nonce);
+  cJSON_AddStringToObject(
+      blink, "eyes",
+      snapshot.blink_eyes == NYABULA_EYE_MASK_LEFT
+          ? "left"
+          : snapshot.blink_eyes == NYABULA_EYE_MASK_RIGHT ? "right" : "both");
   cJSON_AddBoolToObject(settings, "auto_blink", snapshot.auto_blink);
   cJSON_AddNumberToObject(settings, "ambient_light", snapshot.ambient_light);
   cJSON *iris = cJSON_AddArrayToObject(settings, "iris_rgb");
