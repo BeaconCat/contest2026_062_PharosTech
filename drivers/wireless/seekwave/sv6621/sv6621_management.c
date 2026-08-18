@@ -39,6 +39,7 @@
 
 #define SV6621_MANAGEMENT_COMMAND_TX        14
 #define SV6621_MANAGEMENT_TX_HEADER_SIZE    17
+#define SV6621_MANAGEMENT_TX_STATUS_SIZE    12
 #define SV6621_MANAGEMENT_COMMAND_TIMEOUT_MS 1000
 #define SV6621_MANAGEMENT_MAX_FRAME_SIZE \
   (SV6621_COMMAND_MAX_MESSAGE_SIZE - SV6621_COMMAND_HEADER_SIZE - \
@@ -51,6 +52,8 @@
 static void sv6621_management_put_le16(FAR uint8_t *value, uint16_t number);
 static void sv6621_management_put_le32(FAR uint8_t *value, uint32_t number);
 static void sv6621_management_put_le64(FAR uint8_t *value, uint64_t number);
+static uint16_t sv6621_management_get_le16(FAR const uint8_t *value);
+static uint64_t sv6621_management_get_le64(FAR const uint8_t *value);
 
 /****************************************************************************
  * Private Functions
@@ -78,6 +81,24 @@ static void sv6621_management_put_le64(FAR uint8_t *value, uint64_t number)
     {
       value[index] = number >> (index * 8);
     }
+}
+
+static uint16_t sv6621_management_get_le16(FAR const uint8_t *value)
+{
+  return value[0] | ((uint16_t)value[1] << 8);
+}
+
+static uint64_t sv6621_management_get_le64(FAR const uint8_t *value)
+{
+  uint64_t number = 0;
+  unsigned int index;
+
+  for (index = 0; index < sizeof(number); index++)
+    {
+      number |= (uint64_t)value[index] << (index * 8);
+    }
+
+  return number;
 }
 
 /****************************************************************************
@@ -123,4 +144,29 @@ int sv6621_management_tx(FAR struct sv6621_command_engine_s *command,
                                SV6621_MANAGEMENT_COMMAND_TIMEOUT_MS);
   kmm_free(payload);
   return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
+}
+
+int sv6621_management_parse_tx_status(
+    FAR const uint8_t *payload, size_t payload_length,
+    FAR struct sv6621_management_tx_status_s *status)
+{
+  uint16_t frame_length;
+
+  if (payload == NULL || status == NULL ||
+      payload_length < SV6621_MANAGEMENT_TX_STATUS_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  frame_length = sv6621_management_get_le16(payload + 10);
+  if (frame_length != payload_length - SV6621_MANAGEMENT_TX_STATUS_SIZE)
+    {
+      return -EPROTO;
+    }
+
+  status->cookie = sv6621_management_get_le64(payload);
+  status->acknowledged = sv6621_management_get_le16(payload + 8) != 0;
+  status->frame = payload + SV6621_MANAGEMENT_TX_STATUS_SIZE;
+  status->frame_length = frame_length;
+  return 0;
 }
