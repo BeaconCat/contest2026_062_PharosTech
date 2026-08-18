@@ -76,8 +76,10 @@
 #define SV6621_SCAN_VHT_OPERATION_MIN_SIZE 3
 #define SV6621_SCAN_VHT_WIDTH_MAX          3
 #define SV6621_SCAN_RSN_SUITE_SIZE       4
+#define SV6621_SCAN_RSN_CIPHER_CCMP      4
 #define SV6621_SCAN_RSN_AKM_PSK          2
 #define SV6621_SCAN_RSN_AKM_SAE          8
+#define SV6621_SCAN_RSN_CAP_MFPR         (1 << 6)
 
 /****************************************************************************
  * Private Function Prototypes
@@ -86,8 +88,15 @@
 static void sv6621_scan_put_le32(FAR uint8_t *value, uint32_t number);
 static uint16_t sv6621_scan_get_le16(FAR const uint8_t *value);
 static int sv6621_scan_parse_rsn(FAR const uint8_t *data, size_t length,
+                                 FAR struct sv6621_scan_entry_s *entry,
                                  FAR bool *psk, FAR bool *sae);
+static bool sv6621_scan_is_rsn_suite(FAR const uint8_t *suite);
 static bool sv6621_scan_is_wpa_ie(FAR const uint8_t *data, size_t length);
+static bool sv6621_scan_security_matches(
+    enum sv6621_security_e requested, enum sv6621_security_e advertised);
+static bool sv6621_scan_connection_supported(
+    enum sv6621_security_e requested,
+    FAR const struct sv6621_scan_entry_s *entry);
 static size_t
 sv6621_scan_cache_weakest(FAR const struct sv6621_scan_cache_s *cache);
 static void sv6621_scan_timeout_worker(FAR void *arg);
@@ -109,9 +118,16 @@ static uint16_t sv6621_scan_get_le16(FAR const uint8_t *value)
   return value[0] | ((uint16_t)value[1] << 8);
 }
 
+static bool sv6621_scan_is_rsn_suite(FAR const uint8_t *suite)
+{
+  return suite[0] == 0x00 && suite[1] == 0x0f && suite[2] == 0xac;
+}
+
 static int sv6621_scan_parse_rsn(FAR const uint8_t *data, size_t length,
+                                 FAR struct sv6621_scan_entry_s *entry,
                                  FAR bool *psk, FAR bool *sae)
 {
+  FAR const uint8_t *suite;
   uint16_t suite_count;
   size_t offset;
   unsigned int index;
@@ -121,11 +137,33 @@ static int sv6621_scan_parse_rsn(FAR const uint8_t *data, size_t length,
       return -EPROTO;
     }
 
+  suite = data + 2;
+  if (!sv6621_scan_is_rsn_suite(suite))
+    {
+      return -EPROTO;
+    }
+
+  entry->rsn_group_cipher = suite[3];
   suite_count = sv6621_scan_get_le16(data + 6);
+  if (suite_count == 0)
+    {
+      return -EPROTO;
+    }
+
   offset = 8 + (size_t)suite_count * SV6621_SCAN_RSN_SUITE_SIZE;
   if (offset + 2 > length)
     {
       return -EPROTO;
+    }
+
+  for (index = 0; index < suite_count; index++)
+    {
+      suite = data + 8 + index * SV6621_SCAN_RSN_SUITE_SIZE;
+      if (sv6621_scan_is_rsn_suite(suite) &&
+          suite[3] == SV6621_SCAN_RSN_CIPHER_CCMP)
+        {
+          entry->rsn_pairwise_ccmp = true;
+        }
     }
 
   suite_count = sv6621_scan_get_le16(data + offset);
@@ -137,10 +175,9 @@ static int sv6621_scan_parse_rsn(FAR const uint8_t *data, size_t length,
 
   for (index = 0; index < suite_count; index++)
     {
-      FAR const uint8_t *suite =
-          data + offset + index * SV6621_SCAN_RSN_SUITE_SIZE;
+      suite = data + offset + index * SV6621_SCAN_RSN_SUITE_SIZE;
 
-      if (suite[0] != 0x00 || suite[1] != 0x0f || suite[2] != 0xac)
+      if (!sv6621_scan_is_rsn_suite(suite))
         {
           continue;
         }
@@ -155,6 +192,19 @@ static int sv6621_scan_parse_rsn(FAR const uint8_t *data, size_t length,
         }
     }
 
+  offset += (size_t)suite_count * SV6621_SCAN_RSN_SUITE_SIZE;
+  if (offset < length)
+    {
+      if (length - offset < 2)
+        {
+          return -EPROTO;
+        }
+
+      entry->rsn_capabilities = sv6621_scan_get_le16(data + offset);
+    }
+
+  entry->rsn_present = true;
+
   return 0;
 }
 
@@ -164,6 +214,43 @@ static bool sv6621_scan_is_wpa_ie(FAR const uint8_t *data, size_t length)
 
   return length >= sizeof(wpa_type) &&
          memcmp(data, wpa_type, sizeof(wpa_type)) == 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_scan_security_matches
+ ****************************************************************************/
+
+static bool sv6621_scan_security_matches(
+    enum sv6621_security_e requested, enum sv6621_security_e advertised)
+{
+  if (requested == SV6621_SECURITY_OPEN)
+    {
+      return advertised == SV6621_SECURITY_OPEN;
+    }
+
+  if (requested == SV6621_SECURITY_WPA2_PSK ||
+      requested == SV6621_SECURITY_WPA2_WPA3_PSK)
+    {
+      return advertised == SV6621_SECURITY_WPA2_PSK ||
+             advertised == SV6621_SECURITY_WPA2_WPA3_PSK;
+    }
+
+  return false;
+}
+
+static bool sv6621_scan_connection_supported(
+    enum sv6621_security_e requested,
+    FAR const struct sv6621_scan_entry_s *entry)
+{
+  if (requested == SV6621_SECURITY_OPEN)
+    {
+      return true;
+    }
+
+  return entry->rsn_present &&
+         entry->rsn_group_cipher == SV6621_SCAN_RSN_CIPHER_CCMP &&
+         entry->rsn_pairwise_ccmp &&
+         (entry->rsn_capabilities & SV6621_SCAN_RSN_CAP_MFPR) == 0;
 }
 
 static size_t
@@ -328,6 +415,7 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
   uint16_t frame_length;
   uint16_t capability;
   size_t offset;
+  bool legacy_security = false;
   bool psk = false;
   bool sae = false;
   bool privacy;
@@ -399,7 +487,8 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
         }
       else if (id == SV6621_SCAN_IE_RSN)
         {
-          if (sv6621_scan_parse_rsn(frame + offset, ie_length, &psk, &sae) < 0)
+          if (sv6621_scan_parse_rsn(frame + offset, ie_length, entry, &psk,
+                                    &sae) < 0)
             {
               return -EPROTO;
             }
@@ -438,7 +527,7 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
       else if (id == SV6621_SCAN_IE_VENDOR &&
                sv6621_scan_is_wpa_ie(frame + offset, ie_length))
         {
-          psk = true;
+          legacy_security = true;
         }
 
       if (entry->ie_length + 2 + ie_length <= SV6621_SCAN_IE_CAPACITY)
@@ -464,9 +553,13 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
     {
       bss->security = SV6621_SECURITY_WPA3_SAE;
     }
-  else if (psk || privacy)
+  else if (psk)
     {
       bss->security = SV6621_SECURITY_WPA2_PSK;
+    }
+  else if (legacy_security || privacy)
+    {
+      bss->security = SV6621_SECURITY_LEGACY;
     }
   else
     {
@@ -661,6 +754,17 @@ int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
         }
 
       if (request->channel != 0 && bss->channel != request->channel)
+        {
+          continue;
+        }
+
+      if (!sv6621_scan_security_matches(request->security, bss->security))
+        {
+          continue;
+        }
+
+      if (!sv6621_scan_connection_supported(request->security,
+                                             &cache->entries[index]))
         {
           continue;
         }

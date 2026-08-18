@@ -78,9 +78,13 @@ struct sv6621_scan_entry_s
   uint8_t vht_center_segment1;
   uint8_t bssid_index;
   uint8_t max_bssid_indicator;
+  uint8_t rsn_group_cipher;
+  uint16_t rsn_capabilities;
   uint16_t ie_length;
   bool ht_operation_present;
   bool vht_operation_present;
+  bool rsn_present;
+  bool rsn_pairwise_ccmp;
   bool ies_truncated;
   uint8_t ies[SV6621_SCAN_IE_CAPACITY];
 };
