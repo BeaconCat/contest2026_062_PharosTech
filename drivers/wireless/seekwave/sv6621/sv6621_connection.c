@@ -47,9 +47,11 @@
 #define SV6621_CONNECTION_JOIN_RESPONSE_SIZE  4
 #define SV6621_CONNECTION_JOIN_BANDWIDTH_20MHZ 0
 #define SV6621_CONNECTION_JOIN_BANDWIDTH_40MHZ 1
+#define SV6621_CONNECTION_JOIN_BANDWIDTH_80MHZ 2
 #define SV6621_CONNECTION_HT_SECONDARY_NONE    0
 #define SV6621_CONNECTION_HT_SECONDARY_ABOVE   1
 #define SV6621_CONNECTION_HT_SECONDARY_BELOW   3
+#define SV6621_CONNECTION_VHT_WIDTH_80MHZ       1
 #define SV6621_CONNECTION_AUTH_HEADER_SIZE     14
 #define SV6621_CONNECTION_AUTH_MAX_DATA_SIZE   512
 #define SV6621_CONNECTION_ASSOC_HEADER_SIZE    54
@@ -79,6 +81,10 @@ static const uint8_t g_sv6621_connection_rsn_psk_ccmp[] = {
 static void sv6621_connection_put_le16(FAR uint8_t *output, uint16_t value);
 static void sv6621_connection_put_le32(FAR uint8_t *output, uint32_t value);
 static void sv6621_connection_select_ht_channel(
+    FAR const struct sv6621_scan_entry_s *entry,
+    uint32_t bandwidth_capabilities, FAR uint8_t *center_channel,
+    FAR uint8_t *bandwidth);
+static void sv6621_connection_select_vht_channel(
     FAR const struct sv6621_scan_entry_s *entry,
     uint32_t bandwidth_capabilities, FAR uint8_t *center_channel,
     FAR uint8_t *bandwidth);
@@ -149,6 +155,29 @@ static void sv6621_connection_select_ht_channel(
 }
 
 /****************************************************************************
+ * Name: sv6621_connection_select_vht_channel
+ ****************************************************************************/
+
+static void sv6621_connection_select_vht_channel(
+    FAR const struct sv6621_scan_entry_s *entry,
+    uint32_t bandwidth_capabilities, FAR uint8_t *center_channel,
+    FAR uint8_t *bandwidth)
+{
+  if (entry->bss.band != SV6621_BAND_5GHZ ||
+      !entry->vht_operation_present ||
+      entry->vht_channel_width != SV6621_CONNECTION_VHT_WIDTH_80MHZ ||
+      entry->vht_center_segment0 == 0 ||
+      (bandwidth_capabilities &
+       SV6621_CONNECTION_BW_CAP_5GHZ_80MHZ) == 0)
+    {
+      return;
+    }
+
+  *center_channel = entry->vht_center_segment0;
+  *bandwidth = SV6621_CONNECTION_JOIN_BANDWIDTH_80MHZ;
+}
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -184,6 +213,8 @@ int sv6621_connection_join(FAR struct sv6621_command_engine_s *command,
 
   sv6621_connection_select_ht_channel(entry, bandwidth_capabilities,
                                       &center_channel, &bandwidth);
+  sv6621_connection_select_vht_channel(entry, bandwidth_capabilities,
+                                       &center_channel, &bandwidth);
   payload[0] = entry->bss.channel;
   payload[1] = center_channel;
   payload[3] = bandwidth;
