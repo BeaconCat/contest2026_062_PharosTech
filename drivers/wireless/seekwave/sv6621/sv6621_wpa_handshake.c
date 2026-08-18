@@ -57,6 +57,7 @@ static int sv6621_wpa_generate_nonce(
     uint8_t nonce[SV6621_WPA_NONCE_SIZE]);
 static int sv6621_wpa_compare_replay(FAR const uint8_t *left,
                                      FAR const uint8_t *right);
+static bool sv6621_wpa_is_frame_error(int error);
 static int sv6621_wpa_schedule_locked(FAR struct sv6621_wpa_s *wpa);
 static void sv6621_wpa_remove_keys(FAR struct sv6621_wpa_s *wpa);
 static bool sv6621_wpa_group_key_matches(
@@ -135,6 +136,17 @@ static int sv6621_wpa_compare_replay(FAR const uint8_t *left,
     }
 
   return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_is_frame_error
+ ****************************************************************************/
+
+static bool sv6621_wpa_is_frame_error(int error)
+{
+  return error == -EINVAL || error == -EPROTO ||
+         error == -EOPNOTSUPP || error == -EKEYREJECTED ||
+         error == -E2BIG || error == -ENOENT;
 }
 
 /****************************************************************************
@@ -341,7 +353,8 @@ static int sv6621_wpa_process_message_1(
       ret = nxmutex_lock(&wpa->lock);
       if (ret == 0)
         {
-          if (wpa->state == SV6621_WPA_COMPLETE)
+          if (wpa->state == SV6621_WPA_COMPLETE ||
+              wpa->state == SV6621_WPA_FAILED)
             {
               wpa->rekeying = true;
             }
@@ -639,6 +652,11 @@ static void sv6621_wpa_worker(FAR void *arg)
 
       if (ret < 0 && ret != -EALREADY)
         {
+          if (sv6621_wpa_is_frame_error(ret))
+            {
+              continue;
+            }
+
           if (state == SV6621_WPA_COMPLETE || rekeying)
             {
               sv6621_station_disconnect(wpa->station,
@@ -830,6 +848,8 @@ int sv6621_wpa_run(FAR struct sv6621_wpa_s *wpa,
   ret = nxsem_tickwait(&wpa->completion, MSEC2TICK(timeout_ms));
   if (ret < 0)
     {
+      int wait_result = ret;
+
       if (nxmutex_lock(&wpa->lock) == 0)
         {
           if (wpa->state == SV6621_WPA_COMPLETE)
@@ -842,8 +862,8 @@ int sv6621_wpa_run(FAR struct sv6621_wpa_s *wpa,
           nxmutex_unlock(&wpa->lock);
         }
 
-      sv6621_wpa_cancel(wpa, -ETIMEDOUT);
-      return -ETIMEDOUT;
+      sv6621_wpa_cancel(wpa, wait_result);
+      return wait_result;
     }
 
   if (nxmutex_lock(&wpa->lock) < 0)

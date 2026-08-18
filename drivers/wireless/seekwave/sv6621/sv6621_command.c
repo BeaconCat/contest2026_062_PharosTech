@@ -76,7 +76,8 @@ sv6621_command_complete_ack(FAR struct sv6621_command_engine_s *engine,
       return ret;
     }
 
-  if (!engine->pending || header->id != engine->pending_id ||
+  if (!engine->pending || header->instance != engine->pending_instance ||
+      header->id != engine->pending_id ||
       header->sequence != engine->pending_sequence)
     {
       engine->stats.stale_acknowledgements++;
@@ -449,6 +450,7 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
   header.id = id;
   header.sequence = engine->next_sequence;
   header.total_length = (uint16_t)message_length;
+  engine->pending_instance = instance;
   engine->pending_id = id;
   engine->pending_sequence = header.sequence;
   engine->pending = true;
@@ -488,6 +490,7 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
   ret = nxsem_tickwait(&engine->completion, MSEC2TICK(timeout_ms));
   if (ret < 0)
     {
+      int wait_result = ret;
       int lock_ret = nxmutex_lock(&engine->state_lock);
 
       if (lock_ret < 0)
@@ -497,11 +500,19 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
       else if (engine->pending)
         {
           engine->pending = false;
-          engine->completion_result = -ETIMEDOUT;
+          engine->completion_result = wait_result;
           engine->response = NULL;
           engine->response_capacity = 0;
-          engine->stats.timeouts++;
-          ret = -ETIMEDOUT;
+          if (wait_result == -ETIMEDOUT)
+            {
+              engine->stats.timeouts++;
+            }
+          else
+            {
+              engine->stats.cancelled++;
+            }
+
+          ret = wait_result;
           nxmutex_unlock(&engine->state_lock);
           goto finish_command;
         }
