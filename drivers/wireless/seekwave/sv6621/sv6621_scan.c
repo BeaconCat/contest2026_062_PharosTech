@@ -396,6 +396,7 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
   uint16_t frame_length;
   uint16_t capability;
   size_t offset;
+  bool legacy_security = false;
   bool psk = false;
   bool sae = false;
   bool privacy;
@@ -507,7 +508,7 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
       else if (id == SV6621_SCAN_IE_VENDOR &&
                sv6621_scan_is_wpa_ie(frame + offset, ie_length))
         {
-          psk = true;
+          legacy_security = true;
         }
 
       if (entry->ie_length + 2 + ie_length <= SV6621_SCAN_IE_CAPACITY)
@@ -537,7 +538,7 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
     {
       bss->security = SV6621_SECURITY_WPA2_PSK;
     }
-  else if (privacy)
+  else if (legacy_security || privacy)
     {
       bss->security = SV6621_SECURITY_LEGACY;
     }
