@@ -32,6 +32,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <nuttx/arch.h>
 #include <nuttx/irq.h>
@@ -102,6 +103,7 @@
 #define RK3576_SV6621_BLOCK_SIZE   512
 #define RK3576_SV6621_BYTE_COUNT_MAX 512
 #define RK3576_SV6621_BLOCK_COUNT_MAX 512
+#define RK3576_SV6621_TUNING_BLOCK_SIZE 64
 
 #define RK3576_SV6621_R4_FUNCTIONS_MASK  (7u << 28)
 #define RK3576_SV6621_R6_ERROR_MASK      (7u << 13)
@@ -132,6 +134,18 @@ struct rk3576_sv6621_transport_priv_s
   bool prepared;
   bool opened;
   bool irq_enabled;
+};
+
+static const uint8_t g_rk3576_sv6621_tuning_pattern[] =
+{
+  0xff, 0x0f, 0xff, 0x00, 0xff, 0xcc, 0xc3, 0xcc,
+  0xc3, 0x3c, 0xcc, 0xff, 0xfe, 0xff, 0xfe, 0xef,
+  0xff, 0xdf, 0xff, 0xdd, 0xff, 0xfb, 0xff, 0xfb,
+  0xbf, 0xff, 0x7f, 0xff, 0x77, 0xf7, 0xbd, 0xef,
+  0xff, 0xf0, 0xff, 0xf0, 0x0f, 0xfc, 0xcc, 0x3c,
+  0xcc, 0x33, 0xcc, 0xcf, 0xff, 0xef, 0xff, 0xee,
+  0xff, 0xfd, 0xff, 0xfd, 0xdf, 0xff, 0xbf, 0xff,
+  0xbb, 0xff, 0xf7, 0xff, 0xf7, 0x7f, 0x7b, 0xde,
 };
 
 /****************************************************************************
@@ -461,11 +475,13 @@ static int rk3576_sv6621_voltage_switch(void)
 
 static int rk3576_sv6621_tune_sdr104(void)
 {
+  uint8_t tuning_block[RK3576_SV6621_TUNING_BLOCK_SIZE];
   uint32_t response;
   uint32_t fifo_count;
   uint32_t status;
+  uint32_t word;
   uint8_t value;
-  int received = 0;
+  size_t received = 0;
   int index;
   int ret;
 
@@ -520,8 +536,8 @@ static int rk3576_sv6621_tune_sdr104(void)
       return -ETIMEDOUT;
     }
 
-  putreg32(64, RK3576_SV6621_BLKSIZ);
-  putreg32(64, RK3576_SV6621_BYTCNT);
+  putreg32(RK3576_SV6621_TUNING_BLOCK_SIZE, RK3576_SV6621_BLKSIZ);
+  putreg32(RK3576_SV6621_TUNING_BLOCK_SIZE, RK3576_SV6621_BYTCNT);
   status = rk3576_sv6621_command(RK3576_SV6621_CMD19, 0, &response);
   if ((status & (RK3576_SV6621_INT_CMDERR |
                  RK3576_SV6621_INT_DATAERR)) != 0)
@@ -529,13 +545,19 @@ static int rk3576_sv6621_tune_sdr104(void)
       return (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
     }
 
-  for (index = 0; index < 200000 && received < 16; index++)
+  for (index = 0;
+       index < 200000 && received < RK3576_SV6621_TUNING_BLOCK_SIZE;
+       index++)
     {
       fifo_count = (getreg32(RK3576_SV6621_STATUS) >> 17) & 0x1fff;
-      while (fifo_count-- > 0 && received < 16)
+      while (fifo_count-- > 0 &&
+             received < RK3576_SV6621_TUNING_BLOCK_SIZE)
         {
-          (void)getreg32(RK3576_SV6621_FIFO);
-          received++;
+          word = getreg32(RK3576_SV6621_FIFO);
+          tuning_block[received++] = word;
+          tuning_block[received++] = word >> 8;
+          tuning_block[received++] = word >> 16;
+          tuning_block[received++] = word >> 24;
         }
 
       up_udelay(2);
@@ -553,7 +575,7 @@ static int rk3576_sv6621_tune_sdr104(void)
       up_udelay(2);
     }
 
-  if (received != 16 || index == 200000)
+  if (received != RK3576_SV6621_TUNING_BLOCK_SIZE || index == 200000)
     {
       return -ETIMEDOUT;
     }
@@ -561,6 +583,12 @@ static int rk3576_sv6621_tune_sdr104(void)
   if ((status & RK3576_SV6621_INT_DATAERR) != 0)
     {
       return (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
+    }
+
+  if (memcmp(tuning_block, g_rk3576_sv6621_tuning_pattern,
+             RK3576_SV6621_TUNING_BLOCK_SIZE) != 0)
+    {
+      return -EILSEQ;
     }
 
   return 0;
