@@ -223,9 +223,7 @@ int sv6621_command_engine_init(FAR struct sv6621_command_engine_s *engine,
                                sv6621_command_sender_t sender,
                                FAR void *sender_arg,
                                sv6621_command_event_t event,
-                               FAR void *event_arg,
-                               sv6621_command_error_t error,
-                               FAR void *error_arg)
+                               FAR void *event_arg)
 {
   int ret;
 
@@ -269,8 +267,6 @@ int sv6621_command_engine_init(FAR struct sv6621_command_engine_s *engine,
   engine->sender_arg = sender_arg;
   engine->event = event;
   engine->event_arg = event_arg;
-  engine->error = error;
-  engine->error_arg = error_arg;
   return 0;
 }
 
