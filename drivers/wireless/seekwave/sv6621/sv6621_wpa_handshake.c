@@ -250,7 +250,7 @@ static int sv6621_wpa_send_response(
   frame[12] = SV6621_WPA_ETHERTYPE_EAPOL >> 8;
   frame[13] = SV6621_WPA_ETHERTYPE_EAPOL & 0xff;
   ret = sv6621_wpa_eapol_build(
-      response, wpa->eapol_version, wpa->replay, wpa->snonce,
+      response, wpa->key_mgmt, wpa->eapol_version, wpa->replay, wpa->snonce,
       wpa->ptk + SV6621_WPA_KCK_OFFSET,
       frame + SV6621_WPA_ETHERNET_HEADER_SIZE,
       sizeof(frame) - SV6621_WPA_ETHERNET_HEADER_SIZE, &eapol_length);
@@ -337,9 +337,13 @@ static int sv6621_wpa_process_message_1(
   memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
   wpa->replay_valid = true;
   wpa->eapol_version = eapol->version;
-  ret = sv6621_wpa_derive_ptk(
-      wpa->pmk, wpa->authenticator, wpa->supplicant, wpa->anonce,
-      wpa->snonce, wpa->ptk);
+  ret = wpa->key_mgmt == SV6621_WPA_KEY_MGMT_SAE ?
+            sv6621_wpa_derive_ptk_sha256(
+                wpa->pmk, wpa->authenticator, wpa->supplicant,
+                wpa->anonce, wpa->snonce, wpa->ptk) :
+            sv6621_wpa_derive_ptk(
+                wpa->pmk, wpa->authenticator, wpa->supplicant,
+                wpa->anonce, wpa->snonce, wpa->ptk);
   if (ret < 0)
     {
       return ret;
@@ -398,7 +402,7 @@ static int sv6621_wpa_process_message_3(
     }
 
   ret = sv6621_wpa_eapol_verify_mic(
-      eapol, wpa->ptk + SV6621_WPA_KCK_OFFSET);
+      eapol, wpa->key_mgmt, wpa->ptk + SV6621_WPA_KCK_OFFSET);
   if (ret < 0)
     {
       return ret;
@@ -472,7 +476,7 @@ static int sv6621_wpa_process_group_message_1(
   int ret;
 
   ret = sv6621_wpa_eapol_verify_mic(
-      eapol, wpa->ptk + SV6621_WPA_KCK_OFFSET);
+      eapol, wpa->key_mgmt, wpa->ptk + SV6621_WPA_KCK_OFFSET);
   if (ret < 0)
     {
       return ret;
@@ -610,7 +614,7 @@ static void sv6621_wpa_worker(FAR void *arg)
       rekeying = wpa->rekeying;
       nxmutex_unlock(&wpa->lock);
 
-      ret = sv6621_wpa_eapol_parse(frame, length, &eapol);
+      ret = sv6621_wpa_eapol_parse(frame, length, wpa->key_mgmt, &eapol);
       if (ret == 0 && eapol.message == SV6621_WPA_MESSAGE_1 &&
           (state == SV6621_WPA_WAIT_MESSAGE_1 ||
            state == SV6621_WPA_WAIT_MESSAGE_3 ||
@@ -634,7 +638,8 @@ static void sv6621_wpa_worker(FAR void *arg)
                memcmp(eapol.nonce, wpa->anonce, sizeof(wpa->anonce)) == 0)
         {
           ret = sv6621_wpa_eapol_verify_mic(
-              &eapol, wpa->ptk + SV6621_WPA_KCK_OFFSET);
+              &eapol, wpa->key_mgmt,
+              wpa->ptk + SV6621_WPA_KCK_OFFSET);
           if (ret == 0)
             {
               ret = sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_4);
@@ -753,7 +758,8 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
       return ret;
     }
 
-  ret = sv6621_wpa_prepare_pmk(wpa, pmk, supplicant, authenticator);
+  ret = sv6621_wpa_prepare_pmk(wpa, pmk, SV6621_WPA_KEY_MGMT_PSK,
+                               supplicant, authenticator);
   sv6621_wpa_clear(pmk, sizeof(pmk));
   return ret;
 }
@@ -765,6 +771,7 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
 int sv6621_wpa_prepare_pmk(
     FAR struct sv6621_wpa_s *wpa,
     FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE],
+    enum sv6621_wpa_key_mgmt_e key_mgmt,
     FAR const uint8_t supplicant[SV6621_MAC_LENGTH],
     FAR const uint8_t authenticator[SV6621_MAC_LENGTH])
 {
@@ -772,7 +779,7 @@ int sv6621_wpa_prepare_pmk(
   int ret;
 
   if (wpa == NULL || pmk == NULL || supplicant == NULL ||
-      authenticator == NULL)
+      authenticator == NULL || key_mgmt > SV6621_WPA_KEY_MGMT_SAE)
     {
       return -EINVAL;
     }
@@ -805,6 +812,7 @@ int sv6621_wpa_prepare_pmk(
   memcpy(wpa->snonce, snonce, sizeof(wpa->snonce));
   memcpy(wpa->supplicant, supplicant, sizeof(wpa->supplicant));
   memcpy(wpa->authenticator, authenticator, sizeof(wpa->authenticator));
+  wpa->key_mgmt = key_mgmt;
   memset(wpa->replay, 0, sizeof(wpa->replay));
   wpa->replay_valid = false;
   wpa->rekeying = false;
