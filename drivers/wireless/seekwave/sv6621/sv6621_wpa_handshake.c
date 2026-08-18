@@ -848,6 +848,8 @@ int sv6621_wpa_run(FAR struct sv6621_wpa_s *wpa,
   ret = nxsem_tickwait(&wpa->completion, MSEC2TICK(timeout_ms));
   if (ret < 0)
     {
+      int wait_result = ret;
+
       if (nxmutex_lock(&wpa->lock) == 0)
         {
           if (wpa->state == SV6621_WPA_COMPLETE)
@@ -860,8 +862,8 @@ int sv6621_wpa_run(FAR struct sv6621_wpa_s *wpa,
           nxmutex_unlock(&wpa->lock);
         }
 
-      sv6621_wpa_cancel(wpa, -ETIMEDOUT);
-      return -ETIMEDOUT;
+      sv6621_wpa_cancel(wpa, wait_result);
+      return wait_result;
     }
 
   if (nxmutex_lock(&wpa->lock) < 0)
