@@ -741,7 +741,13 @@ static int rk3576_sv6621_enumerate(
                                      &response);
       if ((status & RK3576_SV6621_INT_CMDERR) != 0)
         {
-          ret = (status & RK3576_SV6621_INT_RTO) != 0 ? -ETIMEDOUT : -EIO;
+          if ((status & RK3576_SV6621_INT_RTO) != 0)
+            {
+              up_mdelay(10);
+              continue;
+            }
+
+          ret = -EIO;
           wlerr("ERROR: SV6621 CMD5 failed: %d\n", ret);
           return rk3576_sv6621_open_failed(priv, ret);
         }
@@ -756,7 +762,7 @@ static int rk3576_sv6621_enumerate(
 
   if (index == 100)
     {
-      wlerr("ERROR: SV6621 remained busy after CMD5\n");
+      wlerr("ERROR: SV6621 did not become ready after CMD5 retries\n");
       return rk3576_sv6621_open_failed(priv, -ETIMEDOUT);
     }
 
