@@ -136,6 +136,8 @@ struct rk3576_sv6621_transport_priv_s
   bool prepared;
   bool opened;
   bool irq_enabled;
+  uint8_t sample_phase;
+  bool sample_phase_valid;
 };
 
 static const uint8_t g_rk3576_sv6621_tuning_pattern[] =
@@ -163,7 +165,8 @@ static int rk3576_sv6621_direct(bool write, uint8_t function, uint32_t address,
                                 uint8_t value, FAR uint8_t *result);
 static int rk3576_sv6621_voltage_switch(void);
 static int rk3576_sv6621_execute_tuning(void);
-static int rk3576_sv6621_tune_sdr104(void);
+static int rk3576_sv6621_tune_sdr104(
+    FAR struct rk3576_sv6621_transport_priv_s *priv);
 static int rk3576_sv6621_open_failed(
     FAR struct rk3576_sv6621_transport_priv_s *priv, int error);
 static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport);
@@ -555,7 +558,8 @@ static int rk3576_sv6621_execute_tuning(void)
   return 0;
 }
 
-static int rk3576_sv6621_tune_sdr104(void)
+static int rk3576_sv6621_tune_sdr104(
+    FAR struct rk3576_sv6621_transport_priv_s *priv)
 {
   static const uint8_t phases[RK3576_SV6621_PHASE_COUNT] =
   {
@@ -563,6 +567,8 @@ static int rk3576_sv6621_tune_sdr104(void)
   };
 
   uint8_t value;
+  uint8_t cached_phase = priv->sample_phase;
+  bool cached = priv->sample_phase_valid;
   int last_ret = -EIO;
   int index;
   int ret;
@@ -605,13 +611,33 @@ static int rk3576_sv6621_tune_sdr104(void)
     }
 
   putreg32(RK3576_SV6621_TCON_180, RK3576_SV6621_TIMING0);
+  if (cached)
+    {
+      putreg32(RK3576_SV6621_TCON(cached_phase),
+               RK3576_SV6621_TIMING1);
+      last_ret = rk3576_sv6621_execute_tuning();
+      if (last_ret == 0)
+        {
+          return 0;
+        }
+
+      priv->sample_phase_valid = false;
+    }
+
   for (index = 0; index < RK3576_SV6621_PHASE_COUNT; index++)
     {
+      if (cached && phases[index] == cached_phase)
+        {
+          continue;
+        }
+
       putreg32(RK3576_SV6621_TCON(phases[index]),
                RK3576_SV6621_TIMING1);
       last_ret = rk3576_sv6621_execute_tuning();
       if (last_ret == 0)
         {
+          priv->sample_phase = phases[index];
+          priv->sample_phase_valid = true;
           wlinfo("RK3576 SDIO sample phase tuned to %u degrees\n",
                  (unsigned int)phases[index] * RK3576_SV6621_PHASE_STEP);
           return 0;
@@ -801,7 +827,7 @@ static int rk3576_sv6621_enumerate(
       return rk3576_sv6621_open_failed(priv, ret);
     }
 
-  ret = rk3576_sv6621_tune_sdr104();
+  ret = rk3576_sv6621_tune_sdr104(priv);
   if (ret < 0)
     {
       return rk3576_sv6621_open_failed(priv, ret);
