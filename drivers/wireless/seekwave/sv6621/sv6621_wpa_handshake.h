@@ -64,6 +64,7 @@ struct sv6621_wpa_s
   mutex_t lock;
   sem_t completion;
   struct work_s work;
+  struct work_s rekey_timeout_work;
   FAR struct sv6621_command_engine_s *command;
   FAR struct sv6621_station_s *station;
   enum sv6621_wpa_state_e state;
