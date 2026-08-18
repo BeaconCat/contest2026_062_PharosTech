@@ -93,6 +93,9 @@ static bool sv6621_scan_is_rsn_suite(FAR const uint8_t *suite);
 static bool sv6621_scan_is_wpa_ie(FAR const uint8_t *data, size_t length);
 static bool sv6621_scan_security_matches(
     enum sv6621_security_e requested, enum sv6621_security_e advertised);
+static bool sv6621_scan_connection_supported(
+    enum sv6621_security_e requested,
+    FAR const struct sv6621_scan_entry_s *entry);
 static size_t
 sv6621_scan_cache_weakest(FAR const struct sv6621_scan_cache_s *cache);
 static void sv6621_scan_timeout_worker(FAR void *arg);
@@ -232,6 +235,20 @@ static bool sv6621_scan_security_matches(
     }
 
   return false;
+}
+
+static bool sv6621_scan_connection_supported(
+    enum sv6621_security_e requested,
+    FAR const struct sv6621_scan_entry_s *entry)
+{
+  if (requested == SV6621_SECURITY_OPEN)
+    {
+      return true;
+    }
+
+  return entry->rsn_present &&
+         entry->rsn_group_cipher == SV6621_SCAN_RSN_CIPHER_CCMP &&
+         entry->rsn_pairwise_ccmp;
 }
 
 static size_t
@@ -740,6 +757,12 @@ int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
         }
 
       if (!sv6621_scan_security_matches(request->security, bss->security))
+        {
+          continue;
+        }
+
+      if (!sv6621_scan_connection_supported(request->security,
+                                             &cache->entries[index]))
         {
           continue;
         }
