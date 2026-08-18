@@ -170,7 +170,6 @@ static int rk3576_sv6621_attach_irq(FAR struct sv6621_transport_s *transport,
                                     FAR void *arg);
 static int rk3576_sv6621_enable_irq(FAR struct sv6621_transport_s *transport,
                                     bool enable);
-static int rk3576_sv6621_recover(FAR struct sv6621_transport_s *transport);
 static void rk3576_sv6621_host_interrupt(FAR void *arg);
 
 /****************************************************************************
@@ -191,7 +190,6 @@ static const struct sv6621_transport_ops_s g_rk3576_sv6621_ops = {
   .write = rk3576_sv6621_write,
   .attach_irq = rk3576_sv6621_attach_irq,
   .enable_irq = rk3576_sv6621_enable_irq,
-  .recover = rk3576_sv6621_recover,
 };
 
 static struct sv6621_transport_s g_rk3576_sv6621_transport = {
@@ -1227,55 +1225,6 @@ static int rk3576_sv6621_enable_irq(FAR struct sv6621_transport_s *transport,
     }
 
   priv->irq_enabled = enable;
-  return 0;
-}
-
-static int rk3576_sv6621_recover(FAR struct sv6621_transport_s *transport)
-{
-  FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
-  bool restore_irq;
-  int ret;
-
-  if (!priv->opened)
-    {
-      return -ENODEV;
-    }
-
-  restore_irq = priv->irq_enabled;
-  rk3576_sv6621_close(transport);
-  ret = rk3576_sv6621_open(transport);
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  ret = rk3576_sv6621_enumerate(transport);
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  if (priv->handler != NULL)
-    {
-      ret = rk3576_sdmmc_register_sdio_callback(
-          priv->sdio, rk3576_sv6621_host_interrupt, priv);
-      if (ret < 0)
-        {
-          rk3576_sv6621_close(transport);
-          return ret;
-        }
-    }
-
-  if (restore_irq)
-    {
-      ret = rk3576_sv6621_enable_irq(transport, true);
-      if (ret < 0)
-        {
-          rk3576_sv6621_close(transport);
-          return ret;
-        }
-    }
-
   return 0;
 }
 
