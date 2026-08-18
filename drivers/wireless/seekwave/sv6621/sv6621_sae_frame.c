@@ -41,6 +41,12 @@
 #define SV6621_SAE_AUTH_FRAME_SIZE \
   (SV6621_SAE_FRAME_HEADER_SIZE + SV6621_SAE_AUTH_FIXED_SIZE)
 #define SV6621_SAE_AUTH_ALGORITHM     3
+#define SV6621_SAE_COMMIT_TRANSACTION 1
+#define SV6621_SAE_CONFIRM_TRANSACTION 2
+#define SV6621_SAE_COMMIT_FIXED_SIZE \
+  (2 + SV6621_SAE_SCALAR_SIZE + SV6621_SAE_ELEMENT_SIZE)
+#define SV6621_SAE_CONFIRM_BODY_SIZE \
+  (2 + SV6621_SAE_CONFIRM_SIZE)
 
 /****************************************************************************
  * Private Function Prototypes
@@ -133,5 +139,105 @@ int sv6621_sae_auth_build(
     }
 
   *frame_length = output_length;
+  return 0;
+}
+
+int sv6621_sae_commit_parse(FAR const struct sv6621_sae_auth_frame_s *auth,
+                            FAR struct sv6621_sae_commit_s *commit)
+{
+  size_t token_length;
+
+  if (auth == NULL || commit == NULL ||
+      auth->transaction != SV6621_SAE_COMMIT_TRANSACTION ||
+      auth->status != 0 || auth->body_length < SV6621_SAE_COMMIT_FIXED_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  memset(commit, 0, sizeof(*commit));
+  commit->group = sv6621_sae_frame_get_le16(auth->body);
+  if (commit->group != SV6621_SAE_GROUP_19)
+    {
+      return -EOPNOTSUPP;
+    }
+
+  token_length = auth->body_length - SV6621_SAE_COMMIT_FIXED_SIZE;
+  commit->token = auth->body + 2;
+  commit->token_length = token_length;
+  commit->scalar = auth->body + 2 + token_length;
+  commit->element = commit->scalar + SV6621_SAE_SCALAR_SIZE;
+  return 0;
+}
+
+int sv6621_sae_commit_build(
+    uint16_t group, FAR const uint8_t *token, size_t token_length,
+    FAR const uint8_t scalar[SV6621_SAE_SCALAR_SIZE],
+    FAR const uint8_t element[SV6621_SAE_ELEMENT_SIZE], FAR uint8_t *body,
+    size_t capacity, FAR size_t *body_length)
+{
+  size_t output_length;
+  size_t offset;
+
+  if (group != SV6621_SAE_GROUP_19 ||
+      (token == NULL && token_length != 0) || scalar == NULL ||
+      element == NULL || body == NULL || body_length == NULL ||
+      token_length > SIZE_MAX - SV6621_SAE_COMMIT_FIXED_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  output_length = SV6621_SAE_COMMIT_FIXED_SIZE + token_length;
+  if (output_length > capacity)
+    {
+      return -ENOSPC;
+    }
+
+  sv6621_sae_frame_put_le16(body, group);
+  offset = 2;
+  if (token_length > 0)
+    {
+      memcpy(body + offset, token, token_length);
+      offset += token_length;
+    }
+
+  memcpy(body + offset, scalar, SV6621_SAE_SCALAR_SIZE);
+  offset += SV6621_SAE_SCALAR_SIZE;
+  memcpy(body + offset, element, SV6621_SAE_ELEMENT_SIZE);
+  *body_length = output_length;
+  return 0;
+}
+
+int sv6621_sae_confirm_parse(FAR const struct sv6621_sae_auth_frame_s *auth,
+                             FAR struct sv6621_sae_confirm_s *confirm)
+{
+  if (auth == NULL || confirm == NULL ||
+      auth->transaction != SV6621_SAE_CONFIRM_TRANSACTION ||
+      auth->status != 0 || auth->body_length != SV6621_SAE_CONFIRM_BODY_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  confirm->counter = sv6621_sae_frame_get_le16(auth->body);
+  confirm->value = auth->body + 2;
+  return 0;
+}
+
+int sv6621_sae_confirm_build(
+    uint16_t counter, FAR const uint8_t value[SV6621_SAE_CONFIRM_SIZE],
+    FAR uint8_t *body, size_t capacity, FAR size_t *body_length)
+{
+  if (value == NULL || body == NULL || body_length == NULL)
+    {
+      return -EINVAL;
+    }
+
+  if (capacity < SV6621_SAE_CONFIRM_BODY_SIZE)
+    {
+      return -ENOSPC;
+    }
+
+  sv6621_sae_frame_put_le16(body, counter);
+  memcpy(body + 2, value, SV6621_SAE_CONFIRM_SIZE);
+  *body_length = SV6621_SAE_CONFIRM_BODY_SIZE;
   return 0;
 }

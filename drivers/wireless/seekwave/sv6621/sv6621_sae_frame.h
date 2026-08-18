@@ -35,6 +35,15 @@
 #include "include/sv6621.h"
 
 /****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#define SV6621_SAE_GROUP_19          19
+#define SV6621_SAE_SCALAR_SIZE       32
+#define SV6621_SAE_ELEMENT_SIZE      64
+#define SV6621_SAE_CONFIRM_SIZE      32
+
+/****************************************************************************
  * Public Types
  ****************************************************************************/
 
@@ -49,6 +58,21 @@ struct sv6621_sae_auth_frame_s
   size_t body_length;
 };
 
+struct sv6621_sae_commit_s
+{
+  uint16_t group;
+  FAR const uint8_t *token;
+  size_t token_length;
+  FAR const uint8_t *scalar;
+  FAR const uint8_t *element;
+};
+
+struct sv6621_sae_confirm_s
+{
+  uint16_t counter;
+  FAR const uint8_t *value;
+};
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
@@ -61,5 +85,17 @@ int sv6621_sae_auth_build(
     FAR const uint8_t bssid[SV6621_MAC_LENGTH], uint16_t transaction,
     uint16_t status, FAR const uint8_t *body, size_t body_length,
     FAR uint8_t *frame, size_t capacity, FAR size_t *frame_length);
+int sv6621_sae_commit_parse(FAR const struct sv6621_sae_auth_frame_s *auth,
+                            FAR struct sv6621_sae_commit_s *commit);
+int sv6621_sae_commit_build(
+    uint16_t group, FAR const uint8_t *token, size_t token_length,
+    FAR const uint8_t scalar[SV6621_SAE_SCALAR_SIZE],
+    FAR const uint8_t element[SV6621_SAE_ELEMENT_SIZE], FAR uint8_t *body,
+    size_t capacity, FAR size_t *body_length);
+int sv6621_sae_confirm_parse(FAR const struct sv6621_sae_auth_frame_s *auth,
+                             FAR struct sv6621_sae_confirm_s *confirm);
+int sv6621_sae_confirm_build(
+    uint16_t counter, FAR const uint8_t value[SV6621_SAE_CONFIRM_SIZE],
+    FAR uint8_t *body, size_t capacity, FAR size_t *body_length);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_SAE_FRAME_H */
