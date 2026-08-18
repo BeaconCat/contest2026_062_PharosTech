@@ -66,6 +66,7 @@ struct sv6621_network_s
   FAR struct sv6621_command_engine_s *command;
   struct sv6621_ioctl_s ioctl;
   struct sv6621_data_tx_context_s tx_context;
+  struct sv6621_offload_addresses_s applied_addresses;
   bool registered;
   bool interface_up;
   bool link_up;
@@ -73,12 +74,15 @@ struct sv6621_network_s
   bool tx_scheduled;
   bool tx_reschedule;
   bool multicast_scheduled;
+  bool addresses_applied;
   uint8_t rx_head;
   uint8_t rx_tail;
   uint8_t multicast_count;
   uint8_t multicast_limit;
   uint32_t multicast_generation;
   uint32_t multicast_applied_generation;
+  uint32_t address_epoch;
+  uint8_t applied_address_instance;
   uint8_t multicast[SV6621_NETWORK_MULTICAST_CAPACITY][SV6621_MAC_LENGTH];
   uint16_t rx_length[SV6621_NETWORK_RX_DEPTH];
   uint8_t rx_frame[SV6621_NETWORK_RX_DEPTH][MAX_NETDEV_PKTSIZE];
@@ -98,6 +102,9 @@ int sv6621_network_init(FAR struct sv6621_network_s *network,
 void sv6621_network_deinit(FAR struct sv6621_network_s *network);
 int sv6621_network_sync_multicast(FAR struct sv6621_network_s *network);
 int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network);
+int sv6621_network_sync_link_addresses(
+    FAR struct sv6621_network_s *network,
+    FAR const struct sv6621_data_tx_context_s *context);
 void sv6621_network_set_link(
     FAR struct sv6621_network_s *network, bool link_up,
     FAR const struct sv6621_data_tx_context_s *context);
