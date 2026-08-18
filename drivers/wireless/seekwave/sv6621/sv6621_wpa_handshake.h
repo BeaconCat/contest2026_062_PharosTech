@@ -105,6 +105,11 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
                         FAR const struct sv6621_connect_s *request,
                         FAR const uint8_t supplicant[SV6621_MAC_LENGTH],
                         FAR const uint8_t authenticator[SV6621_MAC_LENGTH]);
+int sv6621_wpa_prepare_pmk(
+    FAR struct sv6621_wpa_s *wpa,
+    FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE],
+    FAR const uint8_t supplicant[SV6621_MAC_LENGTH],
+    FAR const uint8_t authenticator[SV6621_MAC_LENGTH]);
 int sv6621_wpa_run(FAR struct sv6621_wpa_s *wpa,
                     FAR const struct sv6621_connection_peer_s *peer,
                     uint32_t timeout_ms);
