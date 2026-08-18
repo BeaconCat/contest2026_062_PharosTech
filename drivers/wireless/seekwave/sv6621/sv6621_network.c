@@ -614,26 +614,23 @@ int sv6621_network_sync_multicast(FAR struct sv6621_network_s *network)
 }
 
 /****************************************************************************
- * Name: sv6621_network_sync_addresses
+ * Name: sv6621_network_sync_link_addresses
  ****************************************************************************/
 
-int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network)
+int sv6621_network_sync_link_addresses(
+    FAR struct sv6621_network_s *network,
+    FAR const struct sv6621_data_tx_context_s *context)
 {
   struct sv6621_offload_addresses_s addresses;
-  struct sv6621_data_tx_context_s context;
 #ifdef CONFIG_NET_IPv6
   static const uint8_t zero[SV6621_OFFLOAD_IPV6_LENGTH];
   size_t index;
 #endif
 
-  if (network == NULL || network->command == NULL || !network->registered)
+  if (network == NULL || network->command == NULL || !network->registered ||
+      context == NULL)
     {
       return -EINVAL;
-    }
-
-  if (!sv6621_network_tx_snapshot(network, &context))
-    {
-      return -ENETDOWN;
     }
 
   memset(&addresses, 0, sizeof(addresses));
@@ -690,8 +687,29 @@ int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network)
     }
 
   return sv6621_offload_set_addresses(network->command,
-                                       context.instance,
+                                       context->instance,
                                        &addresses);
+}
+
+/****************************************************************************
+ * Name: sv6621_network_sync_addresses
+ ****************************************************************************/
+
+int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network)
+{
+  struct sv6621_data_tx_context_s context;
+
+  if (network == NULL || network->command == NULL || !network->registered)
+    {
+      return -EINVAL;
+    }
+
+  if (!sv6621_network_tx_snapshot(network, &context))
+    {
+      return -ENETDOWN;
+    }
+
+  return sv6621_network_sync_link_addresses(network, &context);
 }
 
 void sv6621_network_set_link(
