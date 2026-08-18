@@ -97,6 +97,8 @@
 #define RK3576_SV6621_TCON(raw) \
   (((uint32_t)0x7ff << 1 << 16) | ((uint32_t)(raw) << 1))
 #define RK3576_SV6621_TCON_180   RK3576_SV6621_TCON(0x2)
+#define RK3576_SV6621_PHASE_COUNT 4
+#define RK3576_SV6621_PHASE_STEP  90
 #define RK3576_SV6621_POLL_LIMIT 200000
 #define RK3576_SV6621_FUNCTION_MAX 7
 #define RK3576_SV6621_ADDRESS_MAX  0x1ffff
@@ -160,6 +162,7 @@ static int rk3576_sv6621_abort_transfer_locked(void);
 static int rk3576_sv6621_direct(bool write, uint8_t function, uint32_t address,
                                 uint8_t value, FAR uint8_t *result);
 static int rk3576_sv6621_voltage_switch(void);
+static int rk3576_sv6621_execute_tuning(void);
 static int rk3576_sv6621_tune_sdr104(void);
 static int rk3576_sv6621_open_failed(
     FAR struct rk3576_sv6621_transport_priv_s *priv, int error);
@@ -473,57 +476,15 @@ static int rk3576_sv6621_voltage_switch(void)
   return 0;
 }
 
-static int rk3576_sv6621_tune_sdr104(void)
+static int rk3576_sv6621_execute_tuning(void)
 {
   uint8_t tuning_block[RK3576_SV6621_TUNING_BLOCK_SIZE];
   uint32_t response;
   uint32_t fifo_count;
   uint32_t status;
   uint32_t word;
-  uint8_t value;
   size_t received = 0;
   int index;
-  int ret;
-
-  ret = rk3576_sv6621_direct(false, 0, RK3576_SV6621_CCCR_BUS_IF, 0,
-                             &value);
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  value = (value & ~0x03) | 0x02;
-  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_BUS_IF, value,
-                             NULL);
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  putreg32(1, RK3576_SV6621_CTYPE);
-  ret = rk3576_sv6621_direct(false, 0, RK3576_SV6621_CCCR_SPEED, 0,
-                             &value);
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  value = (value & ~0x0e) | 0x07;
-  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_SPEED, value,
-                             NULL);
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  ret = rk3576_sv6621_set_clock(RK3576_SV6621_SRC_396M, 0);
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  putreg32(RK3576_SV6621_TCON_180, RK3576_SV6621_TIMING0);
-  putreg32(RK3576_SV6621_TCON_180, RK3576_SV6621_TIMING1);
 
   modifyreg32(RK3576_SV6621_CTRL, 0, 1u << 1);
   for (index = 0;
@@ -592,6 +553,73 @@ static int rk3576_sv6621_tune_sdr104(void)
     }
 
   return 0;
+}
+
+static int rk3576_sv6621_tune_sdr104(void)
+{
+  static const uint8_t phases[RK3576_SV6621_PHASE_COUNT] =
+  {
+    2, 3, 0, 1
+  };
+
+  uint8_t value;
+  int last_ret = -EIO;
+  int index;
+  int ret;
+
+  ret = rk3576_sv6621_direct(false, 0, RK3576_SV6621_CCCR_BUS_IF, 0,
+                             &value);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  value = (value & ~0x03) | 0x02;
+  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_BUS_IF, value,
+                             NULL);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  putreg32(1, RK3576_SV6621_CTYPE);
+  ret = rk3576_sv6621_direct(false, 0, RK3576_SV6621_CCCR_SPEED, 0,
+                             &value);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  value = (value & ~0x0e) | 0x07;
+  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_SPEED, value,
+                             NULL);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = rk3576_sv6621_set_clock(RK3576_SV6621_SRC_396M, 0);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  putreg32(RK3576_SV6621_TCON_180, RK3576_SV6621_TIMING0);
+  for (index = 0; index < RK3576_SV6621_PHASE_COUNT; index++)
+    {
+      putreg32(RK3576_SV6621_TCON(phases[index]),
+               RK3576_SV6621_TIMING1);
+      last_ret = rk3576_sv6621_execute_tuning();
+      if (last_ret == 0)
+        {
+          wlinfo("RK3576 SDIO sample phase tuned to %u degrees\n",
+                 (unsigned int)phases[index] * RK3576_SV6621_PHASE_STEP);
+          return 0;
+        }
+    }
+
+  wlerr("ERROR: RK3576 SDIO has no valid sample phase\n");
+  return last_ret;
 }
 
 /****************************************************************************
