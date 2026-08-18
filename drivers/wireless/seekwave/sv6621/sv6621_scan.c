@@ -488,9 +488,13 @@ int sv6621_scan_parse_report(FAR const uint8_t *payload, size_t length,
     {
       bss->security = SV6621_SECURITY_WPA3_SAE;
     }
-  else if (psk || privacy)
+  else if (psk)
     {
       bss->security = SV6621_SECURITY_WPA2_PSK;
+    }
+  else if (privacy)
+    {
+      bss->security = SV6621_SECURITY_LEGACY;
     }
   else
     {
