@@ -94,6 +94,7 @@ struct sv6621_command_engine_s
   uint16_t next_sequence;
   uint16_t event_sequence;
   uint16_t pending_sequence;
+  uint8_t pending_instance;
   uint8_t pending_id;
   bool pending;
   bool shutting_down;

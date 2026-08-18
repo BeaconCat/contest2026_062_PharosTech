@@ -76,7 +76,8 @@ sv6621_command_complete_ack(FAR struct sv6621_command_engine_s *engine,
       return ret;
     }
 
-  if (!engine->pending || header->id != engine->pending_id ||
+  if (!engine->pending || header->instance != engine->pending_instance ||
+      header->id != engine->pending_id ||
       header->sequence != engine->pending_sequence)
     {
       engine->stats.stale_acknowledgements++;
@@ -449,6 +450,7 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
   header.id = id;
   header.sequence = engine->next_sequence;
   header.total_length = (uint16_t)message_length;
+  engine->pending_instance = instance;
   engine->pending_id = id;
   engine->pending_sequence = header.sequence;
   engine->pending = true;
