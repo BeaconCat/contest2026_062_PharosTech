@@ -176,14 +176,27 @@ static int sv6621_sae_group_test_seed(
       ret = mbedtls_mpi_mod_mpi(&rhs, &rhs, &group->P);
     }
 
-  if (ret == 0)
+  if (ret == 0 && group->A.p == NULL)
+    {
+      ret = mbedtls_mpi_mul_int(&temporary, &point.X, 3);
+    }
+
+  if (ret == 0 && group->A.p == NULL)
+    {
+      ret = mbedtls_mpi_sub_mpi(&rhs, &rhs, &temporary);
+    }
+  else if (ret == 0)
     {
       ret = mbedtls_mpi_mul_mpi(&temporary, &group->A, &point.X);
+      if (ret == 0)
+        {
+          ret = mbedtls_mpi_add_mpi(&rhs, &rhs, &temporary);
+        }
     }
 
   if (ret == 0)
     {
-      ret = mbedtls_mpi_add_mpi(&rhs, &rhs, &temporary);
+      ret = mbedtls_mpi_mod_mpi(&rhs, &rhs, &group->P);
     }
 
   if (ret == 0)
