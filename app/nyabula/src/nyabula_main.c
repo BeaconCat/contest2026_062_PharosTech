@@ -45,8 +45,9 @@
 #define NYABULA_NEEDS_BOARD_INIT 1
 #endif
 
-#define NYABULA_DEMO_EXPRESSION_MS 3000
+#define NYABULA_DEMO_EXPRESSION_MS 5000
 #define NYABULA_DEMO_SCENE_MS      4500
+#define NYABULA_DEMO_SOURCE        "startup-showcase"
 
 #ifndef CONFIG_CONTEST2026_062_NYABULA_GATEWAY_PORT
 #define CONFIG_CONTEST2026_062_NYABULA_GATEWAY_PORT 8080
@@ -92,9 +93,44 @@ enum nyabula_demo_mode_e
 struct nyabula_demo_s
 {
   struct nyabula_eye_engine_s *engine;
+  struct nyabula_core_s *core;
   size_t index;
   enum nyabula_demo_mode_e mode;
 };
+
+static bool nyabula_demo_set_expression(
+    struct nyabula_demo_s *demo,
+    enum nyabula_eye_expression_e expression)
+{
+  if (demo->core != NULL)
+    {
+      struct nyabula_core_snapshot_s snapshot;
+      struct nyabula_core_command_s command;
+
+      if (nyabula_core_get_snapshot(demo->core, &snapshot) < 0)
+        {
+          return false;
+        }
+
+      if (snapshot.expression_owner.active &&
+          strcmp(snapshot.expression_owner.source, NYABULA_DEMO_SOURCE) != 0)
+        {
+          return false;
+        }
+
+      memset(&command, 0, sizeof(command));
+      command.action = NYABULA_CORE_ACTION_EXPRESSION;
+      command.priority = 0;
+      command.data.expression.expression = expression;
+      command.data.expression.transition_ms = 420;
+      strlcpy(command.source, NYABULA_DEMO_SOURCE,
+              sizeof(command.source));
+      return nyabula_core_submit(demo->core, &command) >= 0;
+    }
+
+  nyabula_eye_engine_set_expression(demo->engine, expression, 420);
+  return true;
+}
 
 static void nyabula_demo_scene_request(
     enum nyabula_eye_scene_e scene,
@@ -168,11 +204,15 @@ static void nyabula_demo_timer_cb(lv_timer_t *timer)
     }
   else
     {
-      demo->index =
+      size_t next =
           (demo->index + 1) % (sizeof(g_nyabula_demo_expressions) /
                                sizeof(g_nyabula_demo_expressions[0]));
-      nyabula_eye_engine_set_expression(
-          demo->engine, g_nyabula_demo_expressions[demo->index], 0);
+
+      if (nyabula_demo_set_expression(
+              demo, g_nyabula_demo_expressions[next]))
+        {
+          demo->index = next;
+        }
     }
 }
 
@@ -192,13 +232,14 @@ int main(int argc, FAR char *argv[])
   struct nyabula_gateway_s *gateway = NULL;
 #endif
   lv_timer_t *demo_timer = NULL;
-  enum nyabula_demo_mode_e demo_mode =
-      argc > 1 && strcmp(argv[1], "demo") == 0
-          ? NYABULA_DEMO_EXPRESSIONS
-          : argc > 1 && strcmp(argv[1], "scenes") == 0
-                ? NYABULA_DEMO_SCENES
-                : NYABULA_DEMO_IDLE;
   bool core_mode = argc <= 1 || strcmp(argv[1], "core") == 0;
+  enum nyabula_demo_mode_e demo_mode =
+      argc > 1 && strcmp(argv[1], "scenes") == 0
+          ? NYABULA_DEMO_SCENES
+          : argc > 1 && strcmp(argv[1], "demo") == 0
+                ? NYABULA_DEMO_EXPRESSIONS
+                : core_mode ? NYABULA_DEMO_EXPRESSIONS
+                            : NYABULA_DEMO_IDLE;
 
   if (lv_is_initialized())
     {
@@ -237,30 +278,9 @@ int main(int argc, FAR char *argv[])
     }
 
   demo.engine = eye_engine;
+  demo.core = NULL;
   demo.index = 0;
   demo.mode = demo_mode;
-  if (demo_mode != NYABULA_DEMO_IDLE)
-    {
-      uint32_t period = demo_mode == NYABULA_DEMO_SCENES
-                            ? NYABULA_DEMO_SCENE_MS
-                            : NYABULA_DEMO_EXPRESSION_MS;
-      if (demo_mode == NYABULA_DEMO_SCENES)
-        {
-          struct nyabula_eye_scene_request_s request;
-          nyabula_demo_scene_request(g_nyabula_demo_scenes[0], &request);
-          nyabula_eye_engine_show_scene(eye_engine, &request);
-        }
-      demo_timer = lv_timer_create(nyabula_demo_timer_cb,
-                                   period, &demo);
-      if (demo_timer == NULL)
-        {
-          fprintf(stderr, "nyabula: failed to create the demo timer\n");
-          nyabula_eye_engine_destroy(eye_engine);
-          lv_nuttx_deinit(&result);
-          lv_deinit();
-          return ENOMEM;
-        }
-    }
 
 #ifdef CONFIG_CONTEST2026_062_NYABULA_GATEWAY
   if (core_mode)
@@ -286,6 +306,8 @@ int main(int argc, FAR char *argv[])
           lv_deinit();
           return EIO;
         }
+
+      demo.core = core;
     }
 #else
   if (core_mode)
@@ -293,6 +315,40 @@ int main(int argc, FAR char *argv[])
       fprintf(stderr, "nyabula: control gateway is not enabled\n");
     }
 #endif
+
+  if (demo_mode != NYABULA_DEMO_IDLE)
+    {
+      uint32_t period = demo_mode == NYABULA_DEMO_SCENES
+                            ? NYABULA_DEMO_SCENE_MS
+                            : NYABULA_DEMO_EXPRESSION_MS;
+
+      if (demo_mode == NYABULA_DEMO_SCENES)
+        {
+          struct nyabula_eye_scene_request_s request;
+
+          nyabula_demo_scene_request(g_nyabula_demo_scenes[0], &request);
+          nyabula_eye_engine_show_scene(eye_engine, &request);
+        }
+      else
+        {
+          nyabula_demo_set_expression(
+              &demo, g_nyabula_demo_expressions[0]);
+        }
+
+      demo_timer = lv_timer_create(nyabula_demo_timer_cb,
+                                   period, &demo);
+      if (demo_timer == NULL)
+        {
+#ifdef CONFIG_CONTEST2026_062_NYABULA_GATEWAY
+          nyabula_gateway_stop(gateway);
+#endif
+          nyabula_core_destroy(core);
+          nyabula_eye_engine_destroy(eye_engine);
+          lv_nuttx_deinit(&result);
+          lv_deinit();
+          return ENOMEM;
+        }
+    }
 
   while (1)
     {
