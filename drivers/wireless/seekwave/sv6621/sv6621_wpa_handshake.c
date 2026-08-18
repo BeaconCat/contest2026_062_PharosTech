@@ -353,7 +353,8 @@ static int sv6621_wpa_process_message_1(
       ret = nxmutex_lock(&wpa->lock);
       if (ret == 0)
         {
-          if (wpa->state == SV6621_WPA_COMPLETE)
+          if (wpa->state == SV6621_WPA_COMPLETE ||
+              wpa->state == SV6621_WPA_FAILED)
             {
               wpa->rekeying = true;
             }
