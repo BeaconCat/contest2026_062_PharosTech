@@ -213,6 +213,7 @@ static void sv6621_wpa_finish(FAR struct sv6621_wpa_s *wpa, int result)
 
   wpa->result = result;
   wpa->state = result == 0 ? SV6621_WPA_COMPLETE : SV6621_WPA_FAILED;
+  wpa->rekeying = false;
   wpa->frame_pending = false;
   nxmutex_unlock(&wpa->lock);
   nxsem_post(&wpa->completion);
@@ -306,8 +307,9 @@ static int sv6621_wpa_process_message_1(
         }
     }
 
-  if (wpa->state == SV6621_WPA_WAIT_MESSAGE_3 &&
-      memcmp(eapol->nonce, wpa->anonce, sizeof(wpa->anonce)) != 0)
+  if (wpa->state == SV6621_WPA_COMPLETE ||
+      (wpa->state == SV6621_WPA_WAIT_MESSAGE_3 &&
+       memcmp(eapol->nonce, wpa->anonce, sizeof(wpa->anonce)) != 0))
     {
       ret = sv6621_wpa_generate_nonce(wpa->snonce);
       if (ret < 0)
@@ -334,6 +336,11 @@ static int sv6621_wpa_process_message_1(
       ret = nxmutex_lock(&wpa->lock);
       if (ret == 0)
         {
+          if (wpa->state == SV6621_WPA_COMPLETE)
+            {
+              wpa->rekeying = true;
+            }
+
           wpa->state = SV6621_WPA_WAIT_MESSAGE_3;
           nxmutex_unlock(&wpa->lock);
         }
@@ -525,6 +532,7 @@ static void sv6621_wpa_worker(FAR void *arg)
   struct sv6621_wpa_eapol_s eapol;
   uint8_t frame[SV6621_WPA_FRAME_CAPACITY];
   enum sv6621_wpa_state_e state;
+  bool rekeying;
   size_t length;
   int ret;
 
@@ -546,12 +554,14 @@ static void sv6621_wpa_worker(FAR void *arg)
       memcpy(frame, wpa->frame, length);
       wpa->frame_pending = false;
       state = wpa->state;
+      rekeying = wpa->rekeying;
       nxmutex_unlock(&wpa->lock);
 
       ret = sv6621_wpa_eapol_parse(frame, length, &eapol);
       if (ret == 0 && eapol.message == SV6621_WPA_MESSAGE_1 &&
           (state == SV6621_WPA_WAIT_MESSAGE_1 ||
-           state == SV6621_WPA_WAIT_MESSAGE_3))
+           state == SV6621_WPA_WAIT_MESSAGE_3 ||
+           state == SV6621_WPA_COMPLETE))
         {
           ret = sv6621_wpa_process_message_1(wpa, &eapol);
         }
@@ -589,7 +599,7 @@ static void sv6621_wpa_worker(FAR void *arg)
 
       if (ret < 0 && ret != -EALREADY)
         {
-          if (state == SV6621_WPA_COMPLETE)
+          if (state == SV6621_WPA_COMPLETE || rekeying)
             {
               sv6621_station_disconnect(wpa->station,
                                          SV6621_WPA_REASON_UNSPECIFIED);
@@ -718,6 +728,7 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
   memcpy(wpa->authenticator, authenticator, sizeof(wpa->authenticator));
   memset(wpa->replay, 0, sizeof(wpa->replay));
   wpa->replay_valid = false;
+  wpa->rekeying = false;
   wpa->result = -EINPROGRESS;
   wpa->eapol_version = 0;
   wpa->peer_ready = false;
@@ -843,6 +854,7 @@ void sv6621_wpa_cancel(FAR struct sv6621_wpa_s *wpa, int result)
   wpa->frame_pending = false;
   wpa->work_scheduled = false;
   wpa->canceling = false;
+  wpa->rekeying = false;
   wpa->gtk_index = 0;
   sv6621_wpa_clear(wpa->pmk, sizeof(wpa->pmk));
   sv6621_wpa_clear(wpa->ptk, sizeof(wpa->ptk));

@@ -87,6 +87,7 @@ struct sv6621_wpa_s
   bool work_scheduled;
   bool canceling;
   bool replay_valid;
+  bool rekeying;
   bool pairwise_installed;
   bool group_installed;
 };
