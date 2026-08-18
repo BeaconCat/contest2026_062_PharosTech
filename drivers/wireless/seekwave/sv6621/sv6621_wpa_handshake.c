@@ -46,6 +46,7 @@
 #define SV6621_WPA_TK_SIZE              16
 #define SV6621_WPA_KEY_ENCRYPTED        0x1000
 #define SV6621_WPA_REASON_UNSPECIFIED   1
+#define SV6621_WPA_REKEY_TIMEOUT_MS     5000
 
 /****************************************************************************
  * Private Function Prototypes
@@ -77,6 +78,7 @@ static int sv6621_wpa_process_message_3(
 static int sv6621_wpa_process_group_message_1(
     FAR struct sv6621_wpa_s *wpa,
     FAR const struct sv6621_wpa_eapol_s *eapol);
+static void sv6621_wpa_rekey_timeout_worker(FAR void *arg);
 static void sv6621_wpa_worker(FAR void *arg);
 
 /****************************************************************************
@@ -206,6 +208,7 @@ static bool sv6621_wpa_group_key_matches(
 
 static void sv6621_wpa_finish(FAR struct sv6621_wpa_s *wpa, int result)
 {
+  work_cancel(LPWORK, &wpa->rekey_timeout_work);
   if (nxmutex_lock(&wpa->lock) < 0)
     {
       return;
@@ -333,6 +336,8 @@ static int sv6621_wpa_process_message_1(
   ret = sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_2);
   if (ret == 0)
     {
+      bool rekeying;
+
       ret = nxmutex_lock(&wpa->lock);
       if (ret == 0)
         {
@@ -342,7 +347,16 @@ static int sv6621_wpa_process_message_1(
             }
 
           wpa->state = SV6621_WPA_WAIT_MESSAGE_3;
+          rekeying = wpa->rekeying;
           nxmutex_unlock(&wpa->lock);
+          if (rekeying)
+            {
+              work_cancel(LPWORK, &wpa->rekey_timeout_work);
+              ret = work_queue(
+                  LPWORK, &wpa->rekey_timeout_work,
+                  sv6621_wpa_rekey_timeout_worker, wpa,
+                  MSEC2TICK(SV6621_WPA_REKEY_TIMEOUT_MS));
+            }
         }
     }
 
@@ -520,6 +534,32 @@ static int sv6621_wpa_process_group_message_1(
 clear_gtk:
   sv6621_wpa_clear(gtk, sizeof(gtk));
   return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_rekey_timeout_worker
+ ****************************************************************************/
+
+static void sv6621_wpa_rekey_timeout_worker(FAR void *arg)
+{
+  FAR struct sv6621_wpa_s *wpa = arg;
+  bool timed_out;
+
+  if (nxmutex_lock(&wpa->lock) < 0)
+    {
+      return;
+    }
+
+  timed_out = wpa->state == SV6621_WPA_WAIT_MESSAGE_3 && wpa->rekeying;
+  nxmutex_unlock(&wpa->lock);
+  if (!timed_out)
+    {
+      return;
+    }
+
+  sv6621_station_disconnect(wpa->station, SV6621_WPA_REASON_UNSPECIFIED);
+  sv6621_wpa_remove_keys(wpa);
+  sv6621_wpa_finish(wpa, -ETIMEDOUT);
 }
 
 /****************************************************************************
@@ -842,6 +882,7 @@ void sv6621_wpa_cancel(FAR struct sv6621_wpa_s *wpa, int result)
   nxmutex_unlock(&wpa->lock);
 
   work_cancel_sync(LPWORK, &wpa->work);
+  work_cancel_sync(LPWORK, &wpa->rekey_timeout_work);
   sv6621_wpa_remove_keys(wpa);
   if (nxmutex_lock(&wpa->lock) < 0)
     {
