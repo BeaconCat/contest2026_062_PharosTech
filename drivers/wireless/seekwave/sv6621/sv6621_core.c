@@ -2163,7 +2163,8 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
     }
 
   if (request->security != SV6621_SECURITY_OPEN &&
-      request->security != SV6621_SECURITY_WPA2_PSK)
+      request->security != SV6621_SECURITY_WPA2_PSK &&
+      request->security != SV6621_SECURITY_WPA2_WPA3_PSK)
     {
       return -EOPNOTSUPP;
     }
@@ -2248,7 +2249,8 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
       goto unlock_lifecycle;
     }
 
-  if (connection->security == SV6621_SECURITY_WPA2_PSK)
+  if (connection->security == SV6621_SECURITY_WPA2_PSK ||
+      connection->security == SV6621_SECURITY_WPA2_WPA3_PSK)
     {
       target = kmm_malloc(sizeof(*target));
       if (target == NULL)
