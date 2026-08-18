@@ -49,6 +49,7 @@ struct transform_s
 {
   float cx;
   float cy;
+  float sx;
   float sy;
   float sn;
   float cs;
@@ -338,10 +339,10 @@ static void vector_eye_transform(struct nyabula_eye_renderer_s *r,
   lv_matrix_t matrix;
 
   lv_matrix_identity(&matrix);
-  matrix.m[0][0] = e->t.cs;
+  matrix.m[0][0] = e->t.sx * e->t.cs;
   matrix.m[0][1] = -e->t.sy * e->t.sn;
   matrix.m[0][2] = e->t.cx;
-  matrix.m[1][0] = e->t.sn;
+  matrix.m[1][0] = e->t.sx * e->t.sn;
   matrix.m[1][1] = e->t.sy * e->t.cs;
   matrix.m[1][2] = e->t.cy;
   lv_vector_dsc_set_transform(r->vector, &matrix);
@@ -383,6 +384,7 @@ static uint32_t shade(uint32_t color, float scale)
 static void to_screen(const struct transform_s *t, float x, float y, float *sx,
                       float *sy)
 {
+  x *= t->sx;
   y *= t->sy;
   *sx = t->cx + x * t->cs - y * t->sn;
   *sy = t->cy + x * t->sn + y * t->cs;
@@ -393,7 +395,7 @@ static void to_local(const struct transform_s *t, float x, float y, float *lx,
 {
   float dx = x - t->cx;
   float dy = y - t->cy;
-  *lx = dx * t->cs + dy * t->sn;
+  *lx = (dx * t->cs + dy * t->sn) / t->sx;
   *ly = (-dx * t->sn + dy * t->cs) / t->sy;
 }
 
@@ -469,12 +471,15 @@ static void text_center_at(struct nyabula_eye_renderer_s *r,
 {
   lv_draw_label_dsc_t descriptor;
   lv_area_t area;
+  float screen_x;
+  float screen_y;
   int width;
 
   font = renderer_font(r, font);
   width = text_width(r, font, text);
-  area.x1 = lroundf(e->t.cx + center_x - width * 0.5f);
-  area.y1 = lroundf(e->t.cy + center_y - font->line_height * 0.5f);
+  to_screen(&e->t, center_x, center_y, &screen_x, &screen_y);
+  area.x1 = lroundf(screen_x - width * 0.5f);
+  area.y1 = lroundf(screen_y - font->line_height * 0.5f);
   area.x2 = area.x1 + width + 1;
   area.y2 = area.y1 + font->line_height + 1;
 
@@ -1665,82 +1670,274 @@ static void scene_draw_cloud(struct nyabula_eye_renderer_s *r,
                       shade(color, 1.22f), opacity * 0.28f);
 }
 
+static void scene_music_progress(
+    struct nyabula_eye_renderer_s *r, const struct eye_s *e,
+    const struct nyabula_eye_scene_payload_s *payload, float seconds,
+    float opacity)
+{
+  uint32_t color = scene_color(e);
+  float duration = payload->duration_ms == 0 ? 235.0f
+                                             : payload->duration_ms / 1000.0f;
+  float position = payload->duration_ms == 0 ? fmodf(seconds, duration)
+                                              : payload->position_ms / 1000.0f;
+  float progress = clampf(position / duration, 0.0f, 1.0f);
+  if (e->id != NYABULA_EYE_LEFT)
+    {
+      return;
+    }
+
+  arc(r, e, 0.0f, 0.0f, R * 0.89f, -PI * 0.5f, PI * 2.0f,
+      R * 0.032f, shade(color, 0.38f), opacity * 0.12f);
+  arc(r, e, 0.0f, 0.0f, R * 0.89f, -PI * 0.5f,
+      progress * PI * 2.0f, R * 0.032f, color, opacity * 0.92f);
+  ellipse(r, e, cosf(-PI * 0.5f + progress * PI * 2.0f) * R * 0.89f,
+          sinf(-PI * 0.5f + progress * PI * 2.0f) * R * 0.89f,
+          R * 0.024f, R * 0.024f, 0.0f, color, opacity * 0.95f);
+}
+
+static void scene_music_icon(struct nyabula_eye_renderer_s *r,
+                             const struct eye_s *e, bool playing,
+                             uint32_t color, float opacity, float scale)
+{
+  struct eye_s scaled = *e;
+
+  scaled.t.sx *= scale;
+  scaled.t.sy *= scale;
+  if (playing)
+    {
+      line(r, &scaled, -R * 0.09f, -R * 0.20f, -R * 0.09f, R * 0.20f,
+           R * 0.065f, color, opacity * 0.94f, false);
+      line(r, &scaled, R * 0.09f, -R * 0.20f, R * 0.09f, R * 0.20f,
+           R * 0.065f, color, opacity * 0.94f, false);
+    }
+  else
+    {
+      scene_play_triangle(r, &scaled, color, opacity * 0.94f);
+    }
+}
+
+static void scene_music_title(struct nyabula_eye_renderer_s *r,
+                              const struct eye_s *e,
+                              const struct nyabula_eye_scene_payload_s *payload,
+                              uint32_t color, float opacity)
+{
+  text_center(r, e,
+              scene_font(r, FONT_FAMILY_ENGLISH, 14,
+                         &nyabula_font_english_18),
+              scene_text(payload->title, "NYABULA MIX"), R * 0.36f,
+              color, opacity * 0.50f);
+}
+
+static void scene_music_time(struct nyabula_eye_renderer_s *r,
+                             const struct eye_s *e,
+                             const struct nyabula_eye_scene_payload_s *payload,
+                             float seconds, uint32_t color, float opacity)
+{
+  float duration = payload->duration_ms == 0 ? 235.0f
+                                             : payload->duration_ms / 1000.0f;
+  float position = payload->duration_ms == 0 ? fmodf(seconds, duration)
+                                              : payload->position_ms / 1000.0f;
+  char value[32];
+
+  snprintf(value, sizeof(value), "%02u:%02u  /  %02u:%02u",
+           (unsigned int)position / 60, (unsigned int)position % 60,
+           (unsigned int)duration / 60, (unsigned int)duration % 60);
+  text_center(r, e,
+              scene_font(r, FONT_FAMILY_ENGLISH, 16,
+                         &nyabula_font_english_18),
+              value, R * 0.49f, color, opacity * 0.76f);
+}
+
+static void scene_music_lyrics(
+    struct nyabula_eye_renderer_s *r, const struct eye_s *e,
+    const struct nyabula_eye_scene_payload_s *payload, uint32_t color,
+    float opacity)
+{
+  text_center(r, e, &nyabula_font_body_18,
+              scene_text(payload->previous_line, "灯火落进夜里"),
+              -R * 0.30f, color, opacity * 0.22f);
+  text_center(r, e, &nyabula_font_title_28,
+              scene_text(payload->current_line, "我听见你"), -R * 0.03f,
+              color, opacity * 0.94f);
+  text_center(r, e, &nyabula_font_body_18,
+              scene_text(payload->next_line, "轻轻回应"), R * 0.27f,
+              color, opacity * 0.30f);
+}
+
+static void scene_music_spectrum(struct nyabula_eye_renderer_s *r,
+                                 const struct eye_s *e, float seconds,
+                                 uint32_t color, float opacity)
+{
+  int index;
+
+  text_center(r, e, &nyabula_font_title_20, "频谱", -R * 0.38f, color,
+              opacity * 0.32f);
+  for (index = 0; index < 9; index++)
+    {
+      float wave = 0.5f + 0.5f * sinf(seconds * (3.4f +
+                          (index % 3) * 0.24f) + index * 0.88f);
+      float envelope = 0.58f + 0.42f * sinf((index + 1) / 10.0f * PI);
+      float height = R * (0.13f + 0.49f * wave * envelope);
+      float x = (index - 4) * R * 0.107f;
+      line(r, e, x, -height * 0.5f + R * 0.10f, x,
+           height * 0.5f + R * 0.10f, R * 0.062f, color,
+           opacity * (0.48f + wave * 0.46f), false);
+    }
+}
+
 static void scene_music(struct nyabula_eye_renderer_s *r,
                         const struct eye_s *e,
                         const struct nyabula_eye_scene_payload_s *payload,
                         float seconds, float opacity)
 {
   uint32_t color = scene_color(e);
-  float duration = payload->duration_ms == 0 ? 235.0f
-                                             : payload->duration_ms / 1000.0f;
-  float position = payload->position_ms == 0 ? fmodf(seconds, duration)
-                                              : payload->position_ms / 1000.0f;
-  float progress = clampf(position / duration, 0.0f, 1.0f);
-  char value[32];
 
   if (e->id == NYABULA_EYE_LEFT)
     {
-      arc(r, e, 0.0f, 0.0f, R * 0.89f, -PI * 0.5f, PI * 2.0f,
-          R * 0.032f, shade(color, 0.38f), opacity * 0.12f);
-      arc(r, e, 0.0f, 0.0f, R * 0.89f, -PI * 0.5f,
-          progress * PI * 2.0f, R * 0.032f, color, opacity * 0.92f);
-      ellipse(r, e,
-              cosf(-PI * 0.5f + progress * PI * 2.0f) * R * 0.89f,
-              sinf(-PI * 0.5f + progress * PI * 2.0f) * R * 0.89f,
-              R * 0.024f, R * 0.024f, 0.0f, color, opacity * 0.95f);
-      if (payload->playing)
-        {
-          scene_play_triangle(r, e, color, opacity * 0.94f);
-        }
-      else
-        {
-          line(r, e, -R * 0.09f, -R * 0.20f, -R * 0.09f, R * 0.20f,
-               R * 0.065f, color, opacity * 0.94f, false);
-          line(r, e, R * 0.09f, -R * 0.20f, R * 0.09f, R * 0.20f,
-               R * 0.065f, color, opacity * 0.94f, false);
-        }
-      text_center(r, e,
-                  scene_font(r, FONT_FAMILY_ENGLISH, 14,
-                             &nyabula_font_english_18),
-                  scene_text(payload->title, "NYABULA MIX"), R * 0.36f,
-                  color, opacity * 0.50f);
-      snprintf(value, sizeof(value), "%02u:%02u  /  %02u:%02u",
-               (unsigned int)position / 60, (unsigned int)position % 60,
-               (unsigned int)duration / 60, (unsigned int)duration % 60);
-      text_center(r, e,
-                  scene_font(r, FONT_FAMILY_ENGLISH, 16,
-                             &nyabula_font_english_18),
-                  value, R * 0.49f, color, opacity * 0.76f);
+      scene_music_progress(r, e, payload, seconds, opacity);
+      scene_music_icon(r, e, payload->playing, color, opacity, 1.0f);
+      scene_music_title(r, e, payload, color, opacity);
+      scene_music_time(r, e, payload, seconds, color, opacity);
     }
   else if (payload->music_view == NYABULA_EYE_MUSIC_LYRICS)
     {
-      text_center(r, e, &nyabula_font_body_18,
-                  scene_text(payload->previous_line, "灯火落进夜里"),
-                  -R * 0.30f, color, opacity * 0.22f);
-      text_center(r, e, &nyabula_font_title_28,
-                  scene_text(payload->current_line, "我听见你"),
-                  -R * 0.03f, color, opacity * 0.94f);
-      text_center(r, e, &nyabula_font_body_18,
-                  scene_text(payload->next_line, "轻轻回应"), R * 0.27f,
-                  color, opacity * 0.30f);
+      scene_music_lyrics(r, e, payload, color, opacity);
     }
   else
     {
-      int index;
-      text_center(r, e, &nyabula_font_title_20, "频谱", -R * 0.38f, color,
-                  opacity * 0.32f);
-      for (index = 0; index < 9; index++)
+      scene_music_spectrum(r, e, seconds, color, opacity);
+    }
+}
+
+static float scene_music_lerp(float from, float to, float progress)
+{
+  return from + (to - from) * progress;
+}
+
+static bool scene_music_lyrics_changed(
+    const struct nyabula_eye_scene_payload_s *from,
+    const struct nyabula_eye_scene_payload_s *to)
+{
+  return strcmp(from->previous_line, to->previous_line) != 0 ||
+         strcmp(from->current_line, to->current_line) != 0 ||
+         strcmp(from->next_line, to->next_line) != 0;
+}
+
+static void scene_music_lyrics_transition(
+    struct nyabula_eye_renderer_s *r, const struct eye_s *e,
+    const struct nyabula_eye_scene_payload_s *from,
+    const struct nyabula_eye_scene_payload_s *to, uint32_t color,
+    float progress, float opacity)
+{
+  const char *old_top = scene_text(from->previous_line, "灯火落进夜里");
+  const char *old_middle = scene_text(from->current_line, "我听见你");
+  const char *old_bottom = scene_text(from->next_line, "轻轻回应");
+  const char *new_top = scene_text(to->previous_line, "灯火落进夜里");
+  const char *new_middle = scene_text(to->current_line, "我听见你");
+  const char *new_bottom = scene_text(to->next_line, "轻轻回应");
+  float top_y = scene_music_lerp(-R * 0.30f, -R * 0.03f, progress);
+  float middle_y = scene_music_lerp(-R * 0.03f, R * 0.27f, progress);
+  float bottom_y = scene_music_lerp(R * 0.27f, R * 0.52f, progress);
+  float enter = clampf((progress - 0.08f) / 0.92f, 0.0f, 1.0f);
+  float incoming_y;
+
+  enter = enter * enter * (3.0f - 2.0f * enter);
+  incoming_y = scene_music_lerp(-R * 0.52f, -R * 0.30f, enter);
+
+  text_center(r, e, &nyabula_font_body_18, old_bottom, bottom_y, color,
+              opacity * 0.30f * (1.0f - progress));
+  if (strcmp(old_middle, new_bottom) == 0)
+    {
+      const lv_font_t *font = progress < 0.5f ? &nyabula_font_title_28
+                                               : &nyabula_font_body_18;
+      float alpha = scene_music_lerp(0.94f, 0.30f, progress);
+
+      text_center(r, e, font, old_middle, middle_y, color,
+                  opacity * alpha);
+    }
+  else
+    {
+      text_center(r, e, &nyabula_font_title_28, old_middle, middle_y,
+                  color, opacity * 0.94f * (1.0f - progress));
+      text_center(r, e, &nyabula_font_body_18, new_bottom, middle_y,
+                  color, opacity * 0.30f * progress);
+    }
+
+  if (strcmp(old_top, new_middle) == 0)
+    {
+      const lv_font_t *font = progress < 0.5f ? &nyabula_font_body_18
+                                               : &nyabula_font_title_28;
+      float alpha = scene_music_lerp(0.22f, 0.94f, progress);
+
+      text_center(r, e, font, old_top, top_y, color, opacity * alpha);
+    }
+  else
+    {
+      text_center(r, e, &nyabula_font_body_18, old_top, top_y, color,
+                  opacity * 0.22f * (1.0f - progress));
+      text_center(r, e, &nyabula_font_title_28, new_middle, top_y, color,
+                  opacity * 0.94f * progress);
+    }
+
+  text_center(r, e, &nyabula_font_body_18, new_top, incoming_y, color,
+              opacity * 0.30f * enter);
+}
+
+static void scene_music_transition(
+    struct nyabula_eye_renderer_s *r, const struct eye_s *e,
+    const struct nyabula_eye_scene_payload_s *from,
+    const struct nyabula_eye_scene_payload_s *to, float seconds,
+    float progress, float opacity)
+{
+  struct nyabula_eye_scene_payload_s displayed = *to;
+  uint32_t color = scene_color(e);
+
+  displayed.duration_ms = (uint32_t)lroundf(scene_music_lerp(
+      from->duration_ms, to->duration_ms, progress));
+  displayed.position_ms = (uint32_t)lroundf(scene_music_lerp(
+      from->position_ms, to->position_ms, progress));
+  if (e->id == NYABULA_EYE_LEFT)
+    {
+      scene_music_progress(r, e, &displayed, seconds, opacity);
+      if (from->playing != to->playing)
         {
-          float wave = 0.5f + 0.5f * sinf(seconds * (3.4f +
-                              (index % 3) * 0.24f) + index * 0.88f);
-          float envelope = 0.58f + 0.42f *
-              sinf((index + 1) / 10.0f * PI);
-          float height = R * (0.13f + 0.49f * wave * envelope);
-          float x = (index - 4) * R * 0.107f;
-          line(r, e, x, -height * 0.5f + R * 0.10f, x,
-               height * 0.5f + R * 0.10f, R * 0.062f, color,
-               opacity * (0.48f + wave * 0.46f), false);
+          scene_music_icon(r, e, from->playing, color,
+                           opacity * (1.0f - progress),
+                           0.78f + 0.22f * (1.0f - progress));
+          scene_music_icon(r, e, to->playing, color, opacity * progress,
+                           0.78f + 0.22f * progress);
         }
+      else
+        {
+          scene_music_icon(r, e, to->playing, color, opacity, 1.0f);
+        }
+
+      if (strcmp(from->title, to->title) != 0)
+        {
+          scene_music_title(r, e, from, color,
+                            opacity * (1.0f - progress));
+          scene_music_title(r, e, to, color, opacity * progress);
+        }
+      else
+        {
+          scene_music_title(r, e, to, color, opacity);
+        }
+
+      scene_music_time(r, e, &displayed, seconds, color, opacity);
+    }
+  else if (to->music_view == NYABULA_EYE_MUSIC_LYRICS &&
+           scene_music_lyrics_changed(from, to))
+    {
+      scene_music_lyrics_transition(r, e, from, to, color, progress,
+                                    opacity);
+    }
+  else if (to->music_view == NYABULA_EYE_MUSIC_LYRICS)
+    {
+      scene_music_lyrics(r, e, to, color, opacity);
+    }
+  else
+    {
+      scene_music_spectrum(r, e, seconds, color, opacity);
     }
 }
 
@@ -1764,14 +1961,17 @@ static void scene_timer(struct nyabula_eye_renderer_s *r,
               opacity * (remaining <= 10.0f
                               ? 0.82f + sinf(seconds * 8.0f) * 0.18f
                               : 0.96f));
-  text_center(r, e, &nyabula_font_body_14,
+  text_center(r, e, &nyabula_font_body_18,
               e->id == NYABULA_EYE_LEFT ? "分钟" : "秒钟", R * 0.34f,
-              color, opacity * 0.42f);
+              color, opacity * 0.48f);
   arc(r, e, 0.0f, 0.0f, R * 0.72f, -PI * 0.5f, PI * 2.0f, R * 0.035f,
       color, opacity * 0.22f);
   arc(r, e, 0.0f, 0.0f, R * 0.72f, -PI * 0.5f,
       clampf(remaining / total, 0.0f, 1.0f) * PI * 2.0f, R * 0.035f,
       color, opacity * 0.82f);
+  text_center(r, e, &nyabula_font_body_14,
+              scene_text(payload->detail, "计时中"), R * 0.49f, color,
+              opacity * 0.34f);
 }
 
 static float scene_ease(float value)
@@ -3432,6 +3632,7 @@ static void prepare(struct eye_s *e, const struct nyabula_eye_frame_s *f,
   e->id = id;
   e->t.cx = W * 0.5f;
   e->t.cy = CY;
+  e->t.sx = 1.0f;
   e->t.sy = 1.0f - f->squint * 0.25f;
   e->t.sn = rotation == 0.0f ? 0.0f : sinf(rotation);
   e->t.cs = rotation == 0.0f ? 1.0f : cosf(rotation);
@@ -3453,9 +3654,23 @@ static void prepare_scene(struct eye_s *e,
   e->id = id;
   e->t.cx = W * 0.5f;
   e->t.cy = CY;
+  e->t.sx = 1.0f;
   e->t.sy = 1.0f;
   e->t.cs = 1.0f;
   e->ir = R * 1.08f;
+}
+
+static void prepare_scene_motion(struct eye_s *motion,
+                                 const struct eye_s *scene_eye,
+                                 float opacity, bool incoming)
+{
+  float visible = clampf(opacity, 0.0f, 1.0f);
+  float scale = 0.78f + visible * 0.22f;
+
+  (void)incoming;
+  *motion = *scene_eye;
+  motion->t.sx *= scale;
+  motion->t.sy *= scale;
 }
 
 static void prepare_scene_lids(struct eye_s *e,
@@ -3580,6 +3795,7 @@ static bool render_scene(struct nyabula_eye_renderer_s *r,
 {
   const struct nyabula_eye_scene_frame_s *scene = &frame->scene;
   struct eye_s scene_eye;
+  struct eye_s motion_eye;
 
   if (scene->scene == NYABULA_EYE_SCENE_NONE)
     {
@@ -3600,20 +3816,35 @@ static bool render_scene(struct nyabula_eye_renderer_s *r,
            false);
     }
 
-  if (scene->previous_scene != NYABULA_EYE_SCENE_NONE &&
+  if (scene->previous_scene == NYABULA_EYE_SCENE_MUSIC &&
+      scene->scene == NYABULA_EYE_SCENE_MUSIC &&
+      scene->previous_payload.music_view == scene->payload.music_view &&
       scene->previous_alpha > 0.001f)
     {
-      scene_draw_content(r, &scene_eye, scene->previous_scene,
-                         &scene->previous_payload,
-                         scene->previous_scene_seconds, scene->previous_alpha,
-                         1.0f,
-                         scene->previous_style ==
-                             NYABULA_EYE_SCENE_STYLE_MINIMAL);
+      scene_backdrop(r, &scene_eye,
+                     scene->style == NYABULA_EYE_SCENE_STYLE_MINIMAL, 0.68f);
+      scene_music_transition(r, &scene_eye, &scene->previous_payload,
+                             &scene->payload, scene->scene_seconds,
+                             scene->alpha, 1.0f);
     }
+  else
+    {
+      if (scene->previous_scene != NYABULA_EYE_SCENE_NONE &&
+          scene->previous_alpha > 0.001f)
+        {
+          prepare_scene_motion(&motion_eye, &scene_eye, scene->previous_alpha,
+                               false);
+          scene_draw_content(
+              r, &motion_eye, scene->previous_scene, &scene->previous_payload,
+              scene->previous_scene_seconds, scene->previous_alpha, 1.0f,
+              scene->previous_style == NYABULA_EYE_SCENE_STYLE_MINIMAL);
+        }
 
-  scene_draw_content(r, &scene_eye, scene->scene, &scene->payload,
-                     scene->scene_seconds, scene->alpha, scene->reveal,
-                     scene->style == NYABULA_EYE_SCENE_STYLE_MINIMAL);
+      prepare_scene_motion(&motion_eye, &scene_eye, scene->alpha, true);
+      scene_draw_content(r, &motion_eye, scene->scene, &scene->payload,
+                         scene->scene_seconds, scene->alpha, scene->reveal,
+                         scene->style == NYABULA_EYE_SCENE_STYLE_MINIMAL);
+    }
   if (scene->style == NYABULA_EYE_SCENE_STYLE_FULL && scene->lid > 0.001f)
     {
       struct eye_s mask_eye;
