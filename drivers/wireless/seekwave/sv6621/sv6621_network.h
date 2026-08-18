@@ -98,6 +98,9 @@ int sv6621_network_init(FAR struct sv6621_network_s *network,
 void sv6621_network_deinit(FAR struct sv6621_network_s *network);
 int sv6621_network_sync_multicast(FAR struct sv6621_network_s *network);
 int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network);
+int sv6621_network_sync_link_addresses(
+    FAR struct sv6621_network_s *network,
+    FAR const struct sv6621_data_tx_context_s *context);
 void sv6621_network_set_link(
     FAR struct sv6621_network_s *network, bool link_up,
     FAR const struct sv6621_data_tx_context_s *context);
