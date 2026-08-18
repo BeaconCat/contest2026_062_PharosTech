@@ -32,6 +32,7 @@
 #include <errno.h>
 #include <string.h>
 
+#include "sv6621_sae_crypto.h"
 #include "sv6621_station.h"
 
 /****************************************************************************
@@ -53,6 +54,7 @@
 #define SV6621_STATION_DISCONNECT_EVENT_SIZE  8
 #define SV6621_STATION_EVENT_DISCONNECT        2
 #define SV6621_STATION_EVENT_RX_MGMT           4
+#define SV6621_STATION_AUTH_SAE                 3
 #define SV6621_STATION_AUTH_SUCCESS_TRANSACTION 2
 #define SV6621_STATION_REASON_UNSPECIFIED       1
 #define SV6621_STATION_HT_CAPABILITY_OFFSET     0
@@ -83,6 +85,9 @@ static uint16_t sv6621_station_get_le16(FAR const uint8_t *value);
 static bool sv6621_station_security_matches(enum sv6621_security_e requested,
                                             enum sv6621_security_e advertised);
 static void sv6621_station_association_worker(FAR void *arg);
+static void sv6621_station_sae_complete(int result, FAR const uint8_t *pmk,
+                                        FAR const uint8_t *pmkid,
+                                        FAR void *arg);
 static void sv6621_station_finish(FAR struct sv6621_station_s *station,
                                   enum sv6621_station_state_e state,
                                   int result);
@@ -116,6 +121,12 @@ static bool sv6621_station_security_matches(enum sv6621_security_e requested,
       requested == SV6621_SECURITY_WPA2_WPA3_PSK)
     {
       return advertised == SV6621_SECURITY_WPA2_PSK ||
+             advertised == SV6621_SECURITY_WPA2_WPA3_PSK;
+    }
+
+  if (requested == SV6621_SECURITY_WPA3_SAE)
+    {
+      return advertised == SV6621_SECURITY_WPA3_SAE ||
              advertised == SV6621_SECURITY_WPA2_WPA3_PSK;
     }
 
@@ -167,6 +178,48 @@ static void sv6621_station_association_worker(FAR void *arg)
       station->command, station->target.bss.bssid,
       station->ht_capability, station->vht_capability,
       station->association_ies, station->association_ie_length);
+  if (ret < 0)
+    {
+      sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
+    }
+}
+
+static void sv6621_station_sae_complete(int result, FAR const uint8_t *pmk,
+                                        FAR const uint8_t *pmkid,
+                                        FAR void *arg)
+{
+  FAR struct sv6621_station_s *station = arg;
+  int ret;
+
+  ret = nxmutex_lock(&station->lock);
+  if (ret < 0)
+    {
+      return;
+    }
+
+  if (station->state != SV6621_STATION_AUTHENTICATING ||
+      station->request.security != SV6621_SECURITY_WPA3_SAE)
+    {
+      nxmutex_unlock(&station->lock);
+      return;
+    }
+
+  if (result < 0 || pmk == NULL || pmkid == NULL)
+    {
+      station->state = SV6621_STATION_IDLE;
+      station->result = result < 0 ? result : -EPROTO;
+      nxmutex_unlock(&station->lock);
+      nxsem_post(&station->completion);
+      return;
+    }
+
+  memcpy(station->sae_pmk, pmk, sizeof(station->sae_pmk));
+  memcpy(station->sae_pmkid, pmkid, sizeof(station->sae_pmkid));
+  station->sae_pmk_valid = true;
+  station->state = SV6621_STATION_ASSOCIATING;
+  nxmutex_unlock(&station->lock);
+  ret = work_queue(LPWORK, &station->association_work,
+                   sv6621_station_association_worker, station, 0);
   if (ret < 0)
     {
       sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
@@ -317,12 +370,51 @@ int sv6621_station_init(FAR struct sv6621_station_s *station,
       return ret;
     }
 
+  ret = sv6621_sae_init(&station->sae, command,
+                        sv6621_station_sae_complete, station);
+  if (ret < 0)
+    {
+      nxsem_destroy(&station->completion);
+      nxmutex_destroy(&station->connect_lock);
+      nxmutex_destroy(&station->lock);
+      return ret;
+    }
+
   station->command = command;
   station->scan = scan;
   station->event = event;
   station->event_arg = event_arg;
   memcpy(station->ht_capability, g_sv6621_station_ht_capability,
          sizeof(station->ht_capability));
+  return 0;
+}
+
+int sv6621_station_set_local_address(
+    FAR struct sv6621_station_s *station,
+    FAR const uint8_t address[SV6621_MAC_LENGTH])
+{
+  int ret;
+
+  if (station == NULL || address == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&station->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (station->state != SV6621_STATION_IDLE)
+    {
+      nxmutex_unlock(&station->lock);
+      return -EBUSY;
+    }
+
+  memcpy(station->local_address, address, SV6621_MAC_LENGTH);
+  station->local_address_valid = true;
+  nxmutex_unlock(&station->lock);
   return 0;
 }
 
@@ -497,6 +589,7 @@ void sv6621_station_deinit(FAR struct sv6621_station_s *station)
       nxmutex_unlock(&station->connect_lock);
     }
 
+  sv6621_sae_deinit(&station->sae);
   nxsem_destroy(&station->completion);
   nxmutex_destroy(&station->connect_lock);
   nxmutex_destroy(&station->lock);
@@ -521,15 +614,17 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
       return -EINVAL;
     }
 
-  if (request->security == SV6621_SECURITY_WPA3_SAE)
-    {
-      return -EOPNOTSUPP;
-    }
-
   if ((request->security == SV6621_SECURITY_OPEN &&
        request->credential_length != 0) ||
-      (request->security != SV6621_SECURITY_OPEN &&
+      ((request->security == SV6621_SECURITY_WPA2_PSK ||
+        request->security == SV6621_SECURITY_WPA2_WPA3_PSK) &&
        (request->credential_length < 8 || request->credential_length > 64)))
+    {
+      return -EINVAL;
+    }
+
+  if (request->security == SV6621_SECURITY_WPA3_SAE &&
+      (request->credential_length == 0 || request->credential_length > 63))
     {
       return -EINVAL;
     }
@@ -592,6 +687,9 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
   nxsem_reset(&station->completion, 0);
   station->target = *target;
   station->request = *request;
+  sv6621_sae_zeroize(station->sae_pmk, sizeof(station->sae_pmk));
+  sv6621_sae_zeroize(station->sae_pmkid, sizeof(station->sae_pmkid));
+  station->sae_pmk_valid = false;
   station->result = -EINPROGRESS;
   station->state = SV6621_STATION_JOINING;
   nxmutex_unlock(&station->lock);
@@ -624,8 +722,26 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
 
   station->state = SV6621_STATION_AUTHENTICATING;
   nxmutex_unlock(&station->lock);
-  ret = sv6621_connection_authenticate(
-      station->command, SV6621_CONNECTION_AUTH_OPEN, NULL, 0, NULL, 0);
+  if (request->security == SV6621_SECURITY_WPA3_SAE)
+    {
+      if (!station->local_address_valid)
+        {
+          ret = -EADDRNOTAVAIL;
+        }
+      else
+        {
+          ret = sv6621_sae_start(
+              &station->sae, station->local_address,
+              station->target.bss.bssid, station->peer.instance,
+              station->target.bss.channel, station->target.bss.band,
+              request->credential, request->credential_length);
+        }
+    }
+  else
+    {
+      ret = sv6621_connection_authenticate(
+          station->command, SV6621_CONNECTION_AUTH_OPEN, NULL, 0, NULL, 0);
+    }
   if (ret < 0)
     {
       sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
@@ -656,6 +772,7 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
       station->state = SV6621_STATION_IDLE;
       station->result = wait_result;
       nxmutex_unlock(&station->lock);
+      sv6621_sae_cancel(&station->sae, wait_result);
       sv6621_connection_disconnect(
           station->command, SV6621_CONNECTION_DISCONNECT_ONLY, true,
           SV6621_STATION_REASON_UNSPECIFIED, NULL, 0);
@@ -677,6 +794,11 @@ free_target:
   kmm_free(target);
 
 unlock_connect:
+  if (ret < 0)
+    {
+      sv6621_sae_cancel(&station->sae, ret);
+    }
+
   nxmutex_unlock(&station->connect_lock);
   return ret;
 }
@@ -786,6 +908,36 @@ int sv6621_station_mark_connected(FAR struct sv6621_station_s *station)
   return 0;
 }
 
+int sv6621_station_get_sae_pmk(
+    FAR struct sv6621_station_s *station,
+    uint8_t pmk[SV6621_SAE_PMK_SIZE],
+    uint8_t pmkid[SV6621_SAE_PMKID_SIZE])
+{
+  int ret;
+
+  if (station == NULL || pmk == NULL || pmkid == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&station->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!station->sae_pmk_valid)
+    {
+      nxmutex_unlock(&station->lock);
+      return -ENOENT;
+    }
+
+  memcpy(pmk, station->sae_pmk, SV6621_SAE_PMK_SIZE);
+  memcpy(pmkid, station->sae_pmkid, SV6621_SAE_PMKID_SIZE);
+  nxmutex_unlock(&station->lock);
+  return 0;
+}
+
 /****************************************************************************
  * Name: sv6621_station_reset
  ****************************************************************************/
@@ -807,8 +959,13 @@ void sv6621_station_reset(FAR struct sv6621_station_s *station, int result)
                 station->state == SV6621_STATION_ASSOCIATING;
       station->state = SV6621_STATION_IDLE;
       station->result = result;
+      sv6621_sae_zeroize(station->sae_pmk, sizeof(station->sae_pmk));
+      sv6621_sae_zeroize(station->sae_pmkid, sizeof(station->sae_pmkid));
+      station->sae_pmk_valid = false;
       nxmutex_unlock(&station->lock);
     }
+
+  sv6621_sae_cancel(&station->sae, result);
 
   if (pending)
     {
@@ -895,6 +1052,23 @@ void sv6621_station_command_event(uint8_t instance, uint8_t id,
       if (mgmt.type == SV6621_STATION_MGMT_AUTH &&
           state == SV6621_STATION_AUTHENTICATING)
         {
+          if (station->request.security == SV6621_SECURITY_WPA3_SAE)
+            {
+              nxmutex_unlock(&station->lock);
+              if (mgmt.algorithm == SV6621_STATION_AUTH_SAE)
+                {
+                  ret = sv6621_sae_input(&station->sae, mgmt.frame,
+                                         mgmt.frame_length);
+                  if (ret < 0 && ret != -EBUSY && ret != -ENOTCONN)
+                    {
+                      sv6621_station_finish(station, SV6621_STATION_IDLE,
+                                            ret);
+                    }
+                }
+
+              return;
+            }
+
           if (mgmt.algorithm != SV6621_CONNECTION_AUTH_OPEN ||
               mgmt.transaction != SV6621_STATION_AUTH_SUCCESS_TRANSACTION ||
               mgmt.status != 0)
