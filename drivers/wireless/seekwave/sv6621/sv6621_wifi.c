@@ -48,7 +48,23 @@
 #define SV6621_WIFI_COMMAND_SET_MIB         40
 #define SV6621_WIFI_COMMAND_PHY_BB_CONFIG   50
 #define SV6621_WIFI_COMMAND_VERSION         1
-#define SV6621_WIFI_LAST_SUPPORTED_COMMAND  61
+#define SV6621_WIFI_COMMAND_DOWNLOAD_INI    0
+#define SV6621_WIFI_COMMAND_START_SCAN      5
+#define SV6621_WIFI_COMMAND_STOP_SCAN       6
+#define SV6621_WIFI_COMMAND_JOIN            9
+#define SV6621_WIFI_COMMAND_AUTH            10
+#define SV6621_WIFI_COMMAND_ASSOC           11
+#define SV6621_WIFI_COMMAND_ADD_KEY         12
+#define SV6621_WIFI_COMMAND_DEL_KEY         13
+#define SV6621_WIFI_COMMAND_TX_DATA         15
+#define SV6621_WIFI_COMMAND_SET_IP          16
+#define SV6621_WIFI_COMMAND_DISCONNECT      17
+#define SV6621_WIFI_COMMAND_GET_STA         23
+#define SV6621_WIFI_COMMAND_SET_MC_ADDR     26
+#define SV6621_WIFI_COMMAND_RESUME          27
+#define SV6621_WIFI_COMMAND_SUSPEND         28
+#define SV6621_WIFI_COMMAND_SET_CQM         34
+#define SV6621_WIFI_COMMAND_SET_REGD        51
 #define SV6621_WIFI_VERSION_TABLE_SIZE      256
 #define SV6621_WIFI_VERSION_RESPONSE_SIZE   512
 #define SV6621_WIFI_COMMAND_TIMEOUT_MS      5000
@@ -91,6 +107,37 @@
 #define SV6621_WIFI_MIB_HDK_TEST            131
 #define SV6621_WIFI_BANDWIDTH_40MHZ         1
 #define SV6621_WIFI_LINK_LOSS_DEFAULT       6
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+static const uint8_t g_sv6621_wifi_supported_commands[] =
+{
+  SV6621_WIFI_COMMAND_DOWNLOAD_INI,
+  SV6621_WIFI_COMMAND_GET_INFO,
+  SV6621_WIFI_COMMAND_SYNC_VERSION,
+  SV6621_WIFI_COMMAND_OPEN_DEVICE,
+  SV6621_WIFI_COMMAND_CLOSE_DEVICE,
+  SV6621_WIFI_COMMAND_START_SCAN,
+  SV6621_WIFI_COMMAND_STOP_SCAN,
+  SV6621_WIFI_COMMAND_JOIN,
+  SV6621_WIFI_COMMAND_AUTH,
+  SV6621_WIFI_COMMAND_ASSOC,
+  SV6621_WIFI_COMMAND_ADD_KEY,
+  SV6621_WIFI_COMMAND_DEL_KEY,
+  SV6621_WIFI_COMMAND_TX_DATA,
+  SV6621_WIFI_COMMAND_SET_IP,
+  SV6621_WIFI_COMMAND_DISCONNECT,
+  SV6621_WIFI_COMMAND_GET_STA,
+  SV6621_WIFI_COMMAND_SET_MC_ADDR,
+  SV6621_WIFI_COMMAND_RESUME,
+  SV6621_WIFI_COMMAND_SUSPEND,
+  SV6621_WIFI_COMMAND_SET_CQM,
+  SV6621_WIFI_COMMAND_SET_MIB,
+  SV6621_WIFI_COMMAND_PHY_BB_CONFIG,
+  SV6621_WIFI_COMMAND_SET_REGD
+};
 
 /****************************************************************************
  * Private Function Prototypes
@@ -198,7 +245,7 @@ int sv6621_wifi_sync_versions(FAR struct sv6621_command_engine_s *command)
 {
   FAR uint8_t *versions;
   size_t response_length = SV6621_WIFI_VERSION_RESPONSE_SIZE;
-  unsigned int id;
+  size_t index;
   int ret;
 
   if (command == NULL)
@@ -226,8 +273,10 @@ int sv6621_wifi_sync_versions(FAR struct sv6621_command_engine_s *command)
       goto free_versions;
     }
 
-  for (id = 0; id <= SV6621_WIFI_LAST_SUPPORTED_COMMAND; id++)
+  for (index = 0; index < sizeof(g_sv6621_wifi_supported_commands); index++)
     {
+      uint8_t id = g_sv6621_wifi_supported_commands[index];
+
       if (versions[id] != 0 && versions[id] != SV6621_WIFI_COMMAND_VERSION)
         {
           ret = -EPROTONOSUPPORT;
