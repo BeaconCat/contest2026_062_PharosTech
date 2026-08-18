@@ -98,6 +98,7 @@ config SV6621
 	depends on NET
 	select CRYPTO
 	select CRYPTO_MBEDTLS
+	select MBEDTLS_CMAC_C
 	select CRYPTO_RANDOM_POOL
 	select DEV_URANDOM
 	select DRIVERS_WIRELESS
@@ -106,9 +107,9 @@ config SV6621
 	select SCHED_LPWORK
 	---help---
 		Enable the transport-independent firmware loader, FullMAC control
-		protocol, WPA2-PSK authentication and NuttX network interface for
-		the SeekWave SV6621/SWT6621-S combo.  A platform transport adapter
-		must also be selected.
+		protocol, WPA2-PSK/WPA3-SAE authentication and NuttX network
+		interface for the SeekWave SV6621/SWT6621-S combo.  A platform
+		transport adapter must also be selected.
 
 config SV6621_PM
 	bool "SeekWave SV6621 system power management"

@@ -2305,6 +2305,7 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
         }
 
       ret = sv6621_wpa_prepare_pmk(&dev->wpa, sae_pmk,
+                                   SV6621_WPA_KEY_MGMT_SAE,
                                    dev->wifi_info.mac,
                                    dev->station.target.bss.bssid);
       sv6621_sae_zeroize(sae_pmk, sizeof(sae_pmk));
