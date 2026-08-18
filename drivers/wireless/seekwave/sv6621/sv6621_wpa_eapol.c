@@ -192,7 +192,7 @@ int sv6621_wpa_eapol_parse(FAR const uint8_t *frame, size_t frame_length,
 
   key_data_length = sv6621_wpa_eapol_get_be16(
       packet + SV6621_WPA_KEY_DATA_LEN_OFFSET);
-  if (key_data_length > packet_length - SV6621_WPA_KEY_DATA_OFFSET)
+  if (key_data_length != packet_length - SV6621_WPA_KEY_DATA_OFFSET)
     {
       return -EPROTO;
     }
