@@ -1,0 +1,1664 @@
+<!DOCTYPE html>
+<!--
+  app/nyabula/host/web/mock_eye.html
+
+  SPDX-License-Identifier: Apache-2.0
+
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements. See the NOTICE file distributed with this
+  work for additional information regarding copyright ownership. The ASF
+  licenses this file to you under the Apache License, Version 2.0 (the
+  "License"); you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+  License for the specific language governing permissions and limitations
+  under the License.
+-->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nyabula Mock Eye Renderer</title>
+<style>
+  @font-face{font-family:"NyabulaTitle";src:url("./fonts/AlimamaShuHeiTi.ttf") format("truetype");font-display:swap}
+  @font-face{font-family:"NyabulaBody";src:url("./fonts/MiSans-Semibold.ttf") format("truetype");font-weight:600;font-display:swap}
+  @font-face{font-family:"NyabulaEnglish";src:local("Times New Roman Bold"),local("TimesNewRomanPS-BoldMT");font-weight:700}
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:"NyabulaBody","MiSans","Microsoft YaHei",sans-serif;user-select:none}
+  #stage{position:absolute;inset:0;display:block;cursor:none}
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<script src="./icons/material_icon_paths.js"></script>
+<script>
+"use strict";
+/* ============================================================
+ * Nyabula cat-eye vector animation demo
+ * 全参数化：每帧目标参数 target -> 弹簧/指数插值 -> 绘制
+ * 便于后续移植：draw(ctx, cx, cy, R, side, S) 即单眼渲染入口
+ * ============================================================ */
+const cv = document.getElementById('stage'), ctx = cv.getContext('2d');
+let W=0,H=0,DPR=1;
+function resize(){ DPR=Math.min(2,devicePixelRatio||1); W=innerWidth;H=innerHeight;
+  cv.width=W*DPR; cv.height=H*DPR; cv.style.width=W+'px'; cv.style.height=H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);}
+addEventListener('resize',resize); resize();
+
+/* ---------- 工具 ---------- */
+const lerp=(a,b,t)=>a+(b-a)*t;
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const KAPPA=0.5523;
+const SCREEN_RADIUS_SCALE=1.0;
+const FONT_TITLE_CN='"NyabulaTitle","MiSans","Microsoft YaHei",sans-serif';
+const FONT_BODY_CN='"NyabulaBody","MiSans","Microsoft YaHei",sans-serif';
+const FONT_EN='"NyabulaEnglish","Times New Roman",serif';
+const FONT_MIXED='"NyabulaEnglish","Times New Roman","NyabulaBody","MiSans",sans-serif';
+const fontTitle=px=>`${px|0}px ${FONT_TITLE_CN}`;
+const fontBody=px=>`600 ${px|0}px ${FONT_BODY_CN}`;
+const fontEnglish=px=>`700 ${px|0}px ${FONT_EN}`;
+const fontMixed=px=>`700 ${px|0}px ${FONT_MIXED}`;
+const MATERIAL_ICONS=window.NYABULA_MATERIAL_ICONS||{};
+const materialPathCache=new Map(),materialLengthCache=new Map();
+function materialPath(name){
+  if(!materialPathCache.has(name)){
+    const icon=MATERIAL_ICONS[name];
+    if(!icon)throw new Error(`Missing extracted SVG icon: ${name}`);
+    materialPathCache.set(name,new Path2D(icon.path));
+  }
+  return materialPathCache.get(name);
+}
+function materialPathLength(name){
+  if(!materialLengthCache.has(name)){
+    const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d',MATERIAL_ICONS[name].path);
+    materialLengthCache.set(name,path.getTotalLength());
+  }
+  return materialLengthCache.get(name);
+}
+function iconReveal(startedAt=sceneStartedAt){
+  const start=Math.max(startedAt,optionChangedAt);
+  return sceneEase(clamp((tNow-start)/.72,0,1));
+}
+function iconSceneAlpha(){
+  if(!scenePhase.startsWith('closing'))return 1;
+  return 1-sceneEase(clamp(scenePhaseT/SCENE_CLOSE_TIME,0,1));
+}
+function drawMaterialIcon(name,IR,C,{size=1.18,reveal=iconReveal(),alpha=1,rotation=0,sceneAlpha=iconSceneAlpha()}={}){
+  const icon=MATERIAL_ICONS[name];
+  if(!icon)return;
+  const length=materialPathLength(name),fillIn=sceneEase(clamp((reveal-.46)/.54,0,1));
+  const scale=IR*size/icon.viewBox[2];
+  ctx.save();ctx.globalAlpha*=alpha*sceneAlpha;ctx.rotate(rotation);ctx.scale(scale,scale);
+  ctx.translate(-icon.viewBox[2]/2,-icon.viewBox[3]/2);
+  ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=18;
+  ctx.strokeStyle=rgba(C,lerp(.88,.20,fillIn));
+  ctx.setLineDash([length,length]);ctx.lineDashOffset=length*(1-reveal);
+  ctx.stroke(materialPath(name));
+  if(fillIn>0){ctx.setLineDash([]);ctx.fillStyle=rgba(C,.92*fillIn);ctx.fill(materialPath(name));}
+  ctx.restore();
+}
+function cubicBezier01(t,c1,c2){
+  t=clamp(t,0,1);
+  const u=1-t;
+  return 3*u*u*t*c1+3*u*t*t*c2+t*t*t;
+}
+function hexRgb(h){h=h.replace('#','');return [parseInt(h.substr(0,2),16),parseInt(h.substr(2,2),16),parseInt(h.substr(4,2),16)];}
+function mix(c1,c2,t){return [lerp(c1[0],c2[0],t),lerp(c1[1],c2[1],t),lerp(c1[2],c2[2],t)];}
+function rgba(c,a){return `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;}
+function shade(c,f){return c.map(v=>clamp(v*f,0,255));}
+
+/* ---------- 眼睛状态参数（全部可插值） ---------- */
+function mkParams(){return {
+  pupilW: .35,   // 瞳孔宽度比例 0.10(细竖缝)~1(全圆)
+  pupilH: .78,   // 瞳孔高度比例
+  lidTop: 0,     // 上眼睑闭合 0~1
+  lidBot: 0,     // 下眼睑闭合 0~1
+  lidSlant: 0,   // 上睑倾斜 -1(外高内低=凶) ~ 1(内高外低=委屈)
+  botCurve: 0,   // 下睑上弯(笑) 0~1
+  gazeX: 0, gazeY: 0,    // 注视偏移 -1~1
+  irisScale: 1,  // 虹膜整体缩放（惊讶放大）
+  glow: .5,      // 外发光强度
+  overlay: 0,    // 特效元素透明度(星星/爱心/处理环)
+  squint: 0,     // 整眼压扁
+  derp: 0,       // 呆滞外八：双瞳向外分离+一高一低 0~1
+};}
+const cur=mkParams(), tgt=mkParams();
+const SPEED={pupilW:8,pupilH:8,lidTop:22,lidBot:22,lidSlant:6,botCurve:6,
+  gazeX:10,gazeY:10,irisScale:7,glow:4,overlay:6,squint:8,derp:5};
+
+/* ---------- 全局 ---------- */
+let mode='idle', modeT=0;          // 当前模式 + 进入模式经过秒数
+let irisHexL='#38e06e', irisHexR='#38e06e';
+let lightLvl=.55;                  // 环境光 0~1
+let blinkPhase=-1;                 // -1 无眨眼, 0..1 眨眼进度
+let blinkEyes='both';
+let nextBlink=2.5, nextSaccade=1.2, saccade={x:0,y:0};
+let lookTarget=null, lookHold=0;   // 点击注视
+let sleepStartTop=0, sleepStartBot=0;
+let sleepEndTop=.86, sleepEndBot=.14;
+let tPrev=performance.now()/1000, tNow=tPrev;
+let timerDurationMs=300000,timerRemainingMs=300000,timerStatus='running',timerSyncedAt=tNow;
+let taskProgress=null,taskProgressDisplay=null,taskProgressFrom=null;
+let taskProgressTarget=null,taskProgressFade=1,taskPrevProgress=null;
+let taskTitle=null,taskPrevTitle=null;
+
+/* ---------- Eye scene state machine ----------
+ * Scenes are an information layer, not expressions. Content is swapped only
+ * while both eyes are closed, so the same lifecycle can map to LVGL later.
+ */
+let sceneType=null, scenePrevType=null, scenePending=null, sceneStartedAt=0;
+let scenePrevStartedAt=0;
+let scenePhase='none', scenePhaseT=0, sceneLid=0;
+let sceneStyle='full', scenePendingStyle=null, sceneFade=1;
+let weatherKind='rain', weatherPrevKind=null, weatherFade=1;
+let musicView='spectrum', musicPrevView=null, musicViewFade=1;
+let alarmCopy='name';
+let alarmPrevCopy=null,alarmPrev=null;
+let alarmLabel='早安，Nyabula', alarmDetail='喝水 · 吃药', alarmTriggerUnixMs=0;
+let mediaTitle='NYABULA MIX', mediaArtist='', mediaDurationMs=235000;
+let mediaPositionMs=0, mediaStatus='playing', mediaSyncedAt=tNow;
+let mediaPrevStatus=null,mediaPrev=null,timerPrev=null,callPrevState=null,callPrev=null;
+let callName='BEACON', callNumber='+86 138 0013 8000';
+let networkState='wifi', audioRoute='speaker', eqView='profile', optionFade=1, optionChangedAt=-Infinity;
+let networkPrevState=null, audioPrevRoute=null, eqPrevView=null, batteryPrevState=null, taskPrevState=null;
+let batteryState='charging', callState='incoming', taskState='running';
+let scenePayload={},scenePrevPayload=null,scenePayloadDisplay={};
+let scenePayloadFrom={},scenePayloadFade=1;
+const SCENE_NUMERIC_FIELDS=new Set(['duration_ms','position_ms','remaining_ms','elapsed_ms',
+  'percent','device_count','briefing_index','briefing_count','temperature_c','feels_like_c',
+  'humidity_percent','wind_kph','visibility_km','distance_m','heart_rate_bpm','crossover_hz','progress',
+  'media_duration_ms','media_position_ms','timer_duration_ms','timer_remaining_ms','task_progress']);
+const SCENE_CLOCK_FIELDS=new Set(['media_synced_at_ms','timer_presented_at_ms','present_until_ms']);
+const SCENE_CLOSE_TIME=.38, SCENE_OPEN_TIME=.52, SCENE_FADE_TIME=.32;
+function sceneEase(t){
+  t=clamp(t,0,1);
+  return cubicBezier01(t,.08,.92);
+}
+function withStateMotion(IR,incoming,draw){
+  const p=sceneEase(optionFade),visible=incoming?p:1-p;
+  ctx.save();
+  ctx.globalAlpha*=visible;
+  const scale=.78+.22*visible;
+  ctx.scale(scale,scale);
+  draw(p);
+  ctx.restore();
+}
+function stateRingAngles(incoming){
+  const p=sceneEase(optionFade);
+  return {alpha:incoming?p:1-p,start:-Math.PI/2};
+}
+function setSceneButton(type){
+  document.querySelectorAll('[data-scene]').forEach(b=>
+    b.classList.toggle('on',b.dataset.scene===type));
+}
+function setWeather(kind){
+  document.querySelectorAll('[data-weather]').forEach(b=>
+    b.classList.toggle('on',b.dataset.weather===kind));
+  if(kind!==weatherKind){
+    weatherPrevKind=weatherKind;
+    weatherKind=kind;
+    weatherFade=0;
+  }
+  if(sceneType!=='weather' && scenePending!=='weather')showScene('weather');
+}
+function setMusicView(view){
+  document.querySelectorAll('[data-music-view]').forEach(b=>
+    b.classList.toggle('on',b.dataset.musicView===view));
+  if(view!==musicView){
+    musicPrevView=musicView;
+    musicView=view;
+    musicViewFade=0;
+  }
+  if(sceneType!=='music' && scenePending!=='music')showScene('music');
+}
+function setAlarmCopy(copy){
+  alarmCopy=copy;
+  document.querySelectorAll('[data-alarm-copy]').forEach(b=>
+    b.classList.toggle('on',b.dataset.alarmCopy===copy));
+  if(sceneType!=='alarm' && scenePending!=='alarm')showScene('alarm');
+}
+function setSceneOption(selector,value,type,setter){
+  document.querySelectorAll(selector).forEach(b=>
+    b.classList.toggle('on',b.dataset[setter]===value));
+  const current={network:networkState,audio:audioRoute,eq:eqView,battery:batteryState,call:callState,task:taskState}[type];
+  if(current!==value){
+    if(type==='network'){networkPrevState=networkState;networkState=value;}
+    else if(type==='audio'){audioPrevRoute=audioRoute;audioRoute=value;}
+    else if(type==='eq')eqView=value;
+    else if(type==='battery'){batteryPrevState=batteryState;batteryState=value;}
+    else if(type==='call')callState=value;
+    else {taskPrevState=taskState;taskState=value;}
+    optionFade=0;
+    optionChangedAt=tNow;
+  }
+  if(sceneType!==type && scenePending!==type)showScene(type);
+}
+function setSceneStyleButton(style){
+  document.querySelectorAll('[data-scene-style]').forEach(b=>
+    b.classList.toggle('on',b.dataset.sceneStyle===style));
+}
+function setSceneStyle(style){
+  if(style===sceneStyle && !scenePendingStyle)return;
+  setSceneStyleButton(style);
+  if(!sceneType){
+    sceneStyle=style;
+    scenePendingStyle=null;
+    return;
+  }
+  if(sceneStyle==='minimal' && style==='full'){
+    sceneStyle='full';
+    scenePrevType=null;
+    sceneFade=1;
+    scenePhase='reopening-in';
+    scenePhaseT=0;
+    return;
+  }
+  scenePending=sceneType;
+  scenePendingStyle=style;
+  scenePhase='closing-switch';
+  scenePhaseT=sceneLid*SCENE_CLOSE_TIME;
+}
+function wakeForScene(){
+  if(mode!=='sleep')return;
+  /* Sleep is already visually closed. Keep that closure instead of briefly
+   * reopening the idle eye before the scene swap. */
+  sceneLid=1;
+  mode='idle'; modeT=0;
+  document.querySelectorAll('[data-mode]').forEach(b=>
+    b.classList.toggle('on',b.dataset.mode==='idle'));
+}
+function showScene(type){
+  wakeForScene();
+  if(sceneStyle==='minimal' && sceneType && scenePhase==='visible'){
+    if(sceneType===type)return;
+    scenePrevType=sceneType;
+    scenePrevStartedAt=sceneStartedAt;
+    sceneType=type;
+    sceneStartedAt=tNow;
+    sceneFade=0;
+    setSceneButton(type);
+    return;
+  }
+  scenePending=type;
+  scenePhase=sceneType?'closing-switch':'closing-in';
+  scenePhaseT=sceneLid*SCENE_CLOSE_TIME;
+  setSceneButton(type);
+}
+function hideScene(){
+  scenePending=null;
+  scenePendingStyle=null;
+  scenePrevType=null;
+  if(!sceneType && scenePhase==='none')return;
+  if(sceneStyle==='minimal' && sceneType){
+    /* Minimal scenes live on the closed eyelid surface. Reveal the real eye
+     * underneath while the old scene remains clipped to, and fades with,
+     * the retreating lids. */
+    scenePhase='reopening-minimal-out';
+    scenePhaseT=0;
+    sceneLid=1;
+    sceneFade=1;
+    setSceneButton(null);
+    return;
+  }
+  scenePhase='closing-out';
+  scenePhaseT=sceneLid*SCENE_CLOSE_TIME;
+  setSceneButton(null);
+}
+function updateScene(dt){
+  if(optionFade<1){
+    optionFade=clamp(optionFade+dt/.42,0,1);
+    if(optionFade>=1){
+      networkPrevState=null;audioPrevRoute=null;eqPrevView=null;batteryPrevState=null;
+      taskPrevState=null;taskPrevTitle=null;taskPrevProgress=null;callPrevState=null;
+      alarmPrevCopy=null;alarmPrev=null;mediaPrevStatus=null;mediaPrev=null;
+      timerPrev=null;callPrev=null;scenePrevPayload=null;
+    }
+  }
+  if(taskProgressTarget!==null&&taskProgressDisplay!==taskProgressTarget){
+    taskProgressFade=clamp(taskProgressFade+dt/.52,0,1);
+    taskProgressDisplay=lerp(taskProgressFrom,taskProgressTarget,sceneEase(taskProgressFade));
+    if(taskProgressFade>=1)taskProgressDisplay=taskProgressTarget;
+  }
+  if(scenePayloadFade<1){
+    scenePayloadFade=clamp(scenePayloadFade+dt/.52,0,1);
+    const p=sceneEase(scenePayloadFade),next={...scenePayload};
+    for(const key of SCENE_NUMERIC_FIELDS){
+      if(Number.isFinite(scenePayload[key]))next[key]=lerp(
+        Number(scenePayloadFrom[key]??scenePayload[key]),Number(scenePayload[key]),p);
+    }
+    if(Array.isArray(scenePayload.eq_bands))next.eq_bands=scenePayload.eq_bands.map((value,index)=>
+      lerp(Number(scenePayloadFrom.eq_bands?.[index]??value),Number(value),p));
+    scenePayloadDisplay=next;
+  }else scenePayloadDisplay={...scenePayload};
+  if(weatherFade<1){
+    weatherFade=clamp(weatherFade+dt/SCENE_FADE_TIME,0,1);
+    if(weatherFade>=1)weatherPrevKind=null;
+  }
+  if(sceneFade<1){
+    sceneFade=clamp(sceneFade+dt/SCENE_FADE_TIME,0,1);
+    if(sceneFade>=1)scenePrevType=null;
+  }
+  if(musicViewFade<1){
+    musicViewFade=clamp(musicViewFade+dt/SCENE_FADE_TIME,0,1);
+    if(musicViewFade>=1)musicPrevView=null;
+  }
+  if(scenePhase==='none'||scenePhase==='visible')return;
+  scenePhaseT+=dt;
+  if(scenePhase.startsWith('closing')){
+    const p=clamp(scenePhaseT/SCENE_CLOSE_TIME,0,1);
+    sceneLid=sceneEase(p);
+    if(p>=1){
+      if(scenePhase==='closing-out'){
+        sceneType=null;
+        scenePrevType=null;
+        scenePhase='reopening-out';
+      }else{
+        sceneType=scenePending;
+        sceneStartedAt=tNow;
+        scenePending=null;
+        if(scenePendingStyle){
+          sceneStyle=scenePendingStyle;
+          scenePendingStyle=null;
+        }
+        scenePrevType=null;
+        sceneFade=sceneStyle==='minimal'?0:1;
+        scenePhase=sceneStyle==='minimal'?'visible':'reopening-in';
+      }
+      scenePhaseT=0;
+    }
+  }else if(scenePhase==='reopening-minimal-out'){
+    const p=clamp(scenePhaseT/SCENE_OPEN_TIME,0,1);
+    sceneLid=1-sceneEase(p);
+    sceneFade=1-sceneEase(clamp(p/.86,0,1));
+    if(p>=1){
+      sceneType=null;
+      scenePrevType=null;
+      sceneLid=0;
+      sceneFade=1;
+      scenePhase='none';
+      scenePhaseT=0;
+    }
+  }else if(scenePhase.startsWith('reopening')){
+    const p=clamp(scenePhaseT/SCENE_OPEN_TIME,0,1);
+    sceneLid=1-sceneEase(p);
+    if(p>=1){
+      sceneLid=0;
+      scenePhase=scenePhase==='reopening-in'?'visible':'none';
+      scenePhaseT=0;
+    }
+  }
+}
+
+/* ---------- 模式目标参数 ---------- */
+function applyMode(dt){
+  const p=tgt, t=modeT;
+  // 基线：环境光决定瞳孔（竖瞳<->散瞳），真实猫：亮->细缝，暗->大圆
+  const dil = 1-lightLvl;                       // 0亮 1暗
+  p.pupilW = lerp(.10,.95, dil*dil*.3+dil*.7);  // 非线性，暗端更快变圆
+  p.pupilH = lerp(.72,.95, dil);
+  p.lidTop=0;p.lidBot=0;p.lidSlant=0;p.botCurve=0;
+  p.gazeX=0;p.gazeY=0;
+  p.irisScale=1;p.glow=.5;p.overlay=0;p.squint=0;p.derp=0;
+
+  switch(mode){
+    case 'idle':
+      // 呼吸感：瞳孔轻微律动
+      p.pupilW *= 1+Math.sin(t*1.1)*.04;
+      break;
+    case 'curious':
+      p.pupilW=Math.min(.9,p.pupilW*1.5+.25); p.pupilH=.95;   // 好奇=散瞳
+      p.irisScale=1.06; p.glow=.75;
+      break;
+    case 'happy':
+      p.botCurve=1; p.lidBot=.28; p.squint=.15;
+      p.pupilW=Math.min(.85,p.pupilW+.2);
+      p.glow=.85;
+      break;
+    case 'processing':
+      p.pupilW=.95;p.pupilH=.95; p.overlay=1; p.glow=.6;
+      break;
+    case 'star': case 'heart':
+      p.pupilW=0;p.pupilH=0; p.overlay=1; p.irisScale=1.08; p.glow=1;
+      p.botCurve=.5;p.lidBot=.1;
+      break;
+    case 'sleepy':
+      p.lidTop=.55;p.lidBot=.15; p.pupilW=Math.max(p.pupilW,.5);
+      p.gazeY=.25; p.glow=.3;
+      break;
+    case 'sleep':
+      // 从进入睡眠瞬间的眼睑位置直接闭合，不先回到完全睁眼状态
+      const sleepClose=cubicBezier01(clamp(t/1.8,0,1),.08,.92);
+      p.lidTop=lerp(sleepStartTop,sleepEndTop,sleepClose);
+      p.lidBot=lerp(sleepStartBot,sleepEndBot,sleepClose);
+      p.glow=lerp(.4,.15,Math.min(1,t/2)); p.overlay=sleepClose>.98?1:0;
+      p.gazeY=.2;
+      break;
+    case 'angry':
+      p.lidTop=.32; p.lidSlant=1; p.pupilW=.13;p.pupilH=.8;
+      p.squint=.2; p.glow=.7;
+      break;
+    case 'sad':
+      p.lidTop=.3; p.lidSlant=-.9; p.lidBot=.12;
+      p.pupilW=Math.min(.9,p.pupilW+.3); p.gazeY=.3; p.glow=.35;
+      p.overlay= t>1.2 ? 1:0;   // 泪光延迟出现
+      break;
+    case 'surprise':
+      p.pupilW=.98;p.pupilH=.98; p.irisScale=1.14; p.glow=1;
+      if(t<.25){p.irisScale=1.2;}
+      break;
+    case 'dizzy':
+      p.pupilW=0;p.pupilH=0;p.overlay=1;
+      p.lidTop=.15;p.lidSlant=.3;
+      break;
+    case 'derp':
+      // 表情包同款：大圆瞳外八、一高一低，上眼睑保持完全睁开
+      p.derp=1; p.pupilW=.8;p.pupilH=.86;
+      p.lidTop=0; p.glow=.45;
+      // 偶尔轻晃，更呆
+      p.gazeX=Math.sin(t*.7)*.05;
+      break;
+  }
+}
+
+/* ---------- 行为：眨眼 / 扫视 ---------- */
+function behaviors(dt){
+  // 眨眼
+  if(sceneType||scenePhase!=='none'){
+    blinkPhase=-1;
+  }else if(blinkPhase>=0){
+    blinkPhase+=dt*4.2;
+    if(blinkPhase>=1)blinkPhase=-1;
+  } else if(mode!=='sleep'){
+    nextBlink-=dt;
+    if(nextBlink<=0){blinkEyes='both';blinkPhase=0;nextBlink=2.2+Math.random()*4.5;
+      if(Math.random()<.18)nextBlink=.35;}   // 偶发双眨
+  }
+  // 扫视（idle/curious 自主看）
+  if(lookTarget){ lookHold-=dt; if(lookHold<=0)lookTarget=null; }
+  if(!lookTarget && (mode==='idle'||mode==='curious'||mode==='happy')){
+    nextSaccade-=dt;
+    if(nextSaccade<=0){
+      nextSaccade=1.2+Math.random()*2.8;
+      saccade.x=(Math.random()*2-1)*.55; saccade.y=(Math.random()*2-1)*.35;
+      if(Math.random()<.3){saccade.x=0;saccade.y=0;}
+    }
+  }
+  if(mode==='sleepy'){ saccade.x=Math.sin(tNow*.4)*.15; saccade.y=.2; }
+  if(mode==='processing'){ saccade.x=0; saccade.y=-.1; }
+  if(mode==='dizzy'||mode==='derp'){ saccade.x=0;saccade.y=0; }
+  if(lookTarget){ tgt.gazeX=lookTarget.x; tgt.gazeY=lookTarget.y; }
+  else { tgt.gazeX=clamp(tgt.gazeX+saccade.x,-1,1); tgt.gazeY=clamp(tgt.gazeY+saccade.y,-1,1); }
+}
+
+/* ---------- 主循环 ---------- */
+function tick(){
+  tNow=performance.now()/1000; let dt=Math.min(.05,tNow-tPrev); tPrev=tNow;
+  modeT+=dt;
+  applyMode(dt); behaviors(dt); updateZzz(dt); updateScene(dt);
+  for(const k in SPEED){ cur[k]=lerp(cur[k],tgt[k],1-Math.exp(-SPEED[k]*dt)); }
+  // 眨眼使用三次贝塞尔缓入缓出；闭合略快、睁开略慢，总时长约 240ms
+  let blink=0;
+  if(blinkPhase>=0){
+    if(blinkPhase<.46){
+      blink=cubicBezier01(blinkPhase/.46,.08,.92);
+    }else{
+      blink=1-cubicBezier01((blinkPhase-.46)/.54,.08,.92);
+    }
+  }
+  const zzzMaskTarget=mode==='sleep'?clamp(cur.lidTop+cur.lidBot,0,1):0;
+  zzzMask=lerp(zzzMask,zzzMaskTarget,1-Math.exp(-SPEED.lidTop*dt));
+  if(mode!=='sleep' && zzzMask<.002)zzz.length=0;
+  render(blink);
+  if(!window.__ready)window.__ready=true;
+  requestAnimationFrame(tick);
+}
+
+/* ---------- 渲染 ---------- */
+function render(blink){
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
+  const R=Math.min(W*.16,H*.30);          // 单眼半径
+  const gap=R*2.7, cy=H*.46;
+  const CR=R*SCREEN_RADIUS_SCALE;         // 圆屏边缘与默认虹膜外缘重合
+  for(const side of [-1,1]){
+    const ex=W/2+side*gap/2;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(ex,cy,CR,0,7); ctx.clip();
+    const eyeBlink=blinkEyes==='both'||(blinkEyes==='left'&&side<0)||
+      (blinkEyes==='right'&&side>0)?blink:0;
+    drawEye(ex,cy,R,side,eyeBlink);
+    drawZzz(side,ex,cy,R,CR);
+    ctx.restore();
+    // 屏圈（bezel）
+    ctx.strokeStyle='rgba(60,70,85,.45)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(ex,cy,CR,0,7); ctx.stroke();
+  }
+}
+
+/* 构造眼睑覆盖区域。绘制眼睑和裁剪 Zzz 共用同一条路径，
+ * 这样睁眼时粒子会跟随逐渐退开的黑色眼睑一起消失。
+ */
+function makeLidPath(E,lidT,lidB,slant,botCurve){
+  const path=new Path2D();
+  const topEdge=-E+lidT*E*2;
+  const topLeft=topEdge-slant*E*.35;
+  const topRight=topEdge+slant*E*.35;
+  const topBulge=E*.16*clamp(lidT*2,0,1);
+
+  path.moveTo(-E*1.3,-E*1.3); path.lineTo(E*1.3,-E*1.3);
+  path.lineTo(E*1.3,topRight);
+  path.bezierCurveTo(E*.4,topRight+topBulge,
+                     -E*.4,topLeft+topBulge,-E*1.3,topLeft);
+  path.closePath();
+
+  const bottomEdge=E-lidB*E*2;
+  const bottomBulge=-botCurve*E*.55-E*.16*clamp(lidB*2,0,1);
+  // 与上眼睑保持相同环绕方向，使重叠区域成为并集而不是互相抵消。
+  path.moveTo(-E*1.3,bottomEdge);
+  path.bezierCurveTo(-E*.45,bottomEdge+bottomBulge,
+                     E*.45,bottomEdge+bottomBulge,E*1.3,bottomEdge);
+  path.lineTo(E*1.3,E*1.3); path.lineTo(-E*1.3,E*1.3);
+  path.closePath();
+
+  return path;
+}
+
+/* 单眼。side: -1 左 1 右 */
+function drawEye(cx,cy,R,side,blink){
+  const S=cur;
+  const irisHex = side<0? irisHexL : irisHexR;
+  const IC=hexRgb(irisHex);
+  const squishY = 1 - S.squint*.25;
+  const gx=S.gazeX*R*.30 + side*S.derp*R*.24;         // 外八：各自朝外
+  const gy=S.gazeY*R*.26 + side*S.derp*R*.11 + S.derp*R*.06;  // 一高一低+整体微垂
+  const minimalSceneExit=sceneType&&sceneStyle==='minimal'&&scenePhase==='reopening-minimal-out';
+
+  ctx.save();
+  ctx.translate(cx,cy);
+
+  if(sceneType&&!minimalSceneExit){
+    if(sceneStyle==='minimal'){
+      ctx.fillStyle='#000';
+      ctx.beginPath();ctx.arc(0,0,R*1.08,0,7);ctx.fill();
+      if(scenePrevType){
+        drawScene(R*1.08,IC,side,scenePrevType,1-sceneFade,true,scenePrevStartedAt);
+      }
+      drawScene(R*1.08,IC,side,sceneType,sceneFade,true,sceneStartedAt);
+    }else{
+      drawScene(R*1.08,IC,side,sceneType,1,false,sceneStartedAt);
+      ctx.fillStyle='#000';
+      ctx.fill(makeLidPath(R*1.05,.86*sceneLid,.14*sceneLid,0,0));
+    }
+    ctx.restore();
+    return;
+  }
+
+  if(mode==='dizzy'){ ctx.rotate(Math.sin(tNow*3+side)*0.06); }
+  ctx.scale(1,squishY);
+
+  /* 外发光 */
+  const glowA = S.glow*.5;
+  let g=ctx.createRadialGradient(0,0,R*.4,0,0,R*1.9);
+  g.addColorStop(0,rgba(IC,glowA*.35)); g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,R*1.9,0,7); ctx.fill();
+
+  /* 眼眶剪裁（杏仁形：圆 + 睑遮盖，睑在最后画） */
+  const IR=R*S.irisScale;
+
+  /* 虹膜底 */
+  ctx.save();
+  ctx.beginPath(); ctx.arc(0,0,IR,0,7); ctx.clip();
+  g=ctx.createRadialGradient(gx*.5,gy*.5,IR*.1, 0,0,IR);
+  g.addColorStop(0, rgba(shade(IC,1.25),1));
+  g.addColorStop(.55,rgba(IC,1));
+  g.addColorStop(.85,rgba(shade(IC,.55),1));
+  g.addColorStop(1, rgba(shade(IC,.30),1));
+  ctx.fillStyle=g; ctx.fillRect(-IR,-IR,IR*2,IR*2);
+
+  /* 虹膜纤维纹理：放射细线 */
+  ctx.globalAlpha=.16;
+  ctx.strokeStyle=rgba(shade(IC,1.6),1); ctx.lineWidth=1;
+  for(let i=0;i<48;i++){
+    const a=i/48*Math.PI*2 + Math.sin(i*7)*0.1;
+    const r1=IR*(.28+((i*37)%13)/13*.15), r2=IR*(.82+((i*53)%7)/7*.14);
+    ctx.beginPath();
+    ctx.moveTo(gx+Math.cos(a)*r1, gy+Math.sin(a)*r1);
+    ctx.lineTo(gx*.3+Math.cos(a)*r2, gy*.3+Math.sin(a)*r2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+
+  /* 瞳孔（矢量透镜形：细缝<->圆 形变） */
+  const pw=S.pupilW, ph=S.pupilH;
+  if(pw>0.01 && ph>0.01){
+    const w=IR*pw*.80, h=IR*ph*.84;
+    ctx.save(); ctx.translate(gx,gy);
+    // 暗瞳带微光
+    g=ctx.createRadialGradient(0,0,0,0,0,Math.max(w,h));
+    g.addColorStop(0,'#101216'); g.addColorStop(.8,'#05070a'); g.addColorStop(1,'#000');
+    ctx.fillStyle=g;
+    ctx.beginPath();
+    ctx.ellipse(0,0,w,h,0,0,7);
+    ctx.fill();
+    // 瞳缘亮边（虹膜内环）
+    ctx.strokeStyle=rgba(shade(IC,1.7),.5); ctx.lineWidth=IR*.02; ctx.stroke();
+    ctx.restore();
+  }
+
+  /* 特效 overlay */
+  if(S.overlay>0.02) drawOverlay(IR,gx,gy,IC,S.overlay,side);
+
+  /* 高光（两点，随注视反向微移，制造球面感） */
+  ctx.globalAlpha=.9;
+  ctx.fillStyle='#fff';
+  ctx.beginPath(); ctx.ellipse(-IR*.33+gx*.55,-IR*.38+gy*.55,IR*.13,IR*.10,-.5,0,7); ctx.fill();
+  ctx.globalAlpha=.45;
+  ctx.beginPath(); ctx.arc(IR*.30+gx*.6,IR*.24+gy*.6,IR*.05,0,7); ctx.fill();
+  ctx.globalAlpha=1;
+  ctx.restore(); /* iris clip */
+
+  /* 眼睑：黑色遮盖（上/下），含倾斜 & 笑眼下弯 & 眨眼 */
+  // 真实闭眼以上眼睑下落为主；下眼睑只轻微上提。若表情本身已经
+  // 抬高下眼睑，则保持该高度，再由上眼睑补足剩余闭合行程。
+  blink=Math.max(blink,sceneLid);
+  const blinkBotTarget=Math.max(.14,S.lidBot);
+  const blinkTopTarget=Math.max(S.lidTop,1-blinkBotTarget);
+  const lidT=clamp(lerp(S.lidTop,blinkTopTarget,blink),0,1);
+  const lidB=clamp(lerp(S.lidBot,blinkBotTarget,blink),0,1);
+  ctx.fillStyle='#000';
+  const E=IR*1.04;
+  // 上睑：曲线边缘。slant: -1 外高内低（凶） 1 内高外低（哀）
+  // 眨眼时逐渐拉平表情倾斜，否则斜眼睑的一端会留下一道缝。
+  const slant=S.lidSlant*side*-1*(1-blink);
+  const lidPath=makeLidPath(E,lidT,lidB,slant,S.botCurve*(1-blink));
+  ctx.fill(lidPath);
+  if(minimalSceneExit){
+    ctx.save();
+    ctx.clip(lidPath);
+    drawScene(R*1.08,IC,side,sceneType,sceneFade,true,sceneStartedAt);
+    ctx.restore();
+  }
+  ctx.restore();
+
+}
+
+/* ---------- 睡眠 Zzz 粒子 ---------- */
+/* ---------- Eye scenes ---------- */
+function sceneGlow(IC,a=1){
+  const C=shade(IC,1.75);
+  ctx.shadowColor=rgba(C,.9*a);
+  ctx.shadowBlur=18*a;
+  return C;
+}
+function currentMediaState(){
+  const durationMs=Number.isFinite(scenePayloadDisplay.media_duration_ms)
+    ?scenePayloadDisplay.media_duration_ms:Number.isFinite(scenePayloadDisplay.duration_ms)
+      ?scenePayloadDisplay.duration_ms:mediaDurationMs;
+  const positionMs=Number.isFinite(scenePayloadDisplay.media_position_ms)
+    ?scenePayloadDisplay.media_position_ms:Number.isFinite(scenePayloadDisplay.position_ms)
+      ?scenePayloadDisplay.position_ms:mediaPositionMs;
+  const duration=Math.max(1,durationMs/1000);
+  const liveElapsed=mediaStatus==='playing'?(tNow-mediaSyncedAt):0;
+  return {title:mediaTitle,artist:mediaArtist,status:mediaStatus,
+    durationMs,positionMs:clamp(positionMs+liveElapsed*1000,0,duration*1000),
+    syncedAt:tNow};
+}
+function currentTimerState(){
+  const elapsed=timerStatus==='running'?(tNow-timerSyncedAt)*1000:0;
+  return {status:timerStatus,durationMs:timerDurationMs,
+    remainingMs:Math.max(0,timerRemainingMs-elapsed),syncedAt:tNow};
+}
+function drawMusicPlaybackBase(IR,IC,C,state=currentMediaState()){
+  const duration=Math.max(1,state.durationMs/1000);
+  const liveElapsed=state.status==='playing'?(tNow-state.syncedAt):0;
+  const elapsed=clamp(state.positionMs/1000+liveElapsed,0,duration);
+  const progress=elapsed/duration;
+  /* A restrained translucent album-art placeholder. A decoded cover can use
+   * the same clipped background layer later without changing the layout. */
+  const cover=ctx.createRadialGradient(-IR*.22,-IR*.30,IR*.03,0,0,IR*.92);
+  cover.addColorStop(0,rgba(shade(IC,1.35),.18));
+  cover.addColorStop(.45,rgba(IC,.08));cover.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=cover;ctx.beginPath();ctx.arc(0,0,IR*.92,0,7);ctx.fill();
+  /* The playback ring hugs the physical display edge instead of behaving
+   * like a second, smaller dial inside it. */
+  ctx.lineCap='round';ctx.lineWidth=IR*.032;
+  ctx.strokeStyle=rgba(C,.16);ctx.beginPath();ctx.arc(0,0,IR*.89,-Math.PI/2,Math.PI*1.5);ctx.stroke();
+  ctx.strokeStyle=rgba(C,.92);ctx.beginPath();
+  ctx.arc(0,0,IR*.89,-Math.PI/2,-Math.PI/2+progress*Math.PI*2);ctx.stroke();
+  const a=-Math.PI/2+progress*Math.PI*2;
+  ctx.fillStyle=rgba(C,.95);ctx.beginPath();
+  ctx.arc(Math.cos(a)*IR*.89,Math.sin(a)*IR*.89,IR*.024,0,7);ctx.fill();
+}
+function drawMusicPlaybackIcon(IR,C,status,alpha=1,scale=1){
+  ctx.save();ctx.globalAlpha*=alpha;ctx.scale(scale,scale);
+  ctx.translate(0,-IR*.08);ctx.fillStyle=rgba(C,.94);
+  if(status==='playing'){
+    const w=IR*.075,h=IR*.34,gap=IR*.075;
+    ctx.beginPath();ctx.roundRect(-gap-w,-h/2,w,h,w/2);ctx.roundRect(gap,-h/2,w,h,w/2);ctx.fill();
+  }else{
+    ctx.beginPath();ctx.moveTo(-IR*.105,-IR*.19);ctx.lineTo(IR*.205,0);ctx.lineTo(-IR*.105,IR*.19);ctx.closePath();ctx.fill();
+  }
+  ctx.restore();
+}
+function drawMusicPlaybackText(IR,C,state=currentMediaState(),drawTitle=true){
+  const duration=Math.max(1,state.durationMs/1000);
+  const elapsed=clamp(state.positionMs/1000,0,duration);
+  const em=String(Math.floor(elapsed/60)).padStart(2,'0');
+  const es=String(Math.floor(elapsed%60)).padStart(2,'0');
+  const dm=String(Math.floor(duration/60)).padStart(2,'0');
+  const ds=String(Math.floor(duration%60)).padStart(2,'0');
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  if(drawTitle){ctx.font=fontEnglish(IR*.080);ctx.fillStyle=rgba(C,.50);
+  ctx.fillText(state.title||state.artist||'NYABULA MIX',0,IR*.36);}
+  ctx.font=fontEnglish(IR*.090);ctx.fillStyle=rgba(C,.76);
+  ctx.fillText(`${em}:${es}  /  ${dm}:${ds}`,0,IR*.49);
+}
+function drawMusicSpectrum(IR,IC,C,alpha){
+  ctx.save();ctx.globalAlpha*=alpha;
+  /* Centre the spectrum as one visual block, including its heading. */
+  ctx.translate(0,IR*.10);
+  const bars=9,bw=IR*.062,gap=IR*.045;
+  ctx.fillStyle=rgba(C,.32);ctx.font=fontTitle(IR*.080);
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('频谱',0,-IR*.48);
+  for(let i=0;i<bars;i++){
+    const wave=.5+.5*Math.sin(tNow*(3.4+(i%3)*.24)+i*.88);
+    const envelope=.58+.42*Math.sin((i+1)/(bars+1)*Math.PI);
+    const h=IR*(.13+.49*wave*envelope),x=(i-(bars-1)/2)*(bw+gap);
+    const grad=ctx.createLinearGradient(0,IR*.31,0,-IR*.31);
+    grad.addColorStop(0,rgba(shade(IC,.70),.48));grad.addColorStop(1,rgba(C,.94));
+    ctx.fillStyle=grad;ctx.beginPath();ctx.roundRect(x-bw/2,-h/2,bw,h,bw/2);ctx.fill();
+  }
+  ctx.restore();
+}
+function musicLyrics(payload={}){
+  return [payload.previous_line||'灯火落进夜里',payload.current_line||'我听见你',
+    payload.next_line||'轻轻回应'];
+}
+function drawMusicLyrics(IR,C,alpha,payload=scenePayloadDisplay){
+  const lines=musicLyrics(payload);
+  ctx.save();ctx.globalAlpha*=alpha;ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.translate(0,IR*.08);
+  ctx.font=fontBody(IR*.095);ctx.fillStyle=rgba(C,.22);
+  ctx.fillText(lines[0],0,-IR*.30);
+  ctx.font=fontTitle(IR*.155);ctx.fillStyle=rgba(C,.94);
+  ctx.fillText(lines[1],0,-IR*.03);
+  ctx.font=fontBody(IR*.095);ctx.fillStyle=rgba(C,.30);
+  ctx.fillText(lines[2],0,IR*.27);
+  ctx.restore();
+}
+function drawMusicLyricsTransition(IR,C,from,to){
+  const oldLines=musicLyrics(from),newLines=musicLyrics(to),p=sceneEase(optionFade);
+  const y0=-IR*.30,y1=-IR*.03,y2=IR*.27,yIn=-IR*.52,yOut=IR*.52;
+  ctx.save();ctx.translate(0,IR*.08);ctx.textAlign='center';ctx.textBaseline='middle';
+  const line=(text,y,size,alpha,title=false)=>{ctx.font=(title?fontTitle:fontBody)(IR*size);
+    ctx.fillStyle=rgba(C,alpha);ctx.fillText(text,0,y);};
+  line(oldLines[2],lerp(y2,yOut,p),.095,.30*(1-p));
+  if(oldLines[1]===newLines[2]){
+    line(oldLines[1],lerp(y1,y2,p),lerp(.155,.095,p),lerp(.94,.30,p),p<.5);
+  }else{
+    line(oldLines[1],lerp(y1,y2,p),.155,.94*(1-p),true);
+    line(newLines[2],lerp(y1,y2,p),.095,.30*p);
+  }
+  if(oldLines[0]===newLines[1]){
+    line(oldLines[0],lerp(y0,y1,p),lerp(.095,.155,p),lerp(.22,.94,p),p>=.5);
+  }else{
+    line(oldLines[0],lerp(y0,y1,p),.095,.22*(1-p));
+    line(newLines[1],lerp(y0,y1,p),.155,.94*p,true);
+  }
+  const enter=sceneEase(clamp((p-.08)/.92,0,1));
+  line(newLines[0],lerp(yIn,y0,enter),.095,.30*enter);
+  ctx.restore();
+}
+function drawMusicScene(IR,IC,side,minimal=false,startedAt=sceneStartedAt){
+  const C=sceneGlow(IC,.65);
+  if(!minimal){ctx.fillStyle='rgba(0,3,7,.68)';ctx.beginPath();ctx.arc(0,0,IR*.93,0,7);ctx.fill();}
+  ctx.shadowBlur=0;
+  if(side<0){
+    const current=currentMediaState();
+    drawMusicPlaybackBase(IR,IC,C,current);
+    if(mediaPrevStatus&&mediaPrevStatus!==current.status){
+      withStateMotion(IR,false,()=>drawMusicPlaybackIcon(IR,C,mediaPrevStatus));
+      withStateMotion(IR,true,()=>drawMusicPlaybackIcon(IR,C,current.status));
+    }else drawMusicPlaybackIcon(IR,C,current.status);
+    const metadataChanged=mediaPrev&&(mediaPrev.title!==current.title||
+      mediaPrev.artist!==current.artist||mediaPrev.durationMs!==current.durationMs);
+    if(metadataChanged){
+      withStateMotion(IR,false,()=>drawMusicPlaybackText(IR,C,mediaPrev,true));
+      withStateMotion(IR,true,()=>drawMusicPlaybackText(IR,C,current,true));
+    }else drawMusicPlaybackText(IR,C,current,true);
+  }
+  else{
+    if(musicPrevView){
+      if(musicPrevView==='spectrum')drawMusicSpectrum(IR,IC,C,1-musicViewFade);
+      else drawMusicLyrics(IR,C,1-musicViewFade,scenePrevPayload||scenePayloadDisplay);
+    }
+    if(musicView==='spectrum')drawMusicSpectrum(IR,IC,C,musicViewFade);
+    else if(!musicPrevView&&scenePrevPayload&&musicLyrics(scenePrevPayload).some(
+      (line,index)=>line!==musicLyrics(scenePayloadDisplay)[index]))
+      drawMusicLyricsTransition(IR,C,scenePrevPayload,scenePayloadDisplay);
+    else drawMusicLyrics(IR,C,musicViewFade,scenePayloadDisplay);
+  }
+  ctx.shadowBlur=0;
+}
+function drawTimerScene(IR,IC,side,minimal=false,startedAt=sceneStartedAt){
+  const C=sceneGlow(IC,.65);
+  if(!minimal){
+    ctx.fillStyle='rgba(0,3,7,.72)';
+    ctx.beginPath();ctx.arc(0,0,IR*.93,0,7);ctx.fill();
+  }
+  ctx.shadowBlur=0;
+  const drawLayer=(state,incoming)=>{
+  const liveElapsed=state.status==='running'?(tNow-state.syncedAt)*1000:0;
+  const precise=Math.max(0,(state.remainingMs-liveElapsed)/1000);
+  const remaining=Math.ceil(precise);
+  const mm=String(Math.floor(remaining/60)).padStart(2,'0');
+  const ss=String(remaining%60).padStart(2,'0');
+  const value=side<0?mm:ss;
+  const urgency=remaining<=10&&state.status==='running'?.82+Math.sin(tNow*8)*.18:1;
+  const ring=stateRingAngles(incoming);
+  ctx.save();ctx.globalAlpha*=ring.alpha;
+  ctx.fillStyle=rgba(C,.96*urgency);
+  ctx.font=fontEnglish(IR*.62);
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(value,0,-IR*.02);
+  ctx.font=fontBody(IR*.115);ctx.fillStyle=rgba(C,.48);
+  ctx.fillText(side<0?'分钟':'秒钟',0,IR*.34);
+  ctx.lineCap='round';ctx.lineWidth=IR*.035;
+  ctx.strokeStyle=rgba(C,.22);
+  ctx.beginPath();ctx.arc(0,0,IR*.72,-Math.PI/2,Math.PI*1.5);ctx.stroke();
+  const p=state.durationMs>0?precise/(state.durationMs/1000):0;
+  ctx.strokeStyle=rgba(C,.82);
+  ctx.beginPath();ctx.arc(0,0,IR*.72,-Math.PI/2,-Math.PI/2+p*Math.PI*2);ctx.stroke();
+  ctx.strokeStyle=rgba(C,.18);ctx.lineWidth=IR*.011;
+  for(let i=0;i<30;i++){
+    const a=i*Math.PI/15,inner=i%5===0?.61:.64;
+    ctx.beginPath();ctx.moveTo(Math.cos(a)*IR*inner,Math.sin(a)*IR*inner);
+    ctx.lineTo(Math.cos(a)*IR*.67,Math.sin(a)*IR*.67);ctx.stroke();
+  }
+  ctx.restore();
+  withStateMotion(IR,incoming,()=>{
+    ctx.font=fontBody(IR*.076);ctx.fillStyle=rgba(C,.34);
+    const status={running:'计时中',paused:'已暂停',completed:'已完成'}[state.status]||'';
+    if(status)ctx.fillText(status,0,IR*.49);
+  });
+  };
+  if(timerPrev){drawLayer(timerPrev,false);drawLayer(currentTimerState(),true);}
+  else{
+    const state=currentTimerState();
+    const saved=optionFade;optionFade=1;drawLayer(state,true);optionFade=saved;
+  }
+  ctx.shadowBlur=0;
+}
+function drawRainDrop(x,y,size,C,alpha,tilt=-.12){
+  ctx.save();
+  ctx.translate(x,y);ctx.rotate(tilt);ctx.globalAlpha*=alpha;
+  ctx.fillStyle=rgba(C,.95);
+  ctx.beginPath();
+  ctx.moveTo(0,-size*.72);
+  ctx.bezierCurveTo(size*.08,-size*.46,size*.32,-size*.12,size*.32,size*.10);
+  ctx.bezierCurveTo(size*.32,size*.40,size*.17,size*.58,0,size*.58);
+  ctx.bezierCurveTo(-size*.17,size*.58,-size*.32,size*.40,-size*.32,size*.10);
+  ctx.bezierCurveTo(-size*.32,-size*.12,-size*.08,-size*.46,0,-size*.72);
+  ctx.fill();
+  ctx.restore();
+}
+function makeCloudPath(IR,dx=0,dy=0){
+  const p=new Path2D();
+  p.moveTo(dx-IR*.46,dy+IR*.18);
+  p.bezierCurveTo(dx-IR*.49,dy+IR*.05,dx-IR*.43,dy-IR*.15,dx-IR*.24,dy-IR*.18);
+  p.bezierCurveTo(dx-IR*.18,dy-IR*.43,dx+IR*.13,dy-IR*.48,dx+IR*.24,dy-IR*.22);
+  p.bezierCurveTo(dx+IR*.40,dy-IR*.21,dx+IR*.49,dy-IR*.08,dx+IR*.48,dy+IR*.09);
+  p.bezierCurveTo(dx+IR*.48,dy+IR*.18,dx+IR*.41,dy+IR*.22,dx+IR*.30,dy+IR*.22);
+  p.lineTo(dx-IR*.39,dy+IR*.22);
+  p.bezierCurveTo(dx-IR*.43,dy+IR*.22,dx-IR*.46,dy+IR*.21,dx-IR*.46,dy+IR*.18);
+  p.closePath();
+  return p;
+}
+function drawCloudBody(IR,C,drift=0,scale=1){
+  ctx.save();ctx.scale(scale,scale);
+  ctx.fillStyle=rgba(shade(C,.38),.55);
+  ctx.fill(makeCloudPath(IR,drift+IR*.035,IR*.035));
+  const cloud=ctx.createLinearGradient(0,-IR*.42,0,IR*.24);
+  cloud.addColorStop(0,rgba(shade(C,1.06),.98));
+  cloud.addColorStop(.72,rgba(C,.91));
+  cloud.addColorStop(1,rgba(shade(C,.72),.92));
+  ctx.fillStyle=cloud;ctx.fill(makeCloudPath(IR,drift,0));
+  ctx.strokeStyle=rgba(shade(C,1.22),.28);ctx.lineWidth=IR*.014;
+  ctx.stroke(makeCloudPath(IR,drift,-IR*.008));
+  ctx.restore();
+}
+function drawRainWeather(IR,C,storm=false){
+  const drift=Math.sin(tNow*.72)*IR*.025;
+  const dropXs=storm?[-.39,-.27,-.14,0,.13,.26,.39]:[-.34,-.18,-.02,.15,.31];
+  for(let i=0;i<dropXs.length;i++){
+    const p=(tNow*((storm?.78:.48)+i*.018)+i*.193)%1;
+    const y=IR*(-.10+Math.pow(p,1.55)*.86);
+    const fadeIn=sceneEase(clamp(p/.12,0,1));
+    const fadeOut=1-sceneEase(clamp((y/IR-.64)/.08,0,1));
+    drawRainDrop(IR*dropXs[i]+drift,y,IR*(storm?.042:.048),C,
+      fadeIn*fadeOut*(.60+(i%2)*.22),storm?-.18:-.12);
+
+    /* The ripple begins only after the drop center reaches the ground line. */
+    if(y>=IR*.72){
+      const q=clamp((y/IR-.72)/.04,0,1);
+      ctx.strokeStyle=rgba(C,(1-q)*.28);ctx.lineWidth=IR*.012;
+      ctx.beginPath();
+      ctx.ellipse(IR*dropXs[i]+drift,IR*.74,IR*(.018+q*.08),IR*(.006+q*.018),0,0,7);
+      ctx.stroke();
+    }
+  }
+  if(storm){
+    /* One brief downward stroke per cycle. It is drawn before the cloud so
+     * the source remains hidden behind the cloud body. */
+    const flashT=(tNow+1.37)%6.4;
+    if(flashT<.30){
+      const p=flashT/.30,alpha=Math.sin(p*Math.PI);
+      ctx.save();ctx.strokeStyle=rgba(shade(C,1.42),alpha*.94);
+      ctx.shadowColor=rgba(shade(C,1.55),alpha);ctx.shadowBlur=IR*.10;
+      ctx.lineWidth=IR*.038;ctx.lineCap='round';ctx.beginPath();
+      ctx.moveTo(-IR*.07,-IR*.13);
+      ctx.bezierCurveTo(IR*.10,IR*.04,-IR*.10,IR*.20,IR*.02,IR*.34);
+      ctx.bezierCurveTo(IR*.15,IR*.47,-IR*.02,IR*.57,IR*.08,IR*.68);
+      ctx.stroke();ctx.restore();
+    }
+  }
+  drawCloudBody(IR,C,drift,storm?.96:1);
+}
+function drawSunnyWeather(IR,C){
+  const pulse=1+Math.sin(tNow*1.2)*.025;
+  ctx.save();ctx.rotate(tNow*.06);ctx.strokeStyle=rgba(C,.42);ctx.lineCap='round';
+  ctx.lineWidth=IR*.026;
+  for(let i=0;i<12;i++){
+    const a=i*Math.PI/6;
+    ctx.beginPath();ctx.moveTo(Math.cos(a)*IR*.48,Math.sin(a)*IR*.48);
+    ctx.lineTo(Math.cos(a)*IR*.62,Math.sin(a)*IR*.62);ctx.stroke();
+  }
+  ctx.restore();
+  const sun=ctx.createRadialGradient(-IR*.12,-IR*.15,0,0,0,IR*.40);
+  sun.addColorStop(0,rgba(shade(C,1.28),1));sun.addColorStop(1,rgba(C,.70));
+  ctx.fillStyle=sun;ctx.beginPath();ctx.arc(0,0,IR*.36*pulse,0,7);ctx.fill();
+}
+function drawCloudyWeather(IR,C){
+  const a=Math.sin(tNow*.35)*IR*.035;
+  ctx.save();ctx.globalAlpha=.34;ctx.translate(-IR*.17,-IR*.18);ctx.scale(.72,.72);
+  drawCloudBody(IR,shade(C,.65),-a);ctx.restore();
+  ctx.save();ctx.translate(IR*.08,IR*.12);drawCloudBody(IR,C,a);ctx.restore();
+}
+function drawSnowWeather(IR,C){
+  for(let i=0;i<12;i++){
+    const p=(tNow*(.16+(i%3)*.018)+i*.083)%1;
+    const x=IR*(-.46+((i*.37)%1)*.92)+Math.sin(tNow*1.3+i)*IR*.035;
+    const y=IR*(-.12+p*.90);
+    const a=sceneEase(clamp(p/.12,0,1))*(1-sceneEase(clamp((p-.84)/.16,0,1)));
+    ctx.save();ctx.translate(x,y);ctx.rotate(tNow*.4+i);ctx.strokeStyle=rgba(C,a*.78);
+    ctx.lineWidth=IR*.012;
+    for(let k=0;k<3;k++){ctx.rotate(Math.PI/3);ctx.beginPath();ctx.moveTo(-IR*.028,0);ctx.lineTo(IR*.028,0);ctx.stroke();}
+    ctx.restore();
+  }
+  drawCloudBody(IR,C,Math.sin(tNow*.5)*IR*.018,.94);
+}
+function drawFogWeather(IR,C){
+  ctx.globalAlpha*=.92;
+  ctx.lineCap='round';
+  for(let i=0;i<7;i++){
+    const y=IR*(-.50+i*.16);
+    const shift=Math.sin(tNow*.35+i*.9)*IR*.10;
+    const half=IR*(.26+(i%3)*.10);
+    ctx.strokeStyle=rgba(C,.22+i*.055);ctx.lineWidth=IR*(.018+(i%2)*.008);
+    ctx.beginPath();ctx.moveTo(-half+shift,y);
+    ctx.bezierCurveTo(-half*.35+shift,y-IR*.035,half*.35+shift,y+IR*.035,half+shift,y);
+    ctx.stroke();
+  }
+}
+const WEATHER_META={
+  sunny:['28°','晴朗','紫外','4','体感','29°'],
+  cloudy:['21°','多云','湿度','66%','体感','20°'],
+  rain:['23°','小雨','湿度','78%','体感','22°'],
+  storm:['19°','雷雨','风速','24','湿度','86%'],
+  snow:['1°','降雪','湿度','91%','体感','-2°'],
+  fog:['16°','有雾','能见','0.8','湿度','95%']
+};
+function drawWeatherReadout(IR,C,kind){
+  const m=WEATHER_META[kind];
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineCap='round';ctx.lineWidth=IR*.024;
+  ctx.strokeStyle=rgba(C,.16);ctx.beginPath();ctx.arc(0,0,IR*.70,Math.PI*.83,Math.PI*2.17);ctx.stroke();
+  ctx.strokeStyle=rgba(C,.76);ctx.beginPath();ctx.arc(0,0,IR*.70,Math.PI*.83,Math.PI*1.61);ctx.stroke();
+  ctx.fillStyle=rgba(C,.98);ctx.font=fontEnglish(IR*.50);
+  ctx.fillText(m[0],0,-IR*.10);
+  ctx.font=fontTitle(IR*.125);ctx.fillStyle=rgba(C,.64);
+  ctx.fillText(m[1],0,IR*.23);
+  ctx.font=fontBody(IR*.072);ctx.fillStyle=rgba(C,.40);
+  ctx.fillText(m[2],-IR*.23,IR*.39);ctx.fillText(m[4],IR*.23,IR*.39);
+  ctx.font=fontEnglish(IR*.115);ctx.fillStyle=rgba(C,.72);
+  ctx.fillText(m[3],-IR*.23,IR*.50);ctx.fillText(m[5],IR*.23,IR*.50);
+}
+function drawWeatherState(IR,C,side,kind,alpha,incoming=true){
+  const travel=incoming?1-alpha:1-alpha;
+  ctx.save();ctx.globalAlpha*=alpha;ctx.translate(0,IR*(incoming?.08:-.08)*travel);ctx.rotate((incoming?.12:-.12)*travel);
+  if(side<0){
+    /* Precipitation extends below the icon, so centre its full silhouette. */
+    const centerY=kind==='rain'||kind==='storm'?-IR*.09:kind==='snow'?-IR*.06:0;
+    ctx.translate(0,centerY);
+    if(kind==='sunny')drawSunnyWeather(IR,C);
+    else if(kind==='cloudy')drawCloudyWeather(IR,C);
+    else if(kind==='rain')drawRainWeather(IR,C,false);
+    else if(kind==='storm')drawRainWeather(IR,C,true);
+    else if(kind==='snow')drawSnowWeather(IR,C);
+    else drawFogWeather(IR,C);
+  }else drawWeatherReadout(IR,C,kind);
+  ctx.restore();
+}
+function drawWeatherScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.55);
+  if(!minimal){ctx.fillStyle='rgba(0,3,7,.64)';ctx.beginPath();ctx.arc(0,0,IR*.93,0,7);ctx.fill();}
+  ctx.shadowBlur=0;
+  if(weatherPrevKind)drawWeatherState(IR,C,side,weatherPrevKind,1-weatherFade,false);
+  drawWeatherState(IR,C,side,weatherKind,weatherFade,true);
+}
+function drawBatteryScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.55),levels={charging:.68,low:.09,full:1,hot:.55,dock:.82};
+  const icons={charging:'battery_charging',low:'battery_low',full:'battery_full',hot:'battery_hot',dock:'battery_dock'};
+  const metas={charging:['68%','充电中','约 2 小时 14 分'],low:['9%','电量不足','约 18 分钟'],full:['100%','已充满','可以出发啦'],hot:['55%','暂停充电','温度过高'],dock:['82%','正在底座充电','磁吸底座已连接']};
+  if(!minimal){ctx.fillStyle='rgba(0,3,7,.68)';ctx.beginPath();ctx.arc(0,0,IR*.93,0,7);ctx.fill();}
+  ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  if(side<0){
+    const layer=(state,payload,incoming)=>{
+      const level=Number.isFinite(payload?.percent)?clamp(payload.percent/100,0,1):levels[state];
+      const ring=stateRingAngles(incoming),pulse=(state==='charging'||state==='dock')?.88+.12*Math.sin(tNow*3.2):1;
+      ctx.save();ctx.globalAlpha*=ring.alpha;ctx.lineCap='round';ctx.lineWidth=IR*.055;
+      ctx.strokeStyle=rgba(C,.20);ctx.beginPath();ctx.arc(0,0,IR*.58,ring.start,ring.start+Math.PI*2);ctx.stroke();
+      ctx.strokeStyle=rgba(C,.92);ctx.beginPath();ctx.arc(0,0,IR*.58,ring.start,ring.start+level*Math.PI*2);ctx.stroke();ctx.restore();
+      withStateMotion(IR,incoming,()=>drawMaterialIcon(icons[state],IR,C,{size:.78,reveal:1,alpha:pulse}));
+    };
+    if(batteryPrevState)layer(batteryPrevState,scenePrevPayload||{},false);
+    if(batteryPrevState)layer(batteryState,scenePayloadDisplay,true);
+    else {const level=Number.isFinite(scenePayloadDisplay.percent)?clamp(scenePayloadDisplay.percent/100,0,1):levels[batteryState];ctx.lineCap='round';ctx.lineWidth=IR*.055;ctx.strokeStyle=rgba(C,.20);ctx.beginPath();ctx.arc(0,0,IR*.58,-Math.PI/2,Math.PI*1.5);ctx.stroke();ctx.strokeStyle=rgba(C,.92);ctx.beginPath();ctx.arc(0,0,IR*.58,-Math.PI/2,-Math.PI/2+level*Math.PI*2);ctx.stroke();drawMaterialIcon(icons[batteryState],IR,C,{size:.78,alpha:1});}
+  }else{
+    const layer=(state,payload,incoming)=>withStateMotion(IR,incoming,()=>{const meta=metas[state],percent=Number.isFinite(payload?.percent)?`${Math.round(payload.percent)}%`:meta[0];ctx.fillStyle=rgba(C,.98);ctx.font=fontEnglish(IR*.50);ctx.fillText(percent,0,-IR*.155);ctx.fillStyle=rgba(C,.52);ctx.font=fontTitle(IR*.105);ctx.fillText(payload?.subtitle||meta[1],0,IR*.165);ctx.fillStyle=rgba(C,.72);ctx.font=fontBody(IR*.095);ctx.fillText(payload?.detail||meta[2],0,IR*.365);});
+    if(batteryPrevState){layer(batteryPrevState,scenePrevPayload||{},false);layer(batteryState,scenePayloadDisplay,true);}else layer(batteryState,scenePayloadDisplay,true);
+  }
+}
+function drawAlarmScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.55);
+  if(!minimal){ctx.fillStyle='rgba(0,3,7,.68)';ctx.beginPath();ctx.arc(0,0,IR*.93,0,7);ctx.fill();}
+  ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  if(side<0){
+    if(alarmPrev)withStateMotion(IR,false,()=>drawLucideAlarm(IR,C));
+    if(alarmPrev)withStateMotion(IR,true,()=>drawLucideAlarm(IR,C));
+    else drawLucideAlarm(IR,C);
+  }else{
+    const layer=(state,incoming)=>withStateMotion(IR,incoming,()=>{const trigger=state.trigger?new Date(state.trigger):null;const time=trigger&&!Number.isNaN(trigger.getTime())?`${String(trigger.getHours()).padStart(2,'0')}:${String(trigger.getMinutes()).padStart(2,'0')}`:'07:30';ctx.fillStyle=rgba(C,.98);ctx.font=fontEnglish(IR*.43);ctx.fillText(time,0,-IR*.07);if(state.copy!=='none'){ctx.fillStyle=rgba(C,.62);ctx.font=fontBody(IR*.105);ctx.fillText(state.copy==='name'?(state.label||'早安，Nyabula'):(state.detail||state.label||'提醒'),0,IR*.26);}});
+    const current={copy:alarmCopy,label:alarmLabel,detail:alarmDetail,trigger:alarmTriggerUnixMs};
+    if(alarmPrev){layer(alarmPrev,false);layer(current,true);}else layer(current,true);
+  }
+}
+/* Lucide Static 1.31.0 icon geometry, ISC license. The paths are embedded so
+ * the standalone prototype has no runtime npm/CDN dependency. */
+function drawIconRipples(IR,C){
+  /* Three water rings finish at 1.4 s, followed by a true 200 ms rest. */
+  const cycle=1.6,phase=tNow%cycle;
+  if(phase>=1.4)return;
+  ctx.save();ctx.lineCap='round';ctx.lineWidth=IR*.014;
+  for(let i=0;i<3;i++){
+    const p=(phase-i*.30)/.80;
+    if(p<0||p>1)continue;
+    const eased=sceneEase(p),radius=IR*(.34+eased*.34);
+    ctx.strokeStyle=rgba(C,Math.sin(p*Math.PI)*.28);
+    ctx.beginPath();ctx.arc(0,0,radius,0,7);ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawLucideAlarm(IR,C){
+  const s=IR*.040,shake=Math.sin(tNow*14)*IR*.004*(.5+.5*Math.sin(tNow*4.8));
+  drawIconRipples(IR,C);
+  ctx.save();ctx.translate(shake-12*s,-12*s);ctx.scale(s,s);
+  ctx.strokeStyle=rgba(C,.96);ctx.lineWidth=2;ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.beginPath();ctx.arc(12,13,8,0,7);ctx.stroke();
+  for(const d of ['M12 9v4l2 2','M5 3 2 6','m22 6-3-3','M6.38 18.7 4 21','M17.64 18.67 20 21']){
+    ctx.stroke(new Path2D(d));
+  }
+  ctx.restore();
+}
+function drawLucidePhoneCall(IR,C,animated=true){
+  const s=IR*.038,pulse=.82+.18*Math.sin(tNow*4.4);
+  if(animated)drawIconRipples(IR,C);
+  ctx.save();ctx.translate(-12*s,-12*s);ctx.scale(s,s);
+  ctx.strokeStyle=rgba(C,pulse);ctx.shadowColor=rgba(C,.65);ctx.shadowBlur=1.5;
+  ctx.lineWidth=2;ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.stroke(new Path2D('M13 2a9 9 0 0 1 9 9'));
+  ctx.stroke(new Path2D('M13 6a5 5 0 0 1 5 5'));
+  ctx.stroke(new Path2D('M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384'));
+  ctx.restore();
+}
+function drawCallScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.7);
+  if(!minimal){ctx.fillStyle='rgba(0,3,7,.68)';ctx.beginPath();ctx.arc(0,0,IR*.93,0,7);ctx.fill();}
+  ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  const layer=(call,incoming)=>withStateMotion(IR,incoming,()=>{
+    if(side<0){if(call.state==='ended')drawMaterialIcon('call_end',IR,C,{size:1.10,alpha:.72});else drawLucidePhoneCall(IR,C,call.state==='incoming');}
+    else{ctx.fillStyle=rgba(C,call.state==='ended'?.58:.98);ctx.font=call.state==='ended'?fontTitle(IR*.25):fontEnglish(IR*.27);ctx.fillText(call.state==='ended'?'通话结束':(call.name||'未知联系人'),0,-IR*.11);ctx.fillStyle=rgba(C,.48);ctx.font=fontMixed(IR*.10);const detail=call.state==='incoming'?(call.number||'号码未知'):call.state==='active'?'通话中':(call.number||'通话已结束');ctx.fillText(detail,0,IR*.17);}
+  });
+  const current={state:callState,name:callName,number:callNumber};
+  if(callPrev){layer(callPrev,false);layer(current,true);}else layer(current,true);
+}
+function drawTaskStateVisual(IR,C,state,alpha=1,reveal=iconReveal()){
+  ctx.save();ctx.globalAlpha*=alpha*iconSceneAlpha();
+  if(state==='running'){
+    const nodes=6,rotation=tNow*.72;
+    ctx.lineCap='round';ctx.lineWidth=IR*.018;
+    for(let i=0;i<nodes;i++){
+      const a=rotation+i*Math.PI*2/nodes,b=rotation+(i+1)*Math.PI*2/nodes;
+      ctx.strokeStyle=rgba(C,.16+i*.025);ctx.beginPath();
+      ctx.moveTo(Math.cos(a)*IR*.48,Math.sin(a)*IR*.48);
+      ctx.lineTo(Math.cos(b)*IR*.48,Math.sin(b)*IR*.48);ctx.stroke();
+    }
+    const active=(tNow*2.4)%nodes;
+    for(let i=0;i<nodes;i++){
+      const a=rotation+i*Math.PI*2/nodes,d=Math.min(Math.abs(i-active),nodes-Math.abs(i-active));
+      ctx.fillStyle=rgba(C,clamp(.32+(1-d)*.55,.28,.95));ctx.beginPath();
+      ctx.arc(Math.cos(a)*IR*.48,Math.sin(a)*IR*.48,IR*(d<.7?.064:.036),0,7);ctx.fill();
+    }
+    const breathe=.90+.10*Math.sin(tNow*4.2);
+    ctx.fillStyle=rgba(C,.94);ctx.beginPath();ctx.arc(0,0,IR*.082*breathe,0,7);ctx.fill();
+  }else if(state==='queued'){
+    ctx.save();ctx.translate(0,-IR*.07);
+    drawMaterialIcon('task_queued',IR,C,{size:.88,reveal,rotation:Math.sin(tNow*2.1)*.055,sceneAlpha:1});ctx.restore();
+    for(let i=0;i<3;i++){
+      const active=Math.floor(tNow*2.2)%3===i;
+      ctx.fillStyle=rgba(C,active?.92:.24);ctx.beginPath();
+      ctx.arc((i-1)*IR*.16,IR*.48,IR*(active?.035:.025),0,7);ctx.fill();
+    }
+  }else if(state==='confirm'){
+    const breathe=.96+.04*Math.sin(tNow*2.8),offset=IR*(.50+.025*Math.sin(tNow*2.8));
+    ctx.save();ctx.scale(breathe,breathe);
+    drawMaterialIcon('task_confirm',IR,C,{size:1.02,reveal,sceneAlpha:1});ctx.restore();
+    ctx.strokeStyle=rgba(C,.46);ctx.lineWidth=IR*.022;ctx.lineCap='round';
+    for(const dir of [-1,1]){
+      ctx.beginPath();ctx.moveTo(dir*offset,-IR*.18);ctx.lineTo(dir*offset,IR*.18);ctx.stroke();
+    }
+  }else if(state==='done'){
+    const elapsed=tNow-Math.max(sceneStartedAt,optionChangedAt),p=clamp(elapsed/.78,0,1);
+    drawMaterialIcon('task_done',IR,C,{size:1.12,reveal,sceneAlpha:1});
+    if(p<1){
+      const e=sceneEase(p);ctx.strokeStyle=rgba(C,(1-e)*.48);ctx.lineWidth=IR*.022;
+      ctx.beginPath();ctx.arc(0,0,IR*(.30+.35*e),0,7);ctx.stroke();
+    }
+  }else{
+    const phase=tNow%2.4,shake=phase<.34?Math.sin(phase*58)*(1-phase/.34)*IR*.020:0;
+    ctx.save();ctx.translate(shake,0);
+    drawMaterialIcon('task_failed',IR,C,{size:1.04,reveal,alpha:.78+.14*Math.sin(tNow*2.6),sceneAlpha:1});ctx.restore();
+    if(phase<.62){
+      const p=phase/.62;ctx.strokeStyle=rgba(C,(1-p)*.28);ctx.lineWidth=IR*.018;
+      ctx.beginPath();ctx.arc(0,0,IR*(.39+.17*sceneEase(p)),0,7);ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+function drawTaskScene(IR,IC,side,minimal=false){
+  const fallbacks={running:[.62,'执行中'],queued:[.14,'排队中'],confirm:[.46,'等待确认'],done:[1,'已完成'],failed:[.68,'执行失败']};
+  const fallback=fallbacks[taskState];
+  const dynamic=Number.isFinite(taskProgressDisplay)?clamp(taskProgressDisplay,0,1):fallback[0];
+  const C=sceneGlow(IC,.55);
+  if(!minimal){ctx.fillStyle='rgba(0,3,7,.68)';ctx.beginPath();ctx.arc(0,0,IR*.93,0,7);ctx.fill();}
+  ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  if(side<0){
+    if(taskPrevState)withStateMotion(IR,false,()=>drawTaskStateVisual(IR,C,taskPrevState,1,1));
+    if(taskPrevState)withStateMotion(IR,true,()=>drawTaskStateVisual(IR,C,taskState,1));
+    else drawTaskStateVisual(IR,C,taskState,1);
+  }else{
+    const layer=(state,progress,title,incoming)=>{const ring=stateRingAngles(incoming),fb=fallbacks[state];ctx.save();ctx.globalAlpha*=ring.alpha;ctx.strokeStyle=rgba(C,.18);ctx.lineWidth=IR*.05;ctx.beginPath();ctx.arc(0,0,IR*.55,ring.start,ring.start+Math.PI*2);ctx.stroke();ctx.strokeStyle=rgba(C,.88);ctx.beginPath();ctx.arc(0,0,IR*.55,ring.start,ring.start+clamp(progress,0,1)*Math.PI*2);ctx.stroke();ctx.fillStyle=rgba(C,.98);ctx.font=fontEnglish(IR*.39);ctx.fillText(`${Math.round(progress*5)}/5`,0,-IR*.04);ctx.fillStyle=rgba(C,.52);ctx.font=fontTitle(IR*.10);ctx.fillText(title||fb[1],0,IR*.29);ctx.restore();};
+    if(taskPrevState){layer(taskPrevState,Number.isFinite(taskPrevProgress)?taskPrevProgress:fallbacks[taskPrevState][0],taskPrevTitle,false);layer(taskState,dynamic,taskTitle,true);}
+    else{ctx.strokeStyle=rgba(C,.18);ctx.lineWidth=IR*.05;ctx.beginPath();ctx.arc(0,0,IR*.55,-Math.PI/2,Math.PI*1.5);ctx.stroke();ctx.strokeStyle=rgba(C,.88);ctx.beginPath();ctx.arc(0,0,IR*.55,-Math.PI/2,-Math.PI/2+dynamic*Math.PI*2);ctx.stroke();ctx.fillStyle=rgba(C,.98);ctx.font=fontEnglish(IR*.39);ctx.fillText(`${Math.round(dynamic*5)}/5`,0,-IR*.04);ctx.fillStyle=rgba(C,.52);ctx.font=fontTitle(IR*.10);ctx.fillText(taskTitle||fallback[1],0,IR*.29);}
+  }
+}
+function drawSceneBackdrop(IR,minimal,alpha=.68){
+  if(minimal)return;
+  ctx.fillStyle=`rgba(0,3,7,${alpha})`;
+  ctx.beginPath();ctx.arc(0,0,IR*.93,0,7);ctx.fill();
+}
+function drawDial(IR,C,progress=.72){
+  ctx.lineCap='round';ctx.lineWidth=IR*.035;
+  ctx.strokeStyle=rgba(C,.17);ctx.beginPath();ctx.arc(0,0,IR*.70,-Math.PI/2,Math.PI*1.5);ctx.stroke();
+  if(progress>0){
+    ctx.strokeStyle=rgba(C,.82);ctx.beginPath();ctx.arc(0,0,IR*.70,-Math.PI/2,-Math.PI/2+progress*Math.PI*2);ctx.stroke();
+  }
+}
+function drawStopwatchScene(IR,IC,side,minimal=false,startedAt=sceneStartedAt){
+  const C=sceneGlow(IC,.58),elapsed=tNow-startedAt;
+  drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  const minutes=Math.floor(elapsed/60),seconds=Math.floor(elapsed%60),tenths=Math.floor((elapsed%1)*10);
+  drawDial(IR,C,(elapsed%60)/60);
+  ctx.fillStyle=rgba(C,.98);
+  if(side<0){
+    ctx.font=fontEnglish(IR*.58);ctx.fillText(String(minutes).padStart(2,'0'),0,-IR*.04);
+    ctx.font=fontBody(IR*.085);ctx.fillStyle=rgba(C,.44);ctx.fillText('分钟',0,IR*.34);
+  }else{
+    ctx.font=fontEnglish(IR*.47);ctx.fillText(`${String(seconds).padStart(2,'0')}.${tenths}`,0,-IR*.04);
+    ctx.font=fontBody(IR*.085);ctx.fillStyle=rgba(C,.44);ctx.fillText('秒钟',0,IR*.34);
+  }
+}
+function drawCalendarScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.50);drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  if(side<0){
+    ctx.strokeStyle=rgba(C,.24);ctx.lineWidth=IR*.025;ctx.beginPath();ctx.roundRect(-IR*.48,-IR*.48,IR*.96,IR*.96,IR*.10);ctx.stroke();
+    ctx.fillStyle=rgba(C,.42);ctx.fillRect(-IR*.48,-IR*.29,IR*.96,IR*.025);
+    ctx.fillStyle=rgba(C,.98);ctx.font=fontEnglish(IR*.50);ctx.fillText('16',0,IR*.05);
+    ctx.fillStyle=rgba(C,.52);ctx.font=fontTitle(IR*.11);ctx.fillText('8 月 · 星期日',0,IR*.36);
+  }else{
+    ctx.fillStyle=rgba(C,.98);ctx.font=fontEnglish(IR*.40);ctx.fillText('09:30',0,-IR*.18);
+    ctx.fillStyle=rgba(C,.67);ctx.font=fontTitle(IR*.14);ctx.fillText('产品设计评审',0,IR*.13);
+    ctx.fillStyle=rgba(C,.34);ctx.font=fontBody(IR*.085);ctx.fillText('还有 25 分钟',0,IR*.35);
+  }
+}
+function drawSleepTimerScene(IR,IC,side,minimal=false,startedAt=sceneStartedAt){
+  const C=sceneGlow(IC,.45);drawSceneBackdrop(IR,minimal,.74);ctx.shadowBlur=0;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  if(side<0){
+    ctx.save();ctx.translate(-IR*.02,IR*.01);ctx.shadowColor=rgba(C,.42);ctx.shadowBlur=IR*.08;
+    drawMaterialIcon('moon',IR,C,{size:1.04,reveal:iconReveal(startedAt)});ctx.restore();
+    const stars=[[-.46,-.34,.13],[.40,-.35,.16],[.47,.25,.10]];
+    for(let i=0;i<stars.length;i++){
+      const [x,y,s]=stars[i],pulse=.28+.42*(.5+.5*Math.sin(tNow*1.35+i*1.9));
+      ctx.save();ctx.translate(IR*x,IR*y);ctx.rotate(Math.sin(tNow*.25+i)*.10);
+      drawMaterialIcon('star',IR,C,{size:s*1.75,reveal:iconReveal(startedAt),alpha:pulse});ctx.restore();
+    }
+  }else{
+    const remaining=Math.max(0,1800-(tNow-startedAt));
+    ctx.fillStyle=rgba(C,.98);ctx.font=fontEnglish(IR*.48);ctx.fillText(String(Math.ceil(remaining/60)),0,-IR*.12);
+    ctx.fillStyle=rgba(C,.55);ctx.font=fontTitle(IR*.105);ctx.fillText('分钟',0,IR*.18);
+    ctx.fillStyle=rgba(C,.30);ctx.font=fontBody(IR*.08);ctx.fillText('音乐结束后休眠',0,IR*.36);
+  }
+}
+function drawNetworkScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.55);drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  const layer=(state,incoming)=>withStateMotion(IR,incoming,()=>{if(side<0){const icon={wifi:'wifi',bluetooth:'bluetooth',offline:'wifi_off'}[state];drawMaterialIcon(icon,IR,C,{size:1.18,reveal:1,alpha:state==='offline'?.72:1});}else{const title=state==='wifi'?'网络已连接':state==='bluetooth'?'手机已连接':'当前离线';const detail=state==='wifi'?'Nyabula · 5 GHz':state==='bluetooth'?'BeaconPhone':'等待重新连接';ctx.fillStyle=rgba(C,state==='offline'?.54:.98);ctx.font=fontTitle(IR*.22);ctx.fillText(title,0,-IR*.13);ctx.fillStyle=rgba(C,.44);ctx.font=fontMixed(IR*.09);ctx.fillText(detail,0,IR*.16);if(state!=='offline'){const pulse=.55+.35*Math.sin(tNow*2.2);ctx.fillStyle=rgba(C,pulse);ctx.beginPath();ctx.arc(0,IR*.38,IR*.025,0,7);ctx.fill();}}});
+  if(networkPrevState){layer(networkPrevState,false);layer(networkState,true);}else layer(networkState,true);
+}
+function drawAudioScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.55);drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  const layer=(route,incoming)=>{const muted=route==='mute';if(side<0){const ring=stateRingAngles(incoming);ctx.save();ctx.globalAlpha*=ring.alpha;ctx.rotate(ring.start+Math.PI/2);drawDial(IR,C,muted?0:.64);ctx.restore();withStateMotion(IR,incoming,()=>{const icon={speaker:'speaker',headphone:'headphones',both:'audio_both',mute:'audio_mute'}[route];drawMaterialIcon(icon,IR,C,{size:.82,reveal:1,alpha:muted?.64:1});});}else withStateMotion(IR,incoming,()=>{const label={speaker:'扬声器',headphone:'耳机',both:'同时输出',mute:'已静音'}[route];ctx.fillStyle=rgba(C,muted?.48:.98);ctx.font=fontTitle(IR*.22);ctx.fillText(label,0,-IR*.14);ctx.fillStyle=rgba(C,.74);ctx.font=fontEnglish(IR*.36);ctx.fillText(muted?'—':'64%',0,IR*.14);ctx.fillStyle=rgba(C,.34);ctx.font=fontBody(IR*.085);ctx.fillText('媒体音量',0,IR*.39);});};
+  if(audioPrevRoute){layer(audioPrevRoute,false);layer(audioRoute,true);}else layer(audioRoute,true);
+}
+function drawEqCurve(IR,C,calibrating=false){
+  ctx.strokeStyle=rgba(C,.14);ctx.lineWidth=IR*.010;
+  for(let i=-2;i<=2;i++){ctx.beginPath();ctx.moveTo(-IR*.62,i*IR*.16);ctx.lineTo(IR*.62,i*IR*.16);ctx.stroke();}
+  const sweep=((tNow*.20)%1)*IR*1.24-IR*.62;
+  ctx.strokeStyle=rgba(C,.88);ctx.lineWidth=IR*.025;ctx.lineCap='round';ctx.beginPath();
+  for(let i=0;i<=48;i++){
+    const x=IR*(-.62+i/48*1.24),nx=x/IR;
+    const y=IR*(-.04-Math.exp(-Math.pow((nx+.28)*4,2))*.16+Math.exp(-Math.pow((nx-.22)*5,2))*.11);
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  }ctx.stroke();
+  if(calibrating){const g=ctx.createLinearGradient(sweep-IR*.15,0,sweep,0);g.addColorStop(0,rgba(C,0));g.addColorStop(1,rgba(C,.34));ctx.fillStyle=g;ctx.fillRect(sweep-IR*.15,-IR*.42,IR*.15,IR*.84);}
+}
+function drawEqScene(IR,IC,side,minimal=false,startedAt=sceneStartedAt){
+  const C=sceneGlow(IC,.55);drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  const layer=(view,incoming)=>withStateMotion(IR,incoming,()=>{const cal=view==='calibrate';if(side<0){if(cal){const p=((tNow-startedAt)*.13)%1;drawDial(IR,C,p);ctx.fillStyle=rgba(C,.98);ctx.font=fontEnglish(IR*.33);ctx.fillText(`${Math.round(20*Math.pow(1000,p))}`,0,-IR*.04);ctx.fillStyle=rgba(C,.42);ctx.font=fontMixed(IR*.085);ctx.fillText('Hz · 扫频',0,IR*.28);}else{const bars=7;for(let i=0;i<bars;i++){const x=(i-(bars-1)/2)*IR*.16,h=IR*(.22+.28*(.5+.5*Math.sin(i*1.6+tNow*.7)));ctx.fillStyle=rgba(C,.30+i*.07);ctx.beginPath();ctx.roundRect(x-IR*.035,-h/2,IR*.07,h,IR*.035);ctx.fill();}}}else{ctx.save();ctx.translate(0,-IR*.08);drawEqCurve(IR,C,cal);ctx.restore();ctx.fillStyle=rgba(C,.58);ctx.font=cal?fontTitle(IR*.10):fontEnglish(IR*.085);ctx.fillText(cal?'测量中 · 2/4':'NYABULA FLAT',0,IR*.43);}});
+  if(eqPrevView){layer(eqPrevView,false);layer(eqView,true);}else layer(eqView,true);
+}
+function drawPayloadLayers(IR,draw){
+  if(scenePrevPayload){
+    withStateMotion(IR,false,()=>draw(scenePrevPayload));
+    withStateMotion(IR,true,()=>draw(scenePayloadDisplay));
+  }else draw(scenePayloadDisplay);
+}
+function drawCaptionScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.48);drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  drawPayloadLayers(IR,payload=>{if(side<0){
+    ctx.strokeStyle=rgba(C,.82);ctx.lineWidth=IR*.025;ctx.lineCap='round';ctx.beginPath();
+    for(let i=0;i<=60;i++){
+      const x=IR*(-.58+i/60*1.16),env=Math.sin(i/60*Math.PI),y=Math.sin(i*.72+tNow*5)*env*IR*.25;
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    }ctx.stroke();
+    ctx.fillStyle=rgba(C,.40);ctx.font=fontTitle(IR*.09);ctx.fillText('聆听中',0,IR*.42);
+  }else{
+    ctx.fillStyle=rgba(C,.28);ctx.font=fontBody(IR*.095);ctx.fillText(payload.previous_line||'我可以帮你',0,-IR*.27);
+    ctx.fillStyle=rgba(C,.96);ctx.font=fontTitle(IR*.15);ctx.fillText(payload.current_line||'设置一个提醒',0,IR*.01);
+    ctx.fillStyle=rgba(C,.34);ctx.font=fontBody(IR*.085);ctx.fillText(payload.next_line||'字幕模式已开启',0,IR*.31);
+  }});
+}
+function drawBriefingScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.48);drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  drawPayloadLayers(IR,payload=>{if(side<0){
+    const p=(tNow*.16)%1;
+    ctx.strokeStyle=rgba(C,.18);ctx.lineWidth=IR*.018;ctx.beginPath();ctx.arc(0,0,IR*.48,0,7);ctx.stroke();
+    for(let i=0;i<3;i++){
+      const a=-Math.PI/2+(i+p)*Math.PI*2/3,r=IR*.48;
+      ctx.fillStyle=rgba(C,i===1?.92:.40);ctx.beginPath();ctx.arc(Math.cos(a)*r,Math.sin(a)*r,IR*(i===1?.065:.035),0,7);ctx.fill();
+    }
+    ctx.strokeStyle=rgba(C,.78);ctx.lineWidth=IR*.026;ctx.lineCap='round';ctx.beginPath();
+    for(let i=0;i<=40;i++){const x=IR*(-.31+i/40*.62),y=Math.sin(i*.66+tNow*4)*IR*.09*(1-Math.abs(i/20-1));i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();
+  }else{
+    ctx.fillStyle=rgba(C,.98);ctx.font=fontTitle(IR*.22);ctx.fillText(payload.title||'早间简报',0,-IR*.24);
+    ctx.fillStyle=rgba(C,.55);ctx.font=fontBody(IR*.10);ctx.fillText(payload.subtitle||'天气 · 日程 · 资讯',0,IR*.03);
+    const index=Math.max(1,Math.round(payload.briefing_index||1)),count=Math.max(index,Math.round(payload.briefing_count||3));
+    ctx.fillStyle=rgba(C,.36);ctx.font=fontMixed(IR*.085);ctx.fillText(payload.detail||`正在朗读  ${index} / ${count}`,0,IR*.29);
+  }});
+}
+function drawPrivacyScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.60);drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  drawPayloadLayers(IR,payload=>{if(side<0){
+    drawMaterialIcon('privacy',IR,C,{size:1.16,alpha:payload.active===false?.58:.88+.12*Math.sin(tNow*2.4)});
+  }else{
+    const title=payload.privacy_camera&&payload.privacy_microphone?'摄像头 + 麦克风':payload.privacy_camera?'摄像头':payload.privacy_microphone?'麦克风':'隐私设备';
+    ctx.fillStyle=rgba(C,.98);ctx.font=fontTitle(IR*.17);ctx.fillText(payload.title||title,0,-IR*.20);
+    ctx.fillStyle=rgba(C,.72);ctx.font=fontTitle(IR*.14);ctx.fillText(payload.subtitle||(payload.active===false?'当前空闲':'正在使用'),0,IR*.06);
+    ctx.fillStyle=rgba(C,.34);ctx.font=fontBody(IR*.08);ctx.fillText(payload.detail||'本地处理 · 指示不可关闭',0,IR*.31);
+  }});
+}
+function drawIdentityScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.55);drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  drawPayloadLayers(IR,payload=>{if(side<0){
+    drawMaterialIcon('identity',IR,C,{size:1.18});
+  }else{
+    ctx.fillStyle=rgba(C,.98);ctx.font=fontTitle(IR*.23);ctx.fillText(payload.title||'你好，主人',0,-IR*.15);
+    ctx.fillStyle=rgba(C,.58);ctx.font=fontTitle(IR*.105);ctx.fillText(payload.subtitle||'主人身份已确认',0,IR*.14);
+    ctx.fillStyle=rgba(C,.30);ctx.font=fontBody(IR*.075);ctx.fillText(payload.detail||'模板仅保存在本机',0,IR*.34);
+  }});
+}
+function drawMemoryScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.48);drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  drawPayloadLayers(IR,payload=>{if(side<0){
+    drawMaterialIcon('memory',IR,C,{size:1.16,alpha:.90+.10*Math.sin(tNow*1.7)});
+  }else{
+    ctx.fillStyle=rgba(C,.55);ctx.font=fontBody(IR*.09);ctx.fillText(payload.subtitle||'准备记住',0,-IR*.31);
+    ctx.fillStyle=rgba(C,.98);ctx.font=fontTitle(IR*.17);ctx.fillText(payload.title||'你喜欢轻音乐',0,-IR*.04);
+    ctx.fillStyle=rgba(C,.42);ctx.font=fontBody(IR*.085);ctx.fillText(payload.detail||'等待语音确认',0,IR*.26);
+  }});
+}
+function drawDevicesScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.54);drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  drawPayloadLayers(IR,payload=>{if(side<0){
+    drawMaterialIcon('devices',IR,C,{size:1.18});
+  }else{
+    ctx.fillStyle=rgba(C,.98);ctx.font=fontEnglish(IR*.37);ctx.fillText(String(Math.round(payload.device_count||2)),0,-IR*.18);
+    ctx.fillStyle=rgba(C,.58);ctx.font=fontTitle(IR*.11);ctx.fillText(payload.subtitle||'台设备在线',0,IR*.08);
+    ctx.fillStyle=rgba(C,.32);ctx.font=fontMixed(IR*.075);ctx.fillText(payload.detail||'手机 · CODEX · 局域网 MCP',0,IR*.31);
+  }});
+}
+function drawSystemScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.48);drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  drawPayloadLayers(IR,payload=>{if(side<0){
+    drawMaterialIcon('system',IR,C,{size:1.18});
+  }else{
+    ctx.fillStyle=rgba(C,.98);ctx.font=fontEnglish(IR*.22);ctx.fillText(payload.title||'OPENVELA',0,-IR*.24);
+    ctx.fillStyle=rgba(C,.58);ctx.font=fontTitle(IR*.105);ctx.fillText(payload.subtitle||'本地大脑就绪',0,IR*.01);
+    ctx.fillStyle=rgba(C,.31);ctx.font=fontMixed(IR*.08);ctx.fillText(payload.detail||'AMP · NPU 可用',0,IR*.27);
+  }});
+}
+function drawHealthScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.58);drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  drawPayloadLayers(IR,payload=>{if(side<0){
+    drawMaterialIcon('heart_rate',IR,C,{size:1.18,alpha:.90+.10*Math.sin(tNow*4.0)});
+  }else{
+    ctx.fillStyle=rgba(C,.98);ctx.font=fontEnglish(IR*.48);ctx.fillText(String(Math.round(payload.heart_rate_bpm||72)),0,-IR*.13);
+    ctx.fillStyle=rgba(C,.56);ctx.font=fontBody(IR*.10);ctx.fillText(payload.subtitle||`次/分 · ${payload.signal_good===false?'信号较弱':'信号良好'}`,0,IR*.16);
+    ctx.fillStyle=rgba(C,.28);ctx.font=fontBody(IR*.07);ctx.fillText(payload.detail||'趋势参考 · 非医疗用途',0,IR*.37);
+  }});
+}
+function drawPresenceScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.50);drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  drawPayloadLayers(IR,payload=>{if(side<0){
+    drawMaterialIcon('presence',IR,C,{size:1.18});
+  }else{
+    ctx.fillStyle=rgba(C,.98);ctx.font=fontTitle(IR*.22);ctx.fillText(payload.title||(payload.active===false?'未检测到用户':'用户在场'),0,-IR*.20);
+    ctx.fillStyle=rgba(C,.68);ctx.font=fontMixed(IR*.31);ctx.fillText(`${Number(payload.distance_m||.8).toFixed(1)} m`,0,IR*.09);
+    ctx.fillStyle=rgba(C,.30);ctx.font=fontBody(IR*.075);ctx.fillText(payload.detail||'正在看向猫猫',0,IR*.34);
+  }});
+}
+function drawCompanionScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.43);drawSceneBackdrop(IR,minimal,.74);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  if(side<0){
+    /* Pass one slow breath from the centre outwards, then leave a long rest.
+     * Staggering the layers feels organic without becoming a ripple loop. */
+    const cycle=6.8,phase=tNow%cycle;
+    const layerBreath=delay=>{
+      const p=phase-delay;
+      if(p<0||p>=2.15)return 0;
+      if(p<1.05)return sceneEase(p/1.05);
+      if(p<1.30)return 1;
+      return 1-sceneEase((p-1.30)/.85);
+    };
+    for(let i=3;i>=0;i--){
+      const breath=layerBreath(i*.22);
+      const radius=IR*(.22+i*.11)*(.90+breath*.24);
+      ctx.fillStyle=rgba(C,.050+i*.032+breath*.026);
+      ctx.beginPath();ctx.arc(0,0,radius,0,7);ctx.fill();
+    }
+    drawMaterialIcon('companion',IR,C,{size:.48,alpha:.94});
+  }else{
+    ctx.fillStyle=rgba(C,.98);ctx.font=fontTitle(IR*.22);ctx.fillText('专注陪伴',0,-IR*.17);
+    ctx.fillStyle=rgba(C,.50);ctx.font=fontBody(IR*.09);ctx.fillText('安静模式',0,IR*.10);
+    ctx.fillStyle=rgba(C,.27);ctx.font=fontBody(IR*.075);ctx.fillText('仅保留重要提醒',0,IR*.32);
+  }
+}
+function drawCatHomeScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.46);drawSceneBackdrop(IR,minimal,.72);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  if(side<0){
+    ctx.strokeStyle=rgba(C,.78);ctx.lineWidth=IR*.026;ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.beginPath();ctx.moveTo(-IR*.48,IR*.12);ctx.lineTo(0,-IR*.37);ctx.lineTo(IR*.48,IR*.12);ctx.lineTo(IR*.37,IR*.12);ctx.lineTo(IR*.37,IR*.42);ctx.lineTo(-IR*.37,IR*.42);ctx.lineTo(-IR*.37,IR*.12);ctx.closePath();ctx.stroke();
+    ctx.beginPath();ctx.arc(0,IR*.20,IR*.14,Math.PI,0);ctx.lineTo(IR*.14,IR*.42);ctx.lineTo(-IR*.14,IR*.42);ctx.closePath();ctx.stroke();
+    ctx.fillStyle=rgba(C,.38+.22*Math.sin(tNow*.8));ctx.beginPath();ctx.arc(IR*.34,-IR*.30,IR*.055,0,7);ctx.fill();
+  }else{
+    ctx.fillStyle=rgba(C,.98);ctx.font=fontTitle(IR*.22);ctx.fillText('虚拟猫舍',0,-IR*.23);
+    ctx.fillStyle=rgba(C,.58);ctx.font=fontBody(IR*.11);ctx.fillText('晴 · 午后',0,IR*.03);
+    ctx.fillStyle=rgba(C,.30);ctx.font=fontBody(IR*.08);ctx.fillText('双屏立体视窗预览',0,IR*.29);
+  }
+}
+function drawSubwooferScene(IR,IC,side,minimal=false){
+  const C=sceneGlow(IC,.58);drawSceneBackdrop(IR,minimal);ctx.shadowBlur=0;ctx.textAlign='center';ctx.textBaseline='middle';
+  drawPayloadLayers(IR,payload=>{if(side<0){
+    const beat=.5+.5*Math.sin(tNow*4.4);
+    drawMaterialIcon('subwoofer',IR,C,{size:1.18+beat*.025,alpha:payload.active===false?.48:.84+.16*beat});
+  }else{
+    ctx.fillStyle=rgba(C,.98);ctx.font=fontMixed(IR*.27);ctx.fillText(payload.title||(payload.active===false?'低音单元离线':'2.1 已启用'),0,-IR*.22);
+    ctx.fillStyle=rgba(C,.70);ctx.font=fontMixed(IR*.33);ctx.fillText(`${Math.round(payload.crossover_hz||80)} Hz`,0,IR*.08);
+    ctx.fillStyle=rgba(C,.31);ctx.font=fontMixed(IR*.075);ctx.fillText(payload.detail||'低音在线 · LR 分频',0,IR*.34);
+  }});
+}
+function drawScene(IR,IC,side,type,alpha=1,minimal=false,startedAt=sceneStartedAt){
+  ctx.save();
+  ctx.globalAlpha*=clamp(alpha,0,1);
+  if(type==='music')drawMusicScene(IR,IC,side,minimal,startedAt);
+  else if(type==='timer')drawTimerScene(IR,IC,side,minimal,startedAt);
+  else if(type==='weather')drawWeatherScene(IR,IC,side,minimal);
+  else if(type==='battery')drawBatteryScene(IR,IC,side,minimal);
+  else if(type==='alarm')drawAlarmScene(IR,IC,side,minimal);
+  else if(type==='call')drawCallScene(IR,IC,side,minimal);
+  else if(type==='task')drawTaskScene(IR,IC,side,minimal);
+  else if(type==='stopwatch')drawStopwatchScene(IR,IC,side,minimal,startedAt);
+  else if(type==='calendar')drawCalendarScene(IR,IC,side,minimal);
+  else if(type==='sleep-timer')drawSleepTimerScene(IR,IC,side,minimal,startedAt);
+  else if(type==='network')drawNetworkScene(IR,IC,side,minimal);
+  else if(type==='audio')drawAudioScene(IR,IC,side,minimal);
+  else if(type==='eq')drawEqScene(IR,IC,side,minimal,startedAt);
+  else if(type==='caption')drawCaptionScene(IR,IC,side,minimal);
+  else if(type==='briefing')drawBriefingScene(IR,IC,side,minimal);
+  else if(type==='privacy')drawPrivacyScene(IR,IC,side,minimal);
+  else if(type==='identity')drawIdentityScene(IR,IC,side,minimal);
+  else if(type==='memory')drawMemoryScene(IR,IC,side,minimal);
+  else if(type==='devices')drawDevicesScene(IR,IC,side,minimal);
+  else if(type==='system')drawSystemScene(IR,IC,side,minimal);
+  else if(type==='health')drawHealthScene(IR,IC,side,minimal);
+  else if(type==='presence')drawPresenceScene(IR,IC,side,minimal);
+  else if(type==='companion')drawCompanionScene(IR,IC,side,minimal);
+  else if(type==='home')drawCatHomeScene(IR,IC,side,minimal);
+  else if(type==='subwoofer')drawSubwooferScene(IR,IC,side,minimal);
+  ctx.restore();
+}
+
+const zzz=[]; let zNext=0, zzzMask=0;
+function updateZzz(dt){
+  const R=Math.min(W*.16,H*.30), CR=R*SCREEN_RADIUS_SCALE;
+  if(mode==='sleep' && cur.lidTop+cur.lidBot>.92){
+    zNext-=dt;
+    if(zNext<=0){
+      zNext=.8+Math.random()*1.2;
+      const vy=-(CR*.30+Math.random()*CR*.15);
+      const size=R*(.15+Math.random()*.15);
+      for(const side of [-1,1]){
+        zzz.push({
+          side,
+          ox:(Math.random()*2-1)*CR*.55,     // 两眼同时生成，各自保留自然漂移
+          y:CR*1.1,                          // 相对屏心：从屏底下方进入
+          vy,
+          sway:CR*(.08+Math.random()*.10),
+          ph:Math.random()*7, size,
+          life:0, rot:(Math.random()-.5)*.5
+        });
+      }
+    }
+  }
+  for(let i=zzz.length-1;i>=0;i--){
+    const z=zzz[i]; z.life+=dt; z.y+=z.vy*dt;
+    if(z.y<-CR*1.2) zzz.splice(i,1);         // 飘出屏顶回收
+  }
+}
+function drawZzz(side,ex,cy,R,CR){
+  const S=cur;
+  const IR=R*S.irisScale;
+  const E=IR*1.04;
+  const lidT=sleepEndTop*zzzMask;
+  const lidB=sleepEndBot*zzzMask;
+
+  ctx.save();
+  ctx.translate(ex,cy);
+  ctx.scale(1,1-S.squint*.25);
+  ctx.clip(makeLidPath(E,lidT,lidB,0,0));
+  ctx.globalAlpha*=sceneEase(zzzMask);
+
+  for(const z of zzz){
+    if(z.side!==side)continue;
+    const p=clamp((CR*1.1-z.y)/(CR*2.2),0,1);        // 底→顶进度
+    const a=Math.sin(p*Math.PI);                     // 入淡入、出淡出
+    ctx.save();
+    ctx.translate(z.ox+Math.sin(z.life*2+z.ph)*z.sway,z.y);
+    ctx.rotate(z.rot+Math.sin(z.life*1.5+z.ph)*.15);
+    ctx.globalAlpha=a*.85;
+    ctx.fillStyle='rgba(165,195,255,1)';
+    ctx.font=fontEnglish(z.size*(1+p*.5));
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('Z',0,0);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/* ---------- 特效元素 ---------- */
+function star(ctx,r,rot){
+  ctx.beginPath();
+  for(let i=0;i<10;i++){
+    const a=rot+i*Math.PI/5, rr=i%2?r*.45:r;
+    ctx[i?'lineTo':'moveTo'](Math.cos(a)*rr,Math.sin(a)*rr);
+  }
+  ctx.closePath();
+}
+function heart(ctx,r){
+  ctx.beginPath();
+  ctx.moveTo(0,r*.9);
+  ctx.bezierCurveTo( r*1.1,r*.25,  r*.95,-r*.75, 0,-r*.25);
+  ctx.bezierCurveTo(-r*.95,-r*.75, -r*1.1,r*.25, 0,r*.9);
+  ctx.closePath();
+}
+function drawOverlay(IR,gx,gy,IC,alpha,side){
+  ctx.save(); ctx.translate(gx,gy); ctx.globalAlpha=alpha;
+  if(mode==='processing'){
+    // 彗星拖尾旋环 + 中心呼吸点 + 涟漪扩散（大瞳内"运算"感）
+    const rot=tNow*2.6, BC=shade(IC,1.9);
+    // 彗尾：分段弧，透明度递减
+    ctx.lineCap='round';
+    for(let i=0;i<14;i++){
+      const a0=rot-i*.16, seg=.17;
+      ctx.strokeStyle=rgba(BC,(1-i/14)**1.6*.95);
+      ctx.lineWidth=IR*.055*(1-i/14*.6);
+      ctx.beginPath(); ctx.arc(0,0,IR*.46,a0-seg,a0+.02); ctx.stroke();
+    }
+    // 彗头亮点
+    ctx.fillStyle='#fff'; ctx.shadowColor=rgba(BC,1); ctx.shadowBlur=IR*.15;
+    ctx.beginPath(); ctx.arc(Math.cos(rot)*IR*.46,Math.sin(rot)*IR*.46,IR*.05,0,7); ctx.fill();
+    ctx.shadowBlur=0;
+    // 反向细外环（低速衬托）
+    ctx.globalAlpha=alpha*.35;
+    ctx.strokeStyle=rgba(BC,1); ctx.lineWidth=IR*.02;
+    ctx.beginPath(); ctx.arc(0,0,IR*.62,-rot*.5,-rot*.5+2.4); ctx.stroke();
+    ctx.globalAlpha=alpha;
+    // 中心呼吸点
+    const br=.7+.3*Math.sin(tNow*4);
+    ctx.fillStyle=rgba(BC,.55+br*.4);
+    ctx.beginPath(); ctx.arc(0,0,IR*.055*(1+br*.5),0,7); ctx.fill();
+    // 涟漪：完整扩散淡出后停顿 200ms，再开始下一轮，避免视觉回抽。
+    const rippleDuration=1/.9;
+    const ripplePause=.2;
+    const rippleTime=modeT%(rippleDuration+ripplePause);
+    if(rippleTime<rippleDuration){
+      const rp=rippleTime/rippleDuration;
+      ctx.strokeStyle=rgba(BC,(1-rp)*.5); ctx.lineWidth=IR*.02;
+      ctx.beginPath(); ctx.arc(0,0,IR*.08+rp*IR*.3,0,7); ctx.stroke();
+    }
+  } else if(mode==='star'){
+    const pulse=1+Math.sin(tNow*5)*.12;
+    const rot=Math.sin(tNow*1.5)*.25;
+    ctx.fillStyle='#ffd94d';
+    ctx.shadowColor='#ffd94d'; ctx.shadowBlur=IR*.35;
+    star(ctx,IR*.5*pulse,rot-Math.PI/2); ctx.fill();
+    ctx.shadowBlur=0;
+    // 小碎星
+    for(let i=0;i<2;i++){
+      const a=tNow*2+i*3+side, r=IR*.75;
+      ctx.globalAlpha=alpha*(.4+.3*Math.sin(tNow*4+i*2));
+      ctx.fillStyle='#fff3b8';
+      star(ctx,IR*.09,a);
+      ctx.save();ctx.translate(Math.cos(a)*r,Math.sin(a)*r*.8);star(ctx,IR*.09,a);ctx.fill();ctx.restore();
+    }
+  } else if(mode==='heart'){
+    const beat = (tNow*1.6)%1;
+    const pulse = 1 + (beat<.15? Math.sin(beat/.15*Math.PI)*.18 : beat<.3? Math.sin((beat-.15)/.15*Math.PI)*.10 : 0);
+    ctx.fillStyle='#ff4d79';
+    ctx.shadowColor='#ff4d79'; ctx.shadowBlur=IR*.4;
+    heart(ctx,IR*.5*pulse); ctx.fill();
+    ctx.shadowBlur=0;
+  } else if(mode==='dizzy'){
+    // 螺旋瞳
+    const rot=tNow*4*(side<0?1:-1);
+    ctx.strokeStyle='#0a0c10'; ctx.lineWidth=IR*.09; ctx.lineCap='round';
+    ctx.beginPath();
+    for(let a=0;a<Math.PI*5;a+=.15){
+      const r=IR*.55*a/(Math.PI*5);
+      const x=Math.cos(a+rot)*r,y=Math.sin(a+rot)*r;
+      a?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    }
+    ctx.stroke();
+  } else if(mode==='sad'){
+    // 泪光：下缘水膜
+    ctx.globalAlpha=alpha*(.5+.2*Math.sin(tNow*2));
+    const g2=ctx.createLinearGradient(0,IR*.3,0,IR);
+    g2.addColorStop(0,'rgba(180,220,255,0)');
+    g2.addColorStop(1,'rgba(190,225,255,.55)');
+    ctx.fillStyle=g2;
+    ctx.beginPath(); ctx.arc(0,0,IR*.98,0,7); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* Pure renderer: all interaction arrives from Nyabula Core. */
+const eyeFontsReady=document.fonts?Promise.all([
+  document.fonts.load('32px NyabulaTitle','中文标题'),
+  document.fonts.load('600 24px NyabulaBody','中文正文'),
+  document.fonts.load('700 24px NyabulaEnglish','NYABULA 123')
+]):Promise.resolve();
+eyeFontsReady.then(()=>{
+  document.documentElement.dataset.eyeFonts='ready';
+  tick();
+},()=>{
+  document.documentElement.dataset.eyeFonts='fallback';
+  tick();
+});
+</script>
+<script src="/mock_eye_transport.js"></script>
+</body>
+</html>
