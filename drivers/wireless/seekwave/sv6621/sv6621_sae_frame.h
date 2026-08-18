@@ -42,6 +42,8 @@
 #define SV6621_SAE_SCALAR_SIZE       32
 #define SV6621_SAE_ELEMENT_SIZE      64
 #define SV6621_SAE_CONFIRM_SIZE      32
+#define SV6621_SAE_STATUS_ANTI_CLOGGING_TOKEN 76
+#define SV6621_SAE_STATUS_UNSUPPORTED_GROUP   77
 
 /****************************************************************************
  * Public Types
@@ -92,6 +94,9 @@ int sv6621_sae_commit_build(
     FAR const uint8_t scalar[SV6621_SAE_SCALAR_SIZE],
     FAR const uint8_t element[SV6621_SAE_ELEMENT_SIZE], FAR uint8_t *body,
     size_t capacity, FAR size_t *body_length);
+int sv6621_sae_token_parse(FAR const struct sv6621_sae_auth_frame_s *auth,
+                           FAR const uint8_t **token,
+                           FAR size_t *token_length);
 int sv6621_sae_confirm_parse(FAR const struct sv6621_sae_auth_frame_s *auth,
                              FAR struct sv6621_sae_confirm_s *confirm);
 int sv6621_sae_confirm_build(
