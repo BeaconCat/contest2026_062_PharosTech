@@ -1055,6 +1055,7 @@ static void sv6621_core_station_worker(FAR void *arg)
       struct sv6621_status_s status;
 #ifdef CONFIG_NET
       struct sv6621_data_tx_context_s context;
+      struct sv6621_link_stats_s link_stats;
       bool link_ready = false;
 #endif
       uint16_t reason;
@@ -1106,11 +1107,34 @@ static void sv6621_core_station_worker(FAR void *arg)
       status = dev->status;
       nxmutex_unlock(&dev->status_lock);
 #ifdef CONFIG_NET
+      if (connected && link_ready)
+        {
+          network_ret = sv6621_stats_query(
+              &dev->command, context.instance, status.bssid, &link_stats);
+          if (network_ret == 0)
+            {
+              status.signal_dbm = link_stats.signal_dbm;
+              if (nxmutex_lock(&dev->status_lock) >= 0)
+                {
+                  dev->status.signal_dbm = link_stats.signal_dbm;
+                  nxmutex_unlock(&dev->status_lock);
+                }
+            }
+
+          if (network_ret < 0)
+            {
+              sv6621_core_queue_recovery(dev, network_ret);
+              return;
+            }
+        }
+
       sv6621_network_set_link(&dev->network, connected && link_ready,
                               link_ready ? &context : NULL);
       if (connected && link_ready)
         {
+
           network_ret = sv6621_network_sync_multicast(&dev->network);
+
           if (network_ret == 0)
             {
               network_ret = sv6621_network_sync_addresses(&dev->network);
