@@ -72,7 +72,9 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
 static void sv6621_core_scan_complete(int result, FAR void *arg);
 static void sv6621_core_scan_worker(FAR void *arg);
 static void sv6621_core_station_event(bool connected, uint16_t reason,
-                                      FAR void *arg);
+                                       FAR void *arg);
+static bool sv6621_core_station_worker_stop(
+    FAR struct sv6621_dev_s *dev, uint32_t generation);
 static void sv6621_core_station_worker(FAR void *arg);
 static void sv6621_core_data_input(FAR const struct sv6621_data_rx_s *rx,
                                    FAR void *arg);
@@ -1042,6 +1044,29 @@ static void sv6621_core_station_event(bool connected, uint16_t reason,
 }
 
 /****************************************************************************
+ * Name: sv6621_core_station_worker_stop
+ ****************************************************************************/
+
+static bool sv6621_core_station_worker_stop(
+    FAR struct sv6621_dev_s *dev, uint32_t generation)
+{
+  if (nxmutex_lock(&dev->status_lock) < 0)
+    {
+      return true;
+    }
+
+  if (generation != dev->station_generation)
+    {
+      nxmutex_unlock(&dev->status_lock);
+      return false;
+    }
+
+  dev->station_work_scheduled = false;
+  nxmutex_unlock(&dev->status_lock);
+  return true;
+}
+
+/****************************************************************************
  * Name: sv6621_core_station_worker
  ****************************************************************************/
 
@@ -1053,13 +1078,19 @@ static void sv6621_core_station_worker(FAR void *arg)
   for (;;)
     {
       struct sv6621_status_s status;
+      bool event_current = false;
 #ifdef CONFIG_NET
       struct sv6621_data_tx_context_s context;
+      struct sv6621_link_stats_s link_stats;
       bool link_ready = false;
 #endif
       uint16_t reason;
       bool station_ready = false;
       bool connected;
+      int station_ret = 0;
+#ifdef CONFIG_NET
+      int network_ret = 0;
+#endif
 
       if (nxmutex_lock(&dev->status_lock) < 0)
         {
@@ -1069,26 +1100,30 @@ static void sv6621_core_station_worker(FAR void *arg)
       generation = dev->station_generation;
       connected = dev->station_connected;
       reason = dev->station_reason;
-      if (connected && nxmutex_lock(&dev->station.lock) >= 0)
+      if (connected)
         {
-          memcpy(dev->status.bssid, dev->station.target.bss.bssid,
-                 SV6621_MAC_LENGTH);
-          dev->status.channel = dev->station.target.bss.channel;
-          dev->status.band = dev->station.target.bss.band;
-          dev->status.signal_dbm = dev->station.target.bss.signal_dbm;
-          memcpy(dev->status.ssid, dev->station.target.bss.ssid,
-                 dev->station.target.bss.ssid_length);
-          dev->status.ssid_length = dev->station.target.bss.ssid_length;
-          station_ready = true;
+          station_ret = nxmutex_lock(&dev->station.lock);
+          if (station_ret >= 0)
+            {
+              memcpy(dev->status.bssid, dev->station.target.bss.bssid,
+                     SV6621_MAC_LENGTH);
+              dev->status.channel = dev->station.target.bss.channel;
+              dev->status.band = dev->station.target.bss.band;
+              dev->status.signal_dbm = dev->station.target.bss.signal_dbm;
+              memcpy(dev->status.ssid, dev->station.target.bss.ssid,
+                     dev->station.target.bss.ssid_length);
+              dev->status.ssid_length = dev->station.target.bss.ssid_length;
+              station_ready = true;
 #ifdef CONFIG_NET
-          context.peer_index = dev->station.peer.peer_index;
-          context.multicast_index = dev->station.peer.multicast_index;
-          context.instance = dev->station.peer.instance;
-          context.lmac_id = dev->station.peer.lmac_id;
-          context.tid = 0;
-          link_ready = true;
+              context.peer_index = dev->station.peer.peer_index;
+              context.multicast_index = dev->station.peer.multicast_index;
+              context.instance = dev->station.peer.instance;
+              context.lmac_id = dev->station.peer.lmac_id;
+              context.tid = 0;
+              link_ready = true;
 #endif
-          nxmutex_unlock(&dev->station.lock);
+              nxmutex_unlock(&dev->station.lock);
+            }
         }
       else if (!connected)
         {
@@ -1099,18 +1134,121 @@ static void sv6621_core_station_worker(FAR void *arg)
           dev->status.signal_dbm = 0;
         }
 
-      dev->status.connected = connected && station_ready;
+      dev->status.connected = false;
       status = dev->status;
       nxmutex_unlock(&dev->status_lock);
 #ifdef CONFIG_NET
-      sv6621_network_set_link(&dev->network, connected && link_ready,
-                              link_ready ? &context : NULL);
+      if (connected && !station_ready)
+        {
+          sv6621_core_queue_recovery(
+              dev, station_ret < 0 ? station_ret : -EIO);
+          if (sv6621_core_station_worker_stop(dev, generation))
+            {
+              return;
+            }
+
+          continue;
+        }
+#endif
+#ifdef CONFIG_NET
+      if (connected && link_ready)
+        {
+          network_ret = sv6621_stats_query(
+              &dev->command, context.instance, status.bssid, &link_stats);
+          if (network_ret < 0)
+            {
+              if (nxmutex_lock(&dev->status_lock) >= 0)
+                {
+                  event_current = generation == dev->station_generation &&
+                                  dev->station_connected;
+                  nxmutex_unlock(&dev->status_lock);
+                }
+
+              if (event_current)
+                {
+                  sv6621_core_queue_recovery(dev, network_ret);
+                  if (sv6621_core_station_worker_stop(dev, generation))
+                    {
+                      return;
+                    }
+                }
+
+              continue;
+            }
+
+          network_ret = sv6621_network_sync_multicast(&dev->network);
+          if (network_ret == 0)
+            {
+              network_ret = sv6621_network_sync_link_addresses(
+                  &dev->network, &context);
+            }
+
+          if (network_ret < 0)
+            {
+              if (nxmutex_lock(&dev->status_lock) >= 0)
+                {
+                  event_current = generation == dev->station_generation &&
+                                  dev->station_connected;
+                  nxmutex_unlock(&dev->status_lock);
+                }
+
+              if (event_current)
+                {
+                  sv6621_core_queue_recovery(dev, network_ret);
+                  if (sv6621_core_station_worker_stop(dev, generation))
+                    {
+                      return;
+                    }
+                }
+
+              continue;
+            }
+
+          if (nxmutex_lock(&dev->status_lock) < 0)
+            {
+              return;
+            }
+
+          event_current = generation == dev->station_generation &&
+                          dev->station_connected;
+          if (event_current)
+            {
+              dev->status.signal_dbm = link_stats.signal_dbm;
+              dev->status.connected = true;
+              status = dev->status;
+              sv6621_network_set_link(&dev->network, true, &context);
+            }
+
+          nxmutex_unlock(&dev->status_lock);
+          if (!event_current)
+            {
+              continue;
+            }
+        }
+      else
+        {
+          sv6621_network_set_link(&dev->network, false, NULL);
+        }
 #endif
       if (!connected)
         {
           sv6621_wpa_cancel(&dev->wpa, -ECONNRESET);
           (void)sv6621_data_set_tx_block(
               &dev->data, SV6621_DATA_TX_BLOCK_CHANNEL, false);
+        }
+
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          return;
+        }
+
+      event_current = generation == dev->station_generation &&
+                      dev->station_connected == connected;
+      status = dev->status;
+      nxmutex_unlock(&dev->status_lock);
+      if (!event_current)
+        {
+          continue;
         }
 
       if (connected)
