@@ -442,6 +442,37 @@ int sv6621_station_configure_vht(FAR struct sv6621_station_s *station,
 }
 
 /****************************************************************************
+ * Name: sv6621_station_configure_bandwidth
+ ****************************************************************************/
+
+int sv6621_station_configure_bandwidth(FAR struct sv6621_station_s *station,
+                                       uint32_t capabilities)
+{
+  int ret;
+
+  if (station == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&station->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (station->state != SV6621_STATION_IDLE)
+    {
+      nxmutex_unlock(&station->lock);
+      return -EBUSY;
+    }
+
+  station->bandwidth_capabilities = capabilities;
+  nxmutex_unlock(&station->lock);
+  return 0;
+}
+
+/****************************************************************************
  * Name: sv6621_station_deinit
  ****************************************************************************/
 
