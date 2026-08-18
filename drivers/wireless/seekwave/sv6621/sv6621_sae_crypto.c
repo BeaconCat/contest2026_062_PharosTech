@@ -26,9 +26,12 @@
 
 #include <nuttx/config.h>
 
+#include <nuttx/kmalloc.h>
+
 #include <sys/random.h>
 
 #include <errno.h>
+#include <string.h>
 
 #include <mbedtls/hkdf.h>
 #include <mbedtls/md.h>
@@ -144,6 +147,73 @@ int sv6621_sae_hkdf_expand(
   ret = mbedtls_hkdf_expand(md_info, key, SV6621_SAE_SHA256_SIZE, info,
                             info_length, output, output_length);
   return ret == 0 ? 0 : -EIO;
+}
+
+int sv6621_sae_kdf_hash_length(
+    FAR const uint8_t *key, size_t key_length, FAR const uint8_t *label,
+    size_t label_length, FAR const uint8_t *context, size_t context_length,
+    FAR uint8_t *output, size_t output_length)
+{
+  uint8_t digest[SV6621_SAE_SHA256_SIZE];
+  FAR uint8_t *input;
+  size_t input_length;
+  size_t produced = 0;
+  uint16_t output_bits;
+  uint16_t counter = 1;
+  int ret = 0;
+
+  if (key == NULL || key_length == 0 || label == NULL || label_length == 0 ||
+      (context == NULL && context_length != 0) || output == NULL ||
+      output_length == 0 || output_length > UINT16_MAX / 8 ||
+      context_length > SIZE_MAX - 4 ||
+      label_length > SIZE_MAX - context_length - 4)
+    {
+      return -EINVAL;
+    }
+
+  input_length = 2 + label_length + context_length + 2;
+  input = kmm_malloc(input_length);
+  if (input == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  output_bits = output_length * 8;
+  memcpy(input + 2, label, label_length);
+  if (context_length > 0)
+    {
+      memcpy(input + 2 + label_length, context, context_length);
+    }
+  input[input_length - 2] = output_bits;
+  input[input_length - 1] = output_bits >> 8;
+
+  while (produced < output_length)
+    {
+      size_t copy_length = output_length - produced;
+
+      input[0] = counter;
+      input[1] = counter >> 8;
+      ret = sv6621_sae_hmac_sha256(key, key_length, input, input_length,
+                                    digest);
+      if (ret < 0)
+        {
+          break;
+        }
+
+      if (copy_length > sizeof(digest))
+        {
+          copy_length = sizeof(digest);
+        }
+
+      memcpy(output + produced, digest, copy_length);
+      produced += copy_length;
+      counter++;
+    }
+
+  sv6621_sae_zeroize(digest, sizeof(digest));
+  sv6621_sae_zeroize(input, input_length);
+  kmm_free(input);
+  return ret;
 }
 
 int sv6621_sae_random(FAR uint8_t *output, size_t output_length)
