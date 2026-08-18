@@ -57,6 +57,7 @@ static int sv6621_wpa_generate_nonce(
     uint8_t nonce[SV6621_WPA_NONCE_SIZE]);
 static int sv6621_wpa_compare_replay(FAR const uint8_t *left,
                                      FAR const uint8_t *right);
+static bool sv6621_wpa_is_frame_error(int error);
 static int sv6621_wpa_schedule_locked(FAR struct sv6621_wpa_s *wpa);
 static void sv6621_wpa_remove_keys(FAR struct sv6621_wpa_s *wpa);
 static bool sv6621_wpa_group_key_matches(
@@ -135,6 +136,17 @@ static int sv6621_wpa_compare_replay(FAR const uint8_t *left,
     }
 
   return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_is_frame_error
+ ****************************************************************************/
+
+static bool sv6621_wpa_is_frame_error(int error)
+{
+  return error == -EINVAL || error == -EPROTO ||
+         error == -EOPNOTSUPP || error == -EKEYREJECTED ||
+         error == -E2BIG || error == -ENOENT;
 }
 
 /****************************************************************************
@@ -639,6 +651,11 @@ static void sv6621_wpa_worker(FAR void *arg)
 
       if (ret < 0 && ret != -EALREADY)
         {
+          if (sv6621_wpa_is_frame_error(ret))
+            {
+              continue;
+            }
+
           if (state == SV6621_WPA_COMPLETE || rekeying)
             {
               sv6621_station_disconnect(wpa->station,
