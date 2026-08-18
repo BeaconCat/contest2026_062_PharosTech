@@ -80,7 +80,6 @@ typedef int (*sv6621_command_sender_t)(FAR const uint8_t *packet,
 typedef void (*sv6621_command_event_t)(uint8_t instance, uint8_t id,
                                        FAR const uint8_t *payload,
                                        size_t length, FAR void *arg);
-typedef void (*sv6621_command_error_t)(int error, FAR void *arg);
 
 struct sv6621_command_engine_s
 {
@@ -92,8 +91,6 @@ struct sv6621_command_engine_s
   FAR void *sender_arg;
   sv6621_command_event_t event;
   FAR void *event_arg;
-  sv6621_command_error_t error;
-  FAR void *error_arg;
   uint16_t next_sequence;
   uint16_t event_sequence;
   uint16_t pending_sequence;
@@ -124,9 +121,7 @@ int sv6621_command_engine_init(FAR struct sv6621_command_engine_s *engine,
                                sv6621_command_sender_t sender,
                                FAR void *sender_arg,
                                sv6621_command_event_t event,
-                               FAR void *event_arg,
-                               sv6621_command_error_t error,
-                               FAR void *error_arg);
+                               FAR void *event_arg);
 void sv6621_command_engine_deinit(FAR struct sv6621_command_engine_s *engine);
 int sv6621_command_reset(FAR struct sv6621_command_engine_s *engine);
 int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,

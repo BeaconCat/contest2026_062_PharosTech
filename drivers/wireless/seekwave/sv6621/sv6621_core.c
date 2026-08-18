@@ -1466,8 +1466,7 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
     }
 
   ret = sv6621_command_engine_init(&dev->command, sv6621_tx_command_sender,
-                                   &dev->tx, sv6621_core_command_event, dev,
-                                   sv6621_core_rx_error, dev);
+                                   &dev->tx, sv6621_core_command_event, dev);
   if (ret < 0)
     {
       goto deinit_scan;
