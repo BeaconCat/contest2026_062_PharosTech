@@ -740,7 +740,8 @@ int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
 
   if (wpa == NULL || request == NULL || supplicant == NULL ||
       authenticator == NULL ||
-      request->security != SV6621_SECURITY_WPA2_PSK)
+      (request->security != SV6621_SECURITY_WPA2_PSK &&
+       request->security != SV6621_SECURITY_WPA2_WPA3_PSK))
     {
       return -EINVAL;
     }
