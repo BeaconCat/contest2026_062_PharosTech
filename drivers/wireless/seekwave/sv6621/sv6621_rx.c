@@ -40,7 +40,7 @@
  ****************************************************************************/
 
 #define SV6621_RX_MAX_SLOTS         8
-#define SV6621_RX_TRAILER_SIZE      1024
+#define SV6621_RX_TRAILER_SIZE      SV6621_SDIO_BLOCK_SIZE
 #define SV6621_RX_VALID_LENGTH_SIZE 8
 #define SV6621_RX_PENDING_SIZE      4
 #define SV6621_RX_MAX_DRAIN_BURSTS  32
@@ -136,37 +136,43 @@ static void sv6621_rx_report_error(FAR struct sv6621_rx_s *rx, int error)
 
 static int sv6621_rx_drain(FAR struct sv6621_rx_s *rx)
 {
-  unsigned int slots = 1;
+  unsigned int slots;
   unsigned int burst;
   uint8_t fifo_indicator;
   int ret;
 
-  ret = rx->transport->ops->read_byte(rx->transport,
-                                      SV6621_SDIO_FUNCTION_CONTROL,
-                                      SV6621_RX_FIFO_INDICATOR,
-                                      &fifo_indicator);
-  if (ret < 0)
+  slots = rx->pending_slots == 0 ? 1 : rx->pending_slots;
+  if (rx->pending_slots == 0)
     {
-      rx->stats.transport_errors++;
-      sv6621_rx_report_error(rx, ret);
-      return ret;
+      ret = rx->transport->ops->read_byte(rx->transport,
+                                          SV6621_SDIO_FUNCTION_CONTROL,
+                                          SV6621_RX_FIFO_INDICATOR,
+                                          &fifo_indicator);
+      if (ret < 0)
+        {
+          rx->stats.transport_errors++;
+          sv6621_rx_report_error(rx, ret);
+          return ret;
+        }
+
+      if (fifo_indicator == SV6621_RX_FIFO_ASSERT)
+        {
+          sv6621_rx_report_error(rx, -EIO);
+          return -EIO;
+        }
+
+      if (rx->fifo_indicator_valid &&
+          fifo_indicator == rx->stats.last_fifo_indicator)
+        {
+          rx->stats.duplicate_interrupts++;
+          return 0;
+        }
+
+      rx->stats.last_fifo_indicator = fifo_indicator;
+      rx->fifo_indicator_valid = true;
     }
 
-  if (fifo_indicator == SV6621_RX_FIFO_ASSERT)
-    {
-      sv6621_rx_report_error(rx, -EIO);
-      return -EIO;
-    }
-
-  if (rx->fifo_indicator_valid &&
-      fifo_indicator == rx->stats.last_fifo_indicator)
-    {
-      rx->stats.duplicate_interrupts++;
-      return 0;
-    }
-
-  rx->stats.last_fifo_indicator = fifo_indicator;
-  rx->fifo_indicator_valid = true;
+  rx->pending_slots = 0;
 
   for (burst = 0;
        burst < SV6621_RX_MAX_DRAIN_BURSTS && rx->running && !rx->suspended;
@@ -221,8 +227,9 @@ static int sv6621_rx_drain(FAR struct sv6621_rx_s *rx)
 
   if (rx->running && !rx->suspended)
     {
-      sv6621_rx_report_error(rx, -ELOOP);
-      return -ELOOP;
+      rx->pending_slots = slots;
+      rx->stats.drain_yields++;
+      return -EAGAIN;
     }
 
   return 0;
@@ -236,6 +243,7 @@ static void sv6621_rx_worker(FAR void *arg)
 {
   FAR struct sv6621_rx_s *rx = arg;
   irqstate_t flags;
+  bool defer;
   bool retry;
   int ret;
 
@@ -248,6 +256,25 @@ static void sv6621_rx_worker(FAR void *arg)
       ret = sv6621_rx_drain(rx);
 
       flags = spin_lock_irqsave(&rx->schedule_lock);
+      defer = ret == -EAGAIN && rx->running && !rx->suspended;
+      if (defer)
+        {
+          rx->work_reschedule = false;
+          spin_unlock_irqrestore(&rx->schedule_lock, flags);
+          ret = work_queue(HPWORK, &rx->work, sv6621_rx_worker, rx, 0);
+          if (ret >= 0)
+            {
+              return;
+            }
+
+          flags = spin_lock_irqsave(&rx->schedule_lock);
+          rx->work_scheduled = false;
+          rx->work_reschedule = false;
+          spin_unlock_irqrestore(&rx->schedule_lock, flags);
+          sv6621_rx_report_error(rx, ret);
+          return;
+        }
+
       retry = ret == 0 && rx->work_reschedule && rx->running &&
               !rx->suspended;
       if (!retry)
@@ -325,6 +352,7 @@ int sv6621_rx_start(FAR struct sv6621_rx_s *rx)
   rx->running = true;
   rx->suspended = false;
   rx->fifo_indicator_valid = false;
+  rx->pending_slots = 0;
   flags = spin_lock_irqsave(&rx->schedule_lock);
   rx->work_scheduled = false;
   rx->work_reschedule = false;
@@ -360,6 +388,7 @@ int sv6621_rx_suspend(FAR struct sv6621_rx_s *rx)
     }
 
   rx->suspended = true;
+  rx->pending_slots = 0;
   ret = rx->transport->ops->enable_irq(rx->transport, false);
   if (ret < 0)
     {
@@ -414,6 +443,7 @@ void sv6621_rx_stop(FAR struct sv6621_rx_s *rx)
 
   rx->running = false;
   rx->suspended = false;
+  rx->pending_slots = 0;
   rx->transport->ops->enable_irq(rx->transport, false);
   rx->transport->ops->attach_irq(rx->transport, NULL, NULL);
   work_cancel_sync(HPWORK, &rx->work);

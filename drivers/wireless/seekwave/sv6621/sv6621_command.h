@@ -143,6 +143,7 @@ int sv6621_command_cancel(FAR struct sv6621_command_engine_s *engine,
 int sv6621_command_receive(FAR struct sv6621_command_engine_s *engine,
                            FAR const uint8_t *message, size_t length);
 void sv6621_command_channel_consumer(uint8_t channel,
+                                     FAR const uint8_t encoded[4],
                                      FAR const uint8_t *payload, size_t length,
                                      FAR void *arg);
 

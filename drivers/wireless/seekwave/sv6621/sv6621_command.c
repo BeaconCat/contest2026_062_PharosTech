@@ -774,10 +774,13 @@ unlock_receive:
 }
 
 void sv6621_command_channel_consumer(uint8_t channel,
+                                     FAR const uint8_t encoded[4],
                                      FAR const uint8_t *payload, size_t length,
                                      FAR void *arg)
 {
   FAR struct sv6621_command_engine_s *engine = arg;
+
+  (void)encoded;
 
   if (engine == NULL || payload == NULL ||
       channel != SV6621_CHANNEL_WIFI_COMMAND ||
