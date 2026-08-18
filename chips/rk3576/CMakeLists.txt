@@ -41,6 +41,7 @@ if(CONFIG_SV6621)
        ${SV6621_DIR}/sv6621_sae_crypto.c
        ${SV6621_DIR}/sv6621_sae_frame.c
        ${SV6621_DIR}/sv6621_sae_group.c
+       ${SV6621_DIR}/sv6621_sae_keys.c
        ${SV6621_DIR}/sv6621_scan.c
        ${SV6621_DIR}/sv6621_security.c
        ${SV6621_DIR}/sv6621_signal.c
