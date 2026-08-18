@@ -39,9 +39,9 @@
  * Public Types
  ****************************************************************************/
 
-typedef void (*sv6621_packet_consumer_t)(uint8_t channel,
-                                         FAR const uint8_t *payload,
-                                         size_t length, FAR void *arg);
+typedef void (*sv6621_packet_consumer_t)(
+    uint8_t channel, FAR const uint8_t encoded[SV6621_PACKET_HEADER_SIZE],
+    FAR const uint8_t *payload, size_t length, FAR void *arg);
 
 struct sv6621_packet_consumer_s
 {

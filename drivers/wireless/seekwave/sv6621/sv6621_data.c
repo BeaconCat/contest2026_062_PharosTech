@@ -112,6 +112,7 @@ static const uint8_t g_sv6621_data_snap_header[6] =
 static uint16_t sv6621_data_get_le16(FAR const uint8_t *value);
 static void sv6621_data_put_le16(FAR uint8_t *output, uint16_t value);
 static void sv6621_data_packet(uint8_t channel,
+                               FAR const uint8_t encoded[4],
                                FAR const uint8_t *payload, size_t length,
                                FAR void *arg);
 static FAR struct sv6621_data_fragment_s *
@@ -921,10 +922,14 @@ static int sv6621_data_reassemble(FAR struct sv6621_data_s *data,
  * Name: sv6621_data_packet
  ****************************************************************************/
 
-static void sv6621_data_packet(uint8_t channel, FAR const uint8_t *payload,
-                               size_t length, FAR void *arg)
+static void sv6621_data_packet(uint8_t channel,
+                               FAR const uint8_t encoded[4],
+                               FAR const uint8_t *payload, size_t length,
+                               FAR void *arg)
 {
   FAR struct sv6621_data_s *data = arg;
+  FAR const uint8_t *descriptor;
+  size_t descriptor_length;
   struct sv6621_data_rx_s rx;
   int ret;
 
@@ -934,7 +939,11 @@ static void sv6621_data_packet(uint8_t channel, FAR const uint8_t *payload,
       return;
     }
 
-  if (sv6621_data_decode_rx(payload, length, data->pn_reuse, &rx) < 0)
+  descriptor = data->pn_reuse ? encoded : payload;
+  descriptor_length = length +
+                      (data->pn_reuse ? SV6621_PACKET_HEADER_SIZE : 0);
+  if (sv6621_data_decode_rx(descriptor, descriptor_length, data->pn_reuse,
+                            &rx) < 0)
     {
       data->stats.malformed++;
       goto unlock;
