@@ -82,16 +82,19 @@ struct nyabula_eye_engine_s
   struct nyabula_eye_scene_request_s scene;
   struct nyabula_eye_scene_request_s previous_scene;
   struct nyabula_eye_scene_request_s pending_scene;
+  struct nyabula_eye_scene_payload_s payload_from;
   enum nyabula_eye_scene_phase_e scene_phase;
   uint32_t scene_phase_start;
   uint32_t scene_start;
   uint32_t previous_scene_start;
   uint32_t scene_fade_start;
+  uint32_t payload_animation_start;
   float scene_lid;
   bool blink_active;
   bool auto_blink;
   bool explicit_gaze;
   bool scene_pending;
+  bool payload_animation_active;
 };
 
 static float nyabula_eye_engine_clamp(float value, float minimum,
@@ -121,6 +124,106 @@ static float nyabula_eye_engine_bezier(float progress)
   float u = 1.0f - t;
 
   return 3.0f * u * u * t * 0.08f + 3.0f * u * t * t * 0.92f + t * t * t;
+}
+
+static bool nyabula_eye_engine_payload_visual_change(
+    const struct nyabula_eye_scene_payload_s *from,
+    const struct nyabula_eye_scene_payload_s *to)
+{
+  return from->weather != to->weather ||
+         from->music_view != to->music_view ||
+         from->battery_state != to->battery_state ||
+         from->alarm_copy != to->alarm_copy ||
+         from->call_state != to->call_state ||
+         from->task_state != to->task_state ||
+         from->network_state != to->network_state ||
+         from->audio_route != to->audio_route ||
+         from->eq_view != to->eq_view || from->year != to->year ||
+         from->month != to->month || from->day != to->day ||
+         from->hour != to->hour || from->minute != to->minute ||
+         from->active != to->active || from->playing != to->playing ||
+         from->privacy_camera != to->privacy_camera ||
+         from->privacy_microphone != to->privacy_microphone ||
+         from->signal_good != to->signal_good ||
+         strcmp(from->title, to->title) != 0 ||
+         strcmp(from->subtitle, to->subtitle) != 0 ||
+         strcmp(from->detail, to->detail) != 0 ||
+         strcmp(from->value, to->value) != 0 ||
+         strcmp(from->previous_line, to->previous_line) != 0 ||
+         strcmp(from->current_line, to->current_line) != 0 ||
+         strcmp(from->next_line, to->next_line) != 0;
+}
+
+static uint32_t nyabula_eye_engine_lerp_u32(uint32_t from, uint32_t to,
+                                            float progress)
+{
+  return (uint32_t)lroundf(nyabula_eye_engine_lerp(
+      (float)from, (float)to, progress));
+}
+
+static void nyabula_eye_engine_interpolate_payload(
+    struct nyabula_eye_engine_s *engine,
+    struct nyabula_eye_scene_payload_s *payload)
+{
+  const struct nyabula_eye_scene_payload_s *from = &engine->payload_from;
+  const struct nyabula_eye_scene_payload_s *to = &engine->scene.payload;
+  float progress;
+  int index;
+
+  *payload = *to;
+  if (!engine->payload_animation_active)
+    {
+      return;
+    }
+
+  progress = nyabula_eye_engine_bezier(nyabula_eye_engine_clamp(
+      (float)lv_tick_elaps(engine->payload_animation_start) /
+          NYABULA_EYE_SCENE_FADE_MS,
+      0.0f, 1.0f));
+  payload->duration_ms = nyabula_eye_engine_lerp_u32(
+      from->duration_ms, to->duration_ms, progress);
+  payload->position_ms = nyabula_eye_engine_lerp_u32(
+      from->position_ms, to->position_ms, progress);
+  payload->remaining_ms = nyabula_eye_engine_lerp_u32(
+      from->remaining_ms, to->remaining_ms, progress);
+  payload->elapsed_ms = nyabula_eye_engine_lerp_u32(
+      from->elapsed_ms, to->elapsed_ms, progress);
+  payload->percent = (uint8_t)nyabula_eye_engine_lerp_u32(
+      from->percent, to->percent, progress);
+  payload->device_count = (uint8_t)nyabula_eye_engine_lerp_u32(
+      from->device_count, to->device_count, progress);
+  payload->briefing_index = (uint8_t)nyabula_eye_engine_lerp_u32(
+      from->briefing_index, to->briefing_index, progress);
+  payload->briefing_count = (uint8_t)nyabula_eye_engine_lerp_u32(
+      from->briefing_count, to->briefing_count, progress);
+  payload->temperature_c = nyabula_eye_engine_lerp(
+      from->temperature_c, to->temperature_c, progress);
+  payload->feels_like_c = nyabula_eye_engine_lerp(
+      from->feels_like_c, to->feels_like_c, progress);
+  payload->humidity_percent = nyabula_eye_engine_lerp(
+      from->humidity_percent, to->humidity_percent, progress);
+  payload->wind_kph =
+      nyabula_eye_engine_lerp(from->wind_kph, to->wind_kph, progress);
+  payload->visibility_km = nyabula_eye_engine_lerp(
+      from->visibility_km, to->visibility_km, progress);
+  payload->distance_m = nyabula_eye_engine_lerp(
+      from->distance_m, to->distance_m, progress);
+  payload->heart_rate_bpm = nyabula_eye_engine_lerp(
+      from->heart_rate_bpm, to->heart_rate_bpm, progress);
+  payload->crossover_hz = nyabula_eye_engine_lerp(
+      from->crossover_hz, to->crossover_hz, progress);
+  payload->progress =
+      nyabula_eye_engine_lerp(from->progress, to->progress, progress);
+  for (index = 0; index < NYABULA_EYE_EQ_BANDS; index++)
+    {
+      payload->eq_bands[index] = nyabula_eye_engine_lerp(
+          from->eq_bands[index], to->eq_bands[index], progress);
+    }
+
+  if (progress >= 1.0f)
+    {
+      engine->payload_animation_active = false;
+    }
 }
 
 static float nyabula_eye_engine_follow(float current, float target,
@@ -500,6 +603,7 @@ static void nyabula_eye_engine_update_scene_frame(
   frame->previous_style = engine->previous_scene.style;
   frame->payload = engine->scene.payload;
   frame->previous_payload = engine->previous_scene.payload;
+  nyabula_eye_engine_interpolate_payload(engine, &frame->payload);
   frame->lid = engine->scene_lid;
   frame->scene_seconds = (float)lv_tick_elaps(engine->scene_start) / 1000.0f;
   frame->previous_scene_seconds =
@@ -893,6 +997,7 @@ int nyabula_eye_engine_update_scene(
     struct nyabula_eye_engine_s *engine,
     const struct nyabula_eye_scene_payload_s *payload)
 {
+  struct nyabula_eye_scene_payload_s displayed;
   uint32_t now;
 
   if (engine == NULL || payload == NULL ||
@@ -902,10 +1007,23 @@ int nyabula_eye_engine_update_scene(
     }
 
   now = lv_tick_get();
-  engine->previous_scene = engine->scene;
-  engine->previous_scene_start = engine->scene_start;
+  nyabula_eye_engine_interpolate_payload(engine, &displayed);
+  if (nyabula_eye_engine_payload_visual_change(&displayed, payload))
+    {
+      engine->previous_scene = engine->scene;
+      engine->previous_scene.payload = displayed;
+      engine->previous_scene_start = engine->scene_start;
+      engine->scene_fade_start = now;
+      engine->payload_animation_active = false;
+    }
+  else
+    {
+      engine->payload_from = displayed;
+      engine->payload_animation_start = now;
+      engine->payload_animation_active = true;
+    }
+
   engine->scene.payload = *payload;
-  engine->scene_fade_start = now;
   return 0;
 }
 
