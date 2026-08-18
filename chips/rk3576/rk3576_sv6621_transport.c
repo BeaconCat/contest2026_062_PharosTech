@@ -655,9 +655,15 @@ static int rk3576_sv6621_tune_sdr104(
 static int rk3576_sv6621_open_failed(
     FAR struct rk3576_sv6621_transport_priv_s *priv, int error)
 {
+  irqstate_t flags;
+
   rk3576_sdmmc_enable_sdio_interrupt(priv->sdio, false);
   rk3576_sdmmc_register_sdio_callback(priv->sdio, NULL, NULL);
   SDIO_CLOCK(priv->sdio, CLOCK_SDIO_DISABLED);
+  flags = enter_critical_section();
+  priv->handler = NULL;
+  priv->handler_arg = NULL;
+  leave_critical_section(flags);
   priv->irq_enabled = false;
   priv->opened = false;
   priv->prepared = false;
@@ -1175,6 +1181,7 @@ static int rk3576_sv6621_write(FAR struct sv6621_transport_s *transport,
 static void rk3576_sv6621_close(FAR struct sv6621_transport_s *transport)
 {
   FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
+  irqstate_t flags;
 
   if (!priv->prepared)
     {
@@ -1188,6 +1195,10 @@ static void rk3576_sv6621_close(FAR struct sv6621_transport_s *transport)
 
   rk3576_sdmmc_register_sdio_callback(priv->sdio, NULL, NULL);
   SDIO_CLOCK(priv->sdio, CLOCK_SDIO_DISABLED);
+  flags = enter_critical_section();
+  priv->handler = NULL;
+  priv->handler_arg = NULL;
+  leave_critical_section(flags);
   priv->irq_enabled = false;
   priv->opened = false;
   priv->prepared = false;
