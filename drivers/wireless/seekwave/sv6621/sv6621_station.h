@@ -60,6 +60,8 @@ struct sv6621_station_mgmt_s
   uint16_t transaction;
   uint16_t status;
   uint16_t reason;
+  FAR const uint8_t *frame;
+  size_t frame_length;
 };
 
 enum sv6621_station_state_e

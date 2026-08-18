@@ -212,6 +212,8 @@ int sv6621_station_parse_mgmt(FAR const uint8_t *payload, size_t length,
   event->signal_dbm = (int16_t)sv6621_station_get_le16(payload + 2);
   memcpy(event->bssid, frame + SV6621_STATION_FRAME_BSSID_OFFSET,
          SV6621_MAC_LENGTH);
+  event->frame = frame;
+  event->frame_length = frame_length;
 
   switch (frame_control)
     {
