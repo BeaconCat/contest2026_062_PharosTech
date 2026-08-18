@@ -56,6 +56,12 @@ static int sv6621_network_queue_multicast(
 #endif
 static void sv6621_network_reply(FAR struct sv6621_network_s *network);
 static int sv6621_network_queue_tx(FAR struct sv6621_network_s *network);
+static bool sv6621_network_addresses_equal(
+    FAR const struct sv6621_offload_addresses_s *left,
+    FAR const struct sv6621_offload_addresses_s *right);
+static void sv6621_network_collect_addresses(
+    FAR struct sv6621_network_s *network,
+    FAR struct sv6621_offload_addresses_s *addresses);
 static bool sv6621_network_tx_snapshot(
     FAR struct sv6621_network_s *network,
     FAR struct sv6621_data_tx_context_s *context);
@@ -87,6 +93,92 @@ static void sv6621_network_reply(FAR struct sv6621_network_s *network)
     {
       sv6621_network_transmit(network);
     }
+}
+
+/****************************************************************************
+ * Name: sv6621_network_addresses_equal
+ ****************************************************************************/
+
+static bool sv6621_network_addresses_equal(
+    FAR const struct sv6621_offload_addresses_s *left,
+    FAR const struct sv6621_offload_addresses_s *right)
+{
+  if (left->ipv4_valid != right->ipv4_valid ||
+      left->ipv6_count != right->ipv6_count)
+    {
+      return false;
+    }
+
+  if (left->ipv4_valid &&
+      memcmp(left->ipv4, right->ipv4, sizeof(left->ipv4)) != 0)
+    {
+      return false;
+    }
+
+  return memcmp(left->ipv6, right->ipv6,
+                left->ipv6_count * SV6621_OFFLOAD_IPV6_LENGTH) == 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_network_collect_addresses
+ ****************************************************************************/
+
+static void sv6621_network_collect_addresses(
+    FAR struct sv6621_network_s *network,
+    FAR struct sv6621_offload_addresses_s *addresses)
+{
+#ifdef CONFIG_NET_IPv6
+  static const uint8_t zero[SV6621_OFFLOAD_IPV6_LENGTH];
+  size_t index;
+#endif
+
+  memset(addresses, 0, sizeof(*addresses));
+  net_lock();
+#ifdef CONFIG_NET_IPv4
+  if (network->dev.d_ipaddr != 0)
+    {
+      memcpy(addresses->ipv4, &network->dev.d_ipaddr,
+             SV6621_OFFLOAD_IPV4_LENGTH);
+      addresses->ipv4_valid = true;
+    }
+#endif
+#ifdef CONFIG_NET_IPv6
+  for (index = 0;
+       index < CONFIG_NETDEV_MAX_IPv6_ADDR &&
+       addresses->ipv6_count < SV6621_OFFLOAD_IPV6_LIMIT;
+       index++)
+    {
+      FAR const uint8_t *address =
+          (FAR const uint8_t *)network->dev.d_ipv6[index].addr;
+
+      if (memcmp(address, zero, sizeof(zero)) != 0)
+        {
+          memcpy(addresses->ipv6[addresses->ipv6_count], address,
+                 SV6621_OFFLOAD_IPV6_LENGTH);
+          addresses->ipv6_count++;
+        }
+    }
+
+  if (addresses->ipv6_count == 0)
+    {
+      FAR const uint8_t *mac =
+          network->dev.d_mac.ether.ether_addr_octet;
+      FAR uint8_t *link_local = addresses->ipv6[0];
+
+      link_local[0] = 0xfe;
+      link_local[1] = 0x80;
+      link_local[8] = mac[0] ^ 0x02;
+      link_local[9] = mac[1];
+      link_local[10] = mac[2];
+      link_local[11] = 0xff;
+      link_local[12] = 0xfe;
+      link_local[13] = mac[3];
+      link_local[14] = mac[4];
+      link_local[15] = mac[5];
+      addresses->ipv6_count = 1;
+    }
+#endif
+  net_unlock();
 }
 
 /****************************************************************************
@@ -198,6 +290,8 @@ static void sv6621_network_tx_worker(FAR void *arg)
       flags = spin_lock_irqsave(&network->lock);
       network->tx_reschedule = false;
       spin_unlock_irqrestore(&network->lock, flags);
+
+      (void)sv6621_network_sync_addresses(network);
 
       net_lock();
       if (sv6621_network_tx_snapshot(network, NULL))
@@ -532,7 +626,7 @@ int sv6621_network_init(FAR struct sv6621_network_s *network,
       return ret;
     }
 
-  ret = netdev_register(&network->dev, NET_LL_IEEE80211);
+  ret = netdev_register(&network->dev, NET_LL_ETHERNET);
   if (ret >= 0)
     {
       network->registered = true;
@@ -614,17 +708,66 @@ int sv6621_network_sync_multicast(FAR struct sv6621_network_s *network)
 }
 
 /****************************************************************************
+ * Name: sv6621_network_sync_link_addresses
+ ****************************************************************************/
+
+int sv6621_network_sync_link_addresses(
+    FAR struct sv6621_network_s *network,
+    FAR const struct sv6621_data_tx_context_s *context)
+{
+  struct sv6621_offload_addresses_s addresses;
+  irqstate_t flags;
+  uint32_t epoch;
+  bool already_applied;
+  bool has_addresses;
+  int ret;
+
+  if (network == NULL || network->command == NULL || !network->registered ||
+      context == NULL)
+    {
+      return -EINVAL;
+    }
+
+  sv6621_network_collect_addresses(network, &addresses);
+  flags = spin_lock_irqsave(&network->lock);
+  epoch = network->address_epoch;
+  already_applied = network->addresses_applied &&
+                    network->applied_address_instance == context->instance &&
+                    sv6621_network_addresses_equal(
+                        &network->applied_addresses, &addresses);
+  spin_unlock_irqrestore(&network->lock, flags);
+  if (already_applied)
+    {
+      return 0;
+    }
+
+  has_addresses = addresses.ipv4_valid || addresses.ipv6_count != 0;
+  ret = has_addresses ?
+        sv6621_offload_set_addresses(network->command, context->instance,
+                                     &addresses) : 0;
+  if (ret == 0)
+    {
+      flags = spin_lock_irqsave(&network->lock);
+      if (epoch == network->address_epoch)
+        {
+          network->applied_addresses = addresses;
+          network->applied_address_instance = context->instance;
+          network->addresses_applied = true;
+        }
+
+      spin_unlock_irqrestore(&network->lock, flags);
+    }
+
+  return ret;
+}
+
+/****************************************************************************
  * Name: sv6621_network_sync_addresses
  ****************************************************************************/
 
 int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network)
 {
-  struct sv6621_offload_addresses_s addresses;
   struct sv6621_data_tx_context_s context;
-#ifdef CONFIG_NET_IPv6
-  static const uint8_t zero[SV6621_OFFLOAD_IPV6_LENGTH];
-  size_t index;
-#endif
 
   if (network == NULL || network->command == NULL || !network->registered)
     {
@@ -636,43 +779,7 @@ int sv6621_network_sync_addresses(FAR struct sv6621_network_s *network)
       return -ENETDOWN;
     }
 
-  memset(&addresses, 0, sizeof(addresses));
-  net_lock();
-#ifdef CONFIG_NET_IPv4
-  if (network->dev.d_ipaddr != 0)
-    {
-      memcpy(addresses.ipv4, &network->dev.d_ipaddr,
-             SV6621_OFFLOAD_IPV4_LENGTH);
-      addresses.ipv4_valid = true;
-    }
-#endif
-#ifdef CONFIG_NET_IPv6
-  for (index = 0;
-       index < CONFIG_NETDEV_MAX_IPv6_ADDR &&
-       addresses.ipv6_count < SV6621_OFFLOAD_IPV6_LIMIT;
-       index++)
-    {
-      FAR const uint8_t *address =
-          (FAR const uint8_t *)network->dev.d_ipv6[index].addr;
-
-      if (memcmp(address, zero, sizeof(zero)) != 0)
-        {
-          memcpy(addresses.ipv6[addresses.ipv6_count], address,
-                 SV6621_OFFLOAD_IPV6_LENGTH);
-          addresses.ipv6_count++;
-        }
-    }
-#endif
-  net_unlock();
-
-  if (!addresses.ipv4_valid && addresses.ipv6_count == 0)
-    {
-      return 0;
-    }
-
-  return sv6621_offload_set_addresses(network->command,
-                                       context.instance,
-                                       &addresses);
+  return sv6621_network_sync_link_addresses(network, &context);
 }
 
 void sv6621_network_set_link(
@@ -697,6 +804,8 @@ void sv6621_network_set_link(
   if (!link_up)
     {
       network->rx_tail = network->rx_head;
+      network->addresses_applied = false;
+      network->address_epoch++;
     }
 
   spin_unlock_irqrestore(&network->lock, flags);
