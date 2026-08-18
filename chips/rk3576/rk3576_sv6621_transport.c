@@ -32,6 +32,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <nuttx/arch.h>
 #include <nuttx/irq.h>
@@ -96,12 +97,15 @@
 #define RK3576_SV6621_TCON(raw) \
   (((uint32_t)0x7ff << 1 << 16) | ((uint32_t)(raw) << 1))
 #define RK3576_SV6621_TCON_180   RK3576_SV6621_TCON(0x2)
+#define RK3576_SV6621_PHASE_COUNT 4
+#define RK3576_SV6621_PHASE_STEP  90
 #define RK3576_SV6621_POLL_LIMIT 200000
 #define RK3576_SV6621_FUNCTION_MAX 7
 #define RK3576_SV6621_ADDRESS_MAX  0x1ffff
 #define RK3576_SV6621_BLOCK_SIZE   512
 #define RK3576_SV6621_BYTE_COUNT_MAX 512
 #define RK3576_SV6621_BLOCK_COUNT_MAX 512
+#define RK3576_SV6621_TUNING_BLOCK_SIZE 64
 
 #define RK3576_SV6621_R4_FUNCTIONS_MASK  (7u << 28)
 #define RK3576_SV6621_R6_ERROR_MASK      (7u << 13)
@@ -134,6 +138,18 @@ struct rk3576_sv6621_transport_priv_s
   bool irq_enabled;
 };
 
+static const uint8_t g_rk3576_sv6621_tuning_pattern[] =
+{
+  0xff, 0x0f, 0xff, 0x00, 0xff, 0xcc, 0xc3, 0xcc,
+  0xc3, 0x3c, 0xcc, 0xff, 0xfe, 0xff, 0xfe, 0xef,
+  0xff, 0xdf, 0xff, 0xdd, 0xff, 0xfb, 0xff, 0xfb,
+  0xbf, 0xff, 0x7f, 0xff, 0x77, 0xf7, 0xbd, 0xef,
+  0xff, 0xf0, 0xff, 0xf0, 0x0f, 0xfc, 0xcc, 0x3c,
+  0xcc, 0x33, 0xcc, 0xcf, 0xff, 0xef, 0xff, 0xee,
+  0xff, 0xfd, 0xff, 0xfd, 0xdf, 0xff, 0xbf, 0xff,
+  0xbb, 0xff, 0xf7, 0xff, 0xf7, 0x7f, 0x7b, 0xde,
+};
+
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
@@ -146,6 +162,7 @@ static int rk3576_sv6621_abort_transfer_locked(void);
 static int rk3576_sv6621_direct(bool write, uint8_t function, uint32_t address,
                                 uint8_t value, FAR uint8_t *result);
 static int rk3576_sv6621_voltage_switch(void);
+static int rk3576_sv6621_execute_tuning(void);
 static int rk3576_sv6621_tune_sdr104(void);
 static int rk3576_sv6621_open_failed(
     FAR struct rk3576_sv6621_transport_priv_s *priv, int error);
@@ -170,7 +187,6 @@ static int rk3576_sv6621_attach_irq(FAR struct sv6621_transport_s *transport,
                                     FAR void *arg);
 static int rk3576_sv6621_enable_irq(FAR struct sv6621_transport_s *transport,
                                     bool enable);
-static int rk3576_sv6621_recover(FAR struct sv6621_transport_s *transport);
 static void rk3576_sv6621_host_interrupt(FAR void *arg);
 
 /****************************************************************************
@@ -191,7 +207,6 @@ static const struct sv6621_transport_ops_s g_rk3576_sv6621_ops = {
   .write = rk3576_sv6621_write,
   .attach_irq = rk3576_sv6621_attach_irq,
   .enable_irq = rk3576_sv6621_enable_irq,
-  .recover = rk3576_sv6621_recover,
 };
 
 static struct sv6621_transport_s g_rk3576_sv6621_transport = {
@@ -461,13 +476,94 @@ static int rk3576_sv6621_voltage_switch(void)
   return 0;
 }
 
-static int rk3576_sv6621_tune_sdr104(void)
+static int rk3576_sv6621_execute_tuning(void)
 {
+  uint8_t tuning_block[RK3576_SV6621_TUNING_BLOCK_SIZE];
   uint32_t response;
   uint32_t fifo_count;
   uint32_t status;
+  uint32_t word;
+  size_t received = 0;
+  int index;
+
+  modifyreg32(RK3576_SV6621_CTRL, 0, 1u << 1);
+  for (index = 0;
+       (getreg32(RK3576_SV6621_CTRL) & (1u << 1)) != 0 && index < 100000;
+       index++)
+    ;
+
+  if (index == 100000)
+    {
+      return -ETIMEDOUT;
+    }
+
+  putreg32(RK3576_SV6621_TUNING_BLOCK_SIZE, RK3576_SV6621_BLKSIZ);
+  putreg32(RK3576_SV6621_TUNING_BLOCK_SIZE, RK3576_SV6621_BYTCNT);
+  status = rk3576_sv6621_command(RK3576_SV6621_CMD19, 0, &response);
+  if ((status & (RK3576_SV6621_INT_CMDERR |
+                 RK3576_SV6621_INT_DATAERR)) != 0)
+    {
+      return (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
+    }
+
+  for (index = 0;
+       index < 200000 && received < RK3576_SV6621_TUNING_BLOCK_SIZE;
+       index++)
+    {
+      fifo_count = (getreg32(RK3576_SV6621_STATUS) >> 17) & 0x1fff;
+      while (fifo_count-- > 0 &&
+             received < RK3576_SV6621_TUNING_BLOCK_SIZE)
+        {
+          word = getreg32(RK3576_SV6621_FIFO);
+          tuning_block[received++] = word;
+          tuning_block[received++] = word >> 8;
+          tuning_block[received++] = word >> 16;
+          tuning_block[received++] = word >> 24;
+        }
+
+      up_udelay(2);
+    }
+
+  for (index = 0; index < 200000; index++)
+    {
+      status = getreg32(RK3576_SV6621_RINTSTS);
+      if ((status & (RK3576_SV6621_INT_DTO |
+                     RK3576_SV6621_INT_DATAERR)) != 0)
+        {
+          break;
+        }
+
+      up_udelay(2);
+    }
+
+  if (received != RK3576_SV6621_TUNING_BLOCK_SIZE || index == 200000)
+    {
+      return -ETIMEDOUT;
+    }
+
+  if ((status & RK3576_SV6621_INT_DATAERR) != 0)
+    {
+      return (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
+    }
+
+  if (memcmp(tuning_block, g_rk3576_sv6621_tuning_pattern,
+             RK3576_SV6621_TUNING_BLOCK_SIZE) != 0)
+    {
+      return -EILSEQ;
+    }
+
+  return 0;
+}
+
+static int rk3576_sv6621_tune_sdr104(void)
+{
+  static const uint8_t phases[RK3576_SV6621_PHASE_COUNT] =
+  {
+    2, 3, 0, 1
+  };
+
   uint8_t value;
-  int received = 0;
+  int last_ret = -EIO;
   int index;
   int ret;
 
@@ -509,63 +605,21 @@ static int rk3576_sv6621_tune_sdr104(void)
     }
 
   putreg32(RK3576_SV6621_TCON_180, RK3576_SV6621_TIMING0);
-  putreg32(RK3576_SV6621_TCON_180, RK3576_SV6621_TIMING1);
-
-  modifyreg32(RK3576_SV6621_CTRL, 0, 1u << 1);
-  for (index = 0;
-       (getreg32(RK3576_SV6621_CTRL) & (1u << 1)) != 0 && index < 100000;
-       index++)
-    ;
-
-  if (index == 100000)
+  for (index = 0; index < RK3576_SV6621_PHASE_COUNT; index++)
     {
-      return -ETIMEDOUT;
-    }
-
-  putreg32(64, RK3576_SV6621_BLKSIZ);
-  putreg32(64, RK3576_SV6621_BYTCNT);
-  status = rk3576_sv6621_command(RK3576_SV6621_CMD19, 0, &response);
-  if ((status & (RK3576_SV6621_INT_CMDERR |
-                 RK3576_SV6621_INT_DATAERR)) != 0)
-    {
-      return (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
-    }
-
-  for (index = 0; index < 200000 && received < 16; index++)
-    {
-      fifo_count = (getreg32(RK3576_SV6621_STATUS) >> 17) & 0x1fff;
-      while (fifo_count-- > 0 && received < 16)
+      putreg32(RK3576_SV6621_TCON(phases[index]),
+               RK3576_SV6621_TIMING1);
+      last_ret = rk3576_sv6621_execute_tuning();
+      if (last_ret == 0)
         {
-          (void)getreg32(RK3576_SV6621_FIFO);
-          received++;
+          wlinfo("RK3576 SDIO sample phase tuned to %u degrees\n",
+                 (unsigned int)phases[index] * RK3576_SV6621_PHASE_STEP);
+          return 0;
         }
-
-      up_udelay(2);
     }
 
-  for (index = 0; index < 200000; index++)
-    {
-      status = getreg32(RK3576_SV6621_RINTSTS);
-      if ((status & (RK3576_SV6621_INT_DTO |
-                     RK3576_SV6621_INT_DATAERR)) != 0)
-        {
-          break;
-        }
-
-      up_udelay(2);
-    }
-
-  if (received != 16 || index == 200000)
-    {
-      return -ETIMEDOUT;
-    }
-
-  if ((status & RK3576_SV6621_INT_DATAERR) != 0)
-    {
-      return (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
-    }
-
-  return 0;
+  wlerr("ERROR: RK3576 SDIO has no valid sample phase\n");
+  return last_ret;
 }
 
 /****************************************************************************
@@ -1227,55 +1281,6 @@ static int rk3576_sv6621_enable_irq(FAR struct sv6621_transport_s *transport,
     }
 
   priv->irq_enabled = enable;
-  return 0;
-}
-
-static int rk3576_sv6621_recover(FAR struct sv6621_transport_s *transport)
-{
-  FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
-  bool restore_irq;
-  int ret;
-
-  if (!priv->opened)
-    {
-      return -ENODEV;
-    }
-
-  restore_irq = priv->irq_enabled;
-  rk3576_sv6621_close(transport);
-  ret = rk3576_sv6621_open(transport);
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  ret = rk3576_sv6621_enumerate(transport);
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  if (priv->handler != NULL)
-    {
-      ret = rk3576_sdmmc_register_sdio_callback(
-          priv->sdio, rk3576_sv6621_host_interrupt, priv);
-      if (ret < 0)
-        {
-          rk3576_sv6621_close(transport);
-          return ret;
-        }
-    }
-
-  if (restore_irq)
-    {
-      ret = rk3576_sv6621_enable_irq(transport, true);
-      if (ret < 0)
-        {
-          rk3576_sv6621_close(transport);
-          return ret;
-        }
-    }
-
   return 0;
 }
 
