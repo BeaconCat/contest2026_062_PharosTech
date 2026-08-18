@@ -61,6 +61,12 @@ enum sv6621_wpa_response_e
   SV6621_WPA_RESPONSE_GROUP_2 = 6
 };
 
+enum sv6621_wpa_key_mgmt_e
+{
+  SV6621_WPA_KEY_MGMT_PSK = 0,
+  SV6621_WPA_KEY_MGMT_SAE
+};
+
 struct sv6621_wpa_eapol_s
 {
   enum sv6621_wpa_message_e message;
@@ -82,16 +88,20 @@ struct sv6621_wpa_eapol_s
  * Public Function Prototypes
  ****************************************************************************/
 
-int sv6621_wpa_eapol_parse(FAR const uint8_t *frame, size_t frame_length,
-                            FAR struct sv6621_wpa_eapol_s *eapol);
+int sv6621_wpa_eapol_parse(
+    FAR const uint8_t *frame, size_t frame_length,
+    enum sv6621_wpa_key_mgmt_e key_mgmt,
+    FAR struct sv6621_wpa_eapol_s *eapol);
 int sv6621_wpa_eapol_build(
-    enum sv6621_wpa_response_e response, uint8_t version,
+    enum sv6621_wpa_response_e response,
+    enum sv6621_wpa_key_mgmt_e key_mgmt, uint8_t version,
     FAR const uint8_t replay[SV6621_WPA_REPLAY_SIZE],
     FAR const uint8_t snonce[SV6621_WPA_NONCE_SIZE],
     FAR const uint8_t kck[SV6621_WPA_MIC_SIZE], FAR uint8_t *output,
     size_t capacity, FAR size_t *written);
 int sv6621_wpa_eapol_verify_mic(
     FAR const struct sv6621_wpa_eapol_s *eapol,
+    enum sv6621_wpa_key_mgmt_e key_mgmt,
     FAR const uint8_t kck[SV6621_WPA_MIC_SIZE]);
 int sv6621_wpa_eapol_extract_gtk(
     FAR const uint8_t *key_data, size_t key_data_length,

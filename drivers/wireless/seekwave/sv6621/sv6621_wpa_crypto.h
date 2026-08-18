@@ -37,6 +37,7 @@
  ****************************************************************************/
 
 #define SV6621_WPA_SHA1_SIZE 20
+#define SV6621_WPA_SHA256_SIZE 32
 #define SV6621_WPA_PMK_SIZE  32
 #define SV6621_WPA_NONCE_SIZE 32
 #define SV6621_WPA_PTK_SIZE   48
@@ -49,11 +50,23 @@
 int sv6621_wpa_hmac_sha1(FAR const uint8_t *key, size_t key_length,
                           FAR const uint8_t *data, size_t data_length,
                           uint8_t output[SV6621_WPA_SHA1_SIZE]);
+int sv6621_wpa_hmac_sha256(FAR const uint8_t *key, size_t key_length,
+                            FAR const uint8_t *data, size_t data_length,
+                            uint8_t output[SV6621_WPA_SHA256_SIZE]);
+int sv6621_wpa_aes_cmac(FAR const uint8_t key[16],
+                         FAR const uint8_t *data, size_t data_length,
+                         uint8_t output[16]);
 int sv6621_wpa_derive_pmk(FAR const uint8_t *passphrase,
                            size_t passphrase_length, FAR const uint8_t *ssid,
                            size_t ssid_length,
                            uint8_t pmk[SV6621_WPA_PMK_SIZE]);
 int sv6621_wpa_derive_ptk(
+    FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE],
+    FAR const uint8_t authenticator[6], FAR const uint8_t supplicant[6],
+    FAR const uint8_t anonce[SV6621_WPA_NONCE_SIZE],
+    FAR const uint8_t snonce[SV6621_WPA_NONCE_SIZE],
+    uint8_t ptk[SV6621_WPA_PTK_SIZE]);
+int sv6621_wpa_derive_ptk_sha256(
     FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE],
     FAR const uint8_t authenticator[6], FAR const uint8_t supplicant[6],
     FAR const uint8_t anonce[SV6621_WPA_NONCE_SIZE],
