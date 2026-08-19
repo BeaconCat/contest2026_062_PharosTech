@@ -357,7 +357,7 @@ int kickpi_k7_wifi_initialize(void)
   ret = kickpi_k7_wifi_enable_32k();
   if (ret < 0)
     {
-      return ret;
+      wlwarn("WARNING: WiFi sleep clock setup failed: %d; continuing\n", ret);
     }
 
   memset(&config, 0, sizeof(config));
