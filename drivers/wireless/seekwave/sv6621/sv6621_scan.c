@@ -48,7 +48,6 @@
 #define SV6621_SCAN_STOP_TIMEOUT_MS      500
 #define SV6621_SCAN_BATCH_CHANNELS        16
 #define SV6621_SCAN_RECOVERY_GRACE_MS      500
-#define SV6621_SCAN_POLL_INTERVAL_MS        250
 
 #define SV6621_SCAN_CHANNEL_COUNT_OFFSET 8
 #define SV6621_SCAN_CHANNEL_LIST_OFFSET  12
@@ -105,7 +104,6 @@ static size_t
 sv6621_scan_cache_weakest(FAR const struct sv6621_scan_cache_s *cache);
 static void sv6621_scan_timeout_worker(FAR void *arg);
 static void sv6621_scan_batch_worker(FAR void *arg);
-static void sv6621_scan_poll_worker(FAR void *arg);
 static int sv6621_scan_queue_timeout(FAR struct sv6621_scan_s *scan);
 
 /****************************************************************************
@@ -402,28 +400,6 @@ static void sv6621_scan_batch_worker(FAR void *arg)
     {
       complete(ret, complete_arg);
     }
-}
-
-static void sv6621_scan_poll_worker(FAR void *arg)
-{
-  FAR struct sv6621_scan_s *scan = arg;
-  bool active;
-
-  if (nxmutex_lock(&scan->lock) < 0)
-    {
-      return;
-    }
-
-  active = scan->active;
-  nxmutex_unlock(&scan->lock);
-  if (!active)
-    {
-      return;
-    }
-
-  sv6621_rx_poll(scan->rx);
-  work_queue(LPWORK, &scan->poll_work, sv6621_scan_poll_worker, scan,
-             MSEC2TICK(SV6621_SCAN_POLL_INTERVAL_MS));
 }
 
 /****************************************************************************
@@ -948,7 +924,6 @@ void sv6621_scan_controller_deinit(FAR struct sv6621_scan_s *scan)
     {
       work_cancel_sync(LPWORK, &scan->timeout_work);
       work_cancel_sync(LPWORK, &scan->batch_work);
-      work_cancel_sync(LPWORK, &scan->poll_work);
       sv6621_scan_cache_deinit(&scan->cache);
       nxmutex_destroy(&scan->lock);
     }
@@ -1005,12 +980,6 @@ int sv6621_scan_controller_begin(
   nxmutex_unlock(&scan->lock);
   ret = work_queue(LPWORK, &scan->batch_work, sv6621_scan_batch_worker,
                    scan, 0);
-  if (ret >= 0)
-    {
-      ret = work_queue(LPWORK, &scan->poll_work, sv6621_scan_poll_worker,
-                       scan, MSEC2TICK(SV6621_SCAN_POLL_INTERVAL_MS));
-    }
-
   if (ret < 0 && nxmutex_lock(&scan->lock) >= 0)
     {
       scan->active = false;
@@ -1052,7 +1021,6 @@ int sv6621_scan_controller_cancel(FAR struct sv6621_scan_s *scan)
 
   work_cancel_sync(LPWORK, &scan->timeout_work);
   work_cancel_sync(LPWORK, &scan->batch_work);
-  work_cancel_sync(LPWORK, &scan->poll_work);
   ret = sv6621_scan_stop(scan->command);
   if (nxmutex_lock(&scan->lock) >= 0)
     {
@@ -1114,7 +1082,6 @@ void sv6621_scan_command_event(uint8_t instance, uint8_t id,
 
       nxmutex_unlock(&scan->lock);
       work_cancel(LPWORK, &scan->timeout_work);
-      work_cancel(LPWORK, &scan->poll_work);
       if (nxmutex_lock(&scan->lock) >= 0)
         {
           scan->stopping = false;
