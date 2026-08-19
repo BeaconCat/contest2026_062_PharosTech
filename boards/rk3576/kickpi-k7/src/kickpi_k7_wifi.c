@@ -62,6 +62,9 @@
 
 #define WIFI_WL_REG_ON (GPIO_PORT1 | GPIO_PIN_C6 | GPIO_OUTPUT)
 #define WIFI_BT_RST    (GPIO_PORT1 | GPIO_PIN_C7 | GPIO_OUTPUT)
+#define WIFI_HOST_WAKE                                                        \
+  (GPIO_PORT1 | GPIO_PIN_D5 | GPIO_INPUT | GPIO_PULLDOWN | GPIO_EXTI |       \
+   GPIO_INT_EDGE | GPIO_INT_HIGH_RISING)
 
 /* IOC drive-strength registers for the SDIO bus pins (max drive). */
 
@@ -134,6 +137,10 @@ static int kickpi_k7_wifi_load_address(
     FAR void *arg, uint8_t address[SV6621_MAC_LENGTH]);
 static int kickpi_k7_wifi_store_address(
     FAR void *arg, FAR const uint8_t address[SV6621_MAC_LENGTH]);
+#ifdef CONFIG_SV6621_PM
+static int kickpi_k7_wifi_host_wake_isr(int irq, FAR void *context,
+                                        FAR void *arg);
+#endif
 
 /****************************************************************************
  * Private Functions
@@ -264,6 +271,28 @@ static int kickpi_k7_wifi_store_address(
   memcpy(arg, address, SV6621_MAC_LENGTH);
   return 0;
 }
+
+#ifdef CONFIG_SV6621_PM
+/****************************************************************************
+ * Name: kickpi_k7_wifi_host_wake_isr
+ *
+ * Description:
+ *   Request deferred firmware resume when the combo asserts its dedicated
+ *   active-high host-wake line.  No SDIO transaction is permitted here.
+ ****************************************************************************/
+
+static int kickpi_k7_wifi_host_wake_isr(int irq, FAR void *context,
+                                        FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+
+  UNUSED(irq);
+  UNUSED(context);
+  (void)rk3576_gpio_irq_enable(WIFI_HOST_WAKE, false);
+  (void)sv6621_resume_async(dev);
+  return OK;
+}
+#endif
 
 /****************************************************************************
  * Private Data
@@ -466,10 +495,35 @@ int kickpi_k7_wifi_initialize(void)
       return ret;
     }
 
+#ifdef CONFIG_SV6621_PM
+  ret = rk3576_config_gpio(WIFI_HOST_WAKE);
+  if (ret < 0)
+    {
+      goto stop_driver;
+    }
+
+  ret = rk3576_gpio_irq_attach(WIFI_HOST_WAKE,
+                               kickpi_k7_wifi_host_wake_isr,
+                               g_kickpi_k7_wifi_dev);
+  if (ret < 0)
+    {
+      goto stop_driver;
+    }
+
+#endif
+
   init_result = ret;
   initialized = true;
 
   return ret;
+
+#ifdef CONFIG_SV6621_PM
+stop_driver:
+  sv6621_stop(g_kickpi_k7_wifi_dev);
+  sv6621_destroy(g_kickpi_k7_wifi_dev);
+  g_kickpi_k7_wifi_dev = NULL;
+  return ret;
+#endif
 }
 
 #ifdef CONFIG_SV6621_PM
@@ -479,13 +533,34 @@ int kickpi_k7_wifi_initialize(void)
 
 int kickpi_k7_wifi_prepare_sleep(void)
 {
+  int ret;
+
   if (g_kickpi_k7_wifi_dev == NULL)
     {
       return -ENODEV;
     }
 
-  return sv6621_suspend(g_kickpi_k7_wifi_dev,
-                        &g_kickpi_k7_wifi_suspend);
+  ret = sv6621_suspend(g_kickpi_k7_wifi_dev,
+                       &g_kickpi_k7_wifi_suspend);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = rk3576_gpio_irq_enable(WIFI_HOST_WAKE, true);
+  if (ret < 0)
+    {
+      (void)sv6621_resume(g_kickpi_k7_wifi_dev);
+      return ret;
+    }
+
+  if (rk3576_gpio_read(WIFI_HOST_WAKE))
+    {
+      (void)rk3576_gpio_irq_enable(WIFI_HOST_WAKE, false);
+      (void)sv6621_resume_async(g_kickpi_k7_wifi_dev);
+    }
+
+  return OK;
 }
 
 /****************************************************************************
@@ -499,6 +574,7 @@ int kickpi_k7_wifi_abort_sleep(void)
       return -ENODEV;
     }
 
+  (void)rk3576_gpio_irq_enable(WIFI_HOST_WAKE, false);
   return sv6621_resume(g_kickpi_k7_wifi_dev);
 }
 #endif
