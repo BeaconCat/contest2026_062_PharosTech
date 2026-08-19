@@ -335,6 +335,9 @@ int sv6621_set_signal_threshold(FAR struct sv6621_dev_s *dev,
 int sv6621_suspend(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_suspend_s *config);
 int sv6621_resume(FAR struct sv6621_dev_s *dev);
+#ifdef CONFIG_SV6621_PM
+int sv6621_resume_async(FAR struct sv6621_dev_s *dev);
+#endif
 
 #ifdef __cplusplus
 }

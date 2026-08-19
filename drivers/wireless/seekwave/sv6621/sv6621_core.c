@@ -110,7 +110,7 @@ static int sv6621_core_pm_prepare(FAR struct pm_callback_s *callback,
 static void sv6621_core_pm_notify(FAR struct pm_callback_s *callback,
                                   int domain, enum pm_state_e state);
 static void sv6621_core_pm_resume_worker(FAR void *arg);
-static void sv6621_core_pm_queue_resume(FAR struct sv6621_dev_s *dev);
+static int sv6621_core_pm_queue_resume(FAR struct sv6621_dev_s *dev);
 #endif
 
 /****************************************************************************
@@ -180,7 +180,7 @@ static int sv6621_core_set_state(FAR struct sv6621_dev_s *dev,
  * Name: sv6621_core_pm_queue_resume
  ****************************************************************************/
 
-static void sv6621_core_pm_queue_resume(FAR struct sv6621_dev_s *dev)
+static int sv6621_core_pm_queue_resume(FAR struct sv6621_dev_s *dev)
 {
   irqstate_t flags;
   int ret;
@@ -189,7 +189,7 @@ static void sv6621_core_pm_queue_resume(FAR struct sv6621_dev_s *dev)
   if (!dev->pm_suspended || dev->pm_resume_queued)
     {
       spin_unlock_irqrestore(&dev->pm_lock, flags);
-      return;
+      return 0;
     }
 
   dev->pm_resume_queued = true;
@@ -203,6 +203,8 @@ static void sv6621_core_pm_queue_resume(FAR struct sv6621_dev_s *dev)
       dev->pm_resume_queued = false;
       spin_unlock_irqrestore(&dev->pm_lock, flags);
     }
+
+  return ret;
 }
 
 /****************************************************************************
@@ -3091,3 +3093,19 @@ unlock_lifecycle:
 
   return ret;
 }
+
+#ifdef CONFIG_SV6621_PM
+/****************************************************************************
+ * Name: sv6621_resume_async
+ ****************************************************************************/
+
+int sv6621_resume_async(FAR struct sv6621_dev_s *dev)
+{
+  if (dev == NULL)
+    {
+      return -EINVAL;
+    }
+
+  return sv6621_core_pm_queue_resume(dev);
+}
+#endif
