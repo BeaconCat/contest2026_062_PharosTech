@@ -142,10 +142,17 @@ static int sv6621_service_wait(FAR struct sv6621_service_s *service,
       return ret;
     }
 
-  ret = *ready ? 0 : service->status.failure;
-  if (ret >= 0)
+  if (*ready)
     {
-      ret = -EIO;
+      ret = 0;
+    }
+  else
+    {
+      ret = service->status.failure;
+      if (ret >= 0)
+        {
+          ret = -EIO;
+        }
     }
 
   nxmutex_unlock(&service->lock);
