@@ -396,10 +396,6 @@ int sv6621_scan_start(FAR struct sv6621_command_engine_s *command,
       encoded[0] = channels[index].number;
       encoded[1] = channels[index].band;
       encoded[2] = channels[index].flags;
-      if (ssid_length == 0)
-        {
-          encoded[2] |= SV6621_SCAN_FLAG_PASSIVE;
-        }
     }
 
   if (ssid_length != 0)
