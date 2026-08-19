@@ -81,6 +81,7 @@ struct sv6621_scan_entry_s
   uint8_t bssid_index;
   uint8_t max_bssid_indicator;
   uint8_t rsn_group_cipher;
+  uint8_t rsn_group_management_cipher;
   uint16_t rsn_capabilities;
   uint16_t ie_length;
   bool ht_operation_present;

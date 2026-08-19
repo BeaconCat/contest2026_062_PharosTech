@@ -70,6 +70,11 @@ static int sv6621_wpa_decode_gtk(
     FAR struct sv6621_wpa_s *wpa,
     FAR const struct sv6621_wpa_eapol_s *eapol, FAR uint8_t *key_index,
     FAR uint8_t *gtk, FAR size_t *gtk_length);
+static int sv6621_wpa_decode_igtk(
+    FAR struct sv6621_wpa_s *wpa,
+    FAR const struct sv6621_wpa_eapol_s *eapol, FAR uint8_t *key_index,
+    FAR uint8_t ipn[SV6621_WPA_IPN_SIZE],
+    FAR uint8_t igtk[SV6621_WPA_IGTK_SIZE]);
 static int sv6621_wpa_process_message_1(
     FAR struct sv6621_wpa_s *wpa,
     FAR const struct sv6621_wpa_eapol_s *eapol);
@@ -178,6 +183,17 @@ static int sv6621_wpa_schedule_locked(FAR struct sv6621_wpa_s *wpa)
 
 static void sv6621_wpa_remove_keys(FAR struct sv6621_wpa_s *wpa)
 {
+  if (wpa->integrity_group_installed)
+    {
+      sv6621_security_delete_key(
+          wpa->command, SV6621_SECURITY_KEY_INTEGRITY_GROUP,
+          SV6621_SECURITY_CIPHER_BIP_CMAC_128, wpa->authenticator,
+          wpa->igtk_index);
+      wpa->integrity_group_installed = false;
+    }
+
+  sv6621_wpa_clear(wpa->igtk, sizeof(wpa->igtk));
+
   if (wpa->group_installed)
     {
       sv6621_security_delete_key(
@@ -294,6 +310,38 @@ static int sv6621_wpa_decode_gtk(
 }
 
 /****************************************************************************
+ * Name: sv6621_wpa_decode_igtk
+ ****************************************************************************/
+
+static int sv6621_wpa_decode_igtk(
+    FAR struct sv6621_wpa_s *wpa,
+    FAR const struct sv6621_wpa_eapol_s *eapol, FAR uint8_t *key_index,
+    FAR uint8_t ipn[SV6621_WPA_IPN_SIZE],
+    FAR uint8_t igtk[SV6621_WPA_IGTK_SIZE])
+{
+  uint8_t plain[SV6621_WPA_FRAME_CAPACITY];
+  size_t plain_length;
+  int ret;
+
+  if ((eapol->key_info & SV6621_WPA_KEY_ENCRYPTED) == 0)
+    {
+      return -EOPNOTSUPP;
+    }
+
+  ret = sv6621_wpa_unwrap_key(
+      wpa->ptk + SV6621_WPA_KEK_OFFSET, eapol->key_data,
+      eapol->key_data_length, plain, sizeof(plain), &plain_length);
+  if (ret == 0)
+    {
+      ret = sv6621_wpa_eapol_extract_igtk(plain, plain_length, key_index,
+                                          ipn, igtk);
+    }
+
+  sv6621_wpa_clear(plain, sizeof(plain));
+  return ret;
+}
+
+/****************************************************************************
  * Name: sv6621_wpa_process_message_1
  ****************************************************************************/
 
@@ -386,9 +434,13 @@ static int sv6621_wpa_process_message_3(
     FAR const struct sv6621_wpa_eapol_s *eapol)
 {
   uint8_t gtk[SV6621_WPA_GTK_MAX_SIZE];
+  uint8_t igtk[SV6621_WPA_IGTK_SIZE] = { 0 };
+  uint8_t ipn[SV6621_WPA_IPN_SIZE] = { 0 };
   size_t gtk_length;
   uint8_t gtk_index;
+  uint8_t igtk_index;
   bool install_group;
+  bool install_igtk = false;
   int ret;
 
   if (sv6621_wpa_compare_replay(eapol->replay, wpa->replay) <= 0 ||
@@ -410,13 +462,26 @@ static int sv6621_wpa_process_message_3(
       return ret;
     }
 
+  if (wpa->key_mgmt == SV6621_WPA_KEY_MGMT_SAE)
+    {
+      ret = sv6621_wpa_decode_igtk(wpa, eapol, &igtk_index, ipn, igtk);
+      if (ret < 0)
+        {
+          goto clear_keys;
+        }
+
+      install_igtk = !wpa->integrity_group_installed ||
+                     wpa->igtk_index != igtk_index ||
+                     memcmp(wpa->igtk, igtk, sizeof(igtk)) != 0;
+    }
+
   memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
   wpa->eapol_version = eapol->version;
 
   ret = sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_4);
   if (ret < 0)
     {
-      goto clear_gtk;
+      goto clear_keys;
     }
 
   ret = sv6621_security_add_key(
@@ -425,7 +490,7 @@ static int sv6621_wpa_process_message_3(
       wpa->ptk + SV6621_WPA_TK_OFFSET, SV6621_WPA_TK_SIZE, NULL);
   if (ret < 0)
     {
-      goto clear_gtk;
+      goto clear_keys;
     }
 
   wpa->pairwise_installed = true;
@@ -443,7 +508,7 @@ static int sv6621_wpa_process_message_3(
           gtk_length, NULL);
       if (ret < 0)
         {
-          goto clear_gtk;
+          goto clear_keys;
         }
       else
         {
@@ -452,11 +517,46 @@ static int sv6621_wpa_process_message_3(
         }
     }
 
+  if (install_igtk)
+    {
+      ret = sv6621_security_add_key(
+          wpa->command, SV6621_SECURITY_KEY_INTEGRITY_GROUP,
+          SV6621_SECURITY_CIPHER_BIP_CMAC_128, wpa->authenticator,
+          igtk_index, igtk, sizeof(igtk), ipn);
+      if (ret < 0)
+        {
+          if (install_group)
+            {
+              sv6621_security_delete_key(
+                  wpa->command, SV6621_SECURITY_KEY_GROUP,
+                  SV6621_SECURITY_CIPHER_CCMP, wpa->authenticator,
+                  gtk_index);
+            }
+
+          goto clear_keys;
+        }
+
+      if (wpa->integrity_group_installed &&
+          wpa->igtk_index != igtk_index)
+        {
+          sv6621_security_delete_key(
+              wpa->command, SV6621_SECURITY_KEY_INTEGRITY_GROUP,
+              SV6621_SECURITY_CIPHER_BIP_CMAC_128, wpa->authenticator,
+              wpa->igtk_index);
+        }
+
+      memcpy(wpa->igtk, igtk, sizeof(wpa->igtk));
+      wpa->igtk_index = igtk_index;
+      wpa->integrity_group_installed = true;
+    }
+
   wpa->gtk_index = gtk_index;
   wpa->group_installed = true;
   ret = sv6621_station_mark_connected(wpa->station);
 
-clear_gtk:
+clear_keys:
+  sv6621_wpa_clear(igtk, sizeof(igtk));
+  sv6621_wpa_clear(ipn, sizeof(ipn));
   sv6621_wpa_clear(gtk, sizeof(gtk));
   return ret;
 }
@@ -470,10 +570,14 @@ static int sv6621_wpa_process_group_message_1(
     FAR const struct sv6621_wpa_eapol_s *eapol)
 {
   uint8_t gtk[SV6621_WPA_GTK_MAX_SIZE];
+  uint8_t igtk[SV6621_WPA_IGTK_SIZE] = { 0 };
+  uint8_t ipn[SV6621_WPA_IPN_SIZE] = { 0 };
   size_t gtk_length;
   uint8_t gtk_index;
+  uint8_t igtk_index = 0;
   int comparison;
   bool install_group;
+  bool install_igtk = false;
   int ret;
 
   ret = sv6621_wpa_eapol_verify_mic(
@@ -499,11 +603,27 @@ static int sv6621_wpa_process_group_message_1(
   ret = sv6621_wpa_decode_gtk(wpa, eapol, &gtk_index, gtk, &gtk_length);
   if (ret < 0)
     {
-      goto clear_gtk;
+      goto clear_keys;
     }
 
   install_group = !sv6621_wpa_group_key_matches(
       wpa, gtk_index, gtk, gtk_length);
+
+  if (wpa->key_mgmt == SV6621_WPA_KEY_MGMT_SAE)
+    {
+      ret = sv6621_wpa_decode_igtk(wpa, eapol, &igtk_index, ipn, igtk);
+      if (ret == 0)
+        {
+          install_igtk = !wpa->integrity_group_installed ||
+                         wpa->igtk_index != igtk_index ||
+                         memcmp(wpa->igtk, igtk, sizeof(igtk)) != 0;
+        }
+      else if (ret != -ENOENT)
+        {
+          goto clear_keys;
+        }
+    }
+
   if (install_group)
     {
       ret = sv6621_security_add_key(
@@ -512,7 +632,27 @@ static int sv6621_wpa_process_group_message_1(
           gtk_length, NULL);
       if (ret < 0)
         {
-          goto clear_gtk;
+          goto clear_keys;
+        }
+    }
+
+  if (install_igtk)
+    {
+      ret = sv6621_security_add_key(
+          wpa->command, SV6621_SECURITY_KEY_INTEGRITY_GROUP,
+          SV6621_SECURITY_CIPHER_BIP_CMAC_128, wpa->authenticator,
+          igtk_index, igtk, sizeof(igtk), ipn);
+      if (ret < 0)
+        {
+          if (install_group)
+            {
+              sv6621_security_delete_key(
+                  wpa->command, SV6621_SECURITY_KEY_GROUP,
+                  SV6621_SECURITY_CIPHER_CCMP, wpa->authenticator,
+                  gtk_index);
+            }
+
+          goto clear_keys;
         }
     }
 
@@ -528,7 +668,15 @@ static int sv6621_wpa_process_group_message_1(
               SV6621_SECURITY_CIPHER_CCMP, wpa->authenticator, gtk_index);
         }
 
-      goto clear_gtk;
+      if (install_igtk)
+        {
+          sv6621_security_delete_key(
+              wpa->command, SV6621_SECURITY_KEY_INTEGRITY_GROUP,
+              SV6621_SECURITY_CIPHER_BIP_CMAC_128, wpa->authenticator,
+              igtk_index);
+        }
+
+      goto clear_keys;
     }
 
   if (install_group && wpa->group_installed &&
@@ -545,10 +693,28 @@ static int sv6621_wpa_process_group_message_1(
       wpa->gtk_length = gtk_length;
     }
 
+  if (install_igtk && wpa->integrity_group_installed &&
+      wpa->igtk_index != igtk_index)
+    {
+      sv6621_security_delete_key(
+          wpa->command, SV6621_SECURITY_KEY_INTEGRITY_GROUP,
+          SV6621_SECURITY_CIPHER_BIP_CMAC_128, wpa->authenticator,
+          wpa->igtk_index);
+    }
+
+  if (install_igtk)
+    {
+      memcpy(wpa->igtk, igtk, sizeof(wpa->igtk));
+      wpa->igtk_index = igtk_index;
+      wpa->integrity_group_installed = true;
+    }
+
   wpa->gtk_index = gtk_index;
   wpa->group_installed = true;
 
-clear_gtk:
+clear_keys:
+  sv6621_wpa_clear(igtk, sizeof(igtk));
+  sv6621_wpa_clear(ipn, sizeof(ipn));
   sv6621_wpa_clear(gtk, sizeof(gtk));
   return ret;
 }
@@ -945,6 +1111,7 @@ void sv6621_wpa_cancel(FAR struct sv6621_wpa_s *wpa, int result)
   wpa->canceling = false;
   wpa->rekeying = false;
   wpa->gtk_index = 0;
+  wpa->igtk_index = 0;
   sv6621_wpa_clear(wpa->pmk, sizeof(wpa->pmk));
   sv6621_wpa_clear(wpa->ptk, sizeof(wpa->ptk));
   nxmutex_unlock(&wpa->lock);

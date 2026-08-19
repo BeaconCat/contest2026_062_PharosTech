@@ -29,6 +29,7 @@
 
 #include <nuttx/config.h>
 #include <nuttx/mutex.h>
+#include <nuttx/semaphore.h>
 #ifdef CONFIG_SV6621_PM
 #include <nuttx/power/pm.h>
 #endif
@@ -84,7 +85,6 @@ struct sv6621_dev_s
       scan_channels[SV6621_REGULATORY_SCAN_CHANNEL_CAPACITY];
   size_t scan_channel_count;
   struct work_s event_work;
-  struct work_s recovery_work;
   struct work_s thermal_work;
   struct work_s security_work;
   struct work_s signal_work;
@@ -99,8 +99,11 @@ struct sv6621_dev_s
   bool station_remote_disconnect;
   bool station_work_scheduled;
   bool scan_reporting;
+  sem_t recovery_sem;
+  sem_t recovery_exit_sem;
   bool recovery_pending;
   bool recovery_running;
+  bool recovery_shutdown;
   uint32_t thermal_generation;
   bool thermal_blocked;
   bool thermal_work_scheduled;

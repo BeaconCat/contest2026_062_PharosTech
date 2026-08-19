@@ -47,7 +47,11 @@ enum sv6621_security_key_type_e
 
 enum sv6621_security_cipher_e
 {
-  SV6621_SECURITY_CIPHER_CCMP = 8
+  SV6621_SECURITY_CIPHER_CCMP = 8,
+  SV6621_SECURITY_CIPHER_BIP_CMAC_128 = 12,
+  SV6621_SECURITY_CIPHER_BIP_CMAC_256 = 13,
+  SV6621_SECURITY_CIPHER_BIP_GMAC_128 = 14,
+  SV6621_SECURITY_CIPHER_BIP_GMAC_256 = 15
 };
 
 /****************************************************************************
