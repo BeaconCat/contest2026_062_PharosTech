@@ -78,6 +78,7 @@
 #define SV6621_SCAN_VHT_WIDTH_MAX          3
 #define SV6621_SCAN_RSN_SUITE_SIZE       4
 #define SV6621_SCAN_RSN_CIPHER_CCMP      4
+#define SV6621_SCAN_RSN_CIPHER_BIP_CMAC  6
 #define SV6621_SCAN_RSN_AKM_PSK          2
 #define SV6621_SCAN_RSN_AKM_SAE          8
 #define SV6621_SCAN_RSN_CAP_MFPR         (1 << 6)
@@ -204,6 +205,46 @@ static int sv6621_scan_parse_rsn(FAR const uint8_t *data, size_t length,
         }
 
       entry->rsn_capabilities = sv6621_scan_get_le16(data + offset);
+      offset += 2;
+      if ((entry->rsn_capabilities & SV6621_SCAN_RSN_CAP_MFPC) != 0)
+        {
+          entry->rsn_group_management_cipher =
+              SV6621_SCAN_RSN_CIPHER_BIP_CMAC;
+        }
+    }
+
+  if (offset < length)
+    {
+      suite_count = sv6621_scan_get_le16(data + offset);
+      offset += 2;
+      if (offset + (size_t)suite_count * SV6621_SCAN_RSN_SUITE_SIZE > length)
+        {
+          return -EPROTO;
+        }
+
+      offset += (size_t)suite_count * SV6621_SCAN_RSN_SUITE_SIZE;
+    }
+
+  if (offset < length)
+    {
+      if (length - offset < SV6621_SCAN_RSN_SUITE_SIZE)
+        {
+          return -EPROTO;
+        }
+
+      suite = data + offset;
+      if (!sv6621_scan_is_rsn_suite(suite))
+        {
+          return -EPROTO;
+        }
+
+      entry->rsn_group_management_cipher = suite[3];
+      offset += SV6621_SCAN_RSN_SUITE_SIZE;
+    }
+
+  if (offset != length)
+    {
+      return -EPROTO;
     }
 
   entry->rsn_present = true;
@@ -267,7 +308,9 @@ static bool sv6621_scan_connection_supported(
     {
       return (entry->rsn_capabilities &
               (SV6621_SCAN_RSN_CAP_MFPR | SV6621_SCAN_RSN_CAP_MFPC)) ==
-             (SV6621_SCAN_RSN_CAP_MFPR | SV6621_SCAN_RSN_CAP_MFPC);
+                 (SV6621_SCAN_RSN_CAP_MFPR | SV6621_SCAN_RSN_CAP_MFPC) &&
+             entry->rsn_group_management_cipher ==
+                 SV6621_SCAN_RSN_CIPHER_BIP_CMAC;
     }
 
   return (entry->rsn_capabilities & SV6621_SCAN_RSN_CAP_MFPR) == 0;
