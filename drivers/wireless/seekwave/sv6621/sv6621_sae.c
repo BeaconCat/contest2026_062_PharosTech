@@ -402,6 +402,13 @@ static void sv6621_sae_worker(FAR void *arg)
           goto finish;
         }
 
+      if (memcmp(commit.scalar, sae->scalar, sizeof(sae->scalar)) == 0 &&
+          memcmp(commit.element, sae->element, sizeof(sae->element)) == 0)
+        {
+          ret = -EKEYREJECTED;
+          goto finish;
+        }
+
       ret = sv6621_sae_group_derive_secret(
           sae->pwe, sae->private_random, sae->scalar, commit.scalar,
           commit.element, secret);
