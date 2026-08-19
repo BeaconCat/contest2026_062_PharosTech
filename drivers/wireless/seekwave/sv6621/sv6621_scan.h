@@ -121,7 +121,6 @@ struct sv6621_scan_s
   struct sv6621_scan_cache_s cache;
   struct work_s timeout_work;
   struct work_s batch_work;
-  struct work_s poll_work;
   sv6621_scan_complete_t complete;
   FAR void *complete_arg;
   uint32_t timeout_ms;
