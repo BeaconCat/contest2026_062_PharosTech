@@ -1377,9 +1377,10 @@ static void sv6621_core_station_worker(FAR void *arg)
 
                   continue;
                 }
+
+              sv6621_wpa_disconnected(&dev->wpa, -ECONNRESET);
             }
 
-          sv6621_wpa_cancel(&dev->wpa, -ECONNRESET);
           (void)sv6621_data_set_tx_block(
               &dev->data, SV6621_DATA_TX_BLOCK_CHANNEL, false);
         }
@@ -2171,8 +2172,8 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
   sv6621_network_set_link(&dev->network, false, NULL);
 #endif
   scan_ret = sv6621_scan_controller_cancel(&dev->scan);
-  sv6621_wpa_cancel(&dev->wpa, -ESHUTDOWN);
   sv6621_station_disconnect(&dev->station, 3);
+  sv6621_wpa_disconnected(&dev->wpa, -ESHUTDOWN);
   sv6621_station_reset(&dev->station, -ESHUTDOWN);
   if (dev->station_open)
     {
@@ -2688,7 +2689,18 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
                            SV6621_CORE_HANDSHAKE_TIMEOUT_MS);
       if (ret < 0)
         {
-          sv6621_station_disconnect(&dev->station, 1);
+          int disconnect_ret = sv6621_station_disconnect(&dev->station, 1);
+
+          if (disconnect_ret >= 0)
+            {
+              sv6621_wpa_disconnected(&dev->wpa, ret);
+            }
+          else
+            {
+              sv6621_wpa_cancel(&dev->wpa, ret);
+            }
+
+          wpa_prepared = false;
           goto cancel_wpa;
         }
     }
@@ -2738,8 +2750,11 @@ int sv6621_disconnect(FAR struct sv6621_dev_s *dev, uint16_t reason)
   nxmutex_unlock(&dev->status_lock);
   if (ret >= 0)
     {
-      sv6621_wpa_cancel(&dev->wpa, -ENOTCONN);
       ret = sv6621_station_disconnect(&dev->station, reason);
+      if (ret >= 0)
+        {
+          sv6621_wpa_disconnected(&dev->wpa, -ENOTCONN);
+        }
     }
 
   nxmutex_unlock(&dev->lifecycle_lock);

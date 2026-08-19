@@ -60,6 +60,9 @@ static int sv6621_wpa_compare_replay(FAR const uint8_t *left,
 static bool sv6621_wpa_is_frame_error(int error);
 static int sv6621_wpa_schedule_locked(FAR struct sv6621_wpa_s *wpa);
 static void sv6621_wpa_remove_keys(FAR struct sv6621_wpa_s *wpa);
+static void sv6621_wpa_forget_keys(FAR struct sv6621_wpa_s *wpa);
+static void sv6621_wpa_cancel_internal(FAR struct sv6621_wpa_s *wpa,
+                                       int result, bool remove_keys);
 static bool sv6621_wpa_group_key_matches(
     FAR const struct sv6621_wpa_s *wpa, uint8_t key_index,
     FAR const uint8_t *gtk, size_t gtk_length);
@@ -192,9 +195,6 @@ static void sv6621_wpa_remove_keys(FAR struct sv6621_wpa_s *wpa)
       wpa->integrity_group_installed = false;
     }
 
-  sv6621_wpa_clear(wpa->igtk, sizeof(wpa->igtk));
-  sv6621_wpa_clear(wpa->igtk_ipn, sizeof(wpa->igtk_ipn));
-
   if (wpa->group_installed)
     {
       sv6621_security_delete_key(
@@ -203,9 +203,6 @@ static void sv6621_wpa_remove_keys(FAR struct sv6621_wpa_s *wpa)
       wpa->group_installed = false;
     }
 
-  sv6621_wpa_clear(wpa->gtk, sizeof(wpa->gtk));
-  wpa->gtk_length = 0;
-
   if (wpa->pairwise_installed)
     {
       sv6621_security_delete_key(
@@ -213,6 +210,23 @@ static void sv6621_wpa_remove_keys(FAR struct sv6621_wpa_s *wpa)
           SV6621_SECURITY_CIPHER_CCMP, wpa->authenticator, 0);
       wpa->pairwise_installed = false;
     }
+
+  sv6621_wpa_forget_keys(wpa);
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_forget_keys
+ ****************************************************************************/
+
+static void sv6621_wpa_forget_keys(FAR struct sv6621_wpa_s *wpa)
+{
+  wpa->integrity_group_installed = false;
+  wpa->group_installed = false;
+  wpa->pairwise_installed = false;
+  sv6621_wpa_clear(wpa->igtk, sizeof(wpa->igtk));
+  sv6621_wpa_clear(wpa->igtk_ipn, sizeof(wpa->igtk_ipn));
+  sv6621_wpa_clear(wpa->gtk, sizeof(wpa->gtk));
+  wpa->gtk_length = 0;
 }
 
 /****************************************************************************
@@ -732,6 +746,7 @@ static void sv6621_wpa_rekey_timeout_worker(FAR void *arg)
 {
   FAR struct sv6621_wpa_s *wpa = arg;
   bool timed_out;
+  int ret;
 
   if (nxmutex_lock(&wpa->lock) < 0)
     {
@@ -745,8 +760,17 @@ static void sv6621_wpa_rekey_timeout_worker(FAR void *arg)
       return;
     }
 
-  sv6621_station_disconnect(wpa->station, SV6621_WPA_REASON_UNSPECIFIED);
-  sv6621_wpa_remove_keys(wpa);
+  ret = sv6621_station_disconnect(wpa->station,
+                                  SV6621_WPA_REASON_UNSPECIFIED);
+  if (ret >= 0)
+    {
+      sv6621_wpa_forget_keys(wpa);
+    }
+  else
+    {
+      sv6621_wpa_remove_keys(wpa);
+    }
+
   sv6621_wpa_finish(wpa, -ETIMEDOUT);
 }
 
@@ -835,11 +859,22 @@ static void sv6621_wpa_worker(FAR void *arg)
 
           if (state == SV6621_WPA_COMPLETE || rekeying)
             {
-              sv6621_station_disconnect(wpa->station,
-                                         SV6621_WPA_REASON_UNSPECIFIED);
-            }
+              int disconnect_ret = sv6621_station_disconnect(
+                  wpa->station, SV6621_WPA_REASON_UNSPECIFIED);
 
-          sv6621_wpa_remove_keys(wpa);
+              if (disconnect_ret >= 0)
+                {
+                  sv6621_wpa_forget_keys(wpa);
+                }
+              else
+                {
+                  sv6621_wpa_remove_keys(wpa);
+                }
+            }
+          else
+            {
+              sv6621_wpa_remove_keys(wpa);
+            }
           sv6621_wpa_finish(wpa, ret);
           continue;
         }
@@ -1076,10 +1111,11 @@ int sv6621_wpa_run(FAR struct sv6621_wpa_s *wpa,
 }
 
 /****************************************************************************
- * Name: sv6621_wpa_cancel
+ * Name: sv6621_wpa_cancel_internal
  ****************************************************************************/
 
-void sv6621_wpa_cancel(FAR struct sv6621_wpa_s *wpa, int result)
+static void sv6621_wpa_cancel_internal(FAR struct sv6621_wpa_s *wpa,
+                                       int result, bool remove_keys)
 {
   bool pending;
 
@@ -1102,7 +1138,15 @@ void sv6621_wpa_cancel(FAR struct sv6621_wpa_s *wpa, int result)
 
   work_cancel_sync(LPWORK, &wpa->work);
   work_cancel_sync(LPWORK, &wpa->rekey_timeout_work);
-  sv6621_wpa_remove_keys(wpa);
+  if (remove_keys)
+    {
+      sv6621_wpa_remove_keys(wpa);
+    }
+  else
+    {
+      sv6621_wpa_forget_keys(wpa);
+    }
+
   if (nxmutex_lock(&wpa->lock) < 0)
     {
       return;
@@ -1124,6 +1168,24 @@ void sv6621_wpa_cancel(FAR struct sv6621_wpa_s *wpa, int result)
     {
       nxsem_post(&wpa->completion);
     }
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_cancel
+ ****************************************************************************/
+
+void sv6621_wpa_cancel(FAR struct sv6621_wpa_s *wpa, int result)
+{
+  sv6621_wpa_cancel_internal(wpa, result, true);
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_disconnected
+ ****************************************************************************/
+
+void sv6621_wpa_disconnected(FAR struct sv6621_wpa_s *wpa, int result)
+{
+  sv6621_wpa_cancel_internal(wpa, result, false);
 }
 
 /****************************************************************************
@@ -1159,9 +1221,18 @@ void sv6621_wpa_input(FAR const struct sv6621_data_rx_s *rx, FAR void *arg)
   nxmutex_unlock(&wpa->lock);
   if (ret < 0)
     {
-      sv6621_station_disconnect(wpa->station,
-                                SV6621_WPA_REASON_UNSPECIFIED);
-      sv6621_wpa_remove_keys(wpa);
+      int disconnect_ret = sv6621_station_disconnect(
+          wpa->station, SV6621_WPA_REASON_UNSPECIFIED);
+
+      if (disconnect_ret >= 0)
+        {
+          sv6621_wpa_forget_keys(wpa);
+        }
+      else
+        {
+          sv6621_wpa_remove_keys(wpa);
+        }
+
       sv6621_wpa_finish(wpa, ret);
     }
 }
