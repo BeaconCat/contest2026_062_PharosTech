@@ -162,7 +162,11 @@ static int sv6621_ioctl_key(FAR struct sv6621_ioctl_s *ioctl,
          sizeof(ioctl->connection.credential));
   memcpy(ioctl->connection.credential, extension->key, extension->key_len);
   ioctl->connection.credential_length = extension->key_len;
-  ioctl->connection.security = SV6621_SECURITY_WPA2_PSK;
+  if (ioctl->connection.security != SV6621_SECURITY_WPA3_SAE)
+    {
+      ioctl->connection.security = SV6621_SECURITY_WPA2_PSK;
+    }
+
   return 0;
 }
 
