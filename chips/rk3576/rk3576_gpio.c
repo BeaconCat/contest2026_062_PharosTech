@@ -813,13 +813,16 @@ int rk3576_config_gpio(gpio_pinset_t pinset)
       RK3576_GPIO_V2_WRITE_BIT(RK3576_GPIO_INT_BOTHEDGE(port), pin,
                                (pinset & GPIO_INT_BOTHEDGE) != 0 ? 1 : 0);
 
-      /* Clear any pending interrupt before enabling */
+      /* Clear any pending interrupt before leaving it disabled.  The
+       * interrupt owner must explicitly enable delivery after installing
+       * its handler.
+       */
 
       RK3576_GPIO_V2_WRITE_BIT(RK3576_GPIO_PORTA_EOI(port), pin, 1);
 
-      /* Unmask the interrupt */
+      /* Keep the interrupt masked until its handler is ready. */
 
-      RK3576_GPIO_V2_WRITE_BIT(RK3576_GPIO_INTMASK(port), pin, 0);
+      RK3576_GPIO_V2_WRITE_BIT(RK3576_GPIO_INTMASK(port), pin, 1);
 
       /* GIC interrupt handlers are installed by rk3576_gpio_init().
        * Each bank has 4 interrupt lines (one per 8-pin group).
