@@ -31,6 +31,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <syslog.h>
 
 #include "sv6621_command.h"
 #include "sv6621_packet.h"
@@ -363,7 +364,7 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
                            FAR void *response, FAR size_t *response_length,
                            uint32_t timeout_ms)
 {
-  struct sv6621_message_header_s header;
+  struct sv6621_message_header_s header = {0};
   FAR uint8_t *message;
   FAR uint8_t *packet;
   size_t message_length;
@@ -558,6 +559,13 @@ unlock_execute:
   nxmutex_unlock(&engine->execute_lock);
 
 free_buffers:
+  if (ret < 0)
+    {
+      syslog(LOG_ERR,
+             "SV6621 command failed: instance=%u id=%u sequence=%u ret=%d\n",
+             instance, id, header.sequence, ret);
+    }
+
   kmm_free(packet);
   kmm_free(message);
   return ret;
