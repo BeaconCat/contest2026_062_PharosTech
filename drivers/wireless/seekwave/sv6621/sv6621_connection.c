@@ -80,8 +80,9 @@ static const uint8_t g_sv6621_connection_rsn_psk_ccmp[] = {
 };
 
 static const uint8_t g_sv6621_connection_rsn_sae_ccmp[] = {
-  SV6621_CONNECTION_IE_RSN, 20, 1, 0, 0x00, 0x0f, 0xac, 4,
-  1, 0, 0x00, 0x0f, 0xac, 4, 1, 0, 0x00, 0x0f, 0xac, 8, 0xc0, 0
+  SV6621_CONNECTION_IE_RSN, 26, 1, 0, 0x00, 0x0f, 0xac, 4,
+  1, 0, 0x00, 0x0f, 0xac, 4, 1, 0, 0x00, 0x0f, 0xac, 8, 0xc0, 0,
+  0, 0, 0x00, 0x0f, 0xac, 6
 };
 
 /****************************************************************************
