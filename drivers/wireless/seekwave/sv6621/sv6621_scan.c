@@ -45,6 +45,7 @@
 #define SV6621_SCAN_CHANNEL_SIZE         3
 #define SV6621_SCAN_SSID_SIZE            (SV6621_SSID_MAX_LENGTH + 1)
 #define SV6621_SCAN_MAX_CHANNELS         64
+#define SV6621_SCAN_STOP_TIMEOUT_MS      500
 #define SV6621_SCAN_COMMAND_TIMEOUT_MS   5000
 
 #define SV6621_SCAN_CHANNEL_COUNT_OFFSET 8
@@ -425,7 +426,7 @@ int sv6621_scan_stop(FAR struct sv6621_command_engine_s *command)
 
   ret = sv6621_command_execute(command, SV6621_SCAN_INSTANCE,
                                SV6621_SCAN_COMMAND_STOP, NULL, 0, NULL, NULL,
-                               SV6621_SCAN_COMMAND_TIMEOUT_MS);
+                               SV6621_SCAN_STOP_TIMEOUT_MS);
   return ret > 0 ? -EREMOTEIO : ret;
 }
 
