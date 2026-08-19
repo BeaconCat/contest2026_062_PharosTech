@@ -1705,13 +1705,6 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       goto fail;
     }
 
-  ret = sv6621_rx_start(&dev->rx);
-  if (ret < 0)
-    {
-      goto fail;
-    }
-
-  rx_started = true;
   ret = sv6621_firmware_download(
       dev->config.transport, dev->config.iram.data, dev->config.iram.length,
       dev->config.dram.data, dev->config.dram.length, dev->config.nvram.data,
@@ -1720,6 +1713,14 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
     {
       goto fail;
     }
+
+  ret = sv6621_rx_start(&dev->rx);
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
+  rx_started = true;
 
   ret = sv6621_service_wait_bsp(&dev->service, SV6621_CORE_BSP_TIMEOUT_MS);
   if (ret < 0)
