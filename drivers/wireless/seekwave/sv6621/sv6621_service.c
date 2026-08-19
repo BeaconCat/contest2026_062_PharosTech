@@ -30,6 +30,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <syslog.h>
 
 #include "sv6621_protocol.h"
 #include "sv6621_service.h"
@@ -355,6 +356,22 @@ void sv6621_service_channel_consumer(uint8_t channel,
 
   message = payload + SV6621_RX_LINK_HEADER_SIZE;
   message_length = length - SV6621_RX_LINK_HEADER_SIZE;
+  {
+    char text[96];
+    size_t index;
+    size_t count = message_length < sizeof(text) - 1 ?
+                   message_length : sizeof(text) - 1;
+
+    for (index = 0; index < count; index++)
+      {
+        text[index] = message[index] >= 0x20 && message[index] < 0x7f ?
+                      message[index] : '.';
+      }
+
+    text[count] = '\0';
+    syslog(LOG_INFO, "SV6621 firmware: %s\n", text);
+  }
+
   if (sv6621_service_contains(message, message_length, g_sv6621_assert,
                               sizeof(g_sv6621_assert) - 1))
     {
