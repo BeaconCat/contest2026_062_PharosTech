@@ -271,6 +271,14 @@ static int kickpi_k7_wifi_store_address(
 
 static uint8_t g_kickpi_k7_wifi_address[SV6621_MAC_LENGTH];
 static FAR struct sv6621_dev_s *g_kickpi_k7_wifi_dev;
+#ifdef CONFIG_SV6621_PM
+static const struct sv6621_suspend_s g_kickpi_k7_wifi_suspend =
+{
+  .wake_enabled = true,
+  .wake_flags = SV6621_WAKE_DISCONNECT | SV6621_WAKE_MAGIC_PACKET |
+                SV6621_WAKE_GTK_REKEY_FAILURE,
+};
+#endif
 
 static const struct sv6621_board_ops_s g_kickpi_k7_wifi_board_ops = {
   .power_on = kickpi_k7_wifi_power_on,
@@ -441,10 +449,7 @@ int kickpi_k7_wifi_initialize(void)
       sizeof(g_kickpi_k7_wifi_regulatory_domains) /
       sizeof(g_kickpi_k7_wifi_regulatory_domains[0]);
 #ifdef CONFIG_SV6621_PM
-  config.system_suspend.wake_enabled = true;
-  config.system_suspend.wake_flags =
-      SV6621_WAKE_DISCONNECT | SV6621_WAKE_MAGIC_PACKET |
-      SV6621_WAKE_GTK_REKEY_FAILURE;
+  config.system_suspend = g_kickpi_k7_wifi_suspend;
 #endif
 
   ret = sv6621_create(&config, &g_kickpi_k7_wifi_dev);
@@ -466,5 +471,36 @@ int kickpi_k7_wifi_initialize(void)
 
   return ret;
 }
+
+#ifdef CONFIG_SV6621_PM
+/****************************************************************************
+ * Name: kickpi_k7_wifi_prepare_sleep
+ ****************************************************************************/
+
+int kickpi_k7_wifi_prepare_sleep(void)
+{
+  if (g_kickpi_k7_wifi_dev == NULL)
+    {
+      return -ENODEV;
+    }
+
+  return sv6621_suspend(g_kickpi_k7_wifi_dev,
+                        &g_kickpi_k7_wifi_suspend);
+}
+
+/****************************************************************************
+ * Name: kickpi_k7_wifi_abort_sleep
+ ****************************************************************************/
+
+int kickpi_k7_wifi_abort_sleep(void)
+{
+  if (g_kickpi_k7_wifi_dev == NULL)
+    {
+      return -ENODEV;
+    }
+
+  return sv6621_resume(g_kickpi_k7_wifi_dev);
+}
+#endif
 
 #endif /* CONFIG_KICKPI_K7_WIFI */
