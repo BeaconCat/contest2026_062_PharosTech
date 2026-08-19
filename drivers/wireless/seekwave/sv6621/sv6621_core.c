@@ -2406,11 +2406,8 @@ int sv6621_disconnect(FAR struct sv6621_dev_s *dev, uint16_t reason)
   nxmutex_unlock(&dev->status_lock);
   if (ret >= 0)
     {
+      sv6621_wpa_cancel(&dev->wpa, -ENOTCONN);
       ret = sv6621_station_disconnect(&dev->station, reason);
-      if (ret == 0)
-        {
-          sv6621_wpa_cancel(&dev->wpa, -ENOTCONN);
-        }
     }
 
   nxmutex_unlock(&dev->lifecycle_lock);

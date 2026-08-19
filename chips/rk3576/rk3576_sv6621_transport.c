@@ -276,8 +276,15 @@ static int rk3576_sv6621_set_clock(uint32_t source, uint32_t divider)
 static uint32_t rk3576_sv6621_command(uint32_t command, uint32_t argument,
                                       FAR uint32_t *response)
 {
+  uint32_t completion = RK3576_SV6621_INT_CMDDONE |
+                        RK3576_SV6621_INT_CMDERR;
   uint32_t status;
   int index;
+
+  if (command == RK3576_SV6621_CMD11)
+    {
+      completion |= RK3576_SV6621_INT_VOLTSW;
+    }
 
   for (index = 0; (getreg32(RK3576_SV6621_STATUS) & (1u << 9)) != 0 &&
                   index < RK3576_SV6621_POLL_LIMIT;
@@ -309,8 +316,7 @@ static uint32_t rk3576_sv6621_command(uint32_t command, uint32_t argument,
   for (index = 0; index < RK3576_SV6621_POLL_LIMIT; index++)
     {
       status = getreg32(RK3576_SV6621_RINTSTS);
-      if ((status & (RK3576_SV6621_INT_CMDDONE |
-                     RK3576_SV6621_INT_CMDERR)) != 0)
+      if ((status & completion) != 0)
         {
           break;
         }

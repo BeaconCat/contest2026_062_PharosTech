@@ -335,9 +335,9 @@ int kickpi_k7_wifi_initialize(void)
   putreg32((0xffu << 16) | 0xffu, WIFI_IOC_DRV2);
   putreg32((0xffu << 16) | 0xffu, WIFI_IOC_DRV3);
 
-  /* Companion pin environment the SV6160lite boot ROM samples: BT reset
-   * de-asserted low, BT wake high, UART4 lines idle-high.  (Ground truth
-   * from a full-boot GPIO trace of the working vendor stack.)
+  /* Companion pin environment the SV6160lite boot ROM samples.  Keep the
+   * Bluetooth side in reset while Wi-Fi boots, matching the last known-good
+   * networking build; BT wake and the UART4 lines remain idle-high.
    */
 
   rk3576_config_gpio(WIFI_BT_RST);
