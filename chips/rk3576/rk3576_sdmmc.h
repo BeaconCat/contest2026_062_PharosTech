@@ -103,4 +103,6 @@ int rk3576_sdmmc_register_sdio_callback(
 int rk3576_sdmmc_enable_sdio_interrupt(FAR struct sdio_dev_s *dev,
                                        bool enable);
 
+int rk3576_sdmmc_ack_sdio_interrupt(FAR struct sdio_dev_s *dev);
+
 #endif /* __ARCH_ARM64_SRC_RK3576_RK3576_SDMMC_H */
