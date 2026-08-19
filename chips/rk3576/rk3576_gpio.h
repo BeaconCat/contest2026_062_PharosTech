@@ -26,6 +26,7 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include <nuttx/irq.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -271,6 +272,38 @@ void rk3576_gpio_write(gpio_pinset_t pinset, bool value);
 bool rk3576_gpio_read(gpio_pinset_t pinset);
 
 #ifdef CONFIG_DEV_GPIO
+
+/****************************************************************************
+ * Name: rk3576_gpio_irq_attach
+ *
+ * Description:
+ *   Attach a kernel interrupt handler to a configured GPIO interrupt pin.
+ *   Delivery remains masked until rk3576_gpio_irq_enable() is called.
+ *
+ ****************************************************************************/
+
+int rk3576_gpio_irq_attach(gpio_pinset_t pinset, xcpt_t handler,
+                           FAR void *arg);
+
+/****************************************************************************
+ * Name: rk3576_gpio_irq_enable
+ *
+ * Description:
+ *   Enable or disable interrupt delivery for a kernel-owned GPIO pin.
+ *
+ ****************************************************************************/
+
+int rk3576_gpio_irq_enable(gpio_pinset_t pinset, bool enable);
+
+/****************************************************************************
+ * Name: rk3576_gpio_irq_detach
+ *
+ * Description:
+ *   Disable a kernel-owned GPIO interrupt and release its handler slot.
+ *
+ ****************************************************************************/
+
+int rk3576_gpio_irq_detach(gpio_pinset_t pinset);
 /****************************************************************************
  * Name: rk3576_gpio_init
  *
