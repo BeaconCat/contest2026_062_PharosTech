@@ -1901,19 +1901,6 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       &dev->data, (dev->wifi_info.private_capabilities &
                    SV6621_WIFI_PRIVATE_PN_REUSE) != 0);
 
-#ifdef CONFIG_NET
-  if (!dev->network.registered)
-    {
-      ret = sv6621_network_init(&dev->network, dev, &dev->data, &dev->command,
-                                dev->wifi_info.max_multicast_addresses,
-                                dev->wifi_info.mac);
-      if (ret < 0)
-        {
-          goto fail;
-        }
-    }
-#endif
-
   ret = sv6621_wifi_configure_baseline(&dev->command);
   if (ret < 0)
     {
@@ -1945,6 +1932,17 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
   dev->station_open = true;
 
 #ifdef CONFIG_NET
+  if (!dev->network.registered)
+    {
+      ret = sv6621_network_init(&dev->network, dev, &dev->data, &dev->command,
+                                dev->wifi_info.max_multicast_addresses,
+                                dev->wifi_info.mac);
+      if (ret < 0)
+        {
+          goto fail;
+        }
+    }
+
   ret = sv6621_network_sync_multicast(&dev->network);
   if (ret < 0)
     {
