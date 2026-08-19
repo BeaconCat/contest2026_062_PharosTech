@@ -1066,6 +1066,26 @@ int rk3576_config_gpio(gpio_pinset_t pinset)
             {
               goto errout;
             }
+
+          /* Apply the requested bias to alternate-function pins.  SDIO and
+           * similar buses rely on pull-ups while no endpoint is driving the
+           * line, so dropping this setting leaves CMD/DAT floating.
+           */
+
+          if ((pinset & GPIO_PUPD_MASK) == GPIO_PULLUP)
+            {
+              rk3576_pull_set(RK3576_IOC_ADDR, port, pin, RK3576_PULL_UP);
+            }
+          else if ((pinset & GPIO_PUPD_MASK) == GPIO_PULLDOWN)
+            {
+              rk3576_pull_set(RK3576_IOC_ADDR, port, pin,
+                              RK3576_PULL_DOWN);
+            }
+          else
+            {
+              rk3576_pull_set(RK3576_IOC_ADDR, port, pin,
+                              RK3576_PULL_DISABLE);
+            }
         }
         break;
 
