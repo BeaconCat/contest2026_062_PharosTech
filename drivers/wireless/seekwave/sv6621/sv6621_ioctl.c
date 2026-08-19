@@ -1046,6 +1046,19 @@ int sv6621_ioctl_handle(FAR struct sv6621_ioctl_s *ioctl, int command,
         ret = sv6621_ioctl_country(ioctl, request, false);
         break;
 
+      case SIOCSIWPWSAVE:
+        /* Legacy station power save is selected autonomously by firmware,
+         * matching the vendor set_power_mgmt contract.
+         */
+
+        ret = 0;
+        break;
+
+      case SIOCGIWPWSAVE:
+        request->u.power.flags = 1;
+        ret = 0;
+        break;
+
       default:
         ret = -ENOTTY;
         break;
