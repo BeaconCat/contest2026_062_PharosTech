@@ -90,6 +90,8 @@ int sv6621_rx_start(FAR struct sv6621_rx_s *rx);
 int sv6621_rx_suspend(FAR struct sv6621_rx_s *rx);
 int sv6621_rx_resume(FAR struct sv6621_rx_s *rx);
 void sv6621_rx_stop(FAR struct sv6621_rx_s *rx);
+void sv6621_rx_kick(FAR struct sv6621_rx_s *rx);
+int sv6621_rx_poll(FAR struct sv6621_rx_s *rx);
 int sv6621_rx_parse_burst(FAR struct sv6621_rx_s *rx,
                           FAR const uint8_t *buffer, size_t length,
                           unsigned int slots, FAR uint32_t *pending_count);

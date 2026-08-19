@@ -43,6 +43,7 @@
 #define SV6621_WPA_EAPOL_VERSION_MAX    2
 #define SV6621_WPA_EAPOL_TYPE_KEY       3
 #define SV6621_WPA_KEY_DESCRIPTOR_RSN   2
+#define SV6621_WPA_CCMP_KEY_SIZE       16
 #define SV6621_WPA_KEY_FIXED_SIZE       99
 #define SV6621_WPA_KEY_INFO_OFFSET      5
 #define SV6621_WPA_KEY_LENGTH_OFFSET    7
@@ -319,7 +320,9 @@ int sv6621_wpa_eapol_build(
     }
 
   sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_INFO_OFFSET, key_info);
-  sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_LENGTH_OFFSET, 0);
+  sv6621_wpa_eapol_put_be16(
+      output + SV6621_WPA_KEY_LENGTH_OFFSET,
+      response == SV6621_WPA_RESPONSE_4 ? SV6621_WPA_CCMP_KEY_SIZE : 0);
   memcpy(output + SV6621_WPA_KEY_REPLAY_OFFSET, replay,
          SV6621_WPA_REPLAY_SIZE);
   if (response == SV6621_WPA_RESPONSE_2)

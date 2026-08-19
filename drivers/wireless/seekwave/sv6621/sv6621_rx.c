@@ -31,6 +31,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <syslog.h>
 
 #include "sv6621_protocol.h"
 #include "sv6621_rx.h"
@@ -46,6 +47,8 @@
 #define SV6621_RX_MAX_DRAIN_BURSTS  32
 #define SV6621_RX_FIFO_INDICATOR    0x181
 #define SV6621_RX_EXT_INTERRUPT     0x182
+#define SV6621_RX_CCCR_INT_PENDING  0x05
+#define SV6621_RX_FUNCTION1_PENDING (1 << 1)
 #define SV6621_RX_FIFO_ASSERT       0xff
 #define SV6621_RX_BUFFER_SIZE \
   (SV6621_PACKET_SIZE * SV6621_RX_MAX_SLOTS + SV6621_RX_TRAILER_SIZE)
@@ -464,6 +467,64 @@ void sv6621_rx_stop(FAR struct sv6621_rx_s *rx)
   spin_unlock_irqrestore(&rx->schedule_lock, flags);
 }
 
+void sv6621_rx_kick(FAR struct sv6621_rx_s *rx)
+{
+  if (rx == NULL || !rx->running || rx->suspended)
+    {
+      return;
+    }
+
+  rx->fifo_indicator_valid = false;
+  sv6621_rx_interrupt(rx);
+}
+
+int sv6621_rx_poll(FAR struct sv6621_rx_s *rx)
+{
+  irqstate_t flags;
+  uint8_t fifo_indicator;
+  uint8_t pending;
+  bool changed;
+  bool idle;
+  int ret;
+
+  if (rx == NULL || !rx->running || rx->suspended)
+    {
+      return -ENODEV;
+    }
+
+  ret = rx->transport->ops->read_byte(rx->transport,
+                                      SV6621_SDIO_FUNCTION_CONTROL,
+                                      SV6621_RX_CCCR_INT_PENDING, &pending);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if ((pending & SV6621_RX_FUNCTION1_PENDING) != 0)
+    {
+      ret = rx->transport->ops->read_byte(rx->transport,
+                                          SV6621_SDIO_FUNCTION_CONTROL,
+                                          SV6621_RX_FIFO_INDICATOR,
+                                          &fifo_indicator);
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      flags = spin_lock_irqsave(&rx->schedule_lock);
+      idle = !rx->work_scheduled;
+      changed = !rx->fifo_indicator_valid ||
+                fifo_indicator != rx->stats.last_fifo_indicator;
+      spin_unlock_irqrestore(&rx->schedule_lock, flags);
+      if (idle && changed)
+        {
+          sv6621_rx_interrupt(rx);
+        }
+    }
+
+  return 0;
+}
+
 int sv6621_rx_parse_burst(FAR struct sv6621_rx_s *rx,
                           FAR const uint8_t *buffer, size_t length,
                           unsigned int slots, FAR uint32_t *pending_count)
@@ -503,6 +564,10 @@ int sv6621_rx_parse_burst(FAR struct sv6621_rx_s *rx,
       ret = sv6621_protocol_decode_header(packet, &header);
       if (ret < 0)
         {
+          syslog(LOG_ERR,
+                 "SV6621 RX header decode failed: slot=%u ret=%d head=%02x"
+                 " %02x %02x %02x\n",
+                 slot, ret, packet[0], packet[1], packet[2], packet[3]);
           return ret;
         }
 
@@ -513,6 +578,11 @@ int sv6621_rx_parse_burst(FAR struct sv6621_rx_s *rx,
 
       if ((size_t)header.length + header.padding > available)
         {
+          syslog(LOG_ERR,
+                 "SV6621 RX bounds check failed: slot=%u ch=%u len=%u"
+                 " pad=%u available=%zu\n",
+                 slot, header.channel, header.length, header.padding,
+                 available);
           return -EPROTO;
         }
 
