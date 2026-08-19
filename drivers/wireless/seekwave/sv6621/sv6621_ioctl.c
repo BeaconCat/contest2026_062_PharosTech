@@ -103,6 +103,12 @@ static int sv6621_ioctl_auth(FAR struct sv6621_ioctl_s *ioctl,
             return 0;
           }
 
+        if (value == IW_AUTH_WPA_VERSION_WPA3)
+          {
+            ioctl->connection.security = SV6621_SECURITY_WPA3_SAE;
+            return 0;
+          }
+
         return -EOPNOTSUPP;
 
       case IW_AUTH_CIPHER_PAIRWISE:
@@ -444,9 +450,19 @@ static int sv6621_ioctl_auth_query(FAR struct sv6621_ioctl_s *ioctl,
   switch (request->u.param.flags & IW_AUTH_INDEX)
     {
       case IW_AUTH_WPA_VERSION:
-        request->u.param.value =
-            ioctl->connection.security == SV6621_SECURITY_OPEN ?
-            IW_AUTH_WPA_VERSION_DISABLED : IW_AUTH_WPA_VERSION_WPA2;
+        if (ioctl->connection.security == SV6621_SECURITY_OPEN)
+          {
+            request->u.param.value = IW_AUTH_WPA_VERSION_DISABLED;
+          }
+        else if (ioctl->connection.security == SV6621_SECURITY_WPA3_SAE)
+          {
+            request->u.param.value = IW_AUTH_WPA_VERSION_WPA3;
+          }
+        else
+          {
+            request->u.param.value = IW_AUTH_WPA_VERSION_WPA2;
+          }
+
         return 0;
 
       case IW_AUTH_CIPHER_PAIRWISE:
