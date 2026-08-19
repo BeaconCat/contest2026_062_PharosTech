@@ -506,7 +506,7 @@ int sv6621_rx_parse_burst(FAR struct sv6621_rx_s *rx,
           break;
         }
 
-      if ((size_t)header.length + header.padding > available)
+      if (header.length > available)
         {
           syslog(LOG_ERR,
                  "SV6621 RX bounds check failed: slot=%u ch=%u len=%u"
