@@ -626,7 +626,7 @@ int sv6621_network_init(FAR struct sv6621_network_s *network,
       return ret;
     }
 
-  ret = netdev_register(&network->dev, NET_LL_ETHERNET);
+  ret = netdev_register(&network->dev, NET_LL_IEEE80211);
   if (ret >= 0)
     {
       network->registered = true;
