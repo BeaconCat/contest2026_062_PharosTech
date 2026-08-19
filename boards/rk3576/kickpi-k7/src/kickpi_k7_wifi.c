@@ -279,17 +279,77 @@ static const struct sv6621_board_ops_s g_kickpi_k7_wifi_board_ops = {
   .store_address = kickpi_k7_wifi_store_address,
 };
 
-static const struct sv6621_regulatory_domain_s g_kickpi_k7_wifi_regulatory = {
-  .country = { 'C', 'N' },
-  .rule_count = 4,
-  .rules = {
-    { 1, 13, 20, 0, 0 },
-    { 36, 13, 23, 0, SV6621_REGULATORY_FLAG_NO_OUTDOOR |
+static const struct sv6621_regulatory_domain_s
+    g_kickpi_k7_wifi_regulatory_domains[] = {
+  {
+    .country = { 'C', 'N' },
+    .rule_count = 4,
+    .rules = {
+      { 1, 13, 20, 0, 0 },
+      { 36, 13, 23, 0, SV6621_REGULATORY_FLAG_NO_OUTDOOR |
+                          SV6621_REGULATORY_FLAG_AUTO_BW },
+      { 52, 13, 20, 0, SV6621_REGULATORY_FLAG_NO_OUTDOOR |
+                          SV6621_REGULATORY_FLAG_DFS |
+                          SV6621_REGULATORY_FLAG_AUTO_BW },
+      { 149, 17, 33, 0, 0 },
+    },
+  },
+  {
+    .country = { '0', '0' },
+    .rule_count = 7,
+    .rules = {
+      { 1, 11, 20, 0, 0 },
+      { 12, 2, 20, 0, SV6621_REGULATORY_FLAG_NO_IR |
                         SV6621_REGULATORY_FLAG_AUTO_BW },
-    { 52, 13, 20, 0, SV6621_REGULATORY_FLAG_NO_OUTDOOR |
-                        SV6621_REGULATORY_FLAG_DFS |
-                        SV6621_REGULATORY_FLAG_AUTO_BW },
-    { 149, 17, 33, 0, 0 },
+      { 14, 1, 20, 0, SV6621_REGULATORY_FLAG_NO_IR |
+                        SV6621_REGULATORY_FLAG_NO_OFDM },
+      { 36, 13, 20, 0, SV6621_REGULATORY_FLAG_NO_IR |
+                         SV6621_REGULATORY_FLAG_AUTO_BW },
+      { 52, 13, 20, 0, SV6621_REGULATORY_FLAG_NO_IR |
+                         SV6621_REGULATORY_FLAG_DFS |
+                         SV6621_REGULATORY_FLAG_AUTO_BW },
+      { 100, 45, 20, 0, SV6621_REGULATORY_FLAG_NO_IR |
+                          SV6621_REGULATORY_FLAG_DFS },
+      { 149, 17, 20, 0, SV6621_REGULATORY_FLAG_NO_IR },
+    },
+  },
+  {
+    .country = { 'U', 'S' },
+    .rule_count = 5,
+    .rules = {
+      { 1, 11, 30, 0, 0 },
+      { 36, 13, 23, 0, SV6621_REGULATORY_FLAG_AUTO_BW },
+      { 52, 13, 24, 0, SV6621_REGULATORY_FLAG_DFS |
+                          SV6621_REGULATORY_FLAG_AUTO_BW },
+      { 100, 45, 24, 0, SV6621_REGULATORY_FLAG_DFS },
+      { 149, 17, 30, 0, SV6621_REGULATORY_FLAG_AUTO_BW },
+    },
+  },
+  {
+    .country = { 'D', 'E' },
+    .rule_count = 5,
+    .rules = {
+      { 1, 13, 20, 0, 0 },
+      { 36, 13, 23, 0, SV6621_REGULATORY_FLAG_NO_OUTDOOR |
+                          SV6621_REGULATORY_FLAG_AUTO_BW },
+      { 52, 13, 20, 0, SV6621_REGULATORY_FLAG_NO_OUTDOOR |
+                          SV6621_REGULATORY_FLAG_DFS |
+                          SV6621_REGULATORY_FLAG_AUTO_BW },
+      { 100, 41, 27, 0, SV6621_REGULATORY_FLAG_DFS },
+      { 149, 25, 14, 0, 0 },
+    },
+  },
+  {
+    .country = { 'J', 'P' },
+    .rule_count = 5,
+    .rules = {
+      { 1, 13, 20, 0, 0 },
+      { 14, 1, 20, 0, SV6621_REGULATORY_FLAG_NO_OFDM },
+      { 36, 13, 20, 0, SV6621_REGULATORY_FLAG_AUTO_BW },
+      { 52, 13, 20, 0, SV6621_REGULATORY_FLAG_DFS |
+                          SV6621_REGULATORY_FLAG_AUTO_BW },
+      { 100, 45, 23, 0, SV6621_REGULATORY_FLAG_DFS },
+    },
   },
 };
 
@@ -375,7 +435,17 @@ int kickpi_k7_wifi_initialize(void)
   config.calibration.data = g_sv6621_calib_start;
   config.calibration.length =
       g_sv6621_calib_end - g_sv6621_calib_start;
-  config.regulatory = &g_kickpi_k7_wifi_regulatory;
+  config.regulatory = &g_kickpi_k7_wifi_regulatory_domains[0];
+  config.regulatory_domains = g_kickpi_k7_wifi_regulatory_domains;
+  config.regulatory_domain_count =
+      sizeof(g_kickpi_k7_wifi_regulatory_domains) /
+      sizeof(g_kickpi_k7_wifi_regulatory_domains[0]);
+#ifdef CONFIG_SV6621_PM
+  config.system_suspend.wake_enabled = true;
+  config.system_suspend.wake_flags =
+      SV6621_WAKE_DISCONNECT | SV6621_WAKE_MAGIC_PACKET |
+      SV6621_WAKE_GTK_REKEY_FAILURE;
+#endif
 
   ret = sv6621_create(&config, &g_kickpi_k7_wifi_dev);
   if (ret < 0)
