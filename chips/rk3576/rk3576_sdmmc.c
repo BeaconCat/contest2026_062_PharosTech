@@ -619,6 +619,17 @@ static int rk3576_sdmmc_interrupt(int irq, void *context, void *arg)
   enabled = rk3576_sdmmc_getreg(priv, RK3576_SDMMC_INTMASK);
   pending = rk3576_sdmmc_getreg(priv, RK3576_SDMMC_RINTSTS) & enabled;
 
+  /* The card interrupt is level-sensitive and its source is cleared by the
+   * deferred SDIO worker.  Mask it before acknowledging the controller so
+   * the still-asserted DAT1 level cannot retrigger an interrupt storm.
+   */
+
+  if ((pending & SDMMC_INT_SDIO) != 0)
+    {
+      rk3576_sdmmc_putreg(priv, RK3576_SDMMC_INTMASK,
+                          enabled & ~SDMMC_INT_SDIO);
+    }
+
   /* Write 1 to clear the status bits we just read */
 
   rk3576_sdmmc_putreg(priv, RK3576_SDMMC_RINTSTS, pending);
