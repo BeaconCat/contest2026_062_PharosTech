@@ -76,8 +76,8 @@ enum sv6621_station_state_e
   SV6621_STATION_DISCONNECTING
 };
 
-typedef void (*sv6621_station_event_t)(bool connected, uint16_t reason,
-                                       FAR void *arg);
+typedef void (*sv6621_station_event_t)(bool connected, bool remote,
+                                       uint16_t reason, FAR void *arg);
 
 struct sv6621_station_s
 {

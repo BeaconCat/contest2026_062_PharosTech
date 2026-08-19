@@ -119,6 +119,7 @@
 #define RK3576_SV6621_CCCR_IO_ENABLE  0x02
 #define RK3576_SV6621_CCCR_IO_READY   0x03
 #define RK3576_SV6621_CCCR_INTERRUPT  0x04
+#define RK3576_SV6621_CCCR_INT_PENDING 0x05
 #define RK3576_SV6621_CCCR_ABORT      0x06
 #define RK3576_SV6621_CCCR_BUS_IF      0x07
 #define RK3576_SV6621_CCCR_SPEED       0x13
@@ -1184,10 +1185,24 @@ static int rk3576_sv6621_enable_irq(FAR struct sv6621_transport_s *transport,
 static int rk3576_sv6621_ack_irq(FAR struct sv6621_transport_s *transport)
 {
   FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
+  uint8_t pending;
+  int ret;
 
   if (!priv->opened || !priv->irq_enabled)
     {
       return -ENODEV;
+    }
+
+  /* The SV6621 in-band interrupt contract clears the card-side source by
+   * reading CCCR INTx before the receive window is drained.  The controller
+   * latch can then be rearmed without racing an asserted DAT1 level.
+   */
+
+  ret = rk3576_sv6621_direct(false, 0,
+                             RK3576_SV6621_CCCR_INT_PENDING, 0, &pending);
+  if (ret < 0)
+    {
+      return ret;
     }
 
   return rk3576_sdmmc_ack_sdio_interrupt(priv->sdio);

@@ -96,6 +96,7 @@ struct sv6621_dev_s
   uint16_t station_reason;
   uint32_t station_generation;
   bool station_connected;
+  bool station_remote_disconnect;
   bool station_work_scheduled;
   bool scan_reporting;
   bool recovery_pending;
