@@ -45,10 +45,10 @@
 #define SV6621_RX_VALID_LENGTH_SIZE 8
 #define SV6621_RX_PENDING_SIZE      4
 #define SV6621_RX_MAX_DRAIN_BURSTS  32
-#define SV6621_RX_CCCR_INT_PENDING  0x05
-#define SV6621_RX_FUNCTION1_PENDING (1 << 1)
 #define SV6621_RX_FIFO_INDICATOR    0x181
 #define SV6621_RX_EXT_INTERRUPT     0x182
+#define SV6621_RX_CCCR_INT_PENDING  0x05
+#define SV6621_RX_FUNCTION1_PENDING (1 << 1)
 #define SV6621_RX_FIFO_ASSERT       0xff
 #define SV6621_RX_BUFFER_SIZE \
   (SV6621_PACKET_SIZE * SV6621_RX_MAX_SLOTS + SV6621_RX_TRAILER_SIZE)
@@ -467,18 +467,17 @@ void sv6621_rx_stop(FAR struct sv6621_rx_s *rx)
   spin_unlock_irqrestore(&rx->schedule_lock, flags);
 }
 
-int sv6621_rx_parse_burst(FAR struct sv6621_rx_s *rx,
-                          FAR const uint8_t *buffer, size_t length,
-                          unsigned int slots, FAR uint32_t *pending_count)
+void sv6621_rx_kick(FAR struct sv6621_rx_s *rx)
 {
-  size_t packet_region;
-  unsigned int slot;
-
-  if (rx == NULL || rx->router == NULL || buffer == NULL ||
-      pending_count == NULL || slots == 0 || slots > SV6621_RX_MAX_SLOTS)
+  if (rx == NULL || !rx->running || rx->suspended)
     {
-      return -EINVAL;
+      return;
     }
+
+  rx->fifo_indicator_valid = false;
+  sv6621_rx_interrupt(rx);
+}
+
 int sv6621_rx_poll(FAR struct sv6621_rx_s *rx)
 {
   irqstate_t flags;
@@ -526,6 +525,18 @@ int sv6621_rx_poll(FAR struct sv6621_rx_s *rx)
   return 0;
 }
 
+int sv6621_rx_parse_burst(FAR struct sv6621_rx_s *rx,
+                          FAR const uint8_t *buffer, size_t length,
+                          unsigned int slots, FAR uint32_t *pending_count)
+{
+  size_t packet_region;
+  unsigned int slot;
+
+  if (rx == NULL || rx->router == NULL || buffer == NULL ||
+      pending_count == NULL || slots == 0 || slots > SV6621_RX_MAX_SLOTS)
+    {
+      return -EINVAL;
+    }
 
   packet_region = slots * SV6621_PACKET_SIZE;
   if (length != packet_region + SV6621_RX_TRAILER_SIZE)
@@ -567,12 +578,12 @@ int sv6621_rx_poll(FAR struct sv6621_rx_s *rx)
 
       if ((size_t)header.length + header.padding > available)
         {
-          return -EPROTO;
           syslog(LOG_ERR,
                  "SV6621 RX bounds check failed: slot=%u ch=%u len=%u"
                  " pad=%u available=%zu\n",
                  slot, header.channel, header.length, header.padding,
                  available);
+          return -EPROTO;
         }
 
       ret = sv6621_packet_dispatch(
