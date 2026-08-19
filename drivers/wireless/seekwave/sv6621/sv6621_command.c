@@ -225,7 +225,9 @@ int sv6621_command_engine_init(FAR struct sv6621_command_engine_s *engine,
                                sv6621_command_sender_t sender,
                                FAR void *sender_arg,
                                sv6621_command_event_t event,
-                               FAR void *event_arg)
+                               FAR void *event_arg,
+                               sv6621_command_error_t error,
+                               FAR void *error_arg)
 {
   int ret;
 
@@ -269,6 +271,8 @@ int sv6621_command_engine_init(FAR struct sv6621_command_engine_s *engine,
   engine->sender_arg = sender_arg;
   engine->event = event;
   engine->event_arg = event_arg;
+  engine->error = error;
+  engine->error_arg = error_arg;
   return 0;
 }
 
@@ -371,6 +375,7 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
   size_t packet_capacity;
   size_t packet_length;
   size_t response_capacity;
+  bool transport_failure = false;
   int ret;
 
   if (engine == NULL || instance > 0x0f || timeout_ms == 0 ||
@@ -485,6 +490,7 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
   ret = engine->sender(packet, packet_length, engine->sender_arg);
   if (ret < 0)
     {
+      transport_failure = true;
       goto cancel_command;
     }
 
@@ -507,6 +513,7 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
           if (wait_result == -ETIMEDOUT)
             {
               engine->stats.timeouts++;
+              transport_failure = true;
             }
           else
             {
@@ -564,6 +571,11 @@ free_buffers:
       syslog(LOG_ERR,
              "SV6621 command failed: instance=%u id=%u sequence=%u ret=%d\n",
              instance, id, header.sequence, ret);
+    }
+
+  if (transport_failure && engine->error != NULL)
+    {
+      engine->error(ret, engine->error_arg);
     }
 
   kmm_free(packet);
