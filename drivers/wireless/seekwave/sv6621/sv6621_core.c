@@ -75,8 +75,8 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
                                       size_t length, FAR void *arg);
 static void sv6621_core_scan_complete(int result, FAR void *arg);
 static void sv6621_core_scan_worker(FAR void *arg);
-static void sv6621_core_station_event(bool connected, uint16_t reason,
-                                       FAR void *arg);
+static void sv6621_core_station_event(bool connected, bool remote,
+                                      uint16_t reason, FAR void *arg);
 static bool sv6621_core_station_worker_stop(
     FAR struct sv6621_dev_s *dev, uint32_t generation);
 static void sv6621_core_station_worker(FAR void *arg);
@@ -1020,8 +1020,8 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
  * Name: sv6621_core_station_event
  ****************************************************************************/
 
-static void sv6621_core_station_event(bool connected, uint16_t reason,
-                                      FAR void *arg)
+static void sv6621_core_station_event(bool connected, bool remote,
+                                      uint16_t reason, FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
   bool queue = false;
@@ -1035,6 +1035,7 @@ static void sv6621_core_station_event(bool connected, uint16_t reason,
     }
 
   dev->station_connected = connected;
+  dev->station_remote_disconnect = !connected && remote;
   dev->station_reason = reason;
   dev->station_generation++;
   if (!dev->station_work_scheduled)
@@ -1100,6 +1101,7 @@ static void sv6621_core_station_worker(FAR void *arg)
       bool link_ready = false;
 #endif
       uint16_t reason;
+      bool remote_disconnect;
       bool station_ready = false;
       bool connected;
       int station_ret = 0;
@@ -1114,6 +1116,7 @@ static void sv6621_core_station_worker(FAR void *arg)
 
       generation = dev->station_generation;
       connected = dev->station_connected;
+      remote_disconnect = dev->station_remote_disconnect;
       reason = dev->station_reason;
       if (connected)
         {
@@ -1247,6 +1250,55 @@ static void sv6621_core_station_worker(FAR void *arg)
 #endif
       if (!connected)
         {
+          if (remote_disconnect)
+            {
+              int cleanup_ret;
+
+              cleanup_ret = nxmutex_lock(&dev->lifecycle_lock);
+              if (cleanup_ret < 0)
+                {
+                  sv6621_core_queue_recovery(dev, cleanup_ret);
+                  if (sv6621_core_station_worker_stop(dev, generation))
+                    {
+                      return;
+                    }
+
+                  continue;
+                }
+
+              if (nxmutex_lock(&dev->status_lock) >= 0)
+                {
+                  event_current = generation == dev->station_generation &&
+                                  !dev->station_connected &&
+                                  dev->station_remote_disconnect;
+                  nxmutex_unlock(&dev->status_lock);
+                }
+
+              if (event_current)
+                {
+                  cleanup_ret = sv6621_connection_disconnect(
+                      &dev->command, SV6621_CONNECTION_DISCONNECT_ONLY, true,
+                      reason, NULL, 0);
+                }
+
+              nxmutex_unlock(&dev->lifecycle_lock);
+              if (!event_current)
+                {
+                  continue;
+                }
+
+              if (cleanup_ret < 0)
+                {
+                  sv6621_core_queue_recovery(dev, cleanup_ret);
+                  if (sv6621_core_station_worker_stop(dev, generation))
+                    {
+                      return;
+                    }
+
+                  continue;
+                }
+            }
+
           sv6621_wpa_cancel(&dev->wpa, -ECONNRESET);
           (void)sv6621_data_set_tx_block(
               &dev->data, SV6621_DATA_TX_BLOCK_CHANNEL, false);

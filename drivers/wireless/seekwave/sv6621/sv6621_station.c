@@ -912,7 +912,7 @@ int sv6621_station_disconnect(FAR struct sv6621_station_s *station,
 
   if (previous_state == SV6621_STATION_CONNECTED && station->event != NULL)
     {
-      station->event(false, reason, station->event_arg);
+      station->event(false, false, reason, station->event_arg);
     }
 
   return 0;
@@ -947,7 +947,7 @@ int sv6621_station_mark_connected(FAR struct sv6621_station_s *station)
   nxmutex_unlock(&station->lock);
   if (station->event != NULL)
     {
-      station->event(true, 0, station->event_arg);
+      station->event(true, false, 0, station->event_arg);
     }
 
   return 0;
@@ -1174,6 +1174,7 @@ void sv6621_station_command_event(uint8_t instance, uint8_t id,
 
   if (notify && station->event != NULL)
     {
-      station->event(notify_connected, reason, station->event_arg);
+      station->event(notify_connected, !notify_connected, reason,
+                     station->event_arg);
     }
 }
