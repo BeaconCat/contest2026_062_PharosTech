@@ -46,7 +46,6 @@
 #define SV6621_SCAN_SSID_SIZE            (SV6621_SSID_MAX_LENGTH + 1)
 #define SV6621_SCAN_COMMAND_TIMEOUT_MS   5000
 #define SV6621_SCAN_STOP_TIMEOUT_MS      500
-#define SV6621_SCAN_BATCH_CHANNELS        16
 #define SV6621_SCAN_RECOVERY_GRACE_MS      500
 
 #define SV6621_SCAN_CHANNEL_COUNT_OFFSET 8
@@ -103,7 +102,6 @@ static bool sv6621_scan_connection_supported(
 static size_t
 sv6621_scan_cache_weakest(FAR const struct sv6621_scan_cache_s *cache);
 static void sv6621_scan_timeout_worker(FAR void *arg);
-static void sv6621_scan_batch_worker(FAR void *arg);
 static int sv6621_scan_queue_timeout(FAR struct sv6621_scan_s *scan);
 
 /****************************************************************************
@@ -336,70 +334,6 @@ static int sv6621_scan_queue_timeout(FAR struct sv6621_scan_s *scan)
   return work_queue(LPWORK, &scan->timeout_work,
                     sv6621_scan_timeout_worker, scan,
                     MSEC2TICK(scan->timeout_ms));
-}
-
-static void sv6621_scan_batch_worker(FAR void *arg)
-{
-  FAR struct sv6621_scan_s *scan = arg;
-  sv6621_scan_complete_t complete = NULL;
-  FAR void *complete_arg = NULL;
-  size_t offset;
-  size_t count;
-  int ret;
-
-  if (nxmutex_lock(&scan->lock) < 0)
-    {
-      return;
-    }
-
-  if (!scan->active || scan->stopping ||
-      scan->channel_offset >= scan->channel_count)
-    {
-      nxmutex_unlock(&scan->lock);
-      return;
-    }
-
-  offset = scan->channel_offset;
-  count = scan->channel_count - offset;
-  if (count > SV6621_SCAN_BATCH_CHANNELS)
-    {
-      count = SV6621_SCAN_BATCH_CHANNELS;
-    }
-
-  scan->batch_count = count;
-  scan->channel_offset += count;
-  nxmutex_unlock(&scan->lock);
-
-  ret = sv6621_scan_start(scan->command, &scan->channels[offset], count,
-                          scan->ssid_length > 0 ? scan->ssid : NULL,
-                          scan->ssid_length);
-  if (ret == 0)
-    {
-      ret = sv6621_scan_queue_timeout(scan);
-    }
-
-  if (ret >= 0)
-    {
-      return;
-    }
-
-  if (nxmutex_lock(&scan->lock) < 0)
-    {
-      return;
-    }
-
-  if (scan->active)
-    {
-      scan->active = false;
-      complete = scan->complete;
-      complete_arg = scan->complete_arg;
-    }
-
-  nxmutex_unlock(&scan->lock);
-  if (complete != NULL)
-    {
-      complete(ret, complete_arg);
-    }
 }
 
 /****************************************************************************
@@ -923,7 +857,6 @@ void sv6621_scan_controller_deinit(FAR struct sv6621_scan_s *scan)
   if (scan != NULL)
     {
       work_cancel_sync(LPWORK, &scan->timeout_work);
-      work_cancel_sync(LPWORK, &scan->batch_work);
       sv6621_scan_cache_deinit(&scan->cache);
       nxmutex_destroy(&scan->lock);
     }
@@ -968,8 +901,6 @@ int sv6621_scan_controller_begin(
   scan->recovery_pending = false;
   memcpy(scan->channels, channels, channel_count * sizeof(*channels));
   scan->channel_count = channel_count;
-  scan->channel_offset = 0;
-  scan->batch_count = 0;
   scan->ssid_length = ssid_length;
   if (ssid_length > 0)
     {
@@ -978,8 +909,16 @@ int sv6621_scan_controller_begin(
 
   scan->stats.started++;
   nxmutex_unlock(&scan->lock);
-  ret = work_queue(LPWORK, &scan->batch_work, sv6621_scan_batch_worker,
-                   scan, 0);
+
+  ret = sv6621_scan_start(scan->command, scan->channels,
+                          scan->channel_count,
+                          scan->ssid_length > 0 ? scan->ssid : NULL,
+                          scan->ssid_length);
+  if (ret == 0)
+    {
+      ret = sv6621_scan_queue_timeout(scan);
+    }
+
   if (ret < 0 && nxmutex_lock(&scan->lock) >= 0)
     {
       scan->active = false;
@@ -1020,7 +959,6 @@ int sv6621_scan_controller_cancel(FAR struct sv6621_scan_s *scan)
     }
 
   work_cancel_sync(LPWORK, &scan->timeout_work);
-  work_cancel_sync(LPWORK, &scan->batch_work);
   ret = sv6621_scan_stop(scan->command);
   if (nxmutex_lock(&scan->lock) >= 0)
     {
@@ -1066,15 +1004,6 @@ void sv6621_scan_command_event(uint8_t instance, uint8_t id,
     {
       scan->recovery_pending = false;
       scan->stats.completed++;
-      if (scan->channel_offset < scan->channel_count)
-        {
-          nxmutex_unlock(&scan->lock);
-          work_cancel(LPWORK, &scan->timeout_work);
-          work_queue(LPWORK, &scan->batch_work, sv6621_scan_batch_worker,
-                     scan, 0);
-          return;
-        }
-
       scan->active = false;
       scan->stopping = true;
       complete = scan->complete;
