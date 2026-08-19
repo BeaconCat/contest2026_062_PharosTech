@@ -750,6 +750,10 @@ static int rk3576_sv6621_enumerate(
       return -EINVAL;
     }
 
+  /* Match the last known-good networking build: release WL_REG_ON into a
+   * quiet bus, let the combo ROM settle, then start the identification clock.
+   */
+
   putreg32(1, RK3576_SV6621_CLKENA);
   ret = rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPDATE);
   if (ret < 0)
@@ -759,7 +763,7 @@ static int rk3576_sv6621_enumerate(
 
   up_mdelay(10);
 
-  for (index = 0; index < 100; index++)
+  for (index = 0; index < 3; index++)
     {
       status = rk3576_sv6621_command(RK3576_SV6621_CMD5, 0x01300000,
                                      &response);
@@ -784,7 +788,7 @@ static int rk3576_sv6621_enumerate(
       up_mdelay(10);
     }
 
-  if (index == 100)
+  if (index == 3)
     {
       wlerr("ERROR: SV6621 did not become ready after CMD5 retries\n");
       return rk3576_sv6621_open_failed(priv, -ETIMEDOUT);
