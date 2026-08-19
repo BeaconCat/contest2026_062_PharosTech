@@ -195,7 +195,8 @@ static int kickpi_k7_wifi_enable_32k(void)
       up_mdelay(3);
       pr = I2C_TRANSFER(i2c, &pmsg, 1);
       rd = I2C_TRANSFER(i2c, &dmsg, 1);
-      if (wr == OK && pr == OK && rd == OK && rback == 0xc4)
+      if (wr >= 0 && pr >= 0 && rd >= 0 &&
+          (rback & 0x83) == 0x80)
         {
           up_mdelay(150);
           return OK;
@@ -356,7 +357,7 @@ int kickpi_k7_wifi_initialize(void)
   ret = kickpi_k7_wifi_enable_32k();
   if (ret < 0)
     {
-      return ret;
+      wlwarn("WARNING: WiFi sleep clock setup failed: %d; continuing\n", ret);
     }
 
   memset(&config, 0, sizeof(config));
