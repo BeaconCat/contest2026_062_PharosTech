@@ -235,8 +235,13 @@ static void sv6621_core_pm_notify(FAR struct pm_callback_s *callback,
       container_of(callback, struct sv6621_dev_s, pm_callback);
 
   if (domain == PM_IDLE_DOMAIN && state == PM_RESTORE &&
-      dev->pm_suspended && sv6621_resume(dev) == 0)
+      dev->pm_suspended)
     {
+      /* Resume failures transfer ownership to firmware recovery.  Do not
+       * leave the PM latch set after the system has returned to normal.
+       */
+
+      (void)sv6621_resume(dev);
       dev->pm_suspended = false;
     }
 }
