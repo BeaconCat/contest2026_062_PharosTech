@@ -224,6 +224,8 @@ int sv6621_command_decode_header(
 int sv6621_command_engine_init(FAR struct sv6621_command_engine_s *engine,
                                sv6621_command_sender_t sender,
                                FAR void *sender_arg,
+                               sv6621_command_receive_kick_t receive_kick,
+                               FAR void *receive_kick_arg,
                                sv6621_command_event_t event,
                                FAR void *event_arg,
                                sv6621_command_error_t error,
@@ -269,6 +271,8 @@ int sv6621_command_engine_init(FAR struct sv6621_command_engine_s *engine,
 
   engine->sender = sender;
   engine->sender_arg = sender_arg;
+  engine->receive_kick = receive_kick;
+  engine->receive_kick_arg = receive_kick_arg;
   engine->event = event;
   engine->event_arg = event_arg;
   engine->error = error;
@@ -492,6 +496,12 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
     {
       transport_failure = true;
       goto cancel_command;
+    }
+
+  if (engine->receive_kick != NULL)
+    {
+      engine->receive_kick(engine->receive_kick_arg);
+      engine->stats.receive_kicks++;
     }
 
   ret = nxsem_tickwait(&engine->completion, MSEC2TICK(timeout_ms));
