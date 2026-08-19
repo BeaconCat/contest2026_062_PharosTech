@@ -67,6 +67,7 @@ struct sv6621_message_header_s
 struct sv6621_command_stats_s
 {
   uint32_t commands;
+  uint32_t receive_kicks;
   uint32_t timeouts;
   uint32_t cancelled;
   uint32_t events;
@@ -77,6 +78,7 @@ struct sv6621_command_stats_s
 
 typedef int (*sv6621_command_sender_t)(FAR const uint8_t *packet,
                                        size_t length, FAR void *arg);
+typedef void (*sv6621_command_receive_kick_t)(FAR void *arg);
 typedef void (*sv6621_command_event_t)(uint8_t instance, uint8_t id,
                                        FAR const uint8_t *payload,
                                        size_t length, FAR void *arg);
@@ -90,6 +92,8 @@ struct sv6621_command_engine_s
   sem_t completion;
   sv6621_command_sender_t sender;
   FAR void *sender_arg;
+  sv6621_command_receive_kick_t receive_kick;
+  FAR void *receive_kick_arg;
   sv6621_command_event_t event;
   FAR void *event_arg;
   sv6621_command_error_t error;
@@ -124,6 +128,8 @@ int sv6621_command_decode_header(
 int sv6621_command_engine_init(FAR struct sv6621_command_engine_s *engine,
                                sv6621_command_sender_t sender,
                                FAR void *sender_arg,
+                               sv6621_command_receive_kick_t receive_kick,
+                               FAR void *receive_kick_arg,
                                sv6621_command_event_t event,
                                FAR void *event_arg,
                                sv6621_command_error_t error,
