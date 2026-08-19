@@ -28,6 +28,7 @@
 
 #include <nuttx/clock.h>
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 
 #include <errno.h>
 #include <string.h>
@@ -604,6 +605,7 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
                            uint32_t timeout_ms)
 {
   FAR struct sv6621_scan_entry_s *target;
+  bool direct_association = false;
   int ret;
 
   if (station == NULL || request == NULL || timeout_ms == 0 ||
@@ -706,6 +708,8 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
       goto unlock_connect;
     }
 
+  nxsig_usleep(50 * 1000);
+
   ret = nxmutex_lock(&station->lock);
   if (ret < 0)
     {
@@ -747,6 +751,47 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
       sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
       nxsem_trywait(&station->completion);
       goto unlock_connect;
+    }
+
+  if (request->security != SV6621_SECURITY_WPA3_SAE)
+    {
+      ret = nxmutex_lock(&station->lock);
+      if (ret < 0)
+        {
+          goto unlock_connect;
+        }
+
+      if (station->state == SV6621_STATION_AUTHENTICATING)
+        {
+          station->state = SV6621_STATION_ASSOCIATING;
+          direct_association = true;
+          ret = 0;
+        }
+      else if (station->state == SV6621_STATION_ASSOCIATING ||
+               station->state == SV6621_STATION_ASSOCIATED)
+        {
+          direct_association =
+              station->state == SV6621_STATION_ASSOCIATING;
+          ret = 0;
+        }
+      else
+        {
+          ret = station->result;
+        }
+
+      nxmutex_unlock(&station->lock);
+      if (ret < 0)
+        {
+          sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
+          nxsem_trywait(&station->completion);
+          goto unlock_connect;
+        }
+
+      if (direct_association)
+        {
+          nxsig_usleep(100 * 1000);
+          sv6621_station_association_worker(station);
+        }
     }
 
   ret = nxsem_tickwait(&station->completion, MSEC2TICK(timeout_ms));
@@ -1080,14 +1125,6 @@ void sv6621_station_command_event(uint8_t instance, uint8_t id,
           else
             {
               station->state = SV6621_STATION_ASSOCIATING;
-              ret = work_queue(LPWORK, &station->association_work,
-                               sv6621_station_association_worker, station, 0);
-              if (ret < 0)
-                {
-                  station->state = SV6621_STATION_IDLE;
-                  station->result = ret;
-                  complete = true;
-                }
             }
         }
       else if (mgmt.type == SV6621_STATION_MGMT_ASSOC &&
