@@ -1971,6 +1971,12 @@ int rk3576_sdmmc_enable_sdio_interrupt(FAR struct sdio_dev_s *dev,
   mask = rk3576_sdmmc_getreg(priv, RK3576_SDMMC_INTMASK);
   if (enable)
     {
+      /* Discard a stale controller latch before unmasking.  If DAT1 is
+       * still asserted by real card data, the level source relatches after
+       * this write and is delivered normally.
+       */
+
+      rk3576_sdmmc_putreg(priv, RK3576_SDMMC_RINTSTS, SDMMC_INT_SDIO);
       mask |= SDMMC_INT_SDIO;
     }
   else
