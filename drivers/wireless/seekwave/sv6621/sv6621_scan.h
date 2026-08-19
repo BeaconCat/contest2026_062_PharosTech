@@ -120,15 +120,12 @@ struct sv6621_scan_s
   FAR struct sv6621_rx_s *rx;
   struct sv6621_scan_cache_s cache;
   struct work_s timeout_work;
-  struct work_s batch_work;
   sv6621_scan_complete_t complete;
   FAR void *complete_arg;
   uint32_t timeout_ms;
   struct sv6621_scan_channel_s channels[SV6621_SCAN_MAX_CHANNELS];
   uint8_t ssid[SV6621_SSID_MAX_LENGTH];
   size_t channel_count;
-  size_t channel_offset;
-  size_t batch_count;
   size_t ssid_length;
   bool active;
   bool stopping;
