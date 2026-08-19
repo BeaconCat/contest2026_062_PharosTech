@@ -79,6 +79,7 @@ struct sv6621_wpa_s
   uint8_t replay[SV6621_WPA_REPLAY_SIZE];
   uint8_t gtk[SV6621_WPA_GTK_MAX_SIZE];
   uint8_t igtk[SV6621_WPA_IGTK_SIZE];
+  uint8_t igtk_ipn[SV6621_WPA_IPN_SIZE];
   uint8_t frame[SV6621_WPA_FRAME_CAPACITY];
   size_t frame_length;
   size_t gtk_length;

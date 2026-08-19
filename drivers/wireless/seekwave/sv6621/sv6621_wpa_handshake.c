@@ -193,6 +193,7 @@ static void sv6621_wpa_remove_keys(FAR struct sv6621_wpa_s *wpa)
     }
 
   sv6621_wpa_clear(wpa->igtk, sizeof(wpa->igtk));
+  sv6621_wpa_clear(wpa->igtk_ipn, sizeof(wpa->igtk_ipn));
 
   if (wpa->group_installed)
     {
@@ -472,7 +473,8 @@ static int sv6621_wpa_process_message_3(
 
       install_igtk = !wpa->integrity_group_installed ||
                      wpa->igtk_index != igtk_index ||
-                     memcmp(wpa->igtk, igtk, sizeof(igtk)) != 0;
+                     memcmp(wpa->igtk, igtk, sizeof(igtk)) != 0 ||
+                     memcmp(wpa->igtk_ipn, ipn, sizeof(ipn)) != 0;
     }
 
   memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
@@ -546,6 +548,7 @@ static int sv6621_wpa_process_message_3(
         }
 
       memcpy(wpa->igtk, igtk, sizeof(wpa->igtk));
+      memcpy(wpa->igtk_ipn, ipn, sizeof(wpa->igtk_ipn));
       wpa->igtk_index = igtk_index;
       wpa->integrity_group_installed = true;
     }
@@ -616,7 +619,8 @@ static int sv6621_wpa_process_group_message_1(
         {
           install_igtk = !wpa->integrity_group_installed ||
                          wpa->igtk_index != igtk_index ||
-                         memcmp(wpa->igtk, igtk, sizeof(igtk)) != 0;
+                         memcmp(wpa->igtk, igtk, sizeof(igtk)) != 0 ||
+                         memcmp(wpa->igtk_ipn, ipn, sizeof(ipn)) != 0;
         }
       else if (ret != -ENOENT)
         {
@@ -705,6 +709,7 @@ static int sv6621_wpa_process_group_message_1(
   if (install_igtk)
     {
       memcpy(wpa->igtk, igtk, sizeof(wpa->igtk));
+      memcpy(wpa->igtk_ipn, ipn, sizeof(wpa->igtk_ipn));
       wpa->igtk_index = igtk_index;
       wpa->integrity_group_installed = true;
     }
