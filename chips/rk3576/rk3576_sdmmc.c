@@ -614,6 +614,9 @@ static int rk3576_sdmmc_interrupt(int irq, void *context, void *arg)
   uint32_t pending;
   uint32_t enabled;
 
+  UNUSED(irq);
+  UNUSED(context);
+
   /* Read the enabled interrupt status (RINTSTS & INTMASK) */
 
   enabled = rk3576_sdmmc_getreg(priv, RK3576_SDMMC_INTMASK);
@@ -885,6 +888,8 @@ static void rk3576_sdmmc_reset(struct sdio_dev_s *dev)
 static sdio_capset_t rk3576_sdmmc_capabilities(struct sdio_dev_s *dev)
 {
   sdio_capset_t caps = 0;
+
+  UNUSED(dev);
 
 #ifndef CONFIG_SDIO_WIDTH_D1_ONLY
   caps |= SDIO_CAPS_4BIT;
@@ -1315,6 +1320,8 @@ static int rk3576_sdmmc_recvlong(struct sdio_dev_s *dev, uint32_t cmd,
 {
   struct rk3576_sdmmc_dev_s *priv = (struct rk3576_sdmmc_dev_s *)dev;
   uint32_t status = rk3576_sdmmc_getreg(priv, RK3576_SDMMC_RINTSTS);
+
+  UNUSED(cmd);
 
   if ((status & SDMMC_INT_RTO) != 0)
     {
