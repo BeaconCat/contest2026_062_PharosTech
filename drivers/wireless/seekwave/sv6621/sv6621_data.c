@@ -930,17 +930,25 @@ static void sv6621_data_packet(uint8_t channel,
   struct sv6621_data_rx_s rx;
   int ret;
 
+  (void)encoded;
+
   ret = nxmutex_lock(&data->rx_lock);
   if (ret < 0)
     {
       return;
     }
 
-  descriptor = data->pn_reuse ? encoded : payload;
-  descriptor_length = length +
-                      (data->pn_reuse ? SV6621_PACKET_HEADER_SIZE : 0);
-  if (sv6621_data_decode_rx(descriptor, descriptor_length, data->pn_reuse,
-                            &rx) < 0)
+  if (length < SV6621_RX_LINK_HEADER_SIZE)
+    {
+      data->stats.malformed++;
+      goto unlock;
+    }
+
+  descriptor = payload + SV6621_RX_LINK_HEADER_SIZE;
+  descriptor_length = length - SV6621_RX_LINK_HEADER_SIZE;
+  ret = sv6621_data_decode_rx(descriptor, descriptor_length, data->pn_reuse,
+                              &rx);
+  if (ret < 0)
     {
       data->stats.malformed++;
       goto unlock;
@@ -1034,6 +1042,33 @@ int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
       length < SV6621_DATA_RX_DESCRIPTOR_SIZE)
     {
       return -EINVAL;
+    }
+
+  if (pn_reuse)
+    {
+      frame_length = sv6621_data_get_le16(payload) +
+                     SV6621_DATA_RX_ETHERNET_HEADER_TAIL;
+      frame_offset = SV6621_DATA_RX_ETHERNET_HEADER_TAIL;
+      if (frame_length < SV6621_DATA_ETHERNET_HEADER_SIZE ||
+          frame_length > length - frame_offset)
+        {
+          return -EPROTO;
+        }
+
+      context = sv6621_data_get_le16(payload + 2);
+      memset(rx, 0, sizeof(*rx));
+      rx->frame = payload + frame_offset;
+      rx->frame_length = frame_length;
+      rx->instance = context & SV6621_DATA_INSTANCE_MASK;
+      rx->instance_valid = true;
+      rx->peer_index = (context >> 4) & SV6621_DATA_PEER_INDEX_MASK;
+      rx->peer_valid = true;
+      rx->multicast = (context & (1 << 10)) != 0;
+      rx->tid = context >> 12;
+      rx->eapol = (((uint16_t)rx->frame[12] << 8) | rx->frame[13]) ==
+                  SV6621_DATA_ETHERTYPE_EAPOL;
+      rx->first_msdu = true;
+      return 0;
     }
 
   frame_offset = payload[SV6621_DATA_RX_MSDU_OFFSET_OFFSET];

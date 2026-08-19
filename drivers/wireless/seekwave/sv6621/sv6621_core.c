@@ -1458,7 +1458,7 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       goto deinit_tx;
     }
 
-  ret = sv6621_scan_controller_init(&dev->scan, &dev->command,
+  ret = sv6621_scan_controller_init(&dev->scan, &dev->command, &dev->rx,
                                     SV6621_CORE_SCAN_TIMEOUT_MS,
                                     sv6621_core_scan_complete, dev);
   if (ret < 0)
