@@ -70,6 +70,8 @@ static int sv6621_ioctl_scan_start(FAR struct sv6621_ioctl_s *ioctl,
                                    FAR const struct iwreq *request);
 static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
                                      FAR struct iwreq *request);
+static int sv6621_ioctl_country(FAR struct sv6621_ioctl_s *ioctl,
+                                FAR struct iwreq *request, bool set);
 
 /****************************************************************************
  * Private Functions
@@ -874,6 +876,35 @@ free_results:
 }
 
 /****************************************************************************
+ * Name: sv6621_ioctl_country
+ ****************************************************************************/
+
+static int sv6621_ioctl_country(FAR struct sv6621_ioctl_s *ioctl,
+                                FAR struct iwreq *request, bool set)
+{
+  FAR char *country = request->u.data.pointer;
+
+  if (country == NULL)
+    {
+      return -EINVAL;
+    }
+
+  if (request->u.data.length < (set ? 2 : 3))
+    {
+      request->u.data.length = set ? 2 : 3;
+      return set ? -EINVAL : -E2BIG;
+    }
+
+  if (set)
+    {
+      return sv6621_set_country(ioctl->owner, country);
+    }
+
+  request->u.data.length = 3;
+  return sv6621_get_country(ioctl->owner, country);
+}
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -1005,6 +1036,14 @@ int sv6621_ioctl_handle(FAR struct sv6621_ioctl_s *ioctl, int command,
 
       case SIOCGIWSTATS:
         ret = sv6621_ioctl_stats(ioctl, request);
+        break;
+
+      case SIOCSIWCOUNTRY:
+        ret = sv6621_ioctl_country(ioctl, request, true);
+        break;
+
+      case SIOCGIWCOUNTRY:
+        ret = sv6621_ioctl_country(ioctl, request, false);
         break;
 
       default:
