@@ -75,6 +75,7 @@ struct sv6621_rx_s
   bool work_scheduled;
   bool work_reschedule;
   uint8_t pending_slots;
+  uint32_t activity_generation;
 };
 
 /****************************************************************************

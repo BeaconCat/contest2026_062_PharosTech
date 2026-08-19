@@ -93,8 +93,9 @@ static void sv6621_rx_interrupt(FAR void *arg)
       return;
     }
 
-  rx->stats.interrupts++;
   flags = spin_lock_irqsave(&rx->schedule_lock);
+  rx->stats.interrupts++;
+  rx->activity_generation++;
   if (!rx->work_scheduled)
     {
       rx->work_scheduled = true;
@@ -294,6 +295,7 @@ static void sv6621_rx_worker(FAR void *arg)
       if (!retry)
         {
           rx->work_scheduled = false;
+          rx->activity_generation++;
         }
 
       spin_unlock_irqrestore(&rx->schedule_lock, flags);
@@ -485,11 +487,21 @@ int sv6621_rx_poll(FAR struct sv6621_rx_s *rx)
   uint8_t pending;
   bool changed;
   bool idle;
+  uint32_t generation;
   int ret;
 
   if (rx == NULL || !rx->running || rx->suspended)
     {
       return -ENODEV;
+    }
+
+  flags = spin_lock_irqsave(&rx->schedule_lock);
+  idle = !rx->work_scheduled;
+  generation = rx->activity_generation;
+  spin_unlock_irqrestore(&rx->schedule_lock, flags);
+  if (!idle)
+    {
+      return 0;
     }
 
   ret = rx->transport->ops->read_byte(rx->transport,
@@ -512,7 +524,8 @@ int sv6621_rx_poll(FAR struct sv6621_rx_s *rx)
         }
 
       flags = spin_lock_irqsave(&rx->schedule_lock);
-      idle = !rx->work_scheduled;
+      idle = !rx->work_scheduled &&
+             generation == rx->activity_generation;
       changed = !rx->fifo_indicator_valid ||
                 fifo_indicator != rx->stats.last_fifo_indicator;
       spin_unlock_irqrestore(&rx->schedule_lock, flags);
