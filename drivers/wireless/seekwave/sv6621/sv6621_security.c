@@ -42,6 +42,8 @@
 #define SV6621_SECURITY_COMMAND_TIMEOUT_MS  5000
 #define SV6621_SECURITY_PACKET_NUMBER_SIZE  6
 #define SV6621_SECURITY_CCMP_KEY_SIZE       16
+#define SV6621_SECURITY_BIP_KEY_SIZE        16
+#define SV6621_SECURITY_BIP_256_KEY_SIZE    32
 #define SV6621_SECURITY_KEY_PAYLOAD_SIZE    48
 #define SV6621_SECURITY_KEY_TYPE_OFFSET     6
 #define SV6621_SECURITY_CIPHER_OFFSET       7
@@ -68,11 +70,25 @@ int sv6621_security_add_key(
     FAR const uint8_t packet_number[SV6621_SECURITY_PACKET_NUMBER_SIZE])
 {
   uint8_t payload[SV6621_SECURITY_KEY_PAYLOAD_SIZE];
+  bool valid_key;
+
+  valid_key = cipher == SV6621_SECURITY_CIPHER_CCMP ?
+                  key_length == SV6621_SECURITY_CCMP_KEY_SIZE :
+              cipher == SV6621_SECURITY_CIPHER_BIP_CMAC_128 ||
+                      cipher == SV6621_SECURITY_CIPHER_BIP_GMAC_128 ?
+                  key_length == SV6621_SECURITY_BIP_KEY_SIZE :
+              cipher == SV6621_SECURITY_CIPHER_BIP_CMAC_256 ||
+                      cipher == SV6621_SECURITY_CIPHER_BIP_GMAC_256 ?
+                  key_length == SV6621_SECURITY_BIP_256_KEY_SIZE :
+                  false;
 
   if (command == NULL || address == NULL || key == NULL ||
-      key_length != SV6621_SECURITY_CCMP_KEY_SIZE || key_index > 6 ||
+      !valid_key || key_index > 6 ||
       type > SV6621_SECURITY_KEY_BEACON_INTEGRITY_GROUP ||
-      cipher != SV6621_SECURITY_CIPHER_CCMP)
+      (type <= SV6621_SECURITY_KEY_GROUP &&
+       cipher != SV6621_SECURITY_CIPHER_CCMP) ||
+      (type >= SV6621_SECURITY_KEY_INTEGRITY_GROUP &&
+       cipher == SV6621_SECURITY_CIPHER_CCMP))
     {
       return -EINVAL;
     }
@@ -112,7 +128,14 @@ int sv6621_security_delete_key(
 
   if (command == NULL || address == NULL || key_index > 6 ||
       type > SV6621_SECURITY_KEY_BEACON_INTEGRITY_GROUP ||
-      cipher != SV6621_SECURITY_CIPHER_CCMP)
+      cipher < SV6621_SECURITY_CIPHER_CCMP ||
+      cipher > SV6621_SECURITY_CIPHER_BIP_GMAC_256 ||
+      (cipher > SV6621_SECURITY_CIPHER_CCMP &&
+       cipher < SV6621_SECURITY_CIPHER_BIP_CMAC_128) ||
+      (type <= SV6621_SECURITY_KEY_GROUP &&
+       cipher != SV6621_SECURITY_CIPHER_CCMP) ||
+      (type >= SV6621_SECURITY_KEY_INTEGRITY_GROUP &&
+       cipher == SV6621_SECURITY_CIPHER_CCMP))
     {
       return -EINVAL;
     }

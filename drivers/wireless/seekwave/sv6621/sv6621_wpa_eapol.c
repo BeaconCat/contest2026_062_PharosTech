@@ -67,6 +67,7 @@
 #define SV6621_WPA_EAPOL_MAX_SIZE       512
 #define SV6621_WPA_IE_VENDOR             221
 #define SV6621_WPA_GTK_KDE_HEADER_SIZE   6
+#define SV6621_WPA_IGTK_KDE_HEADER_SIZE 12
 
 /****************************************************************************
  * Private Data
@@ -79,13 +80,18 @@ static const uint8_t g_sv6621_wpa_rsn_psk_ccmp[] = {
 };
 
 static const uint8_t g_sv6621_wpa_rsn_sae_ccmp[] = {
-  0x30, 0x14, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04,
+  0x30, 0x1a, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04,
   0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00,
-  0x00, 0x0f, 0xac, 0x08, 0xc0, 0x00
+  0x00, 0x0f, 0xac, 0x08, 0xc0, 0x00, 0x00, 0x00,
+  0x00, 0x0f, 0xac, 0x06
 };
 
 static const uint8_t g_sv6621_wpa_gtk_selector[] = {
   0x00, 0x0f, 0xac, 0x01
+};
+
+static const uint8_t g_sv6621_wpa_igtk_selector[] = {
+  0x00, 0x0f, 0xac, 0x09
 };
 
 /****************************************************************************
@@ -437,6 +443,67 @@ int sv6621_wpa_eapol_extract_gtk(
         }
 
       offset += length + 2;
+    }
+
+  return -ENOENT;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_eapol_extract_igtk
+ ****************************************************************************/
+
+int sv6621_wpa_eapol_extract_igtk(
+    FAR const uint8_t *key_data, size_t key_data_length,
+    FAR uint8_t *key_index, FAR uint8_t ipn[SV6621_WPA_IPN_SIZE],
+    FAR uint8_t igtk[SV6621_WPA_IGTK_SIZE])
+{
+  size_t offset = 0;
+
+  if (key_data == NULL || key_index == NULL || ipn == NULL || igtk == NULL)
+    {
+      return -EINVAL;
+    }
+
+  while (offset < key_data_length)
+    {
+      FAR const uint8_t *value;
+      uint8_t id;
+      uint8_t length;
+
+      if (key_data_length - offset < 2)
+        {
+          return -EPROTO;
+        }
+
+      id = key_data[offset];
+      length = key_data[offset + 1];
+      if ((size_t)length + 2 > key_data_length - offset)
+        {
+          return -EPROTO;
+        }
+
+      value = key_data + offset + 2;
+      if (id == SV6621_WPA_IE_VENDOR &&
+          length == SV6621_WPA_IGTK_KDE_HEADER_SIZE +
+                        SV6621_WPA_IGTK_SIZE &&
+          memcmp(value, g_sv6621_wpa_igtk_selector,
+                 sizeof(g_sv6621_wpa_igtk_selector)) == 0)
+        {
+          uint16_t index = value[4] | ((uint16_t)value[5] << 8);
+
+          if (index < 4 || index > 5)
+            {
+              return -EPROTO;
+            }
+
+          *key_index = index;
+          memcpy(ipn, value + 6, SV6621_WPA_IPN_SIZE);
+          memcpy(igtk, value + SV6621_WPA_IGTK_KDE_HEADER_SIZE,
+                 SV6621_WPA_IGTK_SIZE);
+          return 0;
+        }
+
+      offset += (size_t)length + 2;
     }
 
   return -ENOENT;
