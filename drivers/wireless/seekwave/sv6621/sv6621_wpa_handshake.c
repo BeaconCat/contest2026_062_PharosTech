@@ -410,6 +410,15 @@ static int sv6621_wpa_process_message_3(
       return ret;
     }
 
+  memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
+  wpa->eapol_version = eapol->version;
+
+  ret = sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_4);
+  if (ret < 0)
+    {
+      goto clear_gtk;
+    }
+
   ret = sv6621_security_add_key(
       wpa->command, SV6621_SECURITY_KEY_PAIRWISE,
       SV6621_SECURITY_CIPHER_CCMP, wpa->authenticator, 0,
@@ -445,14 +454,7 @@ static int sv6621_wpa_process_message_3(
 
   wpa->gtk_index = gtk_index;
   wpa->group_installed = true;
-
-  memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
-  wpa->eapol_version = eapol->version;
-  ret = sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_4);
-  if (ret == 0)
-    {
-      ret = sv6621_station_mark_connected(wpa->station);
-    }
+  ret = sv6621_station_mark_connected(wpa->station);
 
 clear_gtk:
   sv6621_wpa_clear(gtk, sizeof(gtk));
