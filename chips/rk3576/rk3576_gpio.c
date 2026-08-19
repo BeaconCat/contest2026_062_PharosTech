@@ -902,6 +902,13 @@ struct rk3576_gpint_dev_s
   bool enabled; /* Interrupt currently enabled */
 };
 
+struct rk3576_gpio_irq_entry_s
+{
+  FAR struct rk3576_gpint_dev_s *dev;
+  xcpt_t handler;
+  FAR void *arg;
+};
+
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
@@ -921,12 +928,12 @@ static int rk3576_gpio_setmask(FAR struct gpio_dev_s *dev, bool enable);
 
 static int g_gpio_global_minor = 0; /* /dev/gpioN minor, globally unique */
 
-/* O(1) interrupt device lookup: irq_map[port][pin] -> registered device.
- * Each (port, pin) slot can hold at most one interrupt device.
+/* O(1) interrupt owner lookup.  Character and kernel clients are mutually
+ * exclusive for each pin.
  */
 
-static struct rk3576_gpint_dev_s
-    *g_gpio_irq_map[RK3576_GPIO_NPORTS][RK3576_GPIO_NPINS];
+static struct rk3576_gpio_irq_entry_s
+    g_gpio_irq_map[RK3576_GPIO_NPORTS][RK3576_GPIO_NPINS];
 
 static const struct gpio_operations_s g_gpin_ops = {
   .go_read = rk3576_gpio_read_cb,
@@ -1196,15 +1203,25 @@ static int rk3576_gpio_isr(int irq, void *context, void *arg)
 
   while (status != 0)
     {
+      FAR struct rk3576_gpio_irq_entry_s *entry;
       FAR struct rk3576_gpint_dev_s *idev;
+      xcpt_t handler;
+      FAR void *handler_arg;
 
       pin = __builtin_ctz(status);
 
-      /* O(1) lookup: irq_map[port][pin] directly indexes the device */
+      /* O(1) lookup: irq_map[port][pin] directly indexes the owner. */
 
-      idev = g_gpio_irq_map[port][pin];
+      entry = &g_gpio_irq_map[port][pin];
+      idev = entry->dev;
+      handler = entry->handler;
+      handler_arg = entry->arg;
 
-      if (idev != NULL && idev->callback != NULL)
+      if (handler != NULL)
+        {
+          handler(irq, context, handler_arg);
+        }
+      else if (idev != NULL && idev->callback != NULL)
         {
           idev->callback(&idev->dev.gpio, (uint8_t)pin);
         }
@@ -1225,6 +1242,109 @@ static int rk3576_gpio_isr(int irq, void *context, void *arg)
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
+
+int rk3576_gpio_irq_attach(gpio_pinset_t pinset, xcpt_t handler,
+                           FAR void *arg)
+{
+  FAR struct rk3576_gpio_irq_entry_s *entry;
+  irqstate_t flags;
+  unsigned int port;
+  unsigned int pin;
+  int ret = OK;
+
+  port = (pinset & GPIO_PORT_MASK) >> GPIO_PORT_SHIFT;
+  pin = (pinset & GPIO_PIN_MASK) >> GPIO_PIN_SHIFT;
+
+  if (port >= RK3576_GPIO_NPORTS || pin >= RK3576_GPIO_NPINS ||
+      handler == NULL || (pinset & GPIO_EXTI) == 0)
+    {
+      return -EINVAL;
+    }
+
+  flags = spin_lock_irqsave(&g_gpio_lock);
+  entry = &g_gpio_irq_map[port][pin];
+
+  if (entry->dev != NULL || entry->handler != NULL)
+    {
+      ret = -EBUSY;
+    }
+  else
+    {
+      RK3576_GPIO_V2_WRITE_BIT(RK3576_GPIO_INTMASK(port), pin, 1);
+      RK3576_GPIO_V2_WRITE_BIT(RK3576_GPIO_PORTA_EOI(port), pin, 1);
+      entry->arg = arg;
+      entry->handler = handler;
+    }
+
+  spin_unlock_irqrestore(&g_gpio_lock, flags);
+  return ret;
+}
+
+int rk3576_gpio_irq_enable(gpio_pinset_t pinset, bool enable)
+{
+  FAR struct rk3576_gpio_irq_entry_s *entry;
+  irqstate_t flags;
+  unsigned int port;
+  unsigned int pin;
+
+  port = (pinset & GPIO_PORT_MASK) >> GPIO_PORT_SHIFT;
+  pin = (pinset & GPIO_PIN_MASK) >> GPIO_PIN_SHIFT;
+
+  if (port >= RK3576_GPIO_NPORTS || pin >= RK3576_GPIO_NPINS)
+    {
+      return -EINVAL;
+    }
+
+  flags = spin_lock_irqsave(&g_gpio_lock);
+  entry = &g_gpio_irq_map[port][pin];
+
+  if (entry->handler == NULL || entry->dev != NULL)
+    {
+      spin_unlock_irqrestore(&g_gpio_lock, flags);
+      return -ENOENT;
+    }
+
+  if (enable)
+    {
+      RK3576_GPIO_V2_WRITE_BIT(RK3576_GPIO_PORTA_EOI(port), pin, 1);
+    }
+
+  RK3576_GPIO_V2_WRITE_BIT(RK3576_GPIO_INTMASK(port), pin, enable ? 0 : 1);
+  spin_unlock_irqrestore(&g_gpio_lock, flags);
+  return OK;
+}
+
+int rk3576_gpio_irq_detach(gpio_pinset_t pinset)
+{
+  FAR struct rk3576_gpio_irq_entry_s *entry;
+  irqstate_t flags;
+  unsigned int port;
+  unsigned int pin;
+
+  port = (pinset & GPIO_PORT_MASK) >> GPIO_PORT_SHIFT;
+  pin = (pinset & GPIO_PIN_MASK) >> GPIO_PIN_SHIFT;
+
+  if (port >= RK3576_GPIO_NPORTS || pin >= RK3576_GPIO_NPINS)
+    {
+      return -EINVAL;
+    }
+
+  flags = spin_lock_irqsave(&g_gpio_lock);
+  entry = &g_gpio_irq_map[port][pin];
+
+  if (entry->handler == NULL || entry->dev != NULL)
+    {
+      spin_unlock_irqrestore(&g_gpio_lock, flags);
+      return -ENOENT;
+    }
+
+  RK3576_GPIO_V2_WRITE_BIT(RK3576_GPIO_INTMASK(port), pin, 1);
+  RK3576_GPIO_V2_WRITE_BIT(RK3576_GPIO_PORTA_EOI(port), pin, 1);
+  entry->handler = NULL;
+  entry->arg = NULL;
+  spin_unlock_irqrestore(&g_gpio_lock, flags);
+  return OK;
+}
 
 int rk3576_gpio_register(gpio_pinset_t pinset)
 {
@@ -1288,7 +1408,9 @@ int rk3576_gpio_register(gpio_pinset_t pinset)
 
   /* Interrupt-specific: check for duplicate before allocating */
 
-  if (is_interrupt && g_gpio_irq_map[port][pin] != NULL)
+  if (is_interrupt &&
+      (g_gpio_irq_map[port][pin].dev != NULL ||
+       g_gpio_irq_map[port][pin].handler != NULL))
     {
       gpioerr("ERROR: GPIO%u_P%u already registered for interrupts\n", port,
               pin);
@@ -1339,7 +1461,19 @@ int rk3576_gpio_register(gpio_pinset_t pinset)
 
   if (is_interrupt)
     {
-      g_gpio_irq_map[port][pin] = idev;
+      irqstate_t flags = spin_lock_irqsave(&g_gpio_lock);
+
+      if (g_gpio_irq_map[port][pin].dev != NULL ||
+          g_gpio_irq_map[port][pin].handler != NULL)
+        {
+          spin_unlock_irqrestore(&g_gpio_lock, flags);
+          gpio_pin_unregister(&dev->gpio, minor);
+          kmm_free(dev);
+          return -EBUSY;
+        }
+
+      g_gpio_irq_map[port][pin].dev = idev;
+      spin_unlock_irqrestore(&g_gpio_lock, flags);
     }
 
   return OK;
