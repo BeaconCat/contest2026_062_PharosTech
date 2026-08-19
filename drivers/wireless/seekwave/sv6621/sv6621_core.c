@@ -29,7 +29,9 @@
 #include <nuttx/kmalloc.h>
 
 #include <errno.h>
+#include <inttypes.h>
 #include <string.h>
+#include <syslog.h>
 
 #include "sv6621_core.h"
 #include "sv6621_firmware.h"
@@ -1725,6 +1727,22 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
   ret = sv6621_service_wait_bsp(&dev->service, SV6621_CORE_BSP_TIMEOUT_MS);
   if (ret < 0)
     {
+      uint8_t intx = 0;
+      uint8_t fifo = 0;
+      int intx_ret;
+      int fifo_ret;
+
+      intx_ret = dev->config.transport->ops->read_byte(
+          dev->config.transport, SV6621_SDIO_FUNCTION_CONTROL, 0x05, &intx);
+      fifo_ret = dev->config.transport->ops->read_byte(
+          dev->config.transport, SV6621_SDIO_FUNCTION_CONTROL, 0x181, &fifo);
+      syslog(LOG_ERR,
+             "SV6621 BSP wait: ret=%d intx=%02x/%d fifo=%02x/%d"
+             " irq=%" PRIu32 " bursts=%" PRIu32 " packets=%" PRIu32
+             " errors=%" PRIu32 "\n",
+             ret, intx, intx_ret, fifo, fifo_ret, dev->rx.stats.interrupts,
+             dev->rx.stats.bursts, dev->rx.stats.packets,
+             dev->rx.stats.transport_errors);
       goto fail;
     }
 
@@ -1744,6 +1762,19 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
                                   SV6621_CORE_WIFI_TIMEOUT_MS);
   if (ret < 0)
     {
+      uint8_t intx = 0;
+      uint8_t fifo = 0;
+
+      dev->config.transport->ops->read_byte(
+          dev->config.transport, SV6621_SDIO_FUNCTION_CONTROL, 0x05, &intx);
+      dev->config.transport->ops->read_byte(
+          dev->config.transport, SV6621_SDIO_FUNCTION_CONTROL, 0x181, &fifo);
+      syslog(LOG_ERR,
+             "SV6621 WiFi ready wait failed: ret=%d intx=%02x fifo=%02x"
+             " irq=%" PRIu32 " bursts=%" PRIu32 " packets=%" PRIu32
+             "\n",
+             ret, intx, fifo, dev->rx.stats.interrupts,
+             dev->rx.stats.bursts, dev->rx.stats.packets);
       goto fail;
     }
 
