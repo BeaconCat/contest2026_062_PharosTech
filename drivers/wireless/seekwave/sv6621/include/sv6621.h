@@ -294,6 +294,8 @@ struct sv6621_config_s
   struct sv6621_firmware_s nvram;
   struct sv6621_firmware_s calibration;
   FAR const struct sv6621_regulatory_domain_s *regulatory;
+  FAR const struct sv6621_regulatory_domain_s *regulatory_domains;
+  size_t regulatory_domain_count;
 #ifdef CONFIG_SV6621_PM
   struct sv6621_suspend_s system_suspend;
 #endif
@@ -320,6 +322,9 @@ int sv6621_get_status(FAR struct sv6621_dev_s *dev,
                       FAR struct sv6621_status_s *status);
 int sv6621_get_link_stats(FAR struct sv6621_dev_s *dev,
                           FAR struct sv6621_link_stats_s *stats);
+int sv6621_set_country(FAR struct sv6621_dev_s *dev,
+                       FAR const char country[2]);
+int sv6621_get_country(FAR struct sv6621_dev_s *dev, FAR char country[3]);
 int sv6621_scan(FAR struct sv6621_dev_s *dev);
 int sv6621_connect(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_connect_s *request);

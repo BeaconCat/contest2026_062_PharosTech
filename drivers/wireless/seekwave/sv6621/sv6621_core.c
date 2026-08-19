@@ -29,6 +29,7 @@
 #include <nuttx/kthread.h>
 #include <nuttx/kmalloc.h>
 
+#include <ctype.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -1518,6 +1519,12 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       return -EINVAL;
     }
 
+  if ((config->regulatory_domains == NULL) !=
+      (config->regulatory_domain_count == 0))
+    {
+      return -EINVAL;
+    }
+
 #ifdef CONFIG_SV6621_PM
   if ((config->system_suspend.wake_flags & ~SV6621_WAKE_ALL) != 0 ||
       (!config->system_suspend.wake_enabled &&
@@ -1541,9 +1548,10 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
     }
 
   dev->config = *config;
+  dev->regulatory = *config->regulatory;
   dev->status.state = SV6621_STATE_OFF;
   ret = sv6621_regulatory_scan_channels(
-      config->regulatory, dev->scan_channels,
+      &dev->regulatory, dev->scan_channels,
       SV6621_REGULATORY_SCAN_CHANNEL_CAPACITY, &dev->scan_channel_count);
   if (ret < 0)
     {
@@ -2004,7 +2012,7 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
     }
 
   ret = sv6621_regulatory_set_domain(&dev->command,
-                                     dev->config.regulatory);
+                                     &dev->regulatory);
   if (ret < 0)
     {
       goto fail;
@@ -2271,6 +2279,141 @@ int sv6621_get_link_stats(FAR struct sv6621_dev_s *dev,
 unlock_lifecycle:
   nxmutex_unlock(&dev->lifecycle_lock);
   return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_set_country
+ ****************************************************************************/
+
+int sv6621_set_country(FAR struct sv6621_dev_s *dev,
+                       FAR const char country[2])
+{
+  struct sv6621_scan_channel_s
+      channels[SV6621_REGULATORY_SCAN_CHANNEL_CAPACITY];
+  FAR const struct sv6621_regulatory_domain_s *domain = NULL;
+  size_t channel_count;
+  size_t index;
+  char alpha2[2];
+  int ret;
+
+  if (dev == NULL || country == NULL)
+    {
+      return -EINVAL;
+    }
+
+  alpha2[0] = toupper((unsigned char)country[0]);
+  alpha2[1] = toupper((unsigned char)country[1]);
+  if (!((alpha2[0] == '0' && alpha2[1] == '0') ||
+        (isalpha((unsigned char)alpha2[0]) &&
+         isalpha((unsigned char)alpha2[1]))))
+    {
+      return -EINVAL;
+    }
+
+  for (index = 0; index < dev->config.regulatory_domain_count; index++)
+    {
+      FAR const struct sv6621_regulatory_domain_s *candidate =
+          &dev->config.regulatory_domains[index];
+
+      if (toupper((unsigned char)candidate->country[0]) == alpha2[0] &&
+          toupper((unsigned char)candidate->country[1]) == alpha2[1])
+        {
+          domain = candidate;
+          break;
+        }
+    }
+
+  if (domain == NULL)
+    {
+      return -ENOENT;
+    }
+
+  ret = sv6621_regulatory_scan_channels(
+      domain, channels, SV6621_REGULATORY_SCAN_CHANNEL_CAPACITY,
+      &channel_count);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (dev->regulatory.country[0] == alpha2[0] &&
+      dev->regulatory.country[1] == alpha2[1])
+    {
+      ret = 0;
+      goto unlock_country;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_country;
+    }
+
+  if (dev->status.state != SV6621_STATE_WIFI_READY)
+    {
+      ret = -ENETDOWN;
+    }
+  else if (dev->station_connected)
+    {
+      ret = -EBUSY;
+    }
+
+  nxmutex_unlock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_country;
+    }
+
+  ret = sv6621_scan_controller_cancel(&dev->scan);
+  if (ret < 0)
+    {
+      goto unlock_country;
+    }
+
+  ret = sv6621_regulatory_set_domain(&dev->command, domain);
+  if (ret == 0)
+    {
+      dev->regulatory = *domain;
+      memcpy(dev->scan_channels, channels,
+             channel_count * sizeof(*channels));
+      dev->scan_channel_count = channel_count;
+    }
+
+unlock_country:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_get_country
+ ****************************************************************************/
+
+int sv6621_get_country(FAR struct sv6621_dev_s *dev, FAR char country[3])
+{
+  int ret;
+
+  if (dev == NULL || country == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  country[0] = dev->regulatory.country[0];
+  country[1] = dev->regulatory.country[1];
+  country[2] = '\0';
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return 0;
 }
 
 /****************************************************************************
