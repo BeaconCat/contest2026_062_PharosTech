@@ -78,12 +78,14 @@ struct sv6621_wpa_s
   uint8_t snonce[SV6621_WPA_NONCE_SIZE];
   uint8_t replay[SV6621_WPA_REPLAY_SIZE];
   uint8_t gtk[SV6621_WPA_GTK_MAX_SIZE];
+  uint8_t igtk[SV6621_WPA_IGTK_SIZE];
   uint8_t frame[SV6621_WPA_FRAME_CAPACITY];
   size_t frame_length;
   size_t gtk_length;
   int result;
   uint8_t eapol_version;
   uint8_t gtk_index;
+  uint8_t igtk_index;
   bool peer_ready;
   bool frame_pending;
   bool work_scheduled;
@@ -92,6 +94,7 @@ struct sv6621_wpa_s
   bool rekeying;
   bool pairwise_installed;
   bool group_installed;
+  bool integrity_group_installed;
 };
 
 /****************************************************************************

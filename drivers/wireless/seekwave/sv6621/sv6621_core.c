@@ -26,10 +26,13 @@
 
 #include <nuttx/config.h>
 
+#include <nuttx/kthread.h>
 #include <nuttx/kmalloc.h>
 
 #include <errno.h>
 #include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
 
@@ -90,6 +93,7 @@ static void sv6621_core_event_worker(FAR void *arg);
 static void sv6621_core_queue_fatal(FAR struct sv6621_dev_s *dev);
 static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
                                        int error);
+static int sv6621_core_recovery_thread(int argc, FAR char *argv[]);
 static void sv6621_core_recovery_worker(FAR void *arg);
 static void sv6621_core_thermal_worker(FAR void *arg);
 static void sv6621_core_security_worker(FAR void *arg);
@@ -310,7 +314,8 @@ static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
 
   if (dev->status.state != SV6621_STATE_OFF &&
       dev->status.state != SV6621_STATE_STOPPING &&
-      dev->status.state != SV6621_STATE_FAILED)
+      dev->status.state != SV6621_STATE_FAILED &&
+      !dev->recovery_shutdown)
     {
       if (!dev->recovery_pending)
         {
@@ -331,8 +336,7 @@ static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
       return;
     }
 
-  ret = work_queue(LPWORK, &dev->recovery_work,
-                   sv6621_core_recovery_worker, dev, 0);
+  ret = nxsem_post(&dev->recovery_sem);
   if (ret < 0)
     {
       if (nxmutex_lock(&dev->status_lock) >= 0)
@@ -346,6 +350,43 @@ static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
 
       sv6621_core_queue_fatal(dev);
     }
+}
+
+/****************************************************************************
+ * Name: sv6621_core_recovery_thread
+ ****************************************************************************/
+
+static int sv6621_core_recovery_thread(int argc, FAR char *argv[])
+{
+  FAR struct sv6621_dev_s *dev =
+      (FAR struct sv6621_dev_s *)(uintptr_t)strtoull(argv[1], NULL, 16);
+
+  (void)argc;
+
+  for (;;)
+    {
+      if (nxsem_wait_uninterruptible(&dev->recovery_sem) < 0)
+        {
+          continue;
+        }
+
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          continue;
+        }
+
+      if (dev->recovery_shutdown)
+        {
+          nxmutex_unlock(&dev->status_lock);
+          break;
+        }
+
+      nxmutex_unlock(&dev->status_lock);
+      sv6621_core_recovery_worker(dev);
+    }
+
+  nxsem_post(&dev->recovery_exit_sem);
+  return 0;
 }
 
 /****************************************************************************
@@ -499,7 +540,8 @@ static void sv6621_core_recovery_worker(FAR void *arg)
           return;
         }
 
-      if (!dev->recovery_pending || dev->status.state == SV6621_STATE_OFF ||
+      if (dev->recovery_shutdown || !dev->recovery_pending ||
+          dev->status.state == SV6621_STATE_OFF ||
           dev->status.state == SV6621_STATE_STOPPING ||
           dev->status.state == SV6621_STATE_FAILED)
         {
@@ -583,7 +625,8 @@ static void sv6621_core_recovery_worker(FAR void *arg)
           return;
         }
 
-      if (!dev->recovery_pending || dev->status.state == SV6621_STATE_OFF ||
+      if (dev->recovery_shutdown || !dev->recovery_pending ||
+          dev->status.state == SV6621_STATE_OFF ||
           dev->status.state == SV6621_STATE_STOPPING ||
           dev->status.state == SV6621_STATE_FAILED)
         {
@@ -1458,6 +1501,8 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
                   FAR struct sv6621_dev_s **dev_out)
 {
   FAR struct sv6621_dev_s *dev;
+  char recovery_arg[2 + sizeof(uintptr_t) * 2 + 1];
+  FAR char *recovery_argv[2];
   int ret;
 
   if (config == NULL || dev_out == NULL || config->transport == NULL ||
@@ -1597,12 +1642,37 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       goto unsubscribe_service;
     }
 
+  ret = nxsem_init(&dev->recovery_sem, 0, 0);
+  if (ret < 0)
+    {
+      goto unsubscribe_command;
+    }
+
+  ret = nxsem_init(&dev->recovery_exit_sem, 0, 0);
+  if (ret < 0)
+    {
+      goto destroy_recovery_sem;
+    }
+
+  snprintf(recovery_arg, sizeof(recovery_arg), "%" PRIxPTR,
+           (uintptr_t)dev);
+  recovery_argv[0] = recovery_arg;
+  recovery_argv[1] = NULL;
+  ret = kthread_create("sv6621_recovery", CONFIG_SV6621_RECOVERY_PRIO,
+                       CONFIG_SV6621_RECOVERY_STACK,
+                       sv6621_core_recovery_thread, recovery_argv);
+  if (ret <= 0)
+    {
+      ret = ret < 0 ? ret : -ECHILD;
+      goto destroy_recovery_exit_sem;
+    }
+
 #ifdef CONFIG_SV6621_PM
   dev->pm_callback.prepare = sv6621_core_pm_prepare;
   ret = pm_register(&dev->pm_callback);
   if (ret < 0)
     {
-      goto unsubscribe_command;
+      goto stop_recovery_thread;
     }
 
   dev->pm_registered = true;
@@ -1612,10 +1682,18 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
   return 0;
 
 #ifdef CONFIG_SV6621_PM
+stop_recovery_thread:
+  dev->recovery_shutdown = true;
+  nxsem_post(&dev->recovery_sem);
+  nxsem_wait_uninterruptible(&dev->recovery_exit_sem);
+#endif
+destroy_recovery_exit_sem:
+  nxsem_destroy(&dev->recovery_exit_sem);
+destroy_recovery_sem:
+  nxsem_destroy(&dev->recovery_sem);
 unsubscribe_command:
   sv6621_packet_unsubscribe(&dev->router, SV6621_CHANNEL_WIFI_COMMAND,
                             sv6621_command_channel_consumer, &dev->command);
-#endif
 unsubscribe_service:
   sv6621_packet_unsubscribe(&dev->router, SV6621_CHANNEL_LOOPCHECK,
                             sv6621_service_channel_consumer, &dev->service);
@@ -1663,8 +1741,15 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
 #endif
 
   dev->config.event = NULL;
+  if (nxmutex_lock(&dev->status_lock) >= 0)
+    {
+      dev->recovery_shutdown = true;
+      nxmutex_unlock(&dev->status_lock);
+    }
+
   sv6621_stop(dev);
-  work_cancel_sync(LPWORK, &dev->recovery_work);
+  nxsem_post(&dev->recovery_sem);
+  nxsem_wait_uninterruptible(&dev->recovery_exit_sem);
   work_cancel_sync(LPWORK, &dev->thermal_work);
   work_cancel_sync(LPWORK, &dev->security_work);
   work_cancel_sync(LPWORK, &dev->signal_work);
@@ -1688,6 +1773,8 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
   sv6621_data_deinit(&dev->data);
   sv6621_tx_deinit(&dev->tx);
   sv6621_packet_router_deinit(&dev->router);
+  nxsem_destroy(&dev->recovery_exit_sem);
+  nxsem_destroy(&dev->recovery_sem);
   nxmutex_destroy(&dev->status_lock);
   nxmutex_destroy(&dev->lifecycle_lock);
   kmm_free(dev);

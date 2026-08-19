@@ -58,6 +58,9 @@ static const uint8_t g_sv6621_dump_complete[] = "DUMPDONE";
 static bool sv6621_service_contains(FAR const uint8_t *payload, size_t length,
                                     FAR const uint8_t *token,
                                     size_t token_length);
+static void sv6621_service_log_message(int priority,
+                                       FAR const uint8_t *message,
+                                       size_t message_length);
 static int sv6621_service_wait(FAR struct sv6621_service_s *service,
                                FAR sem_t *completion, FAR bool *ready,
                                uint32_t timeout_ms);
@@ -93,6 +96,29 @@ static bool sv6621_service_contains(FAR const uint8_t *payload, size_t length,
     }
 
   return false;
+}
+
+/****************************************************************************
+ * Name: sv6621_service_log_message
+ ****************************************************************************/
+
+static void sv6621_service_log_message(int priority,
+                                       FAR const uint8_t *message,
+                                       size_t message_length)
+{
+  char text[96];
+  size_t index;
+  size_t count = message_length < sizeof(text) - 1 ?
+                 message_length : sizeof(text) - 1;
+
+  for (index = 0; index < count; index++)
+    {
+      text[index] = message[index] >= 0x20 && message[index] < 0x7f ?
+                    message[index] : '.';
+    }
+
+  text[count] = '\0';
+  syslog(priority, "SV6621 firmware: %s\n", text);
 }
 
 /****************************************************************************
@@ -356,21 +382,6 @@ void sv6621_service_channel_consumer(uint8_t channel,
 
   message = payload + SV6621_RX_LINK_HEADER_SIZE;
   message_length = length - SV6621_RX_LINK_HEADER_SIZE;
-  {
-    char text[96];
-    size_t index;
-    size_t count = message_length < sizeof(text) - 1 ?
-                   message_length : sizeof(text) - 1;
-
-    for (index = 0; index < count; index++)
-      {
-        text[index] = message[index] >= 0x20 && message[index] < 0x7f ?
-                      message[index] : '.';
-      }
-
-    text[count] = '\0';
-    syslog(LOG_INFO, "SV6621 firmware: %s\n", text);
-  }
 
   if (sv6621_service_contains(message, message_length, g_sv6621_assert,
                               sizeof(g_sv6621_assert) - 1))
@@ -408,8 +419,14 @@ void sv6621_service_channel_consumer(uint8_t channel,
     }
   else
     {
+#ifdef CONFIG_DEBUG_WIRELESS_INFO
+      sv6621_service_log_message(LOG_DEBUG, message, message_length);
+#endif
       return;
     }
+
+  sv6621_service_log_message(failure ? LOG_ERR : LOG_INFO, message,
+                             message_length);
 
   if (nxmutex_lock(&service->lock) < 0)
     {
