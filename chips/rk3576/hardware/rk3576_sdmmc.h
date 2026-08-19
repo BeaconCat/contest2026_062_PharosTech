@@ -130,7 +130,7 @@
 #define SDMMC_INT_SBE      (1 << 13) /* Start bit error */
 #define SDMMC_INT_ACD      (1 << 14) /* Auto command done */
 #define SDMMC_INT_EBE      (1 << 15) /* End bit error */
-#define SDMMC_INT_SDIO     (1 << 16) /* SDIO card interrupt (function 1) */
+#define SDMMC_INT_SDIO     (1 << 24) /* SDIO card interrupt (function 1) */
 
 #define SDMMC_INT_ALL      0xffffffff
 
