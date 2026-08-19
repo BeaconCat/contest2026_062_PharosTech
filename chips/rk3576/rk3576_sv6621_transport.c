@@ -85,6 +85,9 @@
 #define RK3576_SV6621_INT_DRTO     (1u << 9)
 #define RK3576_SV6621_INT_HTO      (1u << 10)
 #define RK3576_SV6621_INT_VOLTSW   (1u << 10)
+#define RK3576_SV6621_INT_SDIO     (1u << 24)
+#define RK3576_SV6621_INT_SYNC_ALL \
+  (UINT32_MAX & ~RK3576_SV6621_INT_SDIO)
 #define RK3576_SV6621_INT_CMDERR   0x00001142
 #define RK3576_SV6621_INT_DATAERR  0x0000ae80
 #define RK3576_SV6621_INT_TIMEOUT \
@@ -280,7 +283,7 @@ static uint32_t rk3576_sv6621_command(uint32_t command, uint32_t argument,
       return RK3576_SV6621_INT_RTO;
     }
 
-  putreg32(UINT32_MAX, RK3576_SV6621_RINTSTS);
+  putreg32(RK3576_SV6621_INT_SYNC_ALL, RK3576_SV6621_RINTSTS);
   putreg32(argument, RK3576_SV6621_CMDARG);
   putreg32(command, RK3576_SV6621_CMD);
 
