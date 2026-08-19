@@ -438,15 +438,25 @@ static void rk3576_sdmmc_configwaitints(struct rk3576_sdmmc_dev_s *priv,
                                         sdio_eventset_t wkupevent)
 {
   irqstate_t flags;
+  uint32_t mask;
+  uint32_t managed;
 
   flags = enter_critical_section();
   priv->waitevents = waitevents;
   priv->wkupevent = wkupevent;
 
-  /* Merge in the data-transfer interrupts and write INTMASK together */
+  /* Only replace interrupts owned by the command/data wait machinery.
+   * In particular, preserve the independently managed SDIO function
+   * interrupt: CMD53 DMA waits run for every packet and must not mask DAT1.
+   */
 
-  rk3576_sdmmc_putreg(priv, RK3576_SDMMC_INTMASK,
-                      priv->xfrints | waitints | SDMMC_INT_CD);
+  managed = SDMMC_INT_CMD_DONE | SDMMC_RESPERR_INTS |
+            SDMMC_XFRDONE_INTS | SDMMC_DATAERR_INTS |
+            SDMMC_INT_TXDR | SDMMC_INT_RXDR | SDMMC_INT_CD;
+  mask = rk3576_sdmmc_getreg(priv, RK3576_SDMMC_INTMASK);
+  mask &= ~managed;
+  mask |= priv->xfrints | waitints | SDMMC_INT_CD;
+  rk3576_sdmmc_putreg(priv, RK3576_SDMMC_INTMASK, mask);
   leave_critical_section(flags);
 }
 
