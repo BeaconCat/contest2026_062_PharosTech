@@ -81,6 +81,7 @@ struct sv6621_dev_s
   struct sv6621_service_s service;
   struct sv6621_rx_s rx;
   struct sv6621_wifi_info_s wifi_info;
+  struct sv6621_regulatory_domain_s regulatory;
   struct sv6621_scan_channel_s
       scan_channels[SV6621_REGULATORY_SCAN_CHANNEL_CAPACITY];
   size_t scan_channel_count;

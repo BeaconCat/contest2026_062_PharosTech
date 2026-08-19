@@ -284,9 +284,11 @@ static const struct sv6621_regulatory_domain_s g_kickpi_k7_wifi_regulatory = {
   .rule_count = 4,
   .rules = {
     { 1, 13, 20, 0, 0 },
-    { 36, 13, 23, 0, 0 },
-    { 52, 93, 23, 0, SV6621_REGULATORY_FLAG_DFS |
-                        SV6621_REGULATORY_FLAG_NO_IR },
+    { 36, 13, 23, 0, SV6621_REGULATORY_FLAG_NO_OUTDOOR |
+                        SV6621_REGULATORY_FLAG_AUTO_BW },
+    { 52, 13, 20, 0, SV6621_REGULATORY_FLAG_NO_OUTDOOR |
+                        SV6621_REGULATORY_FLAG_DFS |
+                        SV6621_REGULATORY_FLAG_AUTO_BW },
     { 149, 17, 33, 0, 0 },
   },
 };
