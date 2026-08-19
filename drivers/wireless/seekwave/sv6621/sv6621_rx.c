@@ -45,6 +45,7 @@
 #define SV6621_RX_VALID_LENGTH_SIZE 8
 #define SV6621_RX_PENDING_SIZE      4
 #define SV6621_RX_MAX_DRAIN_BURSTS  32
+#define SV6621_RX_UNUSED_CHANNEL    0xff
 #define SV6621_RX_BUFFER_SIZE \
   (SV6621_PACKET_SIZE * SV6621_RX_MAX_SLOTS + SV6621_RX_TRAILER_SIZE)
 
@@ -491,6 +492,11 @@ int sv6621_rx_parse_burst(FAR struct sv6621_rx_s *rx,
       size_t available = SV6621_PACKET_SIZE - SV6621_PACKET_HEADER_SIZE;
       int ret;
 
+      if (packet[3] == SV6621_RX_UNUSED_CHANNEL)
+        {
+          continue;
+        }
+
       ret = sv6621_protocol_decode_header(packet, &header);
       if (ret < 0)
         {
@@ -506,7 +512,7 @@ int sv6621_rx_parse_burst(FAR struct sv6621_rx_s *rx,
           break;
         }
 
-      if ((size_t)header.length + header.padding > available)
+      if (header.length > available)
         {
           syslog(LOG_ERR,
                  "SV6621 RX bounds check failed: slot=%u ch=%u len=%u"

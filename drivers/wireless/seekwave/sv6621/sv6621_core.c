@@ -69,6 +69,7 @@ static void sv6621_core_service_event(enum sv6621_service_event_e event,
                                       FAR const uint8_t *payload,
                                       size_t length, FAR void *arg);
 static void sv6621_core_rx_error(int error, FAR void *arg);
+static void sv6621_core_command_receive_kick(FAR void *arg);
 static void sv6621_core_command_error(int error, FAR void *arg);
 static void sv6621_core_command_event(uint8_t instance, uint8_t id,
                                       FAR const uint8_t *payload,
@@ -119,6 +120,17 @@ static void sv6621_core_report(FAR struct sv6621_dev_s *dev,
     {
       dev->config.event(dev, event, data, length, dev->config.event_arg);
     }
+}
+
+/****************************************************************************
+ * Name: sv6621_core_command_receive_kick
+ ****************************************************************************/
+
+static void sv6621_core_command_receive_kick(FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+
+  sv6621_rx_kick(&dev->rx);
 }
 
 /****************************************************************************
@@ -1533,7 +1545,9 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
     }
 
   ret = sv6621_command_engine_init(&dev->command, sv6621_tx_command_sender,
-                                   &dev->tx, sv6621_core_command_event, dev,
+                                   &dev->tx,
+                                   sv6621_core_command_receive_kick, dev,
+                                   sv6621_core_command_event, dev,
                                    sv6621_core_command_error, dev);
   if (ret < 0)
     {
@@ -1887,19 +1901,6 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       &dev->data, (dev->wifi_info.private_capabilities &
                    SV6621_WIFI_PRIVATE_PN_REUSE) != 0);
 
-#ifdef CONFIG_NET
-  if (!dev->network.registered)
-    {
-      ret = sv6621_network_init(&dev->network, dev, &dev->data, &dev->command,
-                                dev->wifi_info.max_multicast_addresses,
-                                dev->wifi_info.mac);
-      if (ret < 0)
-        {
-          goto fail;
-        }
-    }
-#endif
-
   ret = sv6621_wifi_configure_baseline(&dev->command);
   if (ret < 0)
     {
@@ -1931,6 +1932,17 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
   dev->station_open = true;
 
 #ifdef CONFIG_NET
+  if (!dev->network.registered)
+    {
+      ret = sv6621_network_init(&dev->network, dev, &dev->data, &dev->command,
+                                dev->wifi_info.max_multicast_addresses,
+                                dev->wifi_info.mac);
+      if (ret < 0)
+        {
+          goto fail;
+        }
+    }
+
   ret = sv6621_network_sync_multicast(&dev->network);
   if (ret < 0)
     {
