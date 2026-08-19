@@ -109,6 +109,8 @@ static int sv6621_core_pm_prepare(FAR struct pm_callback_s *callback,
                                   int domain, enum pm_state_e state);
 static void sv6621_core_pm_notify(FAR struct pm_callback_s *callback,
                                   int domain, enum pm_state_e state);
+static void sv6621_core_pm_resume_worker(FAR void *arg);
+static void sv6621_core_pm_queue_resume(FAR struct sv6621_dev_s *dev);
 #endif
 
 /****************************************************************************
@@ -147,6 +149,9 @@ static void sv6621_core_command_receive_kick(FAR void *arg)
 static int sv6621_core_set_state(FAR struct sv6621_dev_s *dev,
                                  enum sv6621_state_e state, int error)
 {
+#ifdef CONFIG_SV6621_PM
+  irqstate_t flags;
+#endif
   int ret;
 
   ret = nxmutex_lock(&dev->status_lock);
@@ -158,10 +163,65 @@ static int sv6621_core_set_state(FAR struct sv6621_dev_s *dev,
   dev->status.state = state;
   dev->status.last_error = error;
   nxmutex_unlock(&dev->status_lock);
+#ifdef CONFIG_SV6621_PM
+  if (state == SV6621_STATE_OFF || state == SV6621_STATE_FAILED ||
+      state == SV6621_STATE_WIFI_READY)
+    {
+      flags = spin_lock_irqsave(&dev->pm_lock);
+      dev->pm_active = state == SV6621_STATE_WIFI_READY;
+      spin_unlock_irqrestore(&dev->pm_lock, flags);
+    }
+#endif
   return 0;
 }
 
 #ifdef CONFIG_SV6621_PM
+/****************************************************************************
+ * Name: sv6621_core_pm_queue_resume
+ ****************************************************************************/
+
+static void sv6621_core_pm_queue_resume(FAR struct sv6621_dev_s *dev)
+{
+  irqstate_t flags;
+  int ret;
+
+  flags = spin_lock_irqsave(&dev->pm_lock);
+  if (!dev->pm_suspended || dev->pm_resume_queued)
+    {
+      spin_unlock_irqrestore(&dev->pm_lock, flags);
+      return;
+    }
+
+  dev->pm_resume_queued = true;
+  spin_unlock_irqrestore(&dev->pm_lock, flags);
+
+  ret = work_queue(LPWORK, &dev->pm_resume_work,
+                   sv6621_core_pm_resume_worker, dev, 0);
+  if (ret < 0)
+    {
+      flags = spin_lock_irqsave(&dev->pm_lock);
+      dev->pm_resume_queued = false;
+      spin_unlock_irqrestore(&dev->pm_lock, flags);
+    }
+}
+
+/****************************************************************************
+ * Name: sv6621_core_pm_resume_worker
+ ****************************************************************************/
+
+static void sv6621_core_pm_resume_worker(FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+  irqstate_t flags;
+
+  (void)sv6621_resume(dev);
+
+  flags = spin_lock_irqsave(&dev->pm_lock);
+  dev->pm_suspended = false;
+  dev->pm_resume_queued = false;
+  spin_unlock_irqrestore(&dev->pm_lock, flags);
+}
+
 /****************************************************************************
  * Name: sv6621_core_pm_prepare
  ****************************************************************************/
@@ -171,8 +231,9 @@ static int sv6621_core_pm_prepare(FAR struct pm_callback_s *callback,
 {
   FAR struct sv6621_dev_s *dev =
       container_of(callback, struct sv6621_dev_s, pm_callback);
-  struct sv6621_status_s status;
-  int ret;
+  irqstate_t flags;
+  bool active;
+  bool suspended;
 
   if (domain != PM_IDLE_DOMAIN)
     {
@@ -181,46 +242,24 @@ static int sv6621_core_pm_prepare(FAR struct pm_callback_s *callback,
 
   if (state == PM_SLEEP)
     {
-      if (dev->pm_suspended)
-        {
-          return 0;
-        }
+      /* pm_changestate() invokes callbacks with interrupts disabled while
+       * holding the domain spinlock.  Firmware I/O and mutex acquisition
+       * are therefore forbidden here.  A thread-context coordinator must
+       * complete sv6621_suspend() before allowing system deep sleep.
+       */
 
-      ret = sv6621_get_status(dev, &status);
-      if (ret < 0)
-        {
-          return ret;
-        }
-
-      if (status.state == SV6621_STATE_OFF ||
-          status.state == SV6621_STATE_FAILED)
-        {
-          return 0;
-        }
-
-      if (status.state == SV6621_STATE_SUSPENDED)
-        {
-          return 0;
-        }
-
-      ret = sv6621_suspend(dev, &dev->config.system_suspend);
-      if (ret == 0)
-        {
-          dev->pm_suspended = true;
-        }
-
-      return ret;
+      flags = spin_lock_irqsave(&dev->pm_lock);
+      active = dev->pm_active;
+      suspended = dev->pm_suspended;
+      spin_unlock_irqrestore(&dev->pm_lock, flags);
+      return !active || suspended ? 0 : -EBUSY;
     }
 
-  if (dev->pm_suspended)
-    {
-      ret = sv6621_resume(dev);
-      if (ret == 0)
-        {
-          dev->pm_suspended = false;
-        }
-    }
+  /* This is either a higher-power transition or rollback after another
+   * driver rejected sleep.  Resume outside the PM callback context.
+   */
 
+  sv6621_core_pm_queue_resume(dev);
   return 0;
 }
 
@@ -234,15 +273,9 @@ static void sv6621_core_pm_notify(FAR struct pm_callback_s *callback,
   FAR struct sv6621_dev_s *dev =
       container_of(callback, struct sv6621_dev_s, pm_callback);
 
-  if (domain == PM_IDLE_DOMAIN && state == PM_RESTORE &&
-      dev->pm_suspended)
+  if (domain == PM_IDLE_DOMAIN && state == PM_RESTORE)
     {
-      /* Resume failures transfer ownership to firmware recovery.  Do not
-       * leave the PM latch set after the system has returned to normal.
-       */
-
-      (void)sv6621_resume(dev);
-      dev->pm_suspended = false;
+      sv6621_core_pm_queue_resume(dev);
     }
 }
 #endif
@@ -1701,6 +1734,7 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
     }
 
 #ifdef CONFIG_SV6621_PM
+  spin_lock_init(&dev->pm_lock);
   dev->pm_callback.prepare = sv6621_core_pm_prepare;
   dev->pm_callback.notify = sv6621_core_pm_notify;
   ret = pm_register(&dev->pm_callback);
@@ -1772,6 +1806,8 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
       pm_unregister(&dev->pm_callback);
       dev->pm_registered = false;
     }
+
+  work_cancel_sync(LPWORK, &dev->pm_resume_work);
 #endif
 
   dev->config.event = NULL;
@@ -2821,6 +2857,9 @@ unlock_lifecycle:
 int sv6621_suspend(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_suspend_s *config)
 {
+#ifdef CONFIG_SV6621_PM
+  irqstate_t flags;
+#endif
   enum sv6621_wpa_state_e wpa_state;
   enum sv6621_station_state_e station_state;
   enum sv6621_state_e state;
@@ -2935,6 +2974,11 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
     }
 
   dev->suspended = true;
+#ifdef CONFIG_SV6621_PM
+  flags = spin_lock_irqsave(&dev->pm_lock);
+  dev->pm_suspended = true;
+  spin_unlock_irqrestore(&dev->pm_lock, flags);
+#endif
   ret = sv6621_core_set_state(dev, SV6621_STATE_SUSPENDED, 0);
   nxmutex_unlock(&dev->lifecycle_lock);
   if (ret < 0)
@@ -2958,6 +3002,9 @@ unlock_lifecycle:
 int sv6621_resume(FAR struct sv6621_dev_s *dev)
 {
   enum sv6621_state_e state;
+#ifdef CONFIG_SV6621_PM
+  irqstate_t flags;
+#endif
   bool recover = false;
   int ret;
 
@@ -3016,6 +3063,11 @@ int sv6621_resume(FAR struct sv6621_dev_s *dev)
     }
 
   dev->suspended = false;
+#ifdef CONFIG_SV6621_PM
+  flags = spin_lock_irqsave(&dev->pm_lock);
+  dev->pm_suspended = false;
+  spin_unlock_irqrestore(&dev->pm_lock, flags);
+#endif
   ret = sv6621_core_set_state(dev, SV6621_STATE_WIFI_READY, 0);
   nxmutex_unlock(&dev->lifecycle_lock);
   if (ret < 0)
