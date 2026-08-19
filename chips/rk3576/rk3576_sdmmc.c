@@ -1983,4 +1983,30 @@ int rk3576_sdmmc_enable_sdio_interrupt(FAR struct sdio_dev_s *dev,
   return 0;
 }
 
+int rk3576_sdmmc_ack_sdio_interrupt(FAR struct sdio_dev_s *dev)
+{
+  FAR struct rk3576_sdmmc_dev_s *priv;
+  irqstate_t flags;
+  uint32_t mask;
+
+  if (dev == NULL)
+    {
+      return -EINVAL;
+    }
+
+  priv = (FAR struct rk3576_sdmmc_dev_s *)dev;
+  if (!priv->nonremovable)
+    {
+      return -ENOTSUP;
+    }
+
+  flags = enter_critical_section();
+  rk3576_sdmmc_putreg(priv, RK3576_SDMMC_RINTSTS, SDMMC_INT_SDIO);
+  mask = rk3576_sdmmc_getreg(priv, RK3576_SDMMC_INTMASK);
+  rk3576_sdmmc_putreg(priv, RK3576_SDMMC_INTMASK,
+                      mask | SDMMC_INT_SDIO);
+  leave_critical_section(flags);
+  return 0;
+}
+
 #endif /* CONFIG_RK3576_SDMMC || CONFIG_RK3576_SDIO */

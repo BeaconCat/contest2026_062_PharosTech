@@ -190,6 +190,7 @@ static int rk3576_sv6621_attach_irq(FAR struct sv6621_transport_s *transport,
                                     FAR void *arg);
 static int rk3576_sv6621_enable_irq(FAR struct sv6621_transport_s *transport,
                                     bool enable);
+static int rk3576_sv6621_ack_irq(FAR struct sv6621_transport_s *transport);
 static void rk3576_sv6621_host_interrupt(FAR void *arg);
 
 /****************************************************************************
@@ -210,6 +211,7 @@ static const struct sv6621_transport_ops_s g_rk3576_sv6621_ops = {
   .write = rk3576_sv6621_write,
   .attach_irq = rk3576_sv6621_attach_irq,
   .enable_irq = rk3576_sv6621_enable_irq,
+  .ack_irq = rk3576_sv6621_ack_irq,
 };
 
 static struct sv6621_transport_s g_rk3576_sv6621_transport = {
@@ -1325,6 +1327,18 @@ static int rk3576_sv6621_enable_irq(FAR struct sv6621_transport_s *transport,
 
   priv->irq_enabled = enable;
   return 0;
+}
+
+static int rk3576_sv6621_ack_irq(FAR struct sv6621_transport_s *transport)
+{
+  FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
+
+  if (!priv->opened || !priv->irq_enabled)
+    {
+      return -ENODEV;
+    }
+
+  return rk3576_sdmmc_ack_sdio_interrupt(priv->sdio);
 }
 
 /****************************************************************************
