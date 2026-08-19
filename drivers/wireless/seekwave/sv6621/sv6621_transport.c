@@ -47,7 +47,8 @@ int sv6621_transport_validate(FAR const struct sv6621_transport_s *transport)
   if (ops->open == NULL || ops->enumerate == NULL || ops->close == NULL ||
       ops->read_byte == NULL ||
       ops->write_byte == NULL || ops->read == NULL || ops->write == NULL ||
-      ops->attach_irq == NULL || ops->enable_irq == NULL)
+      ops->attach_irq == NULL || ops->enable_irq == NULL ||
+      ops->ack_irq == NULL)
     {
       return -ENOSYS;
     }

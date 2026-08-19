@@ -255,6 +255,17 @@ static void sv6621_rx_worker(FAR void *arg)
 
       ret = sv6621_rx_drain(rx);
 
+      if (ret != -EAGAIN)
+        {
+          int ack_ret = rx->transport->ops->ack_irq(rx->transport);
+
+          if (ack_ret < 0 && ret >= 0)
+            {
+              ret = ack_ret;
+              sv6621_rx_report_error(rx, ack_ret);
+            }
+        }
+
       flags = spin_lock_irqsave(&rx->schedule_lock);
       defer = ret == -EAGAIN && rx->running && !rx->suspended;
       if (defer)

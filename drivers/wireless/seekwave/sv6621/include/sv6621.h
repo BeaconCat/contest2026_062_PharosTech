@@ -83,6 +83,7 @@ struct sv6621_transport_ops_s
   int (*attach_irq)(FAR struct sv6621_transport_s *transport,
                     sv6621_transport_irq_t handler, FAR void *arg);
   int (*enable_irq)(FAR struct sv6621_transport_s *transport, bool enable);
+  int (*ack_irq)(FAR struct sv6621_transport_s *transport);
 };
 
 struct sv6621_transport_s
