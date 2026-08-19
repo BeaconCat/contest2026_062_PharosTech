@@ -27,6 +27,7 @@
 #include <nuttx/config.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 
 #include <sys/random.h>
 
@@ -421,6 +422,11 @@ int sv6621_wifi_download_calibration(
 
       offset += chunk_length;
       sequence++;
+
+      if (offset < length)
+        {
+          nxsig_usleep(1000);
+        }
     }
 
   return 0;
