@@ -45,6 +45,8 @@
 #define SV6621_RX_VALID_LENGTH_SIZE 8
 #define SV6621_RX_PENDING_SIZE      4
 #define SV6621_RX_MAX_DRAIN_BURSTS  32
+#define SV6621_RX_CCCR_INT_PENDING  0x05
+#define SV6621_RX_FUNCTION1_PENDING (1 << 1)
 #define SV6621_RX_FIFO_INDICATOR    0x181
 #define SV6621_RX_EXT_INTERRUPT     0x182
 #define SV6621_RX_FIFO_ASSERT       0xff
@@ -477,6 +479,53 @@ int sv6621_rx_parse_burst(FAR struct sv6621_rx_s *rx,
     {
       return -EINVAL;
     }
+int sv6621_rx_poll(FAR struct sv6621_rx_s *rx)
+{
+  irqstate_t flags;
+  uint8_t fifo_indicator;
+  uint8_t pending;
+  bool changed;
+  bool idle;
+  int ret;
+
+  if (rx == NULL || !rx->running || rx->suspended)
+    {
+      return -ENODEV;
+    }
+
+  ret = rx->transport->ops->read_byte(rx->transport,
+                                      SV6621_SDIO_FUNCTION_CONTROL,
+                                      SV6621_RX_CCCR_INT_PENDING, &pending);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if ((pending & SV6621_RX_FUNCTION1_PENDING) != 0)
+    {
+      ret = rx->transport->ops->read_byte(rx->transport,
+                                          SV6621_SDIO_FUNCTION_CONTROL,
+                                          SV6621_RX_FIFO_INDICATOR,
+                                          &fifo_indicator);
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      flags = spin_lock_irqsave(&rx->schedule_lock);
+      idle = !rx->work_scheduled;
+      changed = !rx->fifo_indicator_valid ||
+                fifo_indicator != rx->stats.last_fifo_indicator;
+      spin_unlock_irqrestore(&rx->schedule_lock, flags);
+      if (idle && changed)
+        {
+          sv6621_rx_interrupt(rx);
+        }
+    }
+
+  return 0;
+}
+
 
   packet_region = slots * SV6621_PACKET_SIZE;
   if (length != packet_region + SV6621_RX_TRAILER_SIZE)
