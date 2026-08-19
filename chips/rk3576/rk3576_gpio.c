@@ -1165,6 +1165,9 @@ static int rk3576_gpio_isr(int irq, void *context, void *arg)
   uint32_t status;
   int pin;
 
+  UNUSED(irq);
+  UNUSED(context);
+
   if (port >= RK3576_GPIO_NPORTS)
     {
       gpioerr("Error: Invalid GPIO port: %u\n", port);
