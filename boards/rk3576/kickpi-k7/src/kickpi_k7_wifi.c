@@ -440,6 +440,12 @@ int kickpi_k7_wifi_initialize(void)
   config.regulatory_domain_count =
       sizeof(g_kickpi_k7_wifi_regulatory_domains) /
       sizeof(g_kickpi_k7_wifi_regulatory_domains[0]);
+#ifdef CONFIG_SV6621_PM
+  config.system_suspend.wake_enabled = true;
+  config.system_suspend.wake_flags =
+      SV6621_WAKE_DISCONNECT | SV6621_WAKE_MAGIC_PACKET |
+      SV6621_WAKE_GTK_REKEY_FAILURE;
+#endif
 
   ret = sv6621_create(&config, &g_kickpi_k7_wifi_dev);
   if (ret < 0)
