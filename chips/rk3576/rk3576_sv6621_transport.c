@@ -135,6 +135,7 @@ struct rk3576_sv6621_transport_priv_s
   FAR void *handler_arg;
   bool prepared;
   bool opened;
+  bool host_irq_attached;
   bool irq_enabled;
   uint8_t sample_phase;
   bool sample_phase_valid;
@@ -694,6 +695,18 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
   else
     {
       SDIO_RESET(priv->sdio);
+    }
+
+  if (!priv->host_irq_attached)
+    {
+      ret = SDIO_ATTACH(priv->sdio);
+      if (ret < 0)
+        {
+          wlerr("ERROR: RK3576 SDIO interrupt attach failed: %d\n", ret);
+          return rk3576_sv6621_open_failed(priv, ret);
+        }
+
+      priv->host_irq_attached = true;
     }
 
   SDIO_CLOCK(priv->sdio, CLOCK_SDIO_DISABLED);
