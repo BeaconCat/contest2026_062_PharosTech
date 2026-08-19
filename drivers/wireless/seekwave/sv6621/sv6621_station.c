@@ -28,6 +28,7 @@
 
 #include <nuttx/clock.h>
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 
 #include <errno.h>
 #include <string.h>
@@ -705,6 +706,8 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
       nxsem_trywait(&station->completion);
       goto unlock_connect;
     }
+
+  nxsig_usleep(50 * 1000);
 
   ret = nxmutex_lock(&station->lock);
   if (ret < 0)
