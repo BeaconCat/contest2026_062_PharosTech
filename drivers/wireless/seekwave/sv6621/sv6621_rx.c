@@ -31,6 +31,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <syslog.h>
 
 #include "sv6621_protocol.h"
 #include "sv6621_rx.h"
@@ -503,6 +504,10 @@ int sv6621_rx_parse_burst(FAR struct sv6621_rx_s *rx,
       ret = sv6621_protocol_decode_header(packet, &header);
       if (ret < 0)
         {
+          syslog(LOG_ERR,
+                 "SV6621 RX header decode failed: slot=%u ret=%d head=%02x"
+                 " %02x %02x %02x\n",
+                 slot, ret, packet[0], packet[1], packet[2], packet[3]);
           return ret;
         }
 
@@ -514,6 +519,11 @@ int sv6621_rx_parse_burst(FAR struct sv6621_rx_s *rx,
       if ((size_t)header.length + header.padding > available)
         {
           return -EPROTO;
+          syslog(LOG_ERR,
+                 "SV6621 RX bounds check failed: slot=%u ch=%u len=%u"
+                 " pad=%u available=%zu\n",
+                 slot, header.channel, header.length, header.padding,
+                 available);
         }
 
       ret = sv6621_packet_dispatch(
