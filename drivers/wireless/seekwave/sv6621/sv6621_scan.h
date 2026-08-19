@@ -36,6 +36,7 @@
 
 #include "include/sv6621.h"
 #include "sv6621_command.h"
+#include "sv6621_rx.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -48,6 +49,7 @@
 #define SV6621_SCAN_IE_CAPACITY         512
 #define SV6621_SCAN_EVENT_COMPLETE      0
 #define SV6621_SCAN_EVENT_REPORT        11
+#define SV6621_SCAN_MAX_CHANNELS        64
 
 /****************************************************************************
  * Public Types
@@ -115,13 +117,23 @@ struct sv6621_scan_s
 {
   mutex_t lock;
   FAR struct sv6621_command_engine_s *command;
+  FAR struct sv6621_rx_s *rx;
   struct sv6621_scan_cache_s cache;
   struct work_s timeout_work;
+  struct work_s batch_work;
+  struct work_s poll_work;
   sv6621_scan_complete_t complete;
   FAR void *complete_arg;
   uint32_t timeout_ms;
+  struct sv6621_scan_channel_s channels[SV6621_SCAN_MAX_CHANNELS];
+  uint8_t ssid[SV6621_SSID_MAX_LENGTH];
+  size_t channel_count;
+  size_t channel_offset;
+  size_t batch_count;
+  size_t ssid_length;
   bool active;
   bool stopping;
+  bool recovery_pending;
   struct sv6621_scan_stats_s stats;
 };
 
@@ -150,6 +162,7 @@ int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
                            FAR struct sv6621_scan_entry_s *entry);
 int sv6621_scan_controller_init(FAR struct sv6621_scan_s *scan,
                                 FAR struct sv6621_command_engine_s *command,
+                                FAR struct sv6621_rx_s *rx,
                                 uint32_t timeout_ms,
                                 sv6621_scan_complete_t complete,
                                 FAR void *complete_arg);
