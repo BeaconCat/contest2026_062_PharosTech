@@ -578,9 +578,12 @@ static int sv6621_core_roam_transaction(
     uint32_t generation)
 {
   struct sv6621_connect_s connection;
+  struct sv6621_connect_s rollback;
+  struct sv6621_scan_entry_s previous;
 #ifdef CONFIG_NET
   struct sv6621_data_tx_context_s context;
 #endif
+  bool inserted;
   int ret;
 
   ret = nxmutex_lock(&dev->lifecycle_lock);
@@ -621,6 +624,8 @@ static int sv6621_core_roam_transaction(
     }
 
   connection = dev->station.request;
+  rollback = dev->station.request;
+  previous = dev->station.target;
   memcpy(connection.bssid, candidate->bss.bssid, SV6621_MAC_LENGTH);
   connection.bssid_valid = true;
   connection.channel = candidate->bss.channel;
@@ -637,7 +642,24 @@ static int sv6621_core_roam_transaction(
   ret = sv6621_core_connect_locked(dev, &connection, true);
   if (ret < 0)
     {
-      goto unlock_lifecycle;
+      int roam_error = ret;
+
+      sv6621_wpa_cancel(&dev->wpa, roam_error);
+      sv6621_station_reset(&dev->station, roam_error);
+      ret = sv6621_scan_cache_store(&dev->scan.cache, &previous, &inserted);
+      if (ret < 0)
+        {
+          goto unlock_lifecycle;
+        }
+
+      memcpy(rollback.bssid, previous.bss.bssid, SV6621_MAC_LENGTH);
+      rollback.bssid_valid = true;
+      rollback.channel = previous.bss.channel;
+      ret = sv6621_core_connect_locked(dev, &rollback, false);
+      if (ret < 0)
+        {
+          goto unlock_lifecycle;
+        }
     }
 
 #ifdef CONFIG_NET
