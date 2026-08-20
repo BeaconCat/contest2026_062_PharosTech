@@ -117,6 +117,7 @@ void sv6621_ap_deinit(FAR struct sv6621_ap_s *ap);
 int sv6621_ap_enable(FAR struct sv6621_ap_s *ap, uint8_t instance,
                      FAR const struct sv6621_ap_config_s *config);
 int sv6621_ap_disable(FAR struct sv6621_ap_s *ap);
+int sv6621_ap_reset(FAR struct sv6621_ap_s *ap);
 int sv6621_ap_queue_event(FAR struct sv6621_ap_s *ap, uint8_t instance,
                           uint8_t id, FAR const uint8_t *payload,
                           size_t length);

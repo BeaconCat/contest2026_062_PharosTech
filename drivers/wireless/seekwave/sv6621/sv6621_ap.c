@@ -535,6 +535,34 @@ int sv6621_ap_disable(FAR struct sv6621_ap_s *ap)
   return ret;
 }
 
+int sv6621_ap_reset(FAR struct sv6621_ap_s *ap)
+{
+  int event_ret;
+  int ret;
+
+  if (ap == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&ap->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = sv6621_ap_peer_table_reset(&ap->peers);
+  memset(&ap->config, 0, sizeof(ap->config));
+  memset(&ap->templates, 0, sizeof(ap->templates));
+  memset(&ap->context, 0, sizeof(ap->context));
+  ap->instance = 0;
+  ap->active = false;
+  nxmutex_unlock(&ap->lock);
+
+  event_ret = sv6621_ap_event_queue_reset(&ap->events);
+  return ret < 0 ? ret : event_ret;
+}
+
 int sv6621_ap_queue_event(FAR struct sv6621_ap_s *ap, uint8_t instance,
                           uint8_t id, FAR const uint8_t *payload,
                           size_t length)
