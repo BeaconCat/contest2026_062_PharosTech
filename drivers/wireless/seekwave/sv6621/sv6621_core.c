@@ -2352,7 +2352,7 @@ unlock_lifecycle:
 int sv6621_get_driver_stats(FAR struct sv6621_dev_s *dev,
                             FAR struct sv6621_driver_stats_s *stats)
 {
-  irqstate_t flags;
+  int ret;
 
   if (dev == NULL || stats == NULL)
     {
@@ -2360,7 +2360,12 @@ int sv6621_get_driver_stats(FAR struct sv6621_dev_s *dev,
     }
 
   memset(stats, 0, sizeof(*stats));
-  flags = enter_critical_section();
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   stats->version = SV6621_DRIVER_STATS_VERSION;
   stats->size = sizeof(*stats);
   stats->commands = dev->command.stats.commands;
@@ -2402,7 +2407,7 @@ int sv6621_get_driver_stats(FAR struct sv6621_dev_s *dev,
   stats->mic_failures = dev->status.mic_failures;
   stats->mic_failures_dropped = dev->status.mic_failures_dropped;
   stats->signal_events_dropped = dev->status.signal_events_dropped;
-  leave_critical_section(flags);
+  nxmutex_unlock(&dev->status_lock);
   return 0;
 }
 
