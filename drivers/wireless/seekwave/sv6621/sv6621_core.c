@@ -3933,6 +3933,99 @@ unlock_lifecycle:
 }
 
 /****************************************************************************
+ * Name: sv6621_stop_ap
+ ****************************************************************************/
+
+int sv6621_stop_ap(FAR struct sv6621_dev_s *dev)
+{
+  bool report = false;
+  int ret;
+
+  if (dev == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  if (dev->status.state != SV6621_STATE_WIFI_READY)
+    {
+      ret = -ENETDOWN;
+    }
+  else if (!dev->status.ap_active)
+    {
+      ret = -ENOTCONN;
+    }
+  else
+    {
+      ret = 0;
+    }
+
+  nxmutex_unlock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_ap_disable(&dev->ap);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_core_restore_station(dev, 0);
+#ifdef CONFIG_NET
+  if (ret == 0)
+    {
+      ret = sv6621_network_sync_multicast(&dev->network);
+      if (ret < 0)
+        {
+          sv6621_core_queue_recovery(dev, ret);
+        }
+    }
+#endif
+
+  if (nxmutex_lock(&dev->status_lock) < 0)
+    {
+      if (ret == 0)
+        {
+          ret = -EINTR;
+        }
+
+      sv6621_core_queue_recovery(dev, ret);
+      goto unlock_lifecycle;
+    }
+
+  dev->status.ap_active = false;
+  dev->status.ap_client_count = 0;
+  memset(dev->status.ssid, 0, sizeof(dev->status.ssid));
+  dev->status.ssid_length = 0;
+  dev->status.channel = 0;
+  dev->status.band = SV6621_BAND_2GHZ;
+  nxmutex_unlock(&dev->status_lock);
+  report = true;
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  if (report)
+    {
+      sv6621_core_report(dev, SV6621_EVENT_AP_STOPPED, NULL, 0);
+    }
+
+  return ret;
+}
+
+/****************************************************************************
  * Name: sv6621_suspend
  ****************************************************************************/
 
