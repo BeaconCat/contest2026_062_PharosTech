@@ -48,6 +48,7 @@ if(CONFIG_SV6621)
        ${SV6621_DIR}/sv6621_sae_group.c
        ${SV6621_DIR}/sv6621_sae_keys.c
        ${SV6621_DIR}/sv6621_scan.c
+       ${SV6621_DIR}/sv6621_sched_scan.c
        ${SV6621_DIR}/sv6621_security.c
        ${SV6621_DIR}/sv6621_signal.c
        ${SV6621_DIR}/sv6621_service.c
