@@ -855,6 +855,62 @@ int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
   return ret;
 }
 
+/****************************************************************************
+ * Name: sv6621_scan_cache_find_roam_candidate
+ ****************************************************************************/
+
+int sv6621_scan_cache_find_roam_candidate(
+    FAR struct sv6621_scan_cache_s *cache,
+    FAR const struct sv6621_connect_s *request,
+    FAR const uint8_t current_bssid[SV6621_MAC_LENGTH],
+    int16_t current_signal_dbm, uint8_t minimum_gain_db,
+    FAR struct sv6621_scan_entry_s *entry)
+{
+  int32_t required_signal_dbm;
+  size_t index;
+  int ret;
+
+  if (cache == NULL || request == NULL || current_bssid == NULL ||
+      entry == NULL || request->ssid_length == 0 || request->bssid_valid)
+    {
+      return -EINVAL;
+    }
+
+  required_signal_dbm = (int32_t)current_signal_dbm + minimum_gain_db;
+  ret = nxmutex_lock(&cache->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = -ENOENT;
+  for (index = 0; index < cache->count; index++)
+    {
+      FAR const struct sv6621_scan_entry_s *candidate =
+          &cache->entries[index];
+      FAR const struct sv6621_bss_s *bss = &candidate->bss;
+
+      if (memcmp(bss->bssid, current_bssid, SV6621_MAC_LENGTH) == 0 ||
+          bss->ssid_length != request->ssid_length ||
+          memcmp(bss->ssid, request->ssid, request->ssid_length) != 0 ||
+          !sv6621_scan_security_matches(request->security, bss->security) ||
+          !sv6621_scan_connection_supported(request->security, candidate) ||
+          bss->signal_dbm < required_signal_dbm)
+        {
+          continue;
+        }
+
+      if (ret == -ENOENT || bss->signal_dbm > entry->bss.signal_dbm)
+        {
+          *entry = *candidate;
+          ret = 0;
+        }
+    }
+
+  nxmutex_unlock(&cache->lock);
+  return ret;
+}
+
 int sv6621_scan_controller_init(FAR struct sv6621_scan_s *scan,
                                 FAR struct sv6621_command_engine_s *command,
                                 FAR struct sv6621_rx_s *rx,

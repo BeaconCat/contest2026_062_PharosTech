@@ -62,8 +62,7 @@
 #define SV6621_CORE_MIC_FAILURE_SIZE    9
 #define SV6621_CORE_CQM_EVENT_SIZE      11
 #define SV6621_CORE_CHANNEL_EVENT_SIZE  11
-#define SV6621_CORE_CQM_THRESHOLD_DBM  -70
-#define SV6621_CORE_CQM_HYSTERESIS_DB   40
+#define SV6621_CORE_ROAM_MAX_COOLDOWN_MS 3600000
 
 /****************************************************************************
  * Private Function Prototypes
@@ -95,10 +94,25 @@ static void sv6621_core_queue_fatal(FAR struct sv6621_dev_s *dev);
 static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
                                        int error);
 static int sv6621_core_recovery_thread(int argc, FAR char *argv[]);
+static int sv6621_core_roam_thread(int argc, FAR char *argv[]);
+static int sv6621_core_queue_roam_candidate(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_scan_entry_s *candidate,
+    uint32_t generation, int16_t signal_dbm);
+static int sv6621_core_roam_transaction(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_scan_entry_s *candidate,
+    uint32_t generation);
 static void sv6621_core_recovery_worker(FAR void *arg);
 static void sv6621_core_thermal_worker(FAR void *arg);
 static void sv6621_core_security_worker(FAR void *arg);
 static void sv6621_core_signal_worker(FAR void *arg);
+static int sv6621_core_start_roam_scan(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_signal_event_s *event);
+static int sv6621_core_connect_locked(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_connect_s *connection, bool roaming);
 static int sv6621_core_channel_switch(FAR struct sv6621_dev_s *dev,
                                       FAR const uint8_t *payload,
                                       size_t length);
@@ -450,6 +464,258 @@ static int sv6621_core_recovery_thread(int argc, FAR char *argv[])
 }
 
 /****************************************************************************
+ * Name: sv6621_core_roam_thread
+ ****************************************************************************/
+
+static int sv6621_core_roam_thread(int argc, FAR char *argv[])
+{
+  FAR struct sv6621_dev_s *dev =
+      (FAR struct sv6621_dev_s *)(uintptr_t)strtoull(argv[1], NULL, 16);
+
+  (void)argc;
+
+  for (;;)
+    {
+      struct sv6621_roam_candidate_s event;
+      struct sv6621_scan_entry_s candidate;
+      uint32_t generation;
+      int ret;
+
+      if (nxsem_wait_uninterruptible(&dev->roam_sem) < 0)
+        {
+          continue;
+        }
+
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          continue;
+        }
+
+      if (dev->roam_shutdown)
+        {
+          nxmutex_unlock(&dev->status_lock);
+          break;
+        }
+
+      if (!dev->roam_candidate_pending)
+        {
+          nxmutex_unlock(&dev->status_lock);
+          continue;
+        }
+
+      candidate = dev->roam_candidate;
+      generation = dev->roam_candidate_generation;
+      event.candidate = candidate.bss;
+      event.current_signal_dbm = dev->roam_candidate_signal_dbm;
+      event.gain_db = (uint8_t)(dev->roam_candidate.bss.signal_dbm -
+                                dev->roam_candidate_signal_dbm);
+      dev->roam_candidate_pending = false;
+      nxmutex_unlock(&dev->status_lock);
+      sv6621_core_report(dev, SV6621_EVENT_ROAM_CANDIDATE, &event,
+                         sizeof(event));
+      ret = sv6621_core_roam_transaction(dev, &candidate, generation);
+      if (ret < 0 && ret != -ECANCELED && ret != -EALREADY)
+        {
+          sv6621_core_queue_recovery(dev, ret);
+        }
+    }
+
+  nxsem_post(&dev->roam_exit_sem);
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_core_queue_roam_candidate
+ ****************************************************************************/
+
+static int sv6621_core_queue_roam_candidate(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_scan_entry_s *candidate,
+    uint32_t generation, int16_t signal_dbm)
+{
+  int ret;
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (dev->roam_shutdown || dev->roam_candidate_pending)
+    {
+      nxmutex_unlock(&dev->status_lock);
+      return -EBUSY;
+    }
+
+  dev->roam_candidate = *candidate;
+  dev->roam_candidate_generation = generation;
+  dev->roam_candidate_signal_dbm = signal_dbm;
+  dev->roam_candidate_pending = true;
+  nxmutex_unlock(&dev->status_lock);
+
+  ret = nxsem_post(&dev->roam_sem);
+  if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
+    {
+      if (dev->roam_candidate_pending &&
+          dev->roam_candidate_generation == generation)
+        {
+          dev->roam_candidate_pending = false;
+        }
+
+      nxmutex_unlock(&dev->status_lock);
+    }
+
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_core_roam_transaction
+ ****************************************************************************/
+
+static int sv6621_core_roam_transaction(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_scan_entry_s *candidate,
+    uint32_t generation)
+{
+  struct sv6621_connect_s connection;
+  struct sv6621_connect_s rollback;
+  struct sv6621_scan_entry_s previous;
+  struct sv6621_roam_result_s event;
+#ifdef CONFIG_NET
+  struct sv6621_data_tx_context_s context;
+#endif
+  bool inserted;
+  bool attempted = false;
+  int ret;
+
+  memset(&event, 0, sizeof(event));
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  if (dev->roam_shutdown || !dev->roam_policy.enabled ||
+      dev->status.state != SV6621_STATE_WIFI_READY ||
+      !dev->station_connected || dev->station_generation != generation)
+    {
+      ret = -ECANCELED;
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  ret = nxmutex_lock(&dev->station.lock);
+  if (ret < 0)
+    {
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  if (memcmp(candidate->bss.bssid, dev->station.target.bss.bssid,
+             SV6621_MAC_LENGTH) == 0)
+    {
+      ret = -EALREADY;
+      nxmutex_unlock(&dev->station.lock);
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  connection = dev->station.request;
+  rollback = dev->station.request;
+  previous = dev->station.target;
+  memcpy(event.old_bssid, previous.bss.bssid, SV6621_MAC_LENGTH);
+  memcpy(event.new_bssid, candidate->bss.bssid, SV6621_MAC_LENGTH);
+  memcpy(connection.bssid, candidate->bss.bssid, SV6621_MAC_LENGTH);
+  connection.bssid_valid = true;
+  connection.channel = candidate->bss.channel;
+  nxmutex_unlock(&dev->station.lock);
+  nxmutex_unlock(&dev->status_lock);
+
+  ret = sv6621_data_set_tx_block(&dev->data,
+                                 SV6621_DATA_TX_BLOCK_ROAM, true);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  attempted = true;
+  ret = sv6621_core_connect_locked(dev, &connection, true);
+  if (ret < 0)
+    {
+      int roam_error = ret;
+
+      event.result = roam_error;
+      sv6621_wpa_cancel(&dev->wpa, roam_error);
+      sv6621_station_reset(&dev->station, roam_error);
+      ret = sv6621_scan_cache_store(&dev->scan.cache, &previous, &inserted);
+      if (ret < 0)
+        {
+          event.rollback_result = ret;
+          goto unlock_lifecycle;
+        }
+
+      memcpy(rollback.bssid, previous.bss.bssid, SV6621_MAC_LENGTH);
+      rollback.bssid_valid = true;
+      rollback.channel = previous.bss.channel;
+      ret = sv6621_core_connect_locked(dev, &rollback, false);
+      event.rollback_result = ret;
+      if (ret < 0)
+        {
+          goto unlock_lifecycle;
+        }
+
+      event.restored = true;
+    }
+
+#ifdef CONFIG_NET
+  ret = nxmutex_lock(&dev->station.lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  context.peer_index = dev->station.peer.peer_index;
+  context.multicast_index = dev->station.peer.multicast_index;
+  context.instance = dev->station.peer.instance;
+  context.lmac_id = dev->station.peer.lmac_id;
+  context.tid = 0;
+  nxmutex_unlock(&dev->station.lock);
+  sv6621_network_set_link(&dev->network, true, &context);
+#endif
+
+  ret = sv6621_data_set_tx_block(&dev->data,
+                                 SV6621_DATA_TX_BLOCK_ROAM, false);
+#ifdef CONFIG_NET
+  if (ret == 0)
+    {
+      sv6621_network_credit_available(&dev->network);
+    }
+#endif
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  if (attempted)
+    {
+      if (event.result == 0 && ret < 0)
+        {
+          event.result = ret;
+        }
+
+      sv6621_core_report(dev, SV6621_EVENT_ROAM_COMPLETE, &event,
+                         sizeof(event));
+    }
+
+  return ret;
+}
+
+/****************************************************************************
  * Name: sv6621_core_thermal_worker
  ****************************************************************************/
 
@@ -523,6 +789,120 @@ static void sv6621_core_security_worker(FAR void *arg)
 }
 
 /****************************************************************************
+ * Name: sv6621_core_valid_unicast_address
+ ****************************************************************************/
+
+static bool sv6621_core_valid_unicast_address(
+    FAR const uint8_t address[SV6621_MAC_LENGTH])
+{
+  uint8_t aggregate = 0;
+  size_t index;
+
+  if ((address[0] & 1) != 0)
+    {
+      return false;
+    }
+
+  for (index = 0; index < SV6621_MAC_LENGTH; index++)
+    {
+      aggregate |= address[index];
+    }
+
+  return aggregate != 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_core_start_roam_scan
+ ****************************************************************************/
+
+static int sv6621_core_start_roam_scan(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_signal_event_s *event)
+{
+  struct sv6621_scan_channel_s channel;
+  uint8_t ssid[SV6621_SSID_MAX_LENGTH];
+  size_t ssid_length;
+  size_t index;
+  int ret;
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  if (dev->status.state != SV6621_STATE_WIFI_READY ||
+      !dev->station_connected || dev->roam_scan_pending ||
+      dev->scan_reporting)
+    {
+      ret = -EBUSY;
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  ret = nxmutex_lock(&dev->station.lock);
+  if (ret < 0)
+    {
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  if (dev->station.request.bssid_valid ||
+      dev->station.request.ssid_length == 0)
+    {
+      ret = -EOPNOTSUPP;
+      nxmutex_unlock(&dev->station.lock);
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  ssid_length = dev->station.request.ssid_length;
+  memcpy(ssid, dev->station.request.ssid, ssid_length);
+  nxmutex_unlock(&dev->station.lock);
+
+  for (index = 0; index < dev->scan_channel_count; index++)
+    {
+      if (dev->scan_channels[index].number == event->channel &&
+          dev->scan_channels[index].band ==
+              (enum sv6621_scan_band_e)event->band)
+        {
+          channel = dev->scan_channels[index];
+          break;
+        }
+    }
+
+  if (index == dev->scan_channel_count)
+    {
+      ret = -EINVAL;
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  dev->roam_scan_generation = dev->station_generation;
+  dev->roam_scan_signal_dbm = event->signal_dbm;
+  dev->roam_scan_pending = true;
+  nxmutex_unlock(&dev->status_lock);
+
+  ret = sv6621_scan_controller_begin(&dev->scan, &channel, 1, ssid,
+                                     ssid_length);
+  if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
+    {
+      dev->roam_scan_pending = false;
+      nxmutex_unlock(&dev->status_lock);
+    }
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
+}
+
+/****************************************************************************
  * Name: sv6621_core_signal_worker
  ****************************************************************************/
 
@@ -533,6 +913,7 @@ static void sv6621_core_signal_worker(FAR void *arg)
   for (;;)
     {
       struct sv6621_signal_event_s event;
+      bool roam_enabled;
 
       if (nxmutex_lock(&dev->status_lock) < 0)
         {
@@ -556,7 +937,9 @@ static void sv6621_core_signal_worker(FAR void *arg)
           continue;
         }
 
-      if (memcmp(event.bssid, dev->station.target.bss.bssid,
+      if ((event.status == SV6621_SIGNAL_HIGH ||
+           event.status == SV6621_SIGNAL_TDLS_LOSS) &&
+          memcmp(event.bssid, dev->station.target.bss.bssid,
                  SV6621_MAC_LENGTH) != 0)
         {
           nxmutex_unlock(&dev->station.lock);
@@ -566,9 +949,18 @@ static void sv6621_core_signal_worker(FAR void *arg)
 
       nxmutex_unlock(&dev->station.lock);
       dev->status.signal_dbm = event.signal_dbm;
+      roam_enabled = dev->roam_policy.enabled;
       nxmutex_unlock(&dev->status_lock);
       sv6621_core_report(dev, SV6621_EVENT_SIGNAL_CHANGED, &event,
                          sizeof(event));
+
+      if ((event.status == SV6621_SIGNAL_LOW ||
+           event.status == SV6621_SIGNAL_BEACON_LOSS) &&
+          roam_enabled &&
+          sv6621_core_valid_unicast_address(event.bssid))
+        {
+          (void)sv6621_core_start_roam_scan(dev, &event);
+        }
     }
 }
 
@@ -622,6 +1014,8 @@ static void sv6621_core_recovery_worker(FAR void *arg)
           dev->station_connected = false;
           dev->station_reason = disconnect_reason;
           dev->station_generation++;
+          dev->roam_scan_pending = false;
+          dev->roam_candidate_ticks_valid = false;
         }
 
       dev->status.connected = false;
@@ -1017,7 +1411,9 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
           return;
         }
 
-      if (memcmp(event.bssid, dev->station.target.bss.bssid,
+      if ((event.status == SV6621_SIGNAL_HIGH ||
+           event.status == SV6621_SIGNAL_TDLS_LOSS) &&
+          memcmp(event.bssid, dev->station.target.bss.bssid,
                  SV6621_MAC_LENGTH) != 0)
         {
           nxmutex_unlock(&dev->station.lock);
@@ -1153,6 +1549,11 @@ static void sv6621_core_station_event(bool connected, bool remote,
   dev->station_remote_disconnect = !connected && remote;
   dev->station_reason = reason;
   dev->station_generation++;
+  if (!connected)
+    {
+      dev->roam_scan_pending = false;
+      dev->roam_candidate_ticks_valid = false;
+    }
   if (!dev->station_work_scheduled)
     {
       dev->station_work_scheduled = true;
@@ -1209,6 +1610,7 @@ static void sv6621_core_station_worker(FAR void *arg)
   for (;;)
     {
       struct sv6621_status_s status;
+      struct sv6621_roam_policy_s roam_policy;
       bool event_current = false;
 #ifdef CONFIG_NET
       struct sv6621_data_tx_context_s context;
@@ -1269,6 +1671,7 @@ static void sv6621_core_station_worker(FAR void *arg)
 
       dev->status.connected = false;
       status = dev->status;
+      roam_policy = dev->roam_policy;
       nxmutex_unlock(&dev->status_lock);
 #ifdef CONFIG_NET
       if (connected && !station_ready)
@@ -1436,9 +1839,13 @@ static void sv6621_core_station_worker(FAR void *arg)
 
       if (connected)
         {
-          (void)sv6621_set_signal_threshold(
-              dev, SV6621_CORE_CQM_THRESHOLD_DBM,
-              SV6621_CORE_CQM_HYSTERESIS_DB);
+          if (roam_policy.enabled)
+            {
+              (void)sv6621_set_signal_threshold(
+                  dev, roam_policy.threshold_dbm,
+                  roam_policy.hysteresis_db);
+            }
+
           sv6621_core_report(dev, SV6621_EVENT_CONNECTED, &status,
                              sizeof(status));
         }
@@ -1509,6 +1916,7 @@ static void sv6621_core_scan_complete(int result, FAR void *arg)
   if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
     {
       dev->scan_reporting = false;
+      dev->roam_scan_pending = false;
       nxmutex_unlock(&dev->status_lock);
     }
 }
@@ -1521,8 +1929,15 @@ static void sv6621_core_scan_worker(FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
   FAR struct sv6621_bss_s *entries;
+  struct sv6621_scan_entry_s roam_entry;
+  struct sv6621_connect_s request;
+  struct sv6621_roam_policy_s roam_policy;
+  uint8_t current_bssid[SV6621_MAC_LENGTH];
+  uint32_t roam_generation = 0;
   size_t count = SV6621_SCAN_CACHE_CAPACITY;
   size_t index;
+  int16_t roam_signal_dbm = 0;
+  bool roam_scan = false;
   int result;
   int ret;
 
@@ -1544,12 +1959,70 @@ static void sv6621_core_scan_worker(FAR void *arg)
                          sizeof(entries[index]));
     }
 
-  kmm_free(entries);
   if (nxmutex_lock(&dev->status_lock) >= 0)
     {
+      roam_scan = dev->roam_scan_pending;
+      roam_generation = dev->roam_scan_generation;
+      roam_signal_dbm = dev->roam_scan_signal_dbm;
+      roam_policy = dev->roam_policy;
       dev->scan_reporting = false;
+      dev->roam_scan_pending = false;
       nxmutex_unlock(&dev->status_lock);
     }
+
+  if (roam_scan && result == 0 &&
+      nxmutex_lock(&dev->status_lock) >= 0)
+    {
+      if (dev->station_connected &&
+          dev->station_generation == roam_generation &&
+          nxmutex_lock(&dev->station.lock) >= 0)
+        {
+          request = dev->station.request;
+          memcpy(current_bssid, dev->station.target.bss.bssid,
+                 sizeof(current_bssid));
+          nxmutex_unlock(&dev->station.lock);
+          nxmutex_unlock(&dev->status_lock);
+
+          ret = sv6621_scan_cache_find_roam_candidate(
+              &dev->scan.cache, &request, current_bssid, roam_signal_dbm,
+              roam_policy.minimum_gain_db, &roam_entry);
+          if (ret == 0)
+            {
+              clock_t now = clock_systime_ticks();
+
+              if (nxmutex_lock(&dev->status_lock) >= 0)
+                {
+                  bool current = dev->station_connected &&
+                      dev->station_generation == roam_generation &&
+                      dev->roam_policy.enabled;
+                  bool cooldown_elapsed =
+                      !dev->roam_candidate_ticks_valid ||
+                      now - dev->roam_candidate_ticks >=
+                          MSEC2TICK(dev->roam_policy.cooldown_ms);
+
+                  if (current && cooldown_elapsed)
+                    {
+                      dev->roam_candidate_ticks = now;
+                      dev->roam_candidate_ticks_valid = true;
+                    }
+
+                  nxmutex_unlock(&dev->status_lock);
+                  if (current && cooldown_elapsed)
+                    {
+                      (void)sv6621_core_queue_roam_candidate(
+                          dev, &roam_entry, roam_generation,
+                          roam_signal_dbm);
+                    }
+                }
+            }
+        }
+      else
+        {
+          nxmutex_unlock(&dev->status_lock);
+        }
+    }
+
+  kmm_free(entries);
 
   sv6621_core_report(dev, SV6621_EVENT_SCAN_COMPLETE, &result, sizeof(result));
 }
@@ -1562,8 +2035,8 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
                   FAR struct sv6621_dev_s **dev_out)
 {
   FAR struct sv6621_dev_s *dev;
-  char recovery_arg[2 + sizeof(uintptr_t) * 2 + 1];
-  FAR char *recovery_argv[2];
+  char thread_arg[2 + sizeof(uintptr_t) * 2 + 1];
+  FAR char *thread_argv[2];
   int ret;
 
   if (config == NULL || dev_out == NULL || config->transport == NULL ||
@@ -1609,6 +2082,12 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
 
   dev->config = *config;
   dev->regulatory = *config->regulatory;
+  dev->roam_policy.enabled = true;
+  dev->roam_policy.threshold_dbm = SV6621_ROAM_DEFAULT_THRESHOLD_DBM;
+  dev->roam_policy.hysteresis_db = SV6621_ROAM_DEFAULT_HYSTERESIS_DB;
+  dev->roam_policy.minimum_gain_db =
+      SV6621_ROAM_DEFAULT_MINIMUM_GAIN_DB;
+  dev->roam_policy.cooldown_ms = SV6621_ROAM_DEFAULT_COOLDOWN_MS;
   dev->status.state = SV6621_STATE_OFF;
   ret = sv6621_regulatory_scan_channels(
       &dev->regulatory, dev->scan_channels,
@@ -1722,17 +2201,37 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       goto destroy_recovery_sem;
     }
 
-  snprintf(recovery_arg, sizeof(recovery_arg), "%" PRIxPTR,
-           (uintptr_t)dev);
-  recovery_argv[0] = recovery_arg;
-  recovery_argv[1] = NULL;
+  snprintf(thread_arg, sizeof(thread_arg), "%" PRIxPTR, (uintptr_t)dev);
+  thread_argv[0] = thread_arg;
+  thread_argv[1] = NULL;
   ret = kthread_create("sv6621_recovery", CONFIG_SV6621_RECOVERY_PRIO,
                        CONFIG_SV6621_RECOVERY_STACK,
-                       sv6621_core_recovery_thread, recovery_argv);
+                       sv6621_core_recovery_thread, thread_argv);
   if (ret <= 0)
     {
       ret = ret < 0 ? ret : -ECHILD;
       goto destroy_recovery_exit_sem;
+    }
+
+  ret = nxsem_init(&dev->roam_sem, 0, 0);
+  if (ret < 0)
+    {
+      goto stop_recovery_thread;
+    }
+
+  ret = nxsem_init(&dev->roam_exit_sem, 0, 0);
+  if (ret < 0)
+    {
+      goto destroy_roam_sem;
+    }
+
+  ret = kthread_create("sv6621_roam", CONFIG_SV6621_RECOVERY_PRIO,
+                       CONFIG_SV6621_RECOVERY_STACK,
+                       sv6621_core_roam_thread, thread_argv);
+  if (ret <= 0)
+    {
+      ret = ret < 0 ? ret : -ECHILD;
+      goto destroy_roam_exit_sem;
     }
 
 #ifdef CONFIG_SV6621_PM
@@ -1742,7 +2241,7 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
   ret = pm_register(&dev->pm_callback);
   if (ret < 0)
     {
-      goto stop_recovery_thread;
+      goto stop_roam_thread;
     }
 
   dev->pm_registered = true;
@@ -1752,11 +2251,19 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
   return 0;
 
 #ifdef CONFIG_SV6621_PM
+stop_roam_thread:
+  dev->roam_shutdown = true;
+  nxsem_post(&dev->roam_sem);
+  nxsem_wait_uninterruptible(&dev->roam_exit_sem);
+#endif
+destroy_roam_exit_sem:
+  nxsem_destroy(&dev->roam_exit_sem);
+destroy_roam_sem:
+  nxsem_destroy(&dev->roam_sem);
 stop_recovery_thread:
   dev->recovery_shutdown = true;
   nxsem_post(&dev->recovery_sem);
   nxsem_wait_uninterruptible(&dev->recovery_exit_sem);
-#endif
 destroy_recovery_exit_sem:
   nxsem_destroy(&dev->recovery_exit_sem);
 destroy_recovery_sem:
@@ -1816,10 +2323,13 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
   if (nxmutex_lock(&dev->status_lock) >= 0)
     {
       dev->recovery_shutdown = true;
+      dev->roam_shutdown = true;
       nxmutex_unlock(&dev->status_lock);
     }
 
   sv6621_stop(dev);
+  nxsem_post(&dev->roam_sem);
+  nxsem_wait_uninterruptible(&dev->roam_exit_sem);
   nxsem_post(&dev->recovery_sem);
   nxsem_wait_uninterruptible(&dev->recovery_exit_sem);
   work_cancel_sync(LPWORK, &dev->thermal_work);
@@ -1845,6 +2355,8 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
   sv6621_data_deinit(&dev->data);
   sv6621_tx_deinit(&dev->tx);
   sv6621_packet_router_deinit(&dev->router);
+  nxsem_destroy(&dev->roam_exit_sem);
+  nxsem_destroy(&dev->roam_sem);
   nxsem_destroy(&dev->recovery_exit_sem);
   nxsem_destroy(&dev->recovery_sem);
   nxmutex_destroy(&dev->status_lock);
@@ -2618,15 +3130,144 @@ unlock_lifecycle:
   return ret;
 }
 
+/****************************************************************************
+ * Name: sv6621_core_connect_locked
+ ****************************************************************************/
+
+static int sv6621_core_connect_locked(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_connect_s *connection, bool roaming)
+{
+  FAR struct sv6621_scan_entry_s *target = NULL;
+  uint8_t sae_pmk[SV6621_SAE_PMK_SIZE];
+  uint8_t sae_pmkid[SV6621_SAE_PMKID_SIZE];
+  enum sv6621_station_state_e expected_state =
+      roaming ? SV6621_STATION_CONNECTED : SV6621_STATION_IDLE;
+  bool wpa_prepared = false;
+  int ret;
+
+  ret = nxmutex_lock(&dev->station.lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (dev->station.state != expected_state)
+    {
+      ret = -EBUSY;
+    }
+
+  nxmutex_unlock(&dev->station.lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = sv6621_station_set_local_address(&dev->station,
+                                         dev->wifi_info.mac);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (connection->security == SV6621_SECURITY_WPA2_PSK ||
+      connection->security == SV6621_SECURITY_WPA2_WPA3_PSK)
+    {
+      target = kmm_malloc(sizeof(*target));
+      if (target == NULL)
+        {
+          return -ENOMEM;
+        }
+
+      ret = sv6621_scan_cache_find(&dev->scan.cache, connection, target);
+      if (ret < 0)
+        {
+          goto free_target;
+        }
+
+      ret = sv6621_wpa_prepare(&dev->wpa, connection, dev->wifi_info.mac,
+                               target->bss.bssid);
+      if (ret < 0)
+        {
+          goto free_target;
+        }
+
+      wpa_prepared = true;
+      kmm_free(target);
+      target = NULL;
+    }
+
+  ret = sv6621_station_connect(&dev->station, connection, roaming,
+                               SV6621_CORE_CONNECT_TIMEOUT_MS);
+  if (ret < 0)
+    {
+      goto cancel_wpa;
+    }
+
+  if (connection->security == SV6621_SECURITY_WPA3_SAE)
+    {
+      ret = sv6621_station_get_sae_pmk(&dev->station, sae_pmk,
+                                       sae_pmkid);
+      if (ret < 0)
+        {
+          goto cancel_wpa;
+        }
+
+      ret = sv6621_wpa_prepare_pmk(&dev->wpa, sae_pmk,
+                                   SV6621_WPA_KEY_MGMT_SAE,
+                                   dev->wifi_info.mac,
+                                   dev->station.target.bss.bssid);
+      sv6621_sae_zeroize(sae_pmk, sizeof(sae_pmk));
+      sv6621_sae_zeroize(sae_pmkid, sizeof(sae_pmkid));
+      if (ret < 0)
+        {
+          goto cancel_wpa;
+        }
+
+      wpa_prepared = true;
+    }
+
+  if (wpa_prepared)
+    {
+      ret = sv6621_wpa_run(&dev->wpa, &dev->station.peer,
+                           SV6621_CORE_HANDSHAKE_TIMEOUT_MS);
+      if (ret < 0)
+        {
+          int disconnect_ret = sv6621_station_disconnect(&dev->station, 1);
+
+          if (disconnect_ret >= 0)
+            {
+              sv6621_wpa_disconnected(&dev->wpa, ret);
+            }
+          else
+            {
+              sv6621_wpa_cancel(&dev->wpa, ret);
+            }
+
+          wpa_prepared = false;
+          goto cancel_wpa;
+        }
+    }
+
+  return 0;
+
+free_target:
+  kmm_free(target);
+cancel_wpa:
+  if (wpa_prepared)
+    {
+      sv6621_wpa_cancel(&dev->wpa, ret);
+    }
+
+  return ret;
+}
+
 int sv6621_connect(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_connect_s *request)
 {
   struct sv6621_connect_s resolved;
   FAR const struct sv6621_connect_s *connection = request;
   FAR struct sv6621_scan_entry_s *target = NULL;
-  uint8_t sae_pmk[SV6621_SAE_PMK_SIZE];
-  uint8_t sae_pmkid[SV6621_SAE_PMKID_SIZE];
-  bool wpa_prepared = false;
   int ret;
 
   if (dev == NULL || request == NULL)
@@ -2705,119 +3346,7 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
       goto unlock_lifecycle;
     }
 
-  ret = nxmutex_lock(&dev->station.lock);
-  if (ret < 0)
-    {
-      goto unlock_lifecycle;
-    }
-
-  if (dev->station.state != SV6621_STATION_IDLE)
-    {
-      ret = -EBUSY;
-    }
-
-  nxmutex_unlock(&dev->station.lock);
-  if (ret < 0)
-    {
-      goto unlock_lifecycle;
-    }
-
-  ret = sv6621_station_set_local_address(&dev->station,
-                                         dev->wifi_info.mac);
-  if (ret < 0)
-    {
-      goto unlock_lifecycle;
-    }
-
-  if (connection->security == SV6621_SECURITY_WPA2_PSK ||
-      connection->security == SV6621_SECURITY_WPA2_WPA3_PSK)
-    {
-      target = kmm_malloc(sizeof(*target));
-      if (target == NULL)
-        {
-          ret = -ENOMEM;
-          goto unlock_lifecycle;
-        }
-
-      ret = sv6621_scan_cache_find(&dev->scan.cache, connection, target);
-      if (ret < 0)
-        {
-          goto free_target;
-        }
-
-      ret = sv6621_wpa_prepare(&dev->wpa, connection, dev->wifi_info.mac,
-                               target->bss.bssid);
-      if (ret < 0)
-        {
-          goto free_target;
-        }
-
-      wpa_prepared = true;
-      kmm_free(target);
-      target = NULL;
-    }
-
-  ret = sv6621_station_connect(&dev->station, connection,
-                               SV6621_CORE_CONNECT_TIMEOUT_MS);
-  if (ret < 0)
-    {
-      goto cancel_wpa;
-    }
-
-  if (connection->security == SV6621_SECURITY_WPA3_SAE)
-    {
-      ret = sv6621_station_get_sae_pmk(&dev->station, sae_pmk,
-                                       sae_pmkid);
-      if (ret < 0)
-        {
-          goto cancel_wpa;
-        }
-
-      ret = sv6621_wpa_prepare_pmk(&dev->wpa, sae_pmk,
-                                   SV6621_WPA_KEY_MGMT_SAE,
-                                   dev->wifi_info.mac,
-                                   dev->station.target.bss.bssid);
-      sv6621_sae_zeroize(sae_pmk, sizeof(sae_pmk));
-      sv6621_sae_zeroize(sae_pmkid, sizeof(sae_pmkid));
-      if (ret < 0)
-        {
-          goto cancel_wpa;
-        }
-
-      wpa_prepared = true;
-    }
-
-  if (wpa_prepared)
-    {
-      ret = sv6621_wpa_run(&dev->wpa, &dev->station.peer,
-                           SV6621_CORE_HANDSHAKE_TIMEOUT_MS);
-      if (ret < 0)
-        {
-          int disconnect_ret = sv6621_station_disconnect(&dev->station, 1);
-
-          if (disconnect_ret >= 0)
-            {
-              sv6621_wpa_disconnected(&dev->wpa, ret);
-            }
-          else
-            {
-              sv6621_wpa_cancel(&dev->wpa, ret);
-            }
-
-          wpa_prepared = false;
-          goto cancel_wpa;
-        }
-    }
-
-  goto unlock_lifecycle;
-
-free_target:
-  kmm_free(target);
-cancel_wpa:
-  if (wpa_prepared)
-    {
-      sv6621_wpa_cancel(&dev->wpa, ret);
-    }
+  ret = sv6621_core_connect_locked(dev, connection, false);
 
 unlock_lifecycle:
   nxmutex_unlock(&dev->lifecycle_lock);
@@ -2912,6 +3441,79 @@ int sv6621_set_signal_threshold(FAR struct sv6621_dev_s *dev,
   nxmutex_unlock(&dev->station.lock);
   ret = sv6621_signal_configure(&dev->command, instance, threshold_dbm,
                                 hysteresis_db);
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_set_roam_policy
+ ****************************************************************************/
+
+int sv6621_set_roam_policy(FAR struct sv6621_dev_s *dev,
+                           FAR const struct sv6621_roam_policy_s *policy)
+{
+  struct sv6621_roam_policy_s previous;
+  uint8_t instance = 0;
+  bool connected;
+  int ret;
+
+  if (dev == NULL || policy == NULL || policy->threshold_dbm > 0 ||
+      policy->hysteresis_db > INT8_MAX || policy->minimum_gain_db == 0 ||
+      policy->minimum_gain_db > INT8_MAX || policy->cooldown_ms == 0 ||
+      policy->cooldown_ms > SV6621_CORE_ROAM_MAX_COOLDOWN_MS)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  previous = dev->roam_policy;
+  connected = dev->station_connected;
+  if (connected)
+    {
+      ret = nxmutex_lock(&dev->station.lock);
+      if (ret < 0)
+        {
+          nxmutex_unlock(&dev->status_lock);
+          goto unlock_lifecycle;
+        }
+
+      instance = dev->station.peer.instance;
+      nxmutex_unlock(&dev->station.lock);
+    }
+
+  dev->roam_policy = *policy;
+  dev->roam_scan_pending = false;
+  dev->roam_candidate_ticks_valid = false;
+  nxmutex_unlock(&dev->status_lock);
+
+  if (connected && policy->enabled)
+    {
+      ret = sv6621_signal_configure(&dev->command, instance,
+                                    policy->threshold_dbm,
+                                    policy->hysteresis_db);
+      if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
+        {
+          dev->roam_policy = previous;
+          nxmutex_unlock(&dev->status_lock);
+        }
+    }
+  else
+    {
+      ret = 0;
+    }
 
 unlock_lifecycle:
   nxmutex_unlock(&dev->lifecycle_lock);

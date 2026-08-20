@@ -81,7 +81,7 @@ enum sv6621_connection_disconnect_mode_e
 
 int sv6621_connection_join(FAR struct sv6621_command_engine_s *command,
                            FAR const struct sv6621_scan_entry_s *entry,
-                           uint32_t bandwidth_capabilities,
+                           uint32_t bandwidth_capabilities, bool roaming,
                            FAR struct sv6621_connection_peer_s *peer);
 int sv6621_connection_authenticate(
     FAR struct sv6621_command_engine_s *command,

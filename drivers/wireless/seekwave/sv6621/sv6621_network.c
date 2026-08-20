@@ -506,6 +506,18 @@ static int sv6621_network_ioctl(FAR struct net_driver_s *dev, int command,
           (FAR struct sv6621_driver_stats_s *)(uintptr_t)argument);
     }
 
+  if (command == SV6621IOC_GET_LINK_STATS)
+    {
+      if (argument == 0)
+        {
+          return -EINVAL;
+        }
+
+      return sv6621_get_link_stats(
+          network->ioctl.owner,
+          (FAR struct sv6621_link_stats_s *)(uintptr_t)argument);
+    }
+
   return sv6621_ioctl_handle(&network->ioctl, command, argument);
 }
 #endif
