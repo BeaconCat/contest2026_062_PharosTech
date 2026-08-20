@@ -1033,6 +1033,7 @@ static void sv6621_core_recovery_worker(FAR void *arg)
 #ifdef CONFIG_NET
       sv6621_network_set_link(&dev->network, false, NULL);
 #endif
+      sv6621_sched_scan_cancel(&dev->scheduled_scan);
       sv6621_scan_controller_cancel(&dev->scan);
       sv6621_wpa_cancel(&dev->wpa, error);
       sv6621_station_reset(&dev->station, error);
@@ -1524,6 +1525,8 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
     }
 
   sv6621_scan_command_event(instance, id, payload, length, &dev->scan);
+  sv6621_sched_scan_command_event(instance, id, payload, length,
+                                  &dev->scheduled_scan);
   sv6621_station_command_event(instance, id, payload, length, &dev->station);
 }
 
@@ -2136,6 +2139,13 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       goto deinit_data;
     }
 
+  ret = sv6621_sched_scan_init(&dev->scheduled_scan, &dev->command,
+                               &dev->scan.cache, NULL, NULL);
+  if (ret < 0)
+    {
+      goto deinit_scan;
+    }
+
   ret = sv6621_command_engine_init(&dev->command, sv6621_tx_command_sender,
                                    &dev->tx,
                                    sv6621_core_command_receive_kick, dev,
@@ -2143,7 +2153,7 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
                                    sv6621_core_command_error, dev);
   if (ret < 0)
     {
-      goto deinit_scan;
+      goto deinit_scheduled_scan;
     }
 
   ret = sv6621_station_init(&dev->station, &dev->command, &dev->scan,
@@ -2285,6 +2295,8 @@ deinit_station:
   sv6621_station_deinit(&dev->station);
 deinit_command:
   sv6621_command_engine_deinit(&dev->command);
+deinit_scheduled_scan:
+  sv6621_sched_scan_deinit(&dev->scheduled_scan);
 deinit_scan:
   sv6621_scan_controller_deinit(&dev->scan);
 deinit_data:
@@ -2350,6 +2362,7 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
   sv6621_data_set_eapol_input(&dev->data, NULL, NULL);
   sv6621_wpa_deinit(&dev->wpa);
   sv6621_station_deinit(&dev->station);
+  sv6621_sched_scan_deinit(&dev->scheduled_scan);
   sv6621_scan_controller_deinit(&dev->scan);
   sv6621_command_engine_deinit(&dev->command);
   sv6621_data_deinit(&dev->data);
@@ -2685,6 +2698,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 {
   enum sv6621_state_e state;
   uint32_t recovery_count;
+  int scheduled_scan_ret = 0;
   int scan_ret = 0;
   int close_ret = 0;
   int ret;
@@ -2721,6 +2735,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 #ifdef CONFIG_NET
   sv6621_network_set_link(&dev->network, false, NULL);
 #endif
+  scheduled_scan_ret = sv6621_sched_scan_cancel(&dev->scheduled_scan);
   scan_ret = sv6621_scan_controller_cancel(&dev->scan);
   sv6621_station_disconnect(&dev->station, 3);
   sv6621_wpa_disconnected(&dev->wpa, -ESHUTDOWN);
@@ -2772,6 +2787,11 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
   if (scan_ret < 0)
     {
       return scan_ret;
+    }
+
+  if (scheduled_scan_ret < 0)
+    {
+      return scheduled_scan_ret;
     }
 
   return close_ret < 0 ? close_ret : 0;
