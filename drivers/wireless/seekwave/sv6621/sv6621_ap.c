@@ -33,6 +33,7 @@
 #include <string.h>
 
 #include "sv6621_ap.h"
+#include "sv6621_ap_mlme.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -75,6 +76,12 @@ struct sv6621_ap_blob_field_s
 
 static void sv6621_ap_put_le16(FAR uint8_t *value, uint16_t number);
 static void sv6621_ap_put_le32(FAR uint8_t *value, uint32_t number);
+static uint64_t sv6621_ap_next_cookie(FAR struct sv6621_ap_s *ap);
+static bool sv6621_ap_expected_event_error(int error);
+static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
+                                    FAR const uint8_t *payload,
+                                    size_t length, FAR void *arg);
+static void sv6621_ap_dispatch_error(int error, FAR void *arg);
 
 /****************************************************************************
  * Private Functions
@@ -92,6 +99,105 @@ static void sv6621_ap_put_le32(FAR uint8_t *value, uint32_t number)
   value[1] = number >> 8;
   value[2] = number >> 16;
   value[3] = number >> 24;
+}
+
+static uint64_t sv6621_ap_next_cookie(FAR struct sv6621_ap_s *ap)
+{
+  uint64_t cookie = ap->next_cookie++;
+
+  if (cookie == 0)
+    {
+      cookie = ap->next_cookie++;
+    }
+
+  return cookie;
+}
+
+static bool sv6621_ap_expected_event_error(int error)
+{
+  return error == -EACCES || error == -ECONNREFUSED || error == -ENOENT ||
+         error == -ENOMSG || error == -EPROTO || error == -ESTALE;
+}
+
+static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
+                                    FAR const uint8_t *payload,
+                                    size_t length, FAR void *arg)
+{
+  FAR struct sv6621_ap_s *ap = arg;
+  struct sv6621_ap_mgmt_s mgmt;
+  uint8_t address[SV6621_MAC_LENGTH];
+  uint16_t reason;
+  bool accepted;
+  int ret;
+
+  ret = nxmutex_lock(&ap->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!ap->active || instance != ap->instance)
+    {
+      nxmutex_unlock(&ap->lock);
+      return 0;
+    }
+
+  if (id == SV6621_AP_EVENT_MGMT_TX_STATUS)
+    {
+      ret = sv6621_ap_handle_tx_status(&ap->peers, ap->command,
+                                       ap->instance, payload, length);
+    }
+  else if (id == SV6621_AP_EVENT_DEL_STA)
+    {
+      ret = sv6621_ap_parse_peer_departure(payload, length, address, &reason);
+      if (ret == 0)
+        {
+          ret = sv6621_ap_peer_departed(&ap->peers, ap->command,
+                                        ap->instance, address, reason, true);
+        }
+    }
+  else
+    {
+      ret = sv6621_ap_parse_mgmt(payload, length, &mgmt);
+      if (ret == 0 && mgmt.type == SV6621_AP_MGMT_AUTH)
+        {
+          ret = sv6621_ap_authenticate_open(
+              &ap->peers, ap->command, ap->instance, ap->config.channel,
+              ap->config.band, ap->address, &mgmt,
+              sv6621_ap_next_cookie(ap), &accepted);
+        }
+      else if (ret == 0 &&
+               (mgmt.type == SV6621_AP_MGMT_ASSOC_REQUEST ||
+                mgmt.type == SV6621_AP_MGMT_REASSOC_REQUEST))
+        {
+          ret = sv6621_ap_respond_association(
+              &ap->peers, ap->command, ap->instance, ap->config.channel,
+              ap->config.band, ap->address, ap->config.ssid,
+              ap->config.ssid_length, ap->templates.beacon_tail,
+              ap->templates.beacon_tail_length, &mgmt,
+              sv6621_ap_next_cookie(ap), &accepted);
+        }
+      else if (ret == 0 &&
+               (mgmt.type == SV6621_AP_MGMT_DEAUTH ||
+                mgmt.type == SV6621_AP_MGMT_DISASSOC))
+        {
+          ret = sv6621_ap_handle_departure(&ap->peers, ap->command,
+                                           ap->instance, &mgmt);
+        }
+    }
+
+  nxmutex_unlock(&ap->lock);
+  return sv6621_ap_expected_event_error(ret) ? 0 : ret;
+}
+
+static void sv6621_ap_dispatch_error(int error, FAR void *arg)
+{
+  FAR struct sv6621_ap_s *ap = arg;
+
+  if (ap->error != NULL)
+    {
+      ap->error(error, ap->error_arg);
+    }
 }
 
 /****************************************************************************
@@ -242,7 +348,8 @@ int sv6621_ap_stop(FAR struct sv6621_command_engine_s *command,
 int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
                    FAR struct sv6621_command_engine_s *command,
                    uint8_t max_stations,
-                   FAR const uint8_t address[SV6621_MAC_LENGTH])
+                   FAR const uint8_t address[SV6621_MAC_LENGTH],
+                   sv6621_ap_error_t error, FAR void *error_arg)
 {
   int ret;
 
@@ -268,7 +375,19 @@ int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
       return ret;
     }
 
+  ret = sv6621_ap_event_queue_init(&ap->events, sv6621_ap_dispatch_event,
+                                   sv6621_ap_dispatch_error, ap);
+  if (ret < 0)
+    {
+      sv6621_ap_peer_table_deinit(&ap->peers);
+      nxmutex_destroy(&ap->lock);
+      return ret;
+    }
+
   ap->command = command;
+  ap->next_cookie = 1;
+  ap->error = error;
+  ap->error_arg = error_arg;
   memcpy(ap->address, address, SV6621_MAC_LENGTH);
   return 0;
 }
@@ -286,6 +405,7 @@ void sv6621_ap_deinit(FAR struct sv6621_ap_s *ap)
       nxmutex_unlock(&ap->lock);
     }
 
+  sv6621_ap_event_queue_deinit(&ap->events);
   sv6621_ap_peer_table_deinit(&ap->peers);
   nxmutex_destroy(&ap->lock);
   memset(ap, 0, sizeof(*ap));
@@ -374,6 +494,7 @@ int sv6621_ap_enable(FAR struct sv6621_ap_s *ap, uint8_t instance,
 
 int sv6621_ap_disable(FAR struct sv6621_ap_s *ap)
 {
+  bool reset = false;
   int ret;
 
   if (ap == NULL)
@@ -402,10 +523,29 @@ int sv6621_ap_disable(FAR struct sv6621_ap_s *ap)
       memset(&ap->context, 0, sizeof(ap->context));
       ap->instance = 0;
       ap->active = false;
+      reset = true;
     }
 
   nxmutex_unlock(&ap->lock);
+  if (reset)
+    {
+      ret = sv6621_ap_event_queue_reset(&ap->events);
+    }
+
   return ret;
+}
+
+int sv6621_ap_queue_event(FAR struct sv6621_ap_s *ap, uint8_t instance,
+                          uint8_t id, FAR const uint8_t *payload,
+                          size_t length)
+{
+  if (ap == NULL)
+    {
+      return -EINVAL;
+    }
+
+  return sv6621_ap_event_queue_submit(&ap->events, instance, id, payload,
+                                      length);
 }
 
 bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap)
