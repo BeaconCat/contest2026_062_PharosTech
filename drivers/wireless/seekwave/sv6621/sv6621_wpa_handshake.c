@@ -69,6 +69,12 @@ static bool sv6621_wpa_group_key_matches(
 static void sv6621_wpa_finish(FAR struct sv6621_wpa_s *wpa, int result);
 static int sv6621_wpa_send_response(
     FAR struct sv6621_wpa_s *wpa, enum sv6621_wpa_response_e response);
+static int sv6621_wpa_restore_group_key(
+    FAR struct sv6621_wpa_s *wpa,
+    enum sv6621_security_key_type_e type,
+    enum sv6621_security_cipher_e cipher, uint8_t key_index,
+    FAR const uint8_t *key, size_t key_length,
+    FAR const uint8_t packet_number[SV6621_WPA_IPN_SIZE]);
 static int sv6621_wpa_decode_gtk(
     FAR struct sv6621_wpa_s *wpa,
     FAR const struct sv6621_wpa_eapol_s *eapol, FAR uint8_t *key_index,
@@ -290,6 +296,22 @@ static int sv6621_wpa_send_response(
   return sv6621_security_send_eapol(
       wpa->command, &wpa->tx_context, frame,
       SV6621_WPA_ETHERNET_HEADER_SIZE + eapol_length);
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_restore_group_key
+ ****************************************************************************/
+
+static int sv6621_wpa_restore_group_key(
+    FAR struct sv6621_wpa_s *wpa,
+    enum sv6621_security_key_type_e type,
+    enum sv6621_security_cipher_e cipher, uint8_t key_index,
+    FAR const uint8_t *key, size_t key_length,
+    FAR const uint8_t packet_number[SV6621_WPA_IPN_SIZE])
+{
+  return sv6621_security_add_key(wpa->command, type, cipher,
+                                  wpa->authenticator, key_index, key,
+                                  key_length, packet_number);
 }
 
 /****************************************************************************
@@ -595,6 +617,15 @@ static int sv6621_wpa_process_group_message_1(
   int comparison;
   bool install_group;
   bool install_igtk = false;
+  bool restore_gtk = false;
+  bool restore_igtk = false;
+  uint8_t old_gtk[SV6621_WPA_GTK_MAX_SIZE] = { 0 };
+  uint8_t old_igtk[SV6621_WPA_IGTK_SIZE] = { 0 };
+  uint8_t old_igtk_ipn[SV6621_WPA_IPN_SIZE] = { 0 };
+  size_t old_gtk_length = 0;
+  uint8_t old_gtk_index = 0;
+  uint8_t old_igtk_index = 0;
+  int restore_ret;
   int ret;
 
   ret = sv6621_wpa_eapol_verify_mic(
@@ -625,6 +656,14 @@ static int sv6621_wpa_process_group_message_1(
 
   install_group = !sv6621_wpa_group_key_matches(
       wpa, gtk_index, gtk, gtk_length);
+  if (install_group && wpa->group_installed &&
+      wpa->gtk_index == gtk_index)
+    {
+      restore_gtk = true;
+      old_gtk_index = wpa->gtk_index;
+      old_gtk_length = wpa->gtk_length;
+      memcpy(old_gtk, wpa->gtk, old_gtk_length);
+    }
 
   if (wpa->key_mgmt == SV6621_WPA_KEY_MGMT_SAE)
     {
@@ -635,6 +674,14 @@ static int sv6621_wpa_process_group_message_1(
                          wpa->igtk_index != igtk_index ||
                          memcmp(wpa->igtk, igtk, sizeof(igtk)) != 0 ||
                          memcmp(wpa->igtk_ipn, ipn, sizeof(ipn)) != 0;
+          if (install_igtk && wpa->integrity_group_installed &&
+              wpa->igtk_index == igtk_index)
+            {
+              restore_igtk = true;
+              old_igtk_index = wpa->igtk_index;
+              memcpy(old_igtk, wpa->igtk, sizeof(old_igtk));
+              memcpy(old_igtk_ipn, wpa->igtk_ipn, sizeof(old_igtk_ipn));
+            }
         }
       else if (ret != -ENOENT)
         {
@@ -650,6 +697,18 @@ static int sv6621_wpa_process_group_message_1(
           gtk_length, NULL);
       if (ret < 0)
         {
+          if (restore_gtk)
+            {
+              restore_ret = sv6621_wpa_restore_group_key(
+                  wpa, SV6621_SECURITY_KEY_GROUP,
+                  SV6621_SECURITY_CIPHER_CCMP, old_gtk_index, old_gtk,
+                  old_gtk_length, NULL);
+              if (restore_ret < 0)
+                {
+                  ret = restore_ret;
+                }
+            }
+
           goto clear_keys;
         }
     }
@@ -670,11 +729,34 @@ static int sv6621_wpa_process_group_message_1(
                   gtk_index);
             }
 
+          if (restore_gtk)
+            {
+              restore_ret = sv6621_wpa_restore_group_key(
+                  wpa, SV6621_SECURITY_KEY_GROUP,
+                  SV6621_SECURITY_CIPHER_CCMP, old_gtk_index, old_gtk,
+                  old_gtk_length, NULL);
+              if (restore_ret < 0)
+                {
+                  ret = restore_ret;
+                }
+            }
+
+          if (restore_igtk)
+            {
+              restore_ret = sv6621_wpa_restore_group_key(
+                  wpa, SV6621_SECURITY_KEY_INTEGRITY_GROUP,
+                  SV6621_SECURITY_CIPHER_BIP_CMAC_128, old_igtk_index,
+                  old_igtk, sizeof(old_igtk), old_igtk_ipn);
+              if (restore_ret < 0)
+                {
+                  ret = restore_ret;
+                }
+            }
+
           goto clear_keys;
         }
     }
 
-  memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
   wpa->eapol_version = eapol->version;
   ret = sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_GROUP_2);
   if (ret < 0)
@@ -694,8 +776,39 @@ static int sv6621_wpa_process_group_message_1(
               igtk_index);
         }
 
+      if (restore_gtk)
+        {
+          restore_ret = sv6621_wpa_restore_group_key(
+              wpa, SV6621_SECURITY_KEY_GROUP,
+              SV6621_SECURITY_CIPHER_CCMP, old_gtk_index, old_gtk,
+              old_gtk_length, NULL);
+          if (restore_ret < 0)
+            {
+              ret = restore_ret;
+            }
+        }
+
+      if (restore_igtk)
+        {
+          restore_ret = sv6621_wpa_restore_group_key(
+              wpa, SV6621_SECURITY_KEY_INTEGRITY_GROUP,
+              SV6621_SECURITY_CIPHER_BIP_CMAC_128, old_igtk_index, old_igtk,
+              sizeof(old_igtk), old_igtk_ipn);
+          if (restore_ret < 0)
+            {
+              ret = restore_ret;
+            }
+        }
+
       goto clear_keys;
     }
+
+  /* Commit the replay counter only after Group Message 2 has reached the
+   * firmware.  If transmission fails, the AP may retransmit the same Group
+   * Message 1 and the replacement keys must be installed again.
+   */
+
+  memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
 
   if (install_group && wpa->group_installed &&
       wpa->gtk_index != gtk_index)
@@ -735,6 +848,9 @@ clear_keys:
   sv6621_wpa_clear(igtk, sizeof(igtk));
   sv6621_wpa_clear(ipn, sizeof(ipn));
   sv6621_wpa_clear(gtk, sizeof(gtk));
+  sv6621_wpa_clear(old_gtk, sizeof(old_gtk));
+  sv6621_wpa_clear(old_igtk, sizeof(old_igtk));
+  sv6621_wpa_clear(old_igtk_ipn, sizeof(old_igtk_ipn));
   return ret;
 }
 
