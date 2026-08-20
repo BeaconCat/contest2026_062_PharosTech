@@ -50,6 +50,7 @@ INCLUDES += $(INCDIR_PREFIX)$(SV6621_SRCDIR)/include
 CHIP_CSRCS += sv6621_ap.c sv6621_ap_beacon.c sv6621_ap_event.c
 CHIP_CSRCS += sv6621_ap_mlme.c
 CHIP_CSRCS += sv6621_ap_peer.c
+CHIP_CSRCS += sv6621_ap_wpa.c
 CHIP_CSRCS += sv6621_command.c
 CHIP_CSRCS += sv6621_connection.c sv6621_core.c
 CHIP_CSRCS += sv6621_data.c

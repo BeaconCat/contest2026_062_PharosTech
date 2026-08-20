@@ -2165,6 +2165,22 @@ static void sv6621_core_data_input(FAR const struct sv6621_data_rx_s *rx,
 #endif
 }
 
+static void sv6621_core_eapol_input(FAR const struct sv6621_data_rx_s *rx,
+                                    FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+
+  if (dev->ap_initialized && sv6621_ap_is_active(&dev->ap) &&
+      rx->instance_valid && rx->instance == dev->ap.context.instance)
+    {
+      sv6621_ap_eapol_input(rx, &dev->ap);
+    }
+  else
+    {
+      sv6621_wpa_input(rx, &dev->wpa);
+    }
+}
+
 #ifdef CONFIG_NET
 static int sv6621_core_ap_resolve_tx(
     FAR const uint8_t *frame, size_t length,
@@ -2481,7 +2497,7 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       goto deinit_station;
     }
 
-  sv6621_data_set_eapol_input(&dev->data, sv6621_wpa_input, &dev->wpa);
+  sv6621_data_set_eapol_input(&dev->data, sv6621_core_eapol_input, dev);
   ret = sv6621_service_init(&dev->service, sv6621_core_service_event, dev);
   if (ret < 0)
     {

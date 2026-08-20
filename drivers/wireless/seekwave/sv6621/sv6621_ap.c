@@ -194,6 +194,19 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                   notify_connected = false;
                 }
             }
+          else if (notify_connected &&
+                   ap->config.security == SV6621_SECURITY_WPA2_PSK)
+            {
+              struct sv6621_ap_peer_s peer;
+
+              notify_connected = false;
+              ret = sv6621_ap_peer_lookup(&ap->peers,
+                                           client_event.address, &peer);
+              if (ret == 0)
+                {
+                  ret = sv6621_ap_wpa_begin(&ap->wpa, &peer);
+                }
+            }
         }
     }
   else if (id == SV6621_AP_EVENT_DEL_STA)
@@ -207,6 +220,10 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
           ret = sv6621_ap_peer_departed(&ap->peers, ap->command,
                                         ap->instance, address, reason, true);
           notify_disconnected = ret == 0;
+          if (notify_disconnected)
+            {
+              sv6621_ap_wpa_forget(&ap->wpa, address);
+            }
         }
     }
   else
@@ -251,6 +268,10 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
           ret = sv6621_ap_handle_departure(&ap->peers, ap->command,
                                            ap->instance, &mgmt);
           notify_disconnected = ret == 0;
+          if (notify_disconnected)
+            {
+              sv6621_ap_wpa_forget(&ap->wpa, mgmt.source);
+            }
         }
     }
 
@@ -462,6 +483,15 @@ int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
       return ret;
     }
 
+  ret = sv6621_ap_wpa_init(&ap->wpa, command, address);
+  if (ret < 0)
+    {
+      sv6621_ap_event_queue_deinit(&ap->events);
+      sv6621_ap_peer_table_deinit(&ap->peers);
+      nxmutex_destroy(&ap->lock);
+      return ret;
+    }
+
   ap->command = command;
   ap->next_cookie = 1;
   ap->error = error;
@@ -486,6 +516,7 @@ void sv6621_ap_deinit(FAR struct sv6621_ap_s *ap)
     }
 
   sv6621_ap_event_queue_deinit(&ap->events);
+  sv6621_ap_wpa_deinit(&ap->wpa);
   sv6621_ap_peer_table_deinit(&ap->peers);
   nxmutex_destroy(&ap->lock);
   memset(ap, 0, sizeof(*ap));
@@ -583,6 +614,15 @@ int sv6621_ap_enable(FAR struct sv6621_ap_s *ap, uint8_t instance,
   start.probe_response_ies.data = ap->templates.probe_response;
   start.probe_response_ies.length = ap->templates.probe_response_length;
   ret = sv6621_ap_start(ap->command, instance, &start, &context);
+  if (ret == 0 && config->security == SV6621_SECURITY_WPA2_PSK)
+    {
+      ret = sv6621_ap_wpa_enable(&ap->wpa, config, &context);
+      if (ret < 0)
+        {
+          (void)sv6621_ap_stop(ap->command, instance);
+        }
+    }
+
   if (ret == 0)
     {
       ap->config = *config;
@@ -620,6 +660,7 @@ int sv6621_ap_disable(FAR struct sv6621_ap_s *ap)
   ret = sv6621_ap_stop(ap->command, ap->instance);
   if (ret == 0)
     {
+      sv6621_ap_wpa_disable(&ap->wpa);
       sv6621_ap_peer_table_reset(&ap->peers);
       memset(&ap->config, 0, sizeof(ap->config));
       memset(&ap->templates, 0, sizeof(ap->templates));
@@ -655,6 +696,7 @@ int sv6621_ap_reset(FAR struct sv6621_ap_s *ap)
     }
 
   ret = sv6621_ap_peer_table_reset(&ap->peers);
+  sv6621_ap_wpa_disable(&ap->wpa);
   memset(&ap->config, 0, sizeof(ap->config));
   memset(&ap->templates, 0, sizeof(ap->templates));
   memset(&ap->context, 0, sizeof(ap->context));
@@ -830,4 +872,41 @@ bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap)
     }
 
   return active;
+}
+
+void sv6621_ap_eapol_input(FAR const struct sv6621_data_rx_s *rx,
+                            FAR void *arg)
+{
+  FAR struct sv6621_ap_s *ap = arg;
+  struct sv6621_ap_client_event_s event;
+  struct sv6621_ap_peer_s peer;
+  bool authorized;
+  int ret;
+
+  if (ap == NULL || rx == NULL)
+    {
+      return;
+    }
+
+  ret = sv6621_ap_wpa_input(&ap->wpa, rx, &authorized, event.address);
+  if (ret < 0 || !authorized)
+    {
+      return;
+    }
+
+  ret = sv6621_ap_peer_authorize(&ap->peers, event.address);
+  if (ret == 0)
+    {
+      ret = sv6621_ap_peer_lookup(&ap->peers, event.address, &peer);
+    }
+
+  if (ret == 0)
+    {
+      event.aid = peer.aid;
+      event.reason = 0;
+      if (ap->client != NULL)
+        {
+          ap->client(true, &event, ap->client_arg);
+        }
+    }
 }
