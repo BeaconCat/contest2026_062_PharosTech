@@ -3093,19 +3093,3 @@ unlock_lifecycle:
 
   return ret;
 }
-
-#ifdef CONFIG_SV6621_PM
-/****************************************************************************
- * Name: sv6621_resume_async
- ****************************************************************************/
-
-int sv6621_resume_async(FAR struct sv6621_dev_s *dev)
-{
-  if (dev == NULL)
-    {
-      return -EINVAL;
-    }
-
-  return sv6621_core_pm_queue_resume(dev);
-}
-#endif
