@@ -1197,6 +1197,8 @@ static void sv6621_core_recovery_worker(FAR void *arg)
         }
 
       dev->status.connected = false;
+      dev->status.ap_active = false;
+      dev->status.ap_client_count = 0;
       memset(dev->status.bssid, 0, sizeof(dev->status.bssid));
       memset(dev->status.ssid, 0, sizeof(dev->status.ssid));
       dev->status.ssid_length = 0;
@@ -1211,6 +1213,11 @@ static void sv6621_core_recovery_worker(FAR void *arg)
 #ifdef CONFIG_NET
       sv6621_network_set_link(&dev->network, false, NULL);
 #endif
+      if (dev->ap_initialized)
+        {
+          sv6621_ap_reset(&dev->ap);
+        }
+
       sv6621_sched_scan_cancel(&dev->scheduled_scan);
       sv6621_scan_controller_cancel(&dev->scan);
       sv6621_wpa_cancel(&dev->wpa, error);
@@ -2938,6 +2945,8 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 {
   enum sv6621_state_e state;
   uint32_t recovery_count;
+  bool ap_was_active;
+  int ap_ret = 0;
   int scheduled_scan_ret = 0;
   int scan_ret = 0;
   int close_ret = 0;
@@ -2975,12 +2984,24 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 #ifdef CONFIG_NET
   sv6621_network_set_link(&dev->network, false, NULL);
 #endif
+  ap_was_active = dev->ap_initialized && sv6621_ap_is_active(&dev->ap);
   scheduled_scan_ret = sv6621_sched_scan_cancel(&dev->scheduled_scan);
   scan_ret = sv6621_scan_controller_cancel(&dev->scan);
   sv6621_station_disconnect(&dev->station, 3);
   sv6621_wpa_disconnected(&dev->wpa, -ESHUTDOWN);
   sv6621_station_reset(&dev->station, -ESHUTDOWN);
-  if (dev->station_open)
+  if (ap_was_active)
+    {
+      ap_ret = sv6621_ap_disable(&dev->ap);
+      if (ap_ret < 0)
+        {
+          sv6621_ap_reset(&dev->ap);
+        }
+
+      close_ret = sv6621_wifi_close_device(&dev->command);
+      dev->station_open = false;
+    }
+  else if (dev->station_open)
     {
       close_ret = sv6621_wifi_close_device(&dev->command);
       dev->station_open = false;
@@ -3023,6 +3044,11 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
     }
 
   state = SV6621_STATE_OFF;
+  if (ap_was_active)
+    {
+      sv6621_core_report(dev, SV6621_EVENT_AP_STOPPED, NULL, 0);
+    }
+
   sv6621_core_report(dev, SV6621_EVENT_STATE_CHANGED, &state, sizeof(state));
   if (scan_ret < 0)
     {
@@ -3032,6 +3058,11 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
   if (scheduled_scan_ret < 0)
     {
       return scheduled_scan_ret;
+    }
+
+  if (ap_ret < 0)
+    {
+      return ap_ret;
     }
 
   return close_ret < 0 ? close_ret : 0;
