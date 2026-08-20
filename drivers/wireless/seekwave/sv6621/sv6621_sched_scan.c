@@ -445,12 +445,15 @@ void sv6621_sched_scan_command_event(uint8_t instance, uint8_t id,
                                      size_t length, FAR void *arg)
 {
   FAR struct sv6621_sched_scan_s *scan = arg;
+  FAR struct sv6621_bss_s *entries;
   struct sv6621_scan_entry_s entry;
   sv6621_sched_scan_complete_t complete;
   sv6621_sched_scan_result_t result;
   FAR void *complete_arg;
   uint32_t request_id;
   uint32_t generation;
+  size_t count;
+  size_t index;
   bool inserted;
 
   if (scan == NULL || instance != SV6621_SCHED_SCAN_INSTANCE ||
@@ -492,6 +495,25 @@ void sv6621_sched_scan_command_event(uint8_t instance, uint8_t id,
         }
 
       nxmutex_unlock(&scan->lock);
+      if (result != NULL)
+        {
+          count = SV6621_SCAN_CACHE_CAPACITY;
+          entries = kmm_malloc(sizeof(*entries) * count);
+          if (entries != NULL)
+            {
+              if (sv6621_scan_cache_snapshot(scan->cache, entries,
+                                             &count) == 0)
+                {
+                  for (index = 0; index < count; index++)
+                    {
+                      result(&entries[index], complete_arg);
+                    }
+                }
+
+              kmm_free(entries);
+            }
+        }
+
       if (complete != NULL)
         {
           complete(request_id, complete_arg);
@@ -502,10 +524,6 @@ void sv6621_sched_scan_command_event(uint8_t instance, uint8_t id,
 
   if (sv6621_scan_parse_report(payload, length, &entry) == 0)
     {
-      if (sv6621_scan_cache_store(scan->cache, &entry, &inserted) == 0 &&
-          result != NULL)
-        {
-          result(&entry, complete_arg);
-        }
+      (void)sv6621_scan_cache_store(scan->cache, &entry, &inserted);
     }
 }

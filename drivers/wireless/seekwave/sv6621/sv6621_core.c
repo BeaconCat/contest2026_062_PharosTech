@@ -79,7 +79,7 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
                                       size_t length, FAR void *arg);
 static void sv6621_core_scan_complete(int result, FAR void *arg);
 static void sv6621_core_sched_scan_result(
-    FAR const struct sv6621_scan_entry_s *entry, FAR void *arg);
+    FAR const struct sv6621_bss_s *bss, FAR void *arg);
 static void sv6621_core_sched_scan_complete(uint32_t request_id,
                                             FAR void *arg);
 static void sv6621_core_scan_worker(FAR void *arg);
@@ -2039,12 +2039,11 @@ static void sv6621_core_scan_worker(FAR void *arg)
  ****************************************************************************/
 
 static void sv6621_core_sched_scan_result(
-    FAR const struct sv6621_scan_entry_s *entry, FAR void *arg)
+    FAR const struct sv6621_bss_s *bss, FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
 
-  sv6621_core_report(dev, SV6621_EVENT_SCAN_RESULT, &entry->bss,
-                     sizeof(entry->bss));
+  sv6621_core_report(dev, SV6621_EVENT_SCAN_RESULT, bss, sizeof(*bss));
 }
 
 /****************************************************************************

@@ -46,7 +46,7 @@
 typedef void (*sv6621_sched_scan_complete_t)(uint32_t request_id,
                                               FAR void *arg);
 typedef void (*sv6621_sched_scan_result_t)(
-    FAR const struct sv6621_scan_entry_s *entry, FAR void *arg);
+    FAR const struct sv6621_bss_s *bss, FAR void *arg);
 
 struct sv6621_sched_scan_s
 {
