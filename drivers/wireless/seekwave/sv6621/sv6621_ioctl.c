@@ -91,19 +91,55 @@ static int sv6621_ioctl_auth(FAR struct sv6621_ioctl_s *ioctl,
 
   if (ioctl->mode == IW_MODE_MASTER)
     {
-      if ((index == IW_AUTH_WPA_VERSION &&
-           value == IW_AUTH_WPA_VERSION_DISABLED) ||
-          ((index == IW_AUTH_CIPHER_PAIRWISE ||
-            index == IW_AUTH_CIPHER_GROUP ||
-            index == IW_AUTH_KEY_MGMT ||
-            index == IW_AUTH_WPA_ENABLED) && value == 0) ||
-          (index == IW_AUTH_80211_AUTH_ALG &&
-           (value & IW_AUTH_ALG_OPEN_SYSTEM) != 0))
+      if (index == IW_AUTH_WPA_VERSION)
         {
+          if (value == IW_AUTH_WPA_VERSION_DISABLED)
+            {
+              ioctl->access_point.security = SV6621_SECURITY_OPEN;
+              memset(ioctl->access_point.credential, 0,
+                     sizeof(ioctl->access_point.credential));
+              ioctl->access_point.credential_length = 0;
+              return 0;
+            }
+
+          if (value == IW_AUTH_WPA_VERSION_WPA2)
+            {
+              ioctl->access_point.security = SV6621_SECURITY_WPA2_PSK;
+              return 0;
+            }
+
+          return -EOPNOTSUPP;
+        }
+
+      if (index == IW_AUTH_CIPHER_PAIRWISE ||
+          index == IW_AUTH_CIPHER_GROUP)
+        {
+          return value == IW_AUTH_CIPHER_NONE ||
+                 value == IW_AUTH_CIPHER_CCMP ? 0 : -EOPNOTSUPP;
+        }
+
+      if (index == IW_AUTH_KEY_MGMT)
+        {
+          return value == 0 || value == IW_AUTH_KEY_MGMT_PSK ?
+                 0 : -EOPNOTSUPP;
+        }
+
+      if (index == IW_AUTH_WPA_ENABLED)
+        {
+          ioctl->access_point.security = value ?
+              SV6621_SECURITY_WPA2_PSK : SV6621_SECURITY_OPEN;
+          if (!value)
+            {
+              memset(ioctl->access_point.credential, 0,
+                     sizeof(ioctl->access_point.credential));
+              ioctl->access_point.credential_length = 0;
+            }
+
           return 0;
         }
 
-      return -EOPNOTSUPP;
+      return index == IW_AUTH_80211_AUTH_ALG &&
+             (value & IW_AUTH_ALG_OPEN_SYSTEM) != 0 ? 0 : -EOPNOTSUPP;
     }
 
   switch (index)
@@ -172,7 +208,23 @@ static int sv6621_ioctl_key(FAR struct sv6621_ioctl_s *ioctl,
 
   if (ioctl->mode == IW_MODE_MASTER)
     {
-      return -EOPNOTSUPP;
+      if (extension == NULL ||
+          request->u.encoding.length < sizeof(*extension) ||
+          extension->alg != IW_ENCODE_ALG_CCMP || extension->key_len < 8 ||
+          extension->key_len > 63 ||
+          request->u.encoding.length < sizeof(*extension) +
+                                       extension->key_len)
+        {
+          return -EINVAL;
+        }
+
+      memset(ioctl->access_point.credential, 0,
+             sizeof(ioctl->access_point.credential));
+      memcpy(ioctl->access_point.credential, extension->key,
+             extension->key_len);
+      ioctl->access_point.credential_length = extension->key_len;
+      ioctl->access_point.security = SV6621_SECURITY_WPA2_PSK;
+      return 0;
     }
 
   if (extension == NULL ||
@@ -602,18 +654,33 @@ static int sv6621_ioctl_auth_query(FAR struct sv6621_ioctl_s *ioctl,
 {
   if (ioctl->mode == IW_MODE_MASTER)
     {
+      FAR const struct sv6621_ap_config_s *config = &ioctl->access_point;
+
       switch (request->u.param.flags & IW_AUTH_INDEX)
         {
           case IW_AUTH_WPA_VERSION:
-            request->u.param.value = IW_AUTH_WPA_VERSION_DISABLED;
+            request->u.param.value =
+                config->security == SV6621_SECURITY_OPEN ?
+                IW_AUTH_WPA_VERSION_DISABLED : IW_AUTH_WPA_VERSION_WPA2;
             return 0;
 
           case IW_AUTH_CIPHER_PAIRWISE:
           case IW_AUTH_CIPHER_GROUP:
+            request->u.param.value =
+                config->security == SV6621_SECURITY_OPEN ?
+                IW_AUTH_CIPHER_NONE : IW_AUTH_CIPHER_CCMP;
+            return 0;
+
           case IW_AUTH_KEY_MGMT:
+            request->u.param.value =
+                config->security == SV6621_SECURITY_OPEN ?
+                0 : IW_AUTH_KEY_MGMT_PSK;
+            return 0;
+
           case IW_AUTH_WPA_ENABLED:
           case IW_AUTH_PRIVACY_INVOKED:
-            request->u.param.value = 0;
+            request->u.param.value =
+                config->security == SV6621_SECURITY_OPEN ? 0 : 1;
             return 0;
 
           case IW_AUTH_80211_AUTH_ALG:
@@ -680,8 +747,9 @@ static int sv6621_ioctl_encoding_query(FAR struct sv6621_ioctl_s *ioctl,
 {
   request->u.encoding.length = 0;
   request->u.encoding.flags =
-      ioctl->mode == IW_MODE_MASTER ||
-      ioctl->connection.security == SV6621_SECURITY_OPEN ?
+      (ioctl->mode == IW_MODE_MASTER ?
+       ioctl->access_point.security : ioctl->connection.security) ==
+      SV6621_SECURITY_OPEN ?
       IW_ENCODE_DISABLED : IW_ENCODE_ENABLED | IW_ENCODE_NOKEY;
   return 0;
 }
