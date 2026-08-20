@@ -397,6 +397,18 @@ int sv6621_ap_authenticate_open(
   sv6621_ap_mlme_build_auth_response(
       response, request->source, ap_address, request->algorithm,
       request->transaction + 1, status);
+  if (status == SV6621_AP_STATUS_SUCCESS)
+    {
+      ret = sv6621_ap_peer_begin_tx(peers, request->source, cookie);
+      if (ret < 0)
+        {
+          sv6621_ap_remove_peer(command, instance, request->source,
+                                SV6621_AP_REASON_LEAVING, false);
+          sv6621_ap_peer_forget(peers, request->source, NULL);
+          return ret;
+        }
+    }
+
   ret = sv6621_management_tx(command, instance, 0, cookie, channel, band,
                              false, response, sizeof(response),
                              sizeof(response));
@@ -404,6 +416,7 @@ int sv6621_ap_authenticate_open(
     {
       if (status == SV6621_AP_STATUS_SUCCESS)
         {
+          sv6621_ap_peer_cancel_tx(peers, request->source, cookie);
           sv6621_ap_remove_peer(command, instance, request->source,
                                 SV6621_AP_REASON_LEAVING, false);
           sv6621_ap_peer_forget(peers, request->source, NULL);
@@ -590,9 +603,7 @@ int sv6621_ap_respond_association(
         }
     }
 
-  ret = sv6621_management_tx(command, instance, 0, cookie, channel, band,
-                             false, response, response_length,
-                             response_length);
+  ret = sv6621_ap_peer_begin_tx(peers, request->source, cookie);
   if (ret < 0)
     {
       if (status == SV6621_AP_STATUS_SUCCESS)
@@ -603,6 +614,97 @@ int sv6621_ap_respond_association(
       return ret;
     }
 
+  ret = sv6621_management_tx(command, instance, 0, cookie, channel, band,
+                             false, response, response_length,
+                             response_length);
+  if (ret < 0)
+    {
+      sv6621_ap_peer_cancel_tx(peers, request->source, cookie);
+      if (status == SV6621_AP_STATUS_SUCCESS)
+        {
+          sv6621_ap_peer_cancel_association(peers, request->source);
+        }
+
+      return ret;
+    }
+
   *accepted = status == SV6621_AP_STATUS_SUCCESS;
   return 0;
+}
+
+int sv6621_ap_handle_tx_status(
+    FAR struct sv6621_ap_peer_table_s *peers,
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
+    FAR const uint8_t *payload, size_t payload_length)
+{
+  struct sv6621_management_tx_status_s status;
+  FAR const uint8_t *address;
+  uint16_t frame_control;
+  uint16_t response_status;
+  bool association;
+  bool remove;
+  int ret;
+
+  if (peers == NULL || command == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = sv6621_management_parse_tx_status(payload, payload_length, &status);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (status.frame_length < SV6621_AP_MGMT_AUTH_RESPONSE_SIZE)
+    {
+      return -EPROTO;
+    }
+
+  frame_control = sv6621_ap_mlme_get_le16(status.frame) &
+                  SV6621_AP_MGMT_SUBTYPE_MASK;
+  if (frame_control == SV6621_AP_FRAME_AUTH)
+    {
+      association = false;
+      response_status = sv6621_ap_mlme_get_le16(status.frame + 28);
+    }
+  else if (frame_control == 0x10 || frame_control == 0x30)
+    {
+      association = true;
+      response_status = sv6621_ap_mlme_get_le16(status.frame + 26);
+    }
+  else
+    {
+      return -ENOMSG;
+    }
+
+  address = status.frame + SV6621_AP_MGMT_DESTINATION_OFFSET;
+  ret = sv6621_ap_peer_complete_tx(
+      peers, address, status.cookie, association,
+      status.acknowledged && response_status == SV6621_AP_STATUS_SUCCESS,
+      &remove);
+  if (ret < 0 || !remove)
+    {
+      return ret;
+    }
+
+  ret = sv6621_ap_remove_peer(command, instance, address,
+                              SV6621_AP_REASON_LEAVING, false);
+  return ret;
+}
+
+int sv6621_ap_handle_departure(
+    FAR struct sv6621_ap_peer_table_s *peers,
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
+    FAR const struct sv6621_ap_mgmt_s *event)
+{
+  if (peers == NULL || command == NULL || event == NULL ||
+      (event->type != SV6621_AP_MGMT_DEAUTH &&
+       event->type != SV6621_AP_MGMT_DISASSOC))
+    {
+      return -EINVAL;
+    }
+
+  return sv6621_ap_peer_departed(peers, command, instance, event->source,
+                                 event->reason, false);
 }
