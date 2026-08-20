@@ -636,6 +636,57 @@ int sv6621_ap_resolve_tx(
   return 0;
 }
 
+int sv6621_ap_validate_rx(FAR struct sv6621_ap_s *ap,
+                          FAR const struct sv6621_data_rx_s *rx)
+{
+  struct sv6621_ap_peer_s peer;
+  size_t index;
+  bool matched = false;
+  int ret;
+
+  if (ap == NULL || rx == NULL || !rx->instance_valid || !rx->peer_valid)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&ap->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!ap->active || rx->instance != ap->context.instance ||
+      rx->lmac_id != ap->context.lmac_id)
+    {
+      nxmutex_unlock(&ap->lock);
+      return -ENETDOWN;
+    }
+
+  ret = nxmutex_lock(&ap->peers.lock);
+  if (ret < 0)
+    {
+      nxmutex_unlock(&ap->lock);
+      return ret;
+    }
+
+  for (index = 0; index < ap->peers.capacity; index++)
+    {
+      peer = ap->peers.peers[index];
+      if (peer.state != SV6621_AP_PEER_FREE && peer.bound &&
+          peer.peer_index == rx->peer_index)
+        {
+          matched = ap->config.security == SV6621_SECURITY_OPEN ?
+              peer.state >= SV6621_AP_PEER_ASSOCIATED :
+              peer.state >= SV6621_AP_PEER_AUTHORIZED;
+          break;
+        }
+    }
+
+  nxmutex_unlock(&ap->peers.lock);
+  nxmutex_unlock(&ap->lock);
+  return matched ? 0 : -EHOSTUNREACH;
+}
+
 bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap)
 {
   bool active = false;
