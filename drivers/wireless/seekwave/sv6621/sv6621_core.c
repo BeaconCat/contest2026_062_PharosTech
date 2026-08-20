@@ -2977,7 +2977,7 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
       target = NULL;
     }
 
-  ret = sv6621_station_connect(&dev->station, connection,
+  ret = sv6621_station_connect(&dev->station, connection, false,
                                SV6621_CORE_CONNECT_TIMEOUT_MS);
   if (ret < 0)
     {
