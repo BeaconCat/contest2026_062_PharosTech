@@ -543,34 +543,13 @@ stop_driver:
 
 int kickpi_k7_wifi_prepare_sleep(void)
 {
-  int ret;
-
   if (g_kickpi_k7_wifi_dev == NULL)
     {
       return -ENODEV;
     }
 
-  ret = sv6621_suspend(g_kickpi_k7_wifi_dev,
-                       &g_kickpi_k7_wifi_suspend);
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  ret = rk3576_gpio_irq_enable(WIFI_HOST_WAKE, true);
-  if (ret < 0)
-    {
-      (void)sv6621_resume(g_kickpi_k7_wifi_dev);
-      return ret;
-    }
-
-  if (rk3576_gpio_read(WIFI_HOST_WAKE))
-    {
-      (void)rk3576_gpio_irq_enable(WIFI_HOST_WAKE, false);
-      (void)sv6621_resume_async(g_kickpi_k7_wifi_dev);
-    }
-
-  return OK;
+  return sv6621_suspend(g_kickpi_k7_wifi_dev,
+                        &g_kickpi_k7_wifi_suspend);
 }
 
 /****************************************************************************
@@ -584,7 +563,6 @@ int kickpi_k7_wifi_abort_sleep(void)
       return -ENODEV;
     }
 
-  (void)rk3576_gpio_irq_enable(WIFI_HOST_WAKE, false);
   return sv6621_resume(g_kickpi_k7_wifi_dev);
 }
 #endif
