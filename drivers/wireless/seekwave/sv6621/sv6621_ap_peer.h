@@ -31,6 +31,7 @@
 #include <nuttx/mutex.h>
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "include/sv6621.h"
@@ -65,7 +66,9 @@ struct sv6621_ap_peer_s
   enum sv6621_ap_peer_state_e previous_state;
   uint16_t previous_aid;
   uint16_t previous_capability;
+  uint64_t pending_cookie;
   bool bound;
+  bool tx_pending;
 };
 
 struct sv6621_ap_peer_table_s
@@ -91,6 +94,7 @@ int sv6621_ap_remove_peer(FAR struct sv6621_command_engine_s *command,
 int sv6621_ap_peer_table_init(FAR struct sv6621_ap_peer_table_s *table,
                               uint8_t capacity);
 void sv6621_ap_peer_table_deinit(FAR struct sv6621_ap_peer_table_s *table);
+int sv6621_ap_peer_table_reset(FAR struct sv6621_ap_peer_table_s *table);
 int sv6621_ap_peer_authenticate(
     FAR struct sv6621_ap_peer_table_s *table,
     FAR const uint8_t address[SV6621_MAC_LENGTH]);
@@ -105,6 +109,16 @@ int sv6621_ap_peer_prepare_association(
 int sv6621_ap_peer_cancel_association(
     FAR struct sv6621_ap_peer_table_s *table,
     FAR const uint8_t address[SV6621_MAC_LENGTH]);
+int sv6621_ap_peer_begin_tx(FAR struct sv6621_ap_peer_table_s *table,
+                            FAR const uint8_t address[SV6621_MAC_LENGTH],
+                            uint64_t cookie);
+int sv6621_ap_peer_cancel_tx(FAR struct sv6621_ap_peer_table_s *table,
+                             FAR const uint8_t address[SV6621_MAC_LENGTH],
+                             uint64_t cookie);
+int sv6621_ap_peer_complete_tx(FAR struct sv6621_ap_peer_table_s *table,
+                               FAR const uint8_t address[SV6621_MAC_LENGTH],
+                               uint64_t cookie, bool association,
+                               bool success, FAR bool *remove);
 int sv6621_ap_peer_authorize(
     FAR struct sv6621_ap_peer_table_s *table,
     FAR const uint8_t address[SV6621_MAC_LENGTH]);
@@ -114,5 +128,13 @@ int sv6621_ap_peer_lookup(FAR struct sv6621_ap_peer_table_s *table,
 int sv6621_ap_peer_forget(FAR struct sv6621_ap_peer_table_s *table,
                           FAR const uint8_t address[SV6621_MAC_LENGTH],
                           FAR struct sv6621_ap_peer_s *peer);
+int sv6621_ap_parse_peer_departure(
+    FAR const uint8_t *payload, size_t payload_length,
+    FAR uint8_t address[SV6621_MAC_LENGTH], FAR uint16_t *reason);
+int sv6621_ap_peer_departed(FAR struct sv6621_ap_peer_table_s *table,
+                            FAR struct sv6621_command_engine_s *command,
+                            uint8_t instance,
+                            FAR const uint8_t address[SV6621_MAC_LENGTH],
+                            uint16_t reason, bool firmware_event);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_PEER_H */

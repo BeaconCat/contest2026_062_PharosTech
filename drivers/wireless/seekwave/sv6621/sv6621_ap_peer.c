@@ -41,6 +41,7 @@
 #define SV6621_AP_PEER_RESPONSE_SIZE         1
 #define SV6621_AP_PEER_COMMAND_TIMEOUT_MS 1000
 #define SV6621_AP_PEER_INDEX_MAX            31
+#define SV6621_AP_PEER_DEPARTURE_SIZE         7
 #define SV6621_AP_AID_MIN                     1
 #define SV6621_AP_AID_MAX                  2007
 
@@ -202,6 +203,27 @@ void sv6621_ap_peer_table_deinit(FAR struct sv6621_ap_peer_table_s *table)
 
   nxmutex_destroy(&table->lock);
   memset(table, 0, sizeof(*table));
+}
+
+int sv6621_ap_peer_table_reset(FAR struct sv6621_ap_peer_table_s *table)
+{
+  int ret;
+
+  if (table == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&table->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  memset(table->peers, 0, sizeof(table->peers));
+  table->next_aid = SV6621_AP_AID_MIN;
+  nxmutex_unlock(&table->lock);
+  return 0;
 }
 
 int sv6621_ap_peer_authenticate(
@@ -387,6 +409,114 @@ int sv6621_ap_peer_cancel_association(
   return 0;
 }
 
+int sv6621_ap_peer_begin_tx(FAR struct sv6621_ap_peer_table_s *table,
+                            FAR const uint8_t address[SV6621_MAC_LENGTH],
+                            uint64_t cookie)
+{
+  FAR struct sv6621_ap_peer_s *peer;
+  int ret;
+
+  if (table == NULL || address == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&table->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  peer = sv6621_ap_peer_find(table, address);
+  if (peer == NULL || peer->tx_pending)
+    {
+      nxmutex_unlock(&table->lock);
+      return peer == NULL ? -ENOENT : -EBUSY;
+    }
+
+  peer->pending_cookie = cookie;
+  peer->tx_pending = true;
+  nxmutex_unlock(&table->lock);
+  return 0;
+}
+
+int sv6621_ap_peer_cancel_tx(FAR struct sv6621_ap_peer_table_s *table,
+                             FAR const uint8_t address[SV6621_MAC_LENGTH],
+                             uint64_t cookie)
+{
+  FAR struct sv6621_ap_peer_s *peer;
+  int ret;
+
+  if (table == NULL || address == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&table->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  peer = sv6621_ap_peer_find(table, address);
+  if (peer == NULL || !peer->tx_pending || peer->pending_cookie != cookie)
+    {
+      nxmutex_unlock(&table->lock);
+      return peer == NULL ? -ENOENT : -ESTALE;
+    }
+
+  peer->pending_cookie = 0;
+  peer->tx_pending = false;
+  nxmutex_unlock(&table->lock);
+  return 0;
+}
+
+int sv6621_ap_peer_complete_tx(FAR struct sv6621_ap_peer_table_s *table,
+                               FAR const uint8_t address[SV6621_MAC_LENGTH],
+                               uint64_t cookie, bool association,
+                               bool success, FAR bool *remove)
+{
+  FAR struct sv6621_ap_peer_s *peer;
+  int ret;
+
+  if (table == NULL || address == NULL || remove == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&table->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  peer = sv6621_ap_peer_find(table, address);
+  if (peer == NULL || !peer->tx_pending || peer->pending_cookie != cookie ||
+      (association && peer->state != SV6621_AP_PEER_ASSOCIATING))
+    {
+      nxmutex_unlock(&table->lock);
+      return peer == NULL ? -ENOENT : -ESTALE;
+    }
+
+  peer->pending_cookie = 0;
+  peer->tx_pending = false;
+  *remove = !success;
+  if (success && association)
+    {
+      peer->state = SV6621_AP_PEER_ASSOCIATED;
+      peer->previous_state = SV6621_AP_PEER_FREE;
+      peer->previous_aid = 0;
+      peer->previous_capability = 0;
+    }
+  else if (!success)
+    {
+      memset(peer, 0, sizeof(*peer));
+    }
+
+  nxmutex_unlock(&table->lock);
+  return 0;
+}
+
 int sv6621_ap_peer_authorize(
     FAR struct sv6621_ap_peer_table_s *table,
     FAR const uint8_t address[SV6621_MAC_LENGTH])
@@ -478,4 +608,56 @@ int sv6621_ap_peer_forget(FAR struct sv6621_ap_peer_table_s *table,
   memset(entry, 0, sizeof(*entry));
   nxmutex_unlock(&table->lock);
   return 0;
+}
+
+int sv6621_ap_parse_peer_departure(
+    FAR const uint8_t *payload, size_t payload_length,
+    FAR uint8_t address[SV6621_MAC_LENGTH], FAR uint16_t *reason)
+{
+  if (payload == NULL || address == NULL || reason == NULL ||
+      payload_length != SV6621_AP_PEER_DEPARTURE_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  *reason = payload[0];
+  memcpy(address, payload + 1, SV6621_MAC_LENGTH);
+  if ((address[0] & 1) != 0)
+    {
+      return -EPROTO;
+    }
+
+  return 0;
+}
+
+int sv6621_ap_peer_departed(FAR struct sv6621_ap_peer_table_s *table,
+                            FAR struct sv6621_command_engine_s *command,
+                            uint8_t instance,
+                            FAR const uint8_t address[SV6621_MAC_LENGTH],
+                            uint16_t reason, bool firmware_event)
+{
+  struct sv6621_ap_peer_s peer;
+  int ret;
+
+  if (table == NULL || command == NULL || address == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = sv6621_ap_peer_lookup(table, address, &peer);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!firmware_event && peer.bound)
+    {
+      ret = sv6621_ap_remove_peer(command, instance, address, reason, false);
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+
+  return sv6621_ap_peer_forget(table, address, NULL);
 }
