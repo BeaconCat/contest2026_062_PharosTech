@@ -35,6 +35,8 @@
 #include <stdint.h>
 
 #include "include/sv6621.h"
+#include "sv6621_ap_beacon.h"
+#include "sv6621_ap_peer.h"
 #include "sv6621_command.h"
 
 /****************************************************************************
@@ -76,7 +78,12 @@ struct sv6621_ap_context_s
 struct sv6621_ap_s
 {
   mutex_t lock;
+  FAR struct sv6621_command_engine_s *command;
+  struct sv6621_ap_peer_table_s peers;
+  struct sv6621_ap_beacon_templates_s templates;
+  struct sv6621_ap_config_s config;
   struct sv6621_ap_context_s context;
+  uint8_t address[SV6621_MAC_LENGTH];
   uint8_t instance;
   bool active;
 };
@@ -94,14 +101,14 @@ int sv6621_ap_start(FAR struct sv6621_command_engine_s *command,
                     FAR struct sv6621_ap_context_s *context);
 int sv6621_ap_stop(FAR struct sv6621_command_engine_s *command,
                    uint8_t instance);
-int sv6621_ap_init(FAR struct sv6621_ap_s *ap);
+int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
+                   FAR struct sv6621_command_engine_s *command,
+                   uint8_t max_stations,
+                   FAR const uint8_t address[SV6621_MAC_LENGTH]);
 void sv6621_ap_deinit(FAR struct sv6621_ap_s *ap);
-int sv6621_ap_enable(FAR struct sv6621_ap_s *ap,
-                     FAR struct sv6621_command_engine_s *command,
-                     uint8_t instance,
-                     FAR const struct sv6621_ap_start_s *config);
-int sv6621_ap_disable(FAR struct sv6621_ap_s *ap,
-                      FAR struct sv6621_command_engine_s *command);
+int sv6621_ap_enable(FAR struct sv6621_ap_s *ap, uint8_t instance,
+                     FAR const struct sv6621_ap_config_s *config);
+int sv6621_ap_disable(FAR struct sv6621_ap_s *ap);
 bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_H */

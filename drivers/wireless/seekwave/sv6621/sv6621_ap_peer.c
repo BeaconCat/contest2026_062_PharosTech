@@ -205,6 +205,27 @@ void sv6621_ap_peer_table_deinit(FAR struct sv6621_ap_peer_table_s *table)
   memset(table, 0, sizeof(*table));
 }
 
+int sv6621_ap_peer_table_reset(FAR struct sv6621_ap_peer_table_s *table)
+{
+  int ret;
+
+  if (table == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&table->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  memset(table->peers, 0, sizeof(table->peers));
+  table->next_aid = SV6621_AP_AID_MIN;
+  nxmutex_unlock(&table->lock);
+  return 0;
+}
+
 int sv6621_ap_peer_authenticate(
     FAR struct sv6621_ap_peer_table_s *table,
     FAR const uint8_t address[SV6621_MAC_LENGTH])

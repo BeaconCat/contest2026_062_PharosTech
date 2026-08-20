@@ -94,6 +94,7 @@ int sv6621_ap_remove_peer(FAR struct sv6621_command_engine_s *command,
 int sv6621_ap_peer_table_init(FAR struct sv6621_ap_peer_table_s *table,
                               uint8_t capacity);
 void sv6621_ap_peer_table_deinit(FAR struct sv6621_ap_peer_table_s *table);
+int sv6621_ap_peer_table_reset(FAR struct sv6621_ap_peer_table_s *table);
 int sv6621_ap_peer_authenticate(
     FAR struct sv6621_ap_peer_table_s *table,
     FAR const uint8_t address[SV6621_MAC_LENGTH]);

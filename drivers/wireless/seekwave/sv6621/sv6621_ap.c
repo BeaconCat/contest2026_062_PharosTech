@@ -239,15 +239,38 @@ int sv6621_ap_stop(FAR struct sv6621_command_engine_s *command,
                                 SV6621_AP_COMMAND_TIMEOUT_MS);
 }
 
-int sv6621_ap_init(FAR struct sv6621_ap_s *ap)
+int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
+                   FAR struct sv6621_command_engine_s *command,
+                   uint8_t max_stations,
+                   FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
-  if (ap == NULL)
+  int ret;
+
+  if (ap == NULL || command == NULL || address == NULL ||
+      max_stations == 0)
     {
       return -EINVAL;
     }
 
   memset(ap, 0, sizeof(*ap));
-  return nxmutex_init(&ap->lock);
+  ret = nxmutex_init(&ap->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = sv6621_ap_peer_table_init(
+      &ap->peers, max_stations > SV6621_AP_PEER_CAPACITY ?
+                  SV6621_AP_PEER_CAPACITY : max_stations);
+  if (ret < 0)
+    {
+      nxmutex_destroy(&ap->lock);
+      return ret;
+    }
+
+  ap->command = command;
+  memcpy(ap->address, address, SV6621_MAC_LENGTH);
+  return 0;
 }
 
 void sv6621_ap_deinit(FAR struct sv6621_ap_s *ap)
@@ -263,21 +286,33 @@ void sv6621_ap_deinit(FAR struct sv6621_ap_s *ap)
       nxmutex_unlock(&ap->lock);
     }
 
+  sv6621_ap_peer_table_deinit(&ap->peers);
   nxmutex_destroy(&ap->lock);
   memset(ap, 0, sizeof(*ap));
 }
 
-int sv6621_ap_enable(FAR struct sv6621_ap_s *ap,
-                     FAR struct sv6621_command_engine_s *command,
-                     uint8_t instance,
-                     FAR const struct sv6621_ap_start_s *config)
+int sv6621_ap_enable(FAR struct sv6621_ap_s *ap, uint8_t instance,
+                     FAR const struct sv6621_ap_config_s *config)
 {
+  struct sv6621_ap_beacon_config_s beacon;
+  struct sv6621_ap_start_s start;
   struct sv6621_ap_context_s context;
   int ret;
 
-  if (ap == NULL || command == NULL || config == NULL)
+  if (ap == NULL || config == NULL || config->ssid_length == 0 ||
+      config->ssid_length > SV6621_SSID_MAX_LENGTH ||
+      config->hidden_ssid > 2 || config->channel == 0 ||
+      config->channel_width > SV6621_CHANNEL_WIDTH_160 ||
+      config->band > SV6621_BAND_5GHZ || config->beacon_interval == 0 ||
+      config->dtim_period == 0)
     {
       return -EINVAL;
+    }
+
+  if (config->security != SV6621_SECURITY_OPEN ||
+      config->credential_length != 0)
+    {
+      return -EOPNOTSUPP;
     }
 
   ret = nxmutex_lock(&ap->lock);
@@ -292,9 +327,42 @@ int sv6621_ap_enable(FAR struct sv6621_ap_s *ap,
       return -EBUSY;
     }
 
-  ret = sv6621_ap_start(command, instance, config, &context);
+  memset(&beacon, 0, sizeof(beacon));
+  memcpy(beacon.address, ap->address, SV6621_MAC_LENGTH);
+  memcpy(beacon.ssid, config->ssid, config->ssid_length);
+  beacon.ssid_length = config->ssid_length;
+  beacon.hidden_ssid = config->hidden_ssid;
+  beacon.channel = config->channel;
+  beacon.band = config->band;
+  beacon.beacon_interval = config->beacon_interval;
+  ret = sv6621_ap_build_beacon_templates(&beacon, &ap->templates);
+  if (ret < 0)
+    {
+      nxmutex_unlock(&ap->lock);
+      return ret;
+    }
+
+  memset(&start, 0, sizeof(start));
+  start.beacon_interval = config->beacon_interval;
+  start.dtim_period = config->dtim_period;
+  start.hidden_ssid = config->hidden_ssid;
+  start.channel = config->channel;
+  start.channel_width = config->channel_width;
+  start.center_channel1 = config->center_channel1;
+  start.center_channel2 = config->center_channel2;
+  start.band = config->band;
+  memcpy(start.ssid, config->ssid, config->ssid_length);
+  start.ssid_length = config->ssid_length;
+  start.beacon_head.data = ap->templates.beacon_head;
+  start.beacon_head.length = ap->templates.beacon_head_length;
+  start.beacon_tail.data = ap->templates.beacon_tail;
+  start.beacon_tail.length = ap->templates.beacon_tail_length;
+  start.probe_response_ies.data = ap->templates.probe_response;
+  start.probe_response_ies.length = ap->templates.probe_response_length;
+  ret = sv6621_ap_start(ap->command, instance, &start, &context);
   if (ret == 0)
     {
+      ap->config = *config;
       ap->context = context;
       ap->instance = instance;
       ap->active = true;
@@ -304,12 +372,11 @@ int sv6621_ap_enable(FAR struct sv6621_ap_s *ap,
   return ret;
 }
 
-int sv6621_ap_disable(FAR struct sv6621_ap_s *ap,
-                      FAR struct sv6621_command_engine_s *command)
+int sv6621_ap_disable(FAR struct sv6621_ap_s *ap)
 {
   int ret;
 
-  if (ap == NULL || command == NULL)
+  if (ap == NULL)
     {
       return -EINVAL;
     }
@@ -326,9 +393,12 @@ int sv6621_ap_disable(FAR struct sv6621_ap_s *ap,
       return 0;
     }
 
-  ret = sv6621_ap_stop(command, ap->instance);
+  ret = sv6621_ap_stop(ap->command, ap->instance);
   if (ret == 0)
     {
+      sv6621_ap_peer_table_reset(&ap->peers);
+      memset(&ap->config, 0, sizeof(ap->config));
+      memset(&ap->templates, 0, sizeof(ap->templates));
       memset(&ap->context, 0, sizeof(ap->context));
       ap->instance = 0;
       ap->active = false;
