@@ -2346,6 +2346,72 @@ unlock_lifecycle:
 }
 
 /****************************************************************************
+ * Name: sv6621_get_driver_stats
+ ****************************************************************************/
+
+int sv6621_get_driver_stats(FAR struct sv6621_dev_s *dev,
+                            FAR struct sv6621_driver_stats_s *stats)
+{
+  int ret;
+
+  if (dev == NULL || stats == NULL)
+    {
+      return -EINVAL;
+    }
+
+  memset(stats, 0, sizeof(*stats));
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  stats->version = SV6621_DRIVER_STATS_VERSION;
+  stats->size = sizeof(*stats);
+  stats->commands = dev->command.stats.commands;
+  stats->command_timeouts = dev->command.stats.timeouts;
+  stats->command_cancelled = dev->command.stats.cancelled;
+  stats->command_malformed = dev->command.stats.malformed;
+  stats->stale_acknowledgements =
+      dev->command.stats.stale_acknowledgements;
+  stats->missed_events = dev->command.stats.missed_events;
+  stats->rx_interrupts = dev->rx.stats.interrupts;
+  stats->rx_bursts = dev->rx.stats.bursts;
+  stats->rx_packets = dev->rx.stats.packets;
+  stats->rx_malformed_bursts = dev->rx.stats.malformed_bursts;
+  stats->rx_transport_errors = dev->rx.stats.transport_errors;
+  stats->tx_packets = dev->tx.stats.packets;
+  stats->tx_bytes = dev->tx.stats.bytes;
+  stats->tx_transport_errors = dev->tx.stats.transport_errors;
+  stats->tx_doorbell_errors = dev->tx.stats.doorbell_errors;
+  stats->data_received = dev->data.stats.received;
+  stats->data_received_bytes = dev->data.stats.received_bytes;
+  stats->data_malformed = dev->data.stats.malformed;
+  stats->data_transmitted = dev->data.stats.transmitted;
+  stats->data_transmitted_bytes = dev->data.stats.transmitted_bytes;
+  stats->data_transmit_errors = dev->data.stats.transmit_errors;
+  stats->credit_starvations = dev->data.stats.credit_starvations;
+  stats->fragments = dev->data.stats.fragments;
+  stats->fragment_drops = dev->data.stats.fragment_drops;
+  stats->fragment_pn_drops = dev->data.stats.fragment_pn_drops;
+  stats->reassembled = dev->data.stats.reassembled;
+  stats->reorder_duplicates = dev->data.stats.reorder_duplicates;
+  stats->reorder_stale = dev->data.stats.reorder_stale;
+  stats->reorder_allocation_failures =
+      dev->data.stats.reorder_allocation_failures;
+  stats->reorder_timeouts = dev->data.stats.reorder_timeouts;
+  stats->reorder_schedule_errors =
+      dev->data.stats.reorder_schedule_errors;
+  stats->recovery_count = dev->status.recovery_count;
+  stats->unprotected_frames = dev->status.unprotected_frames;
+  stats->mic_failures = dev->status.mic_failures;
+  stats->mic_failures_dropped = dev->status.mic_failures_dropped;
+  stats->signal_events_dropped = dev->status.signal_events_dropped;
+  nxmutex_unlock(&dev->status_lock);
+  return 0;
+}
+
+/****************************************************************************
  * Name: sv6621_set_country
  ****************************************************************************/
 
