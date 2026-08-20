@@ -28,6 +28,7 @@ if(CONFIG_SV6621)
   list(APPEND SRCS
        ${SV6621_DIR}/sv6621_command.c
        ${SV6621_DIR}/sv6621_ap.c
+       ${SV6621_DIR}/sv6621_ap_beacon.c
        ${SV6621_DIR}/sv6621_connection.c
        ${SV6621_DIR}/sv6621_core.c
        ${SV6621_DIR}/sv6621_data.c
