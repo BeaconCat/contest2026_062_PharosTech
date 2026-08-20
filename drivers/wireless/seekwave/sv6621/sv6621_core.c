@@ -91,6 +91,11 @@ static bool sv6621_core_station_worker_stop(
 static void sv6621_core_station_worker(FAR void *arg);
 static void sv6621_core_data_input(FAR const struct sv6621_data_rx_s *rx,
                                    FAR void *arg);
+#ifdef CONFIG_NET
+static int sv6621_core_ap_resolve_tx(
+    FAR const uint8_t *frame, size_t length,
+    FAR struct sv6621_data_tx_context_s *context, FAR void *arg);
+#endif
 static void sv6621_core_report(FAR struct sv6621_dev_s *dev,
                                enum sv6621_event_e event, FAR const void *data,
                                size_t length);
@@ -354,6 +359,9 @@ static int sv6621_core_restore_station(FAR struct sv6621_dev_s *dev,
   int close_ret;
   int open_ret;
 
+#ifdef CONFIG_NET
+  sv6621_network_set_link(&dev->network, false, NULL);
+#endif
   close_ret = sv6621_wifi_close_device(&dev->command);
   open_ret = sv6621_wifi_open_station(&dev->command, dev->wifi_info.mac);
   if (open_ret == 0)
@@ -2085,12 +2093,29 @@ static void sv6621_core_data_input(FAR const struct sv6621_data_rx_s *rx,
 #ifdef CONFIG_NET
   FAR struct sv6621_dev_s *dev = arg;
 
+  if (dev->ap_initialized && sv6621_ap_is_active(&dev->ap) &&
+      sv6621_ap_validate_rx(&dev->ap, rx) < 0)
+    {
+      return;
+    }
+
   sv6621_network_input(rx, &dev->network);
 #else
   (void)rx;
   (void)arg;
 #endif
 }
+
+#ifdef CONFIG_NET
+static int sv6621_core_ap_resolve_tx(
+    FAR const uint8_t *frame, size_t length,
+    FAR struct sv6621_data_tx_context_s *context, FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+
+  return sv6621_ap_resolve_tx(&dev->ap, frame, length, context);
+}
+#endif
 
 /****************************************************************************
  * Name: sv6621_core_scan_complete
@@ -3929,6 +3954,21 @@ int sv6621_start_ap(FAR struct sv6621_dev_s *dev,
       ret = sv6621_core_restore_station(dev, ret);
       goto unlock_lifecycle;
     }
+
+#ifdef CONFIG_NET
+  {
+    struct sv6621_data_tx_context_s context;
+
+    context.peer_index = dev->ap.context.multicast_index;
+    context.multicast_index = dev->ap.context.multicast_index;
+    context.instance = dev->ap.context.instance;
+    context.lmac_id = dev->ap.context.lmac_id;
+    context.tid = 0;
+    sv6621_network_set_tx_resolver(&dev->network,
+                                   sv6621_core_ap_resolve_tx, dev);
+    sv6621_network_set_link(&dev->network, true, &context);
+  }
+#endif
 
   ret = nxmutex_lock(&dev->status_lock);
   if (ret < 0)
