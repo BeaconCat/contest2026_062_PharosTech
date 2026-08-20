@@ -35,6 +35,8 @@
 #include <debug.h>
 #include <errno.h>
 #include <nuttx/config.h>
+
+#include <nuttx/power/pm.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -62,6 +64,9 @@
 
 #define WIFI_WL_REG_ON (GPIO_PORT1 | GPIO_PIN_C6 | GPIO_OUTPUT)
 #define WIFI_BT_RST    (GPIO_PORT1 | GPIO_PIN_C7 | GPIO_OUTPUT)
+#define WIFI_HOST_WAKE (GPIO_PORT1 | GPIO_PIN_D5)
+
+#define WIFI_HOST_WAKE_ACTIVITY 1
 
 /* IOC drive-strength registers for the SDIO bus pins (max drive). */
 
@@ -134,6 +139,10 @@ static int kickpi_k7_wifi_load_address(
     FAR void *arg, uint8_t address[SV6621_MAC_LENGTH]);
 static int kickpi_k7_wifi_store_address(
     FAR void *arg, FAR const uint8_t address[SV6621_MAC_LENGTH]);
+#ifdef CONFIG_SV6621_PM
+static int kickpi_k7_wifi_host_wake_isr(FAR struct gpio_dev_s *dev,
+                                        uint8_t pin);
+#endif
 
 /****************************************************************************
  * Private Functions
@@ -265,12 +274,42 @@ static int kickpi_k7_wifi_store_address(
   return 0;
 }
 
+#ifdef CONFIG_SV6621_PM
+/****************************************************************************
+ * Name: kickpi_k7_wifi_host_wake_isr
+ *
+ * Description:
+ *   Report activity when the combo asserts its dedicated active-high
+ *   host-wake line.  The interrupt wakes the CPU from WFI; the platform PM
+ *   path subsequently enters PM_RESTORE and resumes the Wi-Fi transport.
+ *   No SDIO transaction or driver resume is permitted here.
+ ****************************************************************************/
+
+static int kickpi_k7_wifi_host_wake_isr(FAR struct gpio_dev_s *dev,
+                                        uint8_t pin)
+{
+  UNUSED(dev);
+  UNUSED(pin);
+  pm_activity(PM_IDLE_DOMAIN, WIFI_HOST_WAKE_ACTIVITY);
+  return OK;
+}
+#endif
+
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
 static uint8_t g_kickpi_k7_wifi_address[SV6621_MAC_LENGTH];
 static FAR struct sv6621_dev_s *g_kickpi_k7_wifi_dev;
+#ifdef CONFIG_SV6621_PM
+static FAR struct gpio_dev_s *g_kickpi_k7_wifi_host_wake;
+static const struct sv6621_suspend_s g_kickpi_k7_wifi_suspend =
+{
+  .wake_enabled = true,
+  .wake_flags = SV6621_WAKE_DISCONNECT | SV6621_WAKE_MAGIC_PACKET |
+                SV6621_WAKE_GTK_REKEY_FAILURE,
+};
+#endif
 
 static const struct sv6621_board_ops_s g_kickpi_k7_wifi_board_ops = {
   .power_on = kickpi_k7_wifi_power_on,
@@ -441,10 +480,7 @@ int kickpi_k7_wifi_initialize(void)
       sizeof(g_kickpi_k7_wifi_regulatory_domains) /
       sizeof(g_kickpi_k7_wifi_regulatory_domains[0]);
 #ifdef CONFIG_SV6621_PM
-  config.system_suspend.wake_enabled = true;
-  config.system_suspend.wake_flags =
-      SV6621_WAKE_DISCONNECT | SV6621_WAKE_MAGIC_PACKET |
-      SV6621_WAKE_GTK_REKEY_FAILURE;
+  config.system_suspend = g_kickpi_k7_wifi_suspend;
 #endif
 
   ret = sv6621_create(&config, &g_kickpi_k7_wifi_dev);
@@ -461,10 +497,82 @@ int kickpi_k7_wifi_initialize(void)
       return ret;
     }
 
+#ifdef CONFIG_SV6621_PM
+  ret = rk3576_gpio_get(WIFI_HOST_WAKE, &g_kickpi_k7_wifi_host_wake);
+  if (ret < 0)
+    {
+      goto stop_driver;
+    }
+
+  rk3576_gpio_set_mode(g_kickpi_k7_wifi_host_wake, RK3576_GPIO_INPUT);
+  rk3576_gpio_set_pull(g_kickpi_k7_wifi_host_wake, RK3576_GPIO_PULLDOWN);
+  rk3576_gpio_set_schmitt(g_kickpi_k7_wifi_host_wake, true);
+  rk3576_gpio_set_int_type(g_kickpi_k7_wifi_host_wake,
+                           RK3576_GPIO_INT_EDGE);
+  rk3576_gpio_set_int_pol(g_kickpi_k7_wifi_host_wake,
+                          RK3576_GPIO_INT_HIGH_RISING);
+
+  ret = rk3576_gpio_irq_attach(g_kickpi_k7_wifi_host_wake,
+                               kickpi_k7_wifi_host_wake_isr);
+  if (ret < 0)
+    {
+      goto stop_driver;
+    }
+
+  rk3576_gpio_irq_enable(g_kickpi_k7_wifi_host_wake);
+
+#endif
+
   init_result = ret;
   initialized = true;
 
   return ret;
+
+#ifdef CONFIG_SV6621_PM
+stop_driver:
+  if (g_kickpi_k7_wifi_host_wake != NULL)
+    {
+      rk3576_gpio_irq_attach(g_kickpi_k7_wifi_host_wake, NULL);
+      rk3576_gpio_put(g_kickpi_k7_wifi_host_wake);
+      g_kickpi_k7_wifi_host_wake = NULL;
+    }
+
+  sv6621_stop(g_kickpi_k7_wifi_dev);
+  sv6621_destroy(g_kickpi_k7_wifi_dev);
+  g_kickpi_k7_wifi_dev = NULL;
+  return ret;
+#endif
 }
+
+#ifdef CONFIG_SV6621_PM
+/****************************************************************************
+ * Name: kickpi_k7_wifi_prepare_sleep
+ ****************************************************************************/
+
+int kickpi_k7_wifi_prepare_sleep(void)
+{
+  if (g_kickpi_k7_wifi_dev == NULL)
+    {
+      return -ENODEV;
+    }
+
+  return sv6621_suspend(g_kickpi_k7_wifi_dev,
+                        &g_kickpi_k7_wifi_suspend);
+}
+
+/****************************************************************************
+ * Name: kickpi_k7_wifi_abort_sleep
+ ****************************************************************************/
+
+int kickpi_k7_wifi_abort_sleep(void)
+{
+  if (g_kickpi_k7_wifi_dev == NULL)
+    {
+      return -ENODEV;
+    }
+
+  return sv6621_resume(g_kickpi_k7_wifi_dev);
+}
+#endif
 
 #endif /* CONFIG_KICKPI_K7_WIFI */

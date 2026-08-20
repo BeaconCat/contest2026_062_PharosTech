@@ -117,8 +117,9 @@ config SV6621_PM
 	depends on SV6621 && PM
 	---help---
 		Register the SV6621 core with the NuttX power manager.  System sleep
-		uses the wake policy supplied by the board configuration and resumes
-		the firmware before higher-power system states become visible.
+		uses the wake policy supplied by the board configuration.  A platform
+		coordinator must suspend the firmware from thread context before deep
+		sleep; the PM callback only checks readiness and schedules resume work.
 
 config RK3576_SV6621_TRANSPORT
 	bool
