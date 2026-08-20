@@ -674,7 +674,6 @@ static int sv6621_wpa_process_group_message_1(
         }
     }
 
-  memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
   wpa->eapol_version = eapol->version;
   ret = sv6621_wpa_send_response(wpa, SV6621_WPA_RESPONSE_GROUP_2);
   if (ret < 0)
@@ -696,6 +695,13 @@ static int sv6621_wpa_process_group_message_1(
 
       goto clear_keys;
     }
+
+  /* Commit the replay counter only after Group Message 2 has reached the
+   * firmware.  If transmission fails, the AP may retransmit the same Group
+   * Message 1 and the replacement keys must be installed again.
+   */
+
+  memcpy(wpa->replay, eapol->replay, sizeof(wpa->replay));
 
   if (install_group && wpa->group_installed &&
       wpa->gtk_index != gtk_index)
