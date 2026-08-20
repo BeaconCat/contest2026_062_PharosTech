@@ -34,6 +34,7 @@
 
 #include "sv6621_ap.h"
 #include "sv6621_ap_mlme.h"
+#include "sv6621_management.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -59,6 +60,7 @@
 #define SV6621_AP_SSID_OFFSET                 12
 #define SV6621_AP_BLOB_TABLE_OFFSET           44
 #define SV6621_AP_BLOB_COUNT                   5
+#define SV6621_AP_PROBE_RESPONSE_IE_OFFSET     36 /* Header + fixed fields */
 
 /****************************************************************************
  * Private Types
@@ -78,6 +80,9 @@ static void sv6621_ap_put_le16(FAR uint8_t *value, uint16_t number);
 static void sv6621_ap_put_le32(FAR uint8_t *value, uint32_t number);
 static uint64_t sv6621_ap_next_cookie(FAR struct sv6621_ap_s *ap);
 static bool sv6621_ap_expected_event_error(int error);
+static bool sv6621_ap_tx_client_event(
+    FAR struct sv6621_ap_s *ap, FAR const uint8_t *payload, size_t length,
+    FAR struct sv6621_ap_client_event_s *event);
 static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                                     FAR const uint8_t *payload,
                                     size_t length, FAR void *arg);
@@ -119,6 +124,32 @@ static bool sv6621_ap_expected_event_error(int error)
          error == -ENOMSG || error == -EPROTO || error == -ESTALE;
 }
 
+static bool sv6621_ap_tx_client_event(
+    FAR struct sv6621_ap_s *ap, FAR const uint8_t *payload, size_t length,
+    FAR struct sv6621_ap_client_event_s *event)
+{
+  struct sv6621_management_tx_status_s status;
+  struct sv6621_ap_peer_s peer;
+
+  if (sv6621_management_parse_tx_status(payload, length, &status) < 0 ||
+      !status.acknowledged || status.frame_length < 30 ||
+      status.frame[0] != 0x10)
+    {
+      return false;
+    }
+
+  memcpy(event->address, status.frame + 4, SV6621_MAC_LENGTH);
+  if (sv6621_ap_peer_lookup(&ap->peers, event->address, &peer) < 0 ||
+      peer.state != SV6621_AP_PEER_ASSOCIATED)
+    {
+      return false;
+    }
+
+  event->aid = peer.aid;
+  event->reason = 0;
+  return true;
+}
+
 static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                                     FAR const uint8_t *payload,
                                     size_t length, FAR void *arg)
@@ -126,8 +157,11 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
   FAR struct sv6621_ap_s *ap = arg;
   struct sv6621_ap_mgmt_s mgmt;
   uint8_t address[SV6621_MAC_LENGTH];
+  struct sv6621_ap_client_event_s client_event;
   uint16_t reason;
   bool accepted;
+  bool notify_connected = false;
+  bool notify_disconnected = false;
   int ret;
 
   ret = nxmutex_lock(&ap->lock);
@@ -146,14 +180,33 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
     {
       ret = sv6621_ap_handle_tx_status(&ap->peers, ap->command,
                                        ap->instance, payload, length);
+      if (ret == 0)
+        {
+          notify_connected = sv6621_ap_tx_client_event(
+              ap, payload, length, &client_event);
+          if (notify_connected &&
+              ap->config.security == SV6621_SECURITY_OPEN)
+            {
+              ret = sv6621_ap_peer_authorize(&ap->peers,
+                                             client_event.address);
+              if (ret < 0)
+                {
+                  notify_connected = false;
+                }
+            }
+        }
     }
   else if (id == SV6621_AP_EVENT_DEL_STA)
     {
       ret = sv6621_ap_parse_peer_departure(payload, length, address, &reason);
       if (ret == 0)
         {
+          memcpy(client_event.address, address, SV6621_MAC_LENGTH);
+          client_event.aid = 0;
+          client_event.reason = reason;
           ret = sv6621_ap_peer_departed(&ap->peers, ap->command,
                                         ap->instance, address, reason, true);
+          notify_disconnected = ret == 0;
         }
     }
   else
@@ -170,23 +223,47 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                (mgmt.type == SV6621_AP_MGMT_ASSOC_REQUEST ||
                 mgmt.type == SV6621_AP_MGMT_REASSOC_REQUEST))
         {
-          ret = sv6621_ap_respond_association(
-              &ap->peers, ap->command, ap->instance, ap->config.channel,
-              ap->config.band, ap->address, ap->config.ssid,
-              ap->config.ssid_length, ap->templates.beacon_tail,
-              ap->templates.beacon_tail_length, &mgmt,
-              sv6621_ap_next_cookie(ap), &accepted);
+          if (ap->templates.probe_response_length <
+              SV6621_AP_PROBE_RESPONSE_IE_OFFSET)
+            {
+              ret = -EPROTO;
+            }
+          else
+            {
+              ret = sv6621_ap_respond_association(
+                  &ap->peers, ap->command, ap->instance,
+                  ap->config.channel, ap->config.band, ap->address,
+                  ap->config.ssid, ap->config.ssid_length,
+                  ap->templates.probe_response +
+                      SV6621_AP_PROBE_RESPONSE_IE_OFFSET,
+                  ap->templates.probe_response_length -
+                      SV6621_AP_PROBE_RESPONSE_IE_OFFSET,
+                  &mgmt, sv6621_ap_next_cookie(ap), &accepted);
+            }
         }
       else if (ret == 0 &&
                (mgmt.type == SV6621_AP_MGMT_DEAUTH ||
                 mgmt.type == SV6621_AP_MGMT_DISASSOC))
         {
+          memcpy(client_event.address, mgmt.source, SV6621_MAC_LENGTH);
+          client_event.aid = 0;
+          client_event.reason = mgmt.reason;
           ret = sv6621_ap_handle_departure(&ap->peers, ap->command,
                                            ap->instance, &mgmt);
+          notify_disconnected = ret == 0;
         }
     }
 
   nxmutex_unlock(&ap->lock);
+  if (ap->client != NULL && notify_connected)
+    {
+      ap->client(true, &client_event, ap->client_arg);
+    }
+  else if (ap->client != NULL && notify_disconnected)
+    {
+      ap->client(false, &client_event, ap->client_arg);
+    }
+
   return sv6621_ap_expected_event_error(ret) ? 0 : ret;
 }
 
@@ -349,7 +426,8 @@ int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
                    FAR struct sv6621_command_engine_s *command,
                    uint8_t max_stations,
                    FAR const uint8_t address[SV6621_MAC_LENGTH],
-                   sv6621_ap_error_t error, FAR void *error_arg)
+                   sv6621_ap_error_t error, FAR void *error_arg,
+                   sv6621_ap_client_t client, FAR void *client_arg)
 {
   int ret;
 
@@ -388,6 +466,8 @@ int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
   ap->next_cookie = 1;
   ap->error = error;
   ap->error_arg = error_arg;
+  ap->client = client;
+  ap->client_arg = client_arg;
   memcpy(ap->address, address, SV6621_MAC_LENGTH);
   return 0;
 }
@@ -574,6 +654,146 @@ int sv6621_ap_queue_event(FAR struct sv6621_ap_s *ap, uint8_t instance,
 
   return sv6621_ap_event_queue_submit(&ap->events, instance, id, payload,
                                       length);
+}
+
+int sv6621_ap_resolve_tx(
+    FAR struct sv6621_ap_s *ap, FAR const uint8_t *frame, size_t length,
+    FAR struct sv6621_data_tx_context_s *context)
+{
+  struct sv6621_ap_peer_s peer;
+  bool multicast;
+  int ret;
+
+  if (ap == NULL || frame == NULL || length < SV6621_MAC_LENGTH ||
+      context == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&ap->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!ap->active)
+    {
+      nxmutex_unlock(&ap->lock);
+      return -ENETDOWN;
+    }
+
+  multicast = (frame[0] & 1) != 0;
+  if (!multicast)
+    {
+      ret = sv6621_ap_peer_lookup(&ap->peers, frame, &peer);
+      if (ret < 0)
+        {
+          nxmutex_unlock(&ap->lock);
+          return ret;
+        }
+
+      if (!peer.bound ||
+          (ap->config.security == SV6621_SECURITY_OPEN ?
+           peer.state < SV6621_AP_PEER_ASSOCIATED :
+           peer.state < SV6621_AP_PEER_AUTHORIZED))
+        {
+          nxmutex_unlock(&ap->lock);
+          return -EHOSTUNREACH;
+        }
+
+      context->peer_index = peer.peer_index;
+    }
+  else
+    {
+      context->peer_index = ap->context.multicast_index;
+    }
+
+  context->multicast_index = ap->context.multicast_index;
+  context->instance = ap->context.instance;
+  context->lmac_id = ap->context.lmac_id;
+  context->tid = 0;
+  nxmutex_unlock(&ap->lock);
+  return 0;
+}
+
+int sv6621_ap_validate_rx(FAR struct sv6621_ap_s *ap,
+                          FAR const struct sv6621_data_rx_s *rx)
+{
+  struct sv6621_ap_peer_s peer;
+  size_t index;
+  bool matched = false;
+  int ret;
+
+  if (ap == NULL || rx == NULL || !rx->instance_valid || !rx->peer_valid)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&ap->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!ap->active || rx->instance != ap->context.instance ||
+      rx->lmac_id != ap->context.lmac_id)
+    {
+      nxmutex_unlock(&ap->lock);
+      return -ENETDOWN;
+    }
+
+  ret = nxmutex_lock(&ap->peers.lock);
+  if (ret < 0)
+    {
+      nxmutex_unlock(&ap->lock);
+      return ret;
+    }
+
+  for (index = 0; index < ap->peers.capacity; index++)
+    {
+      peer = ap->peers.peers[index];
+      if (peer.state != SV6621_AP_PEER_FREE && peer.bound &&
+          peer.peer_index == rx->peer_index)
+        {
+          matched = ap->config.security == SV6621_SECURITY_OPEN ?
+              peer.state >= SV6621_AP_PEER_ASSOCIATED :
+              peer.state >= SV6621_AP_PEER_AUTHORIZED;
+          break;
+        }
+    }
+
+  nxmutex_unlock(&ap->peers.lock);
+  nxmutex_unlock(&ap->lock);
+  return matched ? 0 : -EHOSTUNREACH;
+}
+
+int sv6621_ap_forward_policy(FAR struct sv6621_ap_s *ap,
+                             FAR const struct sv6621_data_rx_s *rx,
+                             FAR bool *forward, FAR bool *deliver_local)
+{
+  int ret;
+
+  if (ap == NULL || rx == NULL || forward == NULL || deliver_local == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&ap->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!ap->active)
+    {
+      nxmutex_unlock(&ap->lock);
+      return -ENETDOWN;
+    }
+
+  *forward = rx->need_forward && !ap->config.isolate;
+  *deliver_local = !*forward || rx->multicast;
+  nxmutex_unlock(&ap->lock);
+  return 0;
 }
 
 bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap)

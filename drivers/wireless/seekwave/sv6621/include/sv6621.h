@@ -332,6 +332,7 @@ struct sv6621_ap_config_s
   uint16_t beacon_interval;
   uint8_t dtim_period;
   enum sv6621_security_e security;
+  bool isolate;
   uint8_t credential[SV6621_KEY_MAX_LENGTH];
   uint8_t credential_length;
 };
@@ -519,6 +520,7 @@ int sv6621_start_scheduled_scan(
 int sv6621_stop_scheduled_scan(FAR struct sv6621_dev_s *dev);
 int sv6621_start_ap(FAR struct sv6621_dev_s *dev,
                     FAR const struct sv6621_ap_config_s *config);
+int sv6621_stop_ap(FAR struct sv6621_dev_s *dev);
 int sv6621_suspend(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_suspend_s *config);
 int sv6621_resume(FAR struct sv6621_dev_s *dev);
