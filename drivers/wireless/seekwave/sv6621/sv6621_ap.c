@@ -60,6 +60,7 @@
 #define SV6621_AP_SSID_OFFSET                 12
 #define SV6621_AP_BLOB_TABLE_OFFSET           44
 #define SV6621_AP_BLOB_COUNT                   5
+#define SV6621_AP_PROBE_RESPONSE_IE_OFFSET     36 /* Header + fixed fields */
 
 /****************************************************************************
  * Private Types
@@ -212,12 +213,23 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                (mgmt.type == SV6621_AP_MGMT_ASSOC_REQUEST ||
                 mgmt.type == SV6621_AP_MGMT_REASSOC_REQUEST))
         {
-          ret = sv6621_ap_respond_association(
-              &ap->peers, ap->command, ap->instance, ap->config.channel,
-              ap->config.band, ap->address, ap->config.ssid,
-              ap->config.ssid_length, ap->templates.beacon_tail,
-              ap->templates.beacon_tail_length, &mgmt,
-              sv6621_ap_next_cookie(ap), &accepted);
+          if (ap->templates.probe_response_length <
+              SV6621_AP_PROBE_RESPONSE_IE_OFFSET)
+            {
+              ret = -EPROTO;
+            }
+          else
+            {
+              ret = sv6621_ap_respond_association(
+                  &ap->peers, ap->command, ap->instance,
+                  ap->config.channel, ap->config.band, ap->address,
+                  ap->config.ssid, ap->config.ssid_length,
+                  ap->templates.probe_response +
+                      SV6621_AP_PROBE_RESPONSE_IE_OFFSET,
+                  ap->templates.probe_response_length -
+                      SV6621_AP_PROBE_RESPONSE_IE_OFFSET,
+                  &mgmt, sv6621_ap_next_cookie(ap), &accepted);
+            }
         }
       else if (ret == 0 &&
                (mgmt.type == SV6621_AP_MGMT_DEAUTH ||
