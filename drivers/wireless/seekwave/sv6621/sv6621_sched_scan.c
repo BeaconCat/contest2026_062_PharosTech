@@ -46,6 +46,8 @@
 #define SV6621_SCHED_SCAN_INSTANCE                 0
 #define SV6621_SCHED_SCAN_COMMAND_START             7
 #define SV6621_SCHED_SCAN_COMMAND_STOP              8
+#define SV6621_SCHED_SCAN_EVENT_COMPLETE             1
+#define SV6621_SCHED_SCAN_EVENT_REPORT              11
 #define SV6621_SCHED_SCAN_COMMAND_TIMEOUT_MS     5000
 #define SV6621_SCHED_SCAN_STOP_PAYLOAD_SIZE         8
 #define SV6621_SCHED_SCAN_PAYLOAD_CAPACITY \
@@ -336,4 +338,166 @@ int sv6621_sched_scan_stop(FAR struct sv6621_command_engine_s *command)
       command, SV6621_SCHED_SCAN_INSTANCE, SV6621_SCHED_SCAN_COMMAND_STOP,
       scan_id, sizeof(scan_id), NULL, NULL,
       SV6621_SCHED_SCAN_COMMAND_TIMEOUT_MS);
+}
+
+int sv6621_sched_scan_init(FAR struct sv6621_sched_scan_s *scan,
+                           FAR struct sv6621_command_engine_s *command,
+                           FAR struct sv6621_scan_cache_s *cache,
+                           sv6621_sched_scan_complete_t complete,
+                           FAR void *complete_arg)
+{
+  int ret;
+
+  if (scan == NULL || command == NULL || cache == NULL)
+    {
+      return -EINVAL;
+    }
+
+  memset(scan, 0, sizeof(*scan));
+  ret = nxmutex_init(&scan->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  scan->command = command;
+  scan->cache = cache;
+  scan->complete = complete;
+  scan->complete_arg = complete_arg;
+  return 0;
+}
+
+void sv6621_sched_scan_deinit(FAR struct sv6621_sched_scan_s *scan)
+{
+  if (scan != NULL)
+    {
+      nxmutex_destroy(&scan->lock);
+    }
+}
+
+int sv6621_sched_scan_begin(
+    FAR struct sv6621_sched_scan_s *scan,
+    FAR const struct sv6621_sched_scan_request_s *request)
+{
+  int ret;
+
+  if (scan == NULL || request == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&scan->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (scan->active)
+    {
+      nxmutex_unlock(&scan->lock);
+      return -EBUSY;
+    }
+
+  ret = sv6621_sched_scan_start(scan->command, request);
+  if (ret == 0)
+    {
+      scan->active = true;
+      scan->request_id = request->request_id;
+      scan->generation++;
+    }
+
+  nxmutex_unlock(&scan->lock);
+  return ret;
+}
+
+int sv6621_sched_scan_cancel(FAR struct sv6621_sched_scan_s *scan)
+{
+  int ret;
+
+  if (scan == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&scan->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!scan->active)
+    {
+      nxmutex_unlock(&scan->lock);
+      return 0;
+    }
+
+  scan->active = false;
+  scan->generation++;
+  ret = sv6621_sched_scan_stop(scan->command);
+  nxmutex_unlock(&scan->lock);
+  return ret;
+}
+
+void sv6621_sched_scan_command_event(uint8_t instance, uint8_t id,
+                                     FAR const uint8_t *payload,
+                                     size_t length, FAR void *arg)
+{
+  FAR struct sv6621_sched_scan_s *scan = arg;
+  struct sv6621_scan_entry_s entry;
+  sv6621_sched_scan_complete_t complete;
+  FAR void *complete_arg;
+  uint32_t request_id;
+  uint32_t generation;
+  bool inserted;
+
+  if (scan == NULL || instance != SV6621_SCHED_SCAN_INSTANCE ||
+      (id != SV6621_SCHED_SCAN_EVENT_COMPLETE &&
+       id != SV6621_SCHED_SCAN_EVENT_REPORT))
+    {
+      return;
+    }
+
+  if (nxmutex_lock(&scan->lock) < 0)
+    {
+      return;
+    }
+
+  if (!scan->active)
+    {
+      nxmutex_unlock(&scan->lock);
+      return;
+    }
+
+  complete = scan->complete;
+  complete_arg = scan->complete_arg;
+  request_id = scan->request_id;
+  generation = scan->generation;
+  nxmutex_unlock(&scan->lock);
+
+  if (id == SV6621_SCHED_SCAN_EVENT_COMPLETE)
+    {
+      if (nxmutex_lock(&scan->lock) < 0)
+        {
+          return;
+        }
+
+      if (!scan->active || scan->generation != generation)
+        {
+          nxmutex_unlock(&scan->lock);
+          return;
+        }
+
+      nxmutex_unlock(&scan->lock);
+      if (complete != NULL)
+        {
+          complete(request_id, complete_arg);
+        }
+
+      return;
+    }
+
+  if (sv6621_scan_parse_report(payload, length, &entry) == 0)
+    {
+      (void)sv6621_scan_cache_store(scan->cache, &entry, &inserted);
+    }
 }
