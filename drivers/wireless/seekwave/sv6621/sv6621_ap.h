@@ -28,7 +28,9 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include <nuttx/mutex.h>
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -80,6 +82,14 @@ struct sv6621_ap_context_s
   uint8_t multicast_index;
 };
 
+struct sv6621_ap_s
+{
+  mutex_t lock;
+  struct sv6621_ap_context_s context;
+  uint8_t instance;
+  bool active;
+};
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
@@ -93,5 +103,14 @@ int sv6621_ap_start(FAR struct sv6621_command_engine_s *command,
                     FAR struct sv6621_ap_context_s *context);
 int sv6621_ap_stop(FAR struct sv6621_command_engine_s *command,
                    uint8_t instance);
+int sv6621_ap_init(FAR struct sv6621_ap_s *ap);
+void sv6621_ap_deinit(FAR struct sv6621_ap_s *ap);
+int sv6621_ap_enable(FAR struct sv6621_ap_s *ap,
+                     FAR struct sv6621_command_engine_s *command,
+                     uint8_t instance,
+                     FAR const struct sv6621_ap_start_s *config);
+int sv6621_ap_disable(FAR struct sv6621_ap_s *ap,
+                      FAR struct sv6621_command_engine_s *command);
+bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_H */

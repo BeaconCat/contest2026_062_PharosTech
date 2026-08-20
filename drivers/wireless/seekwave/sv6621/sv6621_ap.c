@@ -238,3 +238,115 @@ int sv6621_ap_stop(FAR struct sv6621_command_engine_s *command,
                                 NULL, 0, NULL, NULL,
                                 SV6621_AP_COMMAND_TIMEOUT_MS);
 }
+
+int sv6621_ap_init(FAR struct sv6621_ap_s *ap)
+{
+  if (ap == NULL)
+    {
+      return -EINVAL;
+    }
+
+  memset(ap, 0, sizeof(*ap));
+  return nxmutex_init(&ap->lock);
+}
+
+void sv6621_ap_deinit(FAR struct sv6621_ap_s *ap)
+{
+  if (ap == NULL)
+    {
+      return;
+    }
+
+  if (nxmutex_lock(&ap->lock) >= 0)
+    {
+      DEBUGASSERT(!ap->active);
+      nxmutex_unlock(&ap->lock);
+    }
+
+  nxmutex_destroy(&ap->lock);
+  memset(ap, 0, sizeof(*ap));
+}
+
+int sv6621_ap_enable(FAR struct sv6621_ap_s *ap,
+                     FAR struct sv6621_command_engine_s *command,
+                     uint8_t instance,
+                     FAR const struct sv6621_ap_start_s *config)
+{
+  struct sv6621_ap_context_s context;
+  int ret;
+
+  if (ap == NULL || command == NULL || config == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&ap->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (ap->active)
+    {
+      nxmutex_unlock(&ap->lock);
+      return -EBUSY;
+    }
+
+  ret = sv6621_ap_start(command, instance, config, &context);
+  if (ret == 0)
+    {
+      ap->context = context;
+      ap->instance = instance;
+      ap->active = true;
+    }
+
+  nxmutex_unlock(&ap->lock);
+  return ret;
+}
+
+int sv6621_ap_disable(FAR struct sv6621_ap_s *ap,
+                      FAR struct sv6621_command_engine_s *command)
+{
+  int ret;
+
+  if (ap == NULL || command == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&ap->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!ap->active)
+    {
+      nxmutex_unlock(&ap->lock);
+      return 0;
+    }
+
+  ret = sv6621_ap_stop(command, ap->instance);
+  if (ret == 0)
+    {
+      memset(&ap->context, 0, sizeof(ap->context));
+      ap->instance = 0;
+      ap->active = false;
+    }
+
+  nxmutex_unlock(&ap->lock);
+  return ret;
+}
+
+bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap)
+{
+  bool active = false;
+
+  if (ap != NULL && nxmutex_lock(&ap->lock) >= 0)
+    {
+      active = ap->active;
+      nxmutex_unlock(&ap->lock);
+    }
+
+  return active;
+}
