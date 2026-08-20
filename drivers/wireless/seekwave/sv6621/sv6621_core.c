@@ -64,6 +64,7 @@
 #define SV6621_CORE_CHANNEL_EVENT_SIZE  11
 #define SV6621_CORE_ROAM_MAX_COOLDOWN_MS 3600000
 #define SV6621_CORE_WIFI_INSTANCE        0
+#define SV6621_CORE_AP_INSTANCE          2
 
 /****************************************************************************
  * Private Function Prototypes
@@ -3998,14 +3999,16 @@ int sv6621_start_ap(FAR struct sv6621_dev_s *dev,
     }
 
   dev->station_open = false;
-  ret = sv6621_wifi_open_access_point(&dev->command, dev->wifi_info.mac);
+  ret = sv6621_wifi_open_access_point(&dev->command,
+                                      SV6621_CORE_AP_INSTANCE,
+                                      dev->wifi_info.mac);
   if (ret < 0)
     {
       ret = sv6621_core_restore_station(dev, ret);
       goto unlock_lifecycle;
     }
 
-  ret = sv6621_ap_enable(&dev->ap, SV6621_CORE_WIFI_INSTANCE, config);
+  ret = sv6621_ap_enable(&dev->ap, SV6621_CORE_AP_INSTANCE, config);
   if (ret < 0)
     {
       ret = sv6621_core_restore_station(dev, ret);
