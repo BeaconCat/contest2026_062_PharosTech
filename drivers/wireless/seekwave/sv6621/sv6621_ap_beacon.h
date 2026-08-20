@@ -79,4 +79,8 @@ int sv6621_ap_build_beacon_templates(
     FAR const struct sv6621_ap_beacon_config_s *config,
     FAR struct sv6621_ap_beacon_templates_s *templates);
 
+int sv6621_ap_build_rsn_ie(enum sv6621_security_e security,
+                           bool pmf_required, FAR uint8_t *ie,
+                           size_t capacity, FAR size_t *length);
+
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_BEACON_H */
