@@ -36,6 +36,7 @@
 #include <nuttx/wqueue.h>
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "include/sv6621.h"
@@ -49,11 +50,16 @@
  ****************************************************************************/
 
 #define SV6621_NETWORK_RX_DEPTH 4
+#define SV6621_NETWORK_FORWARD_DEPTH 8
 #define SV6621_NETWORK_MULTICAST_CAPACITY 32
 
 /****************************************************************************
  * Public Types
  ****************************************************************************/
+
+typedef int (*sv6621_network_tx_resolver_t)(
+    FAR const uint8_t *frame, size_t length,
+    FAR struct sv6621_data_tx_context_s *context, FAR void *arg);
 
 struct sv6621_network_s
 {
@@ -61,11 +67,14 @@ struct sv6621_network_s
   spinlock_t lock;
   struct work_s rx_work;
   struct work_s tx_work;
+  struct work_s forward_work;
   struct work_s multicast_work;
   FAR struct sv6621_data_s *data;
   FAR struct sv6621_command_engine_s *command;
   struct sv6621_ioctl_s ioctl;
   struct sv6621_data_tx_context_s tx_context;
+  sv6621_network_tx_resolver_t tx_resolver;
+  FAR void *tx_resolver_arg;
   struct sv6621_offload_addresses_s applied_addresses;
   bool registered;
   bool interface_up;
@@ -73,10 +82,13 @@ struct sv6621_network_s
   bool rx_scheduled;
   bool tx_scheduled;
   bool tx_reschedule;
+  bool forward_scheduled;
   bool multicast_scheduled;
   bool addresses_applied;
   uint8_t rx_head;
   uint8_t rx_tail;
+  uint8_t forward_head;
+  uint8_t forward_tail;
   uint8_t multicast_count;
   uint8_t multicast_limit;
   uint32_t multicast_generation;
@@ -86,6 +98,8 @@ struct sv6621_network_s
   uint8_t multicast[SV6621_NETWORK_MULTICAST_CAPACITY][SV6621_MAC_LENGTH];
   uint16_t rx_length[SV6621_NETWORK_RX_DEPTH];
   uint8_t rx_frame[SV6621_NETWORK_RX_DEPTH][MAX_NETDEV_PKTSIZE];
+  uint16_t forward_length[SV6621_NETWORK_FORWARD_DEPTH];
+  uint8_t forward_frame[SV6621_NETWORK_FORWARD_DEPTH][MAX_NETDEV_PKTSIZE];
   uint8_t tx_frame[MAX_NETDEV_PKTSIZE] aligned_data(4);
 };
 
@@ -108,7 +122,12 @@ int sv6621_network_sync_link_addresses(
 void sv6621_network_set_link(
     FAR struct sv6621_network_s *network, bool link_up,
     FAR const struct sv6621_data_tx_context_s *context);
+void sv6621_network_set_tx_resolver(
+    FAR struct sv6621_network_s *network,
+    sv6621_network_tx_resolver_t resolver, FAR void *arg);
 void sv6621_network_credit_available(FAR struct sv6621_network_s *network);
+int sv6621_network_forward(FAR struct sv6621_network_s *network,
+                            FAR const uint8_t *frame, size_t length);
 void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx,
                           FAR void *arg);
 
