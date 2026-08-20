@@ -64,6 +64,7 @@
 #define SV6621_CORE_CHANNEL_EVENT_SIZE  11
 #define SV6621_CORE_CQM_THRESHOLD_DBM  -70
 #define SV6621_CORE_CQM_HYSTERESIS_DB   40
+#define SV6621_CORE_ROAM_MINIMUM_GAIN_DB 8
 
 /****************************************************************************
  * Private Function Prototypes
@@ -621,6 +622,8 @@ static int sv6621_core_start_roam_scan(
       goto unlock_lifecycle;
     }
 
+  dev->roam_scan_generation = dev->station_generation;
+  dev->roam_scan_signal_dbm = event->signal_dbm;
   dev->roam_scan_pending = true;
   nxmutex_unlock(&dev->status_lock);
 
@@ -1653,8 +1656,15 @@ static void sv6621_core_scan_worker(FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
   FAR struct sv6621_bss_s *entries;
+  struct sv6621_roam_candidate_s roam_event;
+  struct sv6621_scan_entry_s roam_entry;
+  struct sv6621_connect_s request;
+  uint8_t current_bssid[SV6621_MAC_LENGTH];
+  uint32_t roam_generation = 0;
   size_t count = SV6621_SCAN_CACHE_CAPACITY;
   size_t index;
+  int16_t roam_signal_dbm = 0;
+  bool roam_scan = false;
   int result;
   int ret;
 
@@ -1676,13 +1686,49 @@ static void sv6621_core_scan_worker(FAR void *arg)
                          sizeof(entries[index]));
     }
 
-  kmm_free(entries);
   if (nxmutex_lock(&dev->status_lock) >= 0)
     {
+      roam_scan = dev->roam_scan_pending;
+      roam_generation = dev->roam_scan_generation;
+      roam_signal_dbm = dev->roam_scan_signal_dbm;
       dev->scan_reporting = false;
       dev->roam_scan_pending = false;
       nxmutex_unlock(&dev->status_lock);
     }
+
+  if (roam_scan && result == 0 &&
+      nxmutex_lock(&dev->status_lock) >= 0)
+    {
+      if (dev->station_connected &&
+          dev->station_generation == roam_generation &&
+          nxmutex_lock(&dev->station.lock) >= 0)
+        {
+          request = dev->station.request;
+          memcpy(current_bssid, dev->station.target.bss.bssid,
+                 sizeof(current_bssid));
+          nxmutex_unlock(&dev->station.lock);
+          nxmutex_unlock(&dev->status_lock);
+
+          ret = sv6621_scan_cache_find_roam_candidate(
+              &dev->scan.cache, &request, current_bssid, roam_signal_dbm,
+              SV6621_CORE_ROAM_MINIMUM_GAIN_DB, &roam_entry);
+          if (ret == 0)
+            {
+              roam_event.candidate = roam_entry.bss;
+              roam_event.current_signal_dbm = roam_signal_dbm;
+              roam_event.gain_db =
+                  (uint8_t)(roam_entry.bss.signal_dbm - roam_signal_dbm);
+              sv6621_core_report(dev, SV6621_EVENT_ROAM_CANDIDATE,
+                                 &roam_event, sizeof(roam_event));
+            }
+        }
+      else
+        {
+          nxmutex_unlock(&dev->status_lock);
+        }
+    }
+
+  kmm_free(entries);
 
   sv6621_core_report(dev, SV6621_EVENT_SCAN_COMPLETE, &result, sizeof(result));
 }

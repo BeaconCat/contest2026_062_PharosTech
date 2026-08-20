@@ -120,6 +120,8 @@ struct sv6621_dev_s
   uint8_t signal_head;
   uint8_t signal_tail;
   bool signal_work_scheduled;
+  uint32_t roam_scan_generation;
+  int16_t roam_scan_signal_dbm;
   bool roam_scan_pending;
   bool suspended;
   bool powered;

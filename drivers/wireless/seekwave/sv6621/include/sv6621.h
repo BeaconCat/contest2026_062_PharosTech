@@ -142,7 +142,8 @@ enum sv6621_event_e
   SV6621_EVENT_THERMAL_CHANGED,
   SV6621_EVENT_MIC_FAILURE,
   SV6621_EVENT_SIGNAL_CHANGED,
-  SV6621_EVENT_FATAL
+  SV6621_EVENT_FATAL,
+  SV6621_EVENT_ROAM_CANDIDATE
 };
 
 enum sv6621_signal_status_e
@@ -206,6 +207,13 @@ struct sv6621_bss_s
   enum sv6621_band_e band;
   enum sv6621_security_e security;
   int16_t signal_dbm;
+};
+
+struct sv6621_roam_candidate_s
+{
+  struct sv6621_bss_s candidate;
+  int16_t current_signal_dbm;
+  uint8_t gain_db;
 };
 
 struct sv6621_connect_s
