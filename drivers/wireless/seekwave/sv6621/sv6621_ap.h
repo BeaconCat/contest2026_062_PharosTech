@@ -46,6 +46,9 @@
  ****************************************************************************/
 
 typedef void (*sv6621_ap_error_t)(int error, FAR void *arg);
+typedef void (*sv6621_ap_client_t)(
+    bool connected, FAR const struct sv6621_ap_client_event_s *event,
+    FAR void *arg);
 
 struct sv6621_ap_blob_s
 {
@@ -92,6 +95,8 @@ struct sv6621_ap_s
   uint64_t next_cookie;
   sv6621_ap_error_t error;
   FAR void *error_arg;
+  sv6621_ap_client_t client;
+  FAR void *client_arg;
   uint8_t instance;
   bool active;
 };
@@ -113,7 +118,8 @@ int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
                    FAR struct sv6621_command_engine_s *command,
                    uint8_t max_stations,
                    FAR const uint8_t address[SV6621_MAC_LENGTH],
-                   sv6621_ap_error_t error, FAR void *error_arg);
+                   sv6621_ap_error_t error, FAR void *error_arg,
+                   sv6621_ap_client_t client, FAR void *client_arg);
 void sv6621_ap_deinit(FAR struct sv6621_ap_s *ap);
 int sv6621_ap_enable(FAR struct sv6621_ap_s *ap, uint8_t instance,
                      FAR const struct sv6621_ap_config_s *config);

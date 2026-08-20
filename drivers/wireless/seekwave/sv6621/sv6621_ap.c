@@ -34,6 +34,7 @@
 
 #include "sv6621_ap.h"
 #include "sv6621_ap_mlme.h"
+#include "sv6621_management.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -78,6 +79,9 @@ static void sv6621_ap_put_le16(FAR uint8_t *value, uint16_t number);
 static void sv6621_ap_put_le32(FAR uint8_t *value, uint32_t number);
 static uint64_t sv6621_ap_next_cookie(FAR struct sv6621_ap_s *ap);
 static bool sv6621_ap_expected_event_error(int error);
+static bool sv6621_ap_tx_client_event(
+    FAR struct sv6621_ap_s *ap, FAR const uint8_t *payload, size_t length,
+    FAR struct sv6621_ap_client_event_s *event);
 static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                                     FAR const uint8_t *payload,
                                     size_t length, FAR void *arg);
@@ -119,6 +123,32 @@ static bool sv6621_ap_expected_event_error(int error)
          error == -ENOMSG || error == -EPROTO || error == -ESTALE;
 }
 
+static bool sv6621_ap_tx_client_event(
+    FAR struct sv6621_ap_s *ap, FAR const uint8_t *payload, size_t length,
+    FAR struct sv6621_ap_client_event_s *event)
+{
+  struct sv6621_management_tx_status_s status;
+  struct sv6621_ap_peer_s peer;
+
+  if (sv6621_management_parse_tx_status(payload, length, &status) < 0 ||
+      !status.acknowledged || status.frame_length < 30 ||
+      status.frame[0] != 0x10)
+    {
+      return false;
+    }
+
+  memcpy(event->address, status.frame + 4, SV6621_MAC_LENGTH);
+  if (sv6621_ap_peer_lookup(&ap->peers, event->address, &peer) < 0 ||
+      peer.state != SV6621_AP_PEER_ASSOCIATED)
+    {
+      return false;
+    }
+
+  event->aid = peer.aid;
+  event->reason = 0;
+  return true;
+}
+
 static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                                     FAR const uint8_t *payload,
                                     size_t length, FAR void *arg)
@@ -126,8 +156,11 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
   FAR struct sv6621_ap_s *ap = arg;
   struct sv6621_ap_mgmt_s mgmt;
   uint8_t address[SV6621_MAC_LENGTH];
+  struct sv6621_ap_client_event_s client_event;
   uint16_t reason;
   bool accepted;
+  bool notify_connected = false;
+  bool notify_disconnected = false;
   int ret;
 
   ret = nxmutex_lock(&ap->lock);
@@ -146,14 +179,23 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
     {
       ret = sv6621_ap_handle_tx_status(&ap->peers, ap->command,
                                        ap->instance, payload, length);
+      if (ret == 0)
+        {
+          notify_connected = sv6621_ap_tx_client_event(
+              ap, payload, length, &client_event);
+        }
     }
   else if (id == SV6621_AP_EVENT_DEL_STA)
     {
       ret = sv6621_ap_parse_peer_departure(payload, length, address, &reason);
       if (ret == 0)
         {
+          memcpy(client_event.address, address, SV6621_MAC_LENGTH);
+          client_event.aid = 0;
+          client_event.reason = reason;
           ret = sv6621_ap_peer_departed(&ap->peers, ap->command,
                                         ap->instance, address, reason, true);
+          notify_disconnected = ret == 0;
         }
     }
   else
@@ -181,12 +223,25 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                (mgmt.type == SV6621_AP_MGMT_DEAUTH ||
                 mgmt.type == SV6621_AP_MGMT_DISASSOC))
         {
+          memcpy(client_event.address, mgmt.source, SV6621_MAC_LENGTH);
+          client_event.aid = 0;
+          client_event.reason = mgmt.reason;
           ret = sv6621_ap_handle_departure(&ap->peers, ap->command,
                                            ap->instance, &mgmt);
+          notify_disconnected = ret == 0;
         }
     }
 
   nxmutex_unlock(&ap->lock);
+  if (ap->client != NULL && notify_connected)
+    {
+      ap->client(true, &client_event, ap->client_arg);
+    }
+  else if (ap->client != NULL && notify_disconnected)
+    {
+      ap->client(false, &client_event, ap->client_arg);
+    }
+
   return sv6621_ap_expected_event_error(ret) ? 0 : ret;
 }
 
@@ -349,7 +404,8 @@ int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
                    FAR struct sv6621_command_engine_s *command,
                    uint8_t max_stations,
                    FAR const uint8_t address[SV6621_MAC_LENGTH],
-                   sv6621_ap_error_t error, FAR void *error_arg)
+                   sv6621_ap_error_t error, FAR void *error_arg,
+                   sv6621_ap_client_t client, FAR void *client_arg)
 {
   int ret;
 
@@ -388,6 +444,8 @@ int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
   ap->next_cookie = 1;
   ap->error = error;
   ap->error_arg = error_arg;
+  ap->client = client;
+  ap->client_arg = client_arg;
   memcpy(ap->address, address, SV6621_MAC_LENGTH);
   return 0;
 }
