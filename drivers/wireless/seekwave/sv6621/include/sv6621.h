@@ -29,6 +29,10 @@
 
 #include <nuttx/config.h>
 
+#ifdef CONFIG_NET
+#include <nuttx/net/ioctl.h>
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -42,6 +46,10 @@
 #define SV6621_KEY_MAX_LENGTH  64
 #define SV6621_REGULATORY_MAX_RULES 8
 #define SV6621_DRIVER_STATS_VERSION 1
+
+#ifdef CONFIG_NET
+#define SV6621IOC_GET_DRIVER_STATS SIOCDEVPRIVATE
+#endif
 
 #define SV6621_REGULATORY_FLAG_NO_OFDM    (1 << 0)
 #define SV6621_REGULATORY_FLAG_NO_OUTDOOR (1 << 3)
