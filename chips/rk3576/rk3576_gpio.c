@@ -1155,23 +1155,16 @@ static int rk3576_gpio_setmask(FAR struct gpio_dev_s *dev, bool enable)
  * Name: rk3576_gpio_isr
  *
  * Description:
- *   Per-group GIC ISR.  Each bank has 4 interrupt lines — one per 8-pin
- *   group (A/B/C/D).  Reads GPIO INT_STATUS for the bank, dispatches to
- *   the registered callback via O(1) irq_map lookup, then writes PORTA_EOI
- *   to acknowledge and clear the interrupt at the GPIO controller level.
- *
- *   arg encoding: low 3 bits = port, bits [4:3] = group (0-3).
- *   This allows the ISR to pre-filter pins by group range for efficiency.
+ *   Per-bank GIC ISR.  With GPIO virtual mode disabled, the reset value of
+ *   GPIO_REG_GROUP routes all 32 pins to interrupt flag 0.  Read the full
+ *   GPIO INT_STATUS, dispatch each pending pin through the O(1) irq_map,
+ *   then write PORTA_EOI to acknowledge the edge at the GPIO controller.
  *
  ****************************************************************************/
 
 static int rk3576_gpio_isr(int irq, void *context, void *arg)
 {
-  unsigned int encoded = (unsigned int)(uintptr_t)arg;
-  unsigned int port = encoded & 0x7;
-  unsigned int group = (encoded >> 3) & 0x3;
-  unsigned int pin_start;
-  unsigned int pin_end;
+  unsigned int port = (unsigned int)(uintptr_t)arg;
   uint32_t status;
   int pin;
 
@@ -1184,20 +1177,11 @@ static int rk3576_gpio_isr(int irq, void *context, void *arg)
       return -EINVAL;
     }
 
-  /* Read masked interrupt status for the entire bank.
-   * We pre-filter to our group's pin range below.
+  /* INT_STATUS is a single read-only 32-bit register, unlike the split
+   * low/high write-mask registers used to configure and acknowledge pins.
    */
 
   status = getreg32(RK3576_GPIO_INT_STATUS(port));
-
-  /* Limit processing to this group's pin range */
-
-  pin_start = group * 8;
-  pin_end = pin_start + 8;
-
-  /* Mask out pins outside our group */
-
-  status &= ((1u << pin_end) - 1) ^ ((1u << pin_start) - 1);
 
   /* Process each pending pin */
 
@@ -1481,32 +1465,22 @@ int rk3576_gpio_register(gpio_pinset_t pinset)
 
 int rk3576_gpio_init(void)
 {
-  /* Per-bank GIC interrupt handlers (4 groups per bank, 5 banks).
-   *
-   * Each bank's 32 pins are split into 4 groups (A=0-7, B=8-15,
-   * C=16-23, D=24-31), each with its own GIC interrupt line.
-   *
-   * The ISR arg encodes both port and group:
-   *   bits[2:0] = port (0-4)
-   *   bits[4:3] = group (0-3)
-   * This allows the ISR to limit its scan to the relevant 8-pin range.
+  /* Attach interrupt flag 0 for each bank.  GPIO_REG_GROUP_L/H reset to
+   * all ones, which routes every pin to flag 0 while virtual mode is off.
+   * The other three GIC outputs are OS/virtual groups, not fixed A/B/C/D
+   * pin ranges, and remain unused unless software explicitly programs the
+   * corresponding GPIO_REG_GROUP registers.
    */
 
-  static const unsigned int g_gpio_irqs[RK3576_GPIO_NPORTS][4] = {
-    { RK3576_IRQ_GPIO0_0, RK3576_IRQ_GPIO0_1, RK3576_IRQ_GPIO0_2,
-      RK3576_IRQ_GPIO0_3 },
-    { RK3576_IRQ_GPIO1_0, RK3576_IRQ_GPIO1_1, RK3576_IRQ_GPIO1_2,
-      RK3576_IRQ_GPIO1_3 },
-    { RK3576_IRQ_GPIO2_0, RK3576_IRQ_GPIO2_1, RK3576_IRQ_GPIO2_2,
-      RK3576_IRQ_GPIO2_3 },
-    { RK3576_IRQ_GPIO3_0, RK3576_IRQ_GPIO3_1, RK3576_IRQ_GPIO3_2,
-      RK3576_IRQ_GPIO3_3 },
-    { RK3576_IRQ_GPIO4_0, RK3576_IRQ_GPIO4_1, RK3576_IRQ_GPIO4_2,
-      RK3576_IRQ_GPIO4_3 },
+  static const unsigned int g_gpio_irqs[RK3576_GPIO_NPORTS] = {
+    RK3576_IRQ_GPIO0_0,
+    RK3576_IRQ_GPIO1_0,
+    RK3576_IRQ_GPIO2_0,
+    RK3576_IRQ_GPIO3_0,
+    RK3576_IRQ_GPIO4_0,
   };
 
   unsigned int port;
-  unsigned int group;
 
   /* Initialize all banks: INTEN=all-1 (INTEN always on,
    * only INTMASK controls interrupt delivery), INTMASK=all-1,
@@ -1526,26 +1500,22 @@ int rk3576_gpio_init(void)
       putreg32(0xffffffff, RK3576_GPIO_PORTA_EOI(port) + 4);
     }
 
-  /* Attach GIC interrupt handlers for all groups */
+  /* Attach the default GIC interrupt output for each bank */
 
   for (port = 0; port < RK3576_GPIO_NPORTS; port++)
     {
-      for (group = 0; group < 4; group++)
+      int irq = g_gpio_irqs[port];
+      int ret;
+
+      ret = irq_attach(irq, rk3576_gpio_isr, (void *)(uintptr_t)port);
+      if (ret < 0)
         {
-          int irq = g_gpio_irqs[port][group];
-          uintptr_t arg = (uintptr_t)((group << 3) | port);
-          int ret;
-
-          ret = irq_attach(irq, rk3576_gpio_isr, (void *)arg);
-          if (ret < 0)
-            {
-              gpioerr("ERROR: Failed to attach IRQ %u (GPIO%u_%u): %d\n", irq,
-                      port, group, ret);
-              return ret;
-            }
-
-          up_enable_irq(irq);
+          gpioerr("ERROR: Failed to attach IRQ %u (GPIO%u flag 0): %d\n",
+                  irq, port, ret);
+          return ret;
         }
+
+      up_enable_irq(irq);
     }
 
   return OK;
