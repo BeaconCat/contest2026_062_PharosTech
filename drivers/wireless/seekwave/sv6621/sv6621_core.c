@@ -99,6 +99,10 @@ static int sv6621_core_queue_roam_candidate(
     FAR struct sv6621_dev_s *dev,
     FAR const struct sv6621_scan_entry_s *candidate,
     uint32_t generation, int16_t signal_dbm);
+static int sv6621_core_roam_transaction(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_scan_entry_s *candidate,
+    uint32_t generation);
 static void sv6621_core_recovery_worker(FAR void *arg);
 static void sv6621_core_thermal_worker(FAR void *arg);
 static void sv6621_core_security_worker(FAR void *arg);
@@ -473,6 +477,9 @@ static int sv6621_core_roam_thread(int argc, FAR char *argv[])
   for (;;)
     {
       struct sv6621_roam_candidate_s event;
+      struct sv6621_scan_entry_s candidate;
+      uint32_t generation;
+      int ret;
 
       if (nxsem_wait_uninterruptible(&dev->roam_sem) < 0)
         {
@@ -496,7 +503,9 @@ static int sv6621_core_roam_thread(int argc, FAR char *argv[])
           continue;
         }
 
-      event.candidate = dev->roam_candidate.bss;
+      candidate = dev->roam_candidate;
+      generation = dev->roam_candidate_generation;
+      event.candidate = candidate.bss;
       event.current_signal_dbm = dev->roam_candidate_signal_dbm;
       event.gain_db = (uint8_t)(dev->roam_candidate.bss.signal_dbm -
                                 dev->roam_candidate_signal_dbm);
@@ -504,6 +513,11 @@ static int sv6621_core_roam_thread(int argc, FAR char *argv[])
       nxmutex_unlock(&dev->status_lock);
       sv6621_core_report(dev, SV6621_EVENT_ROAM_CANDIDATE, &event,
                          sizeof(event));
+      ret = sv6621_core_roam_transaction(dev, &candidate, generation);
+      if (ret < 0 && ret != -ECANCELED && ret != -EALREADY)
+        {
+          sv6621_core_queue_recovery(dev, ret);
+        }
     }
 
   nxsem_post(&dev->roam_exit_sem);
@@ -551,6 +565,108 @@ static int sv6621_core_queue_roam_candidate(
       nxmutex_unlock(&dev->status_lock);
     }
 
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_core_roam_transaction
+ ****************************************************************************/
+
+static int sv6621_core_roam_transaction(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_scan_entry_s *candidate,
+    uint32_t generation)
+{
+  struct sv6621_connect_s connection;
+#ifdef CONFIG_NET
+  struct sv6621_data_tx_context_s context;
+#endif
+  int ret;
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  if (dev->roam_shutdown || !dev->roam_policy.enabled ||
+      dev->status.state != SV6621_STATE_WIFI_READY ||
+      !dev->station_connected || dev->station_generation != generation)
+    {
+      ret = -ECANCELED;
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  ret = nxmutex_lock(&dev->station.lock);
+  if (ret < 0)
+    {
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  if (memcmp(candidate->bss.bssid, dev->station.target.bss.bssid,
+             SV6621_MAC_LENGTH) == 0)
+    {
+      ret = -EALREADY;
+      nxmutex_unlock(&dev->station.lock);
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  connection = dev->station.request;
+  memcpy(connection.bssid, candidate->bss.bssid, SV6621_MAC_LENGTH);
+  connection.bssid_valid = true;
+  connection.channel = candidate->bss.channel;
+  nxmutex_unlock(&dev->station.lock);
+  nxmutex_unlock(&dev->status_lock);
+
+  ret = sv6621_data_set_tx_block(&dev->data,
+                                 SV6621_DATA_TX_BLOCK_ROAM, true);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_core_connect_locked(dev, &connection, true);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+#ifdef CONFIG_NET
+  ret = nxmutex_lock(&dev->station.lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  context.peer_index = dev->station.peer.peer_index;
+  context.multicast_index = dev->station.peer.multicast_index;
+  context.instance = dev->station.peer.instance;
+  context.lmac_id = dev->station.peer.lmac_id;
+  context.tid = 0;
+  nxmutex_unlock(&dev->station.lock);
+  sv6621_network_set_link(&dev->network, true, &context);
+#endif
+
+  ret = sv6621_data_set_tx_block(&dev->data,
+                                 SV6621_DATA_TX_BLOCK_ROAM, false);
+#ifdef CONFIG_NET
+  if (ret == 0)
+    {
+      sv6621_network_credit_available(&dev->network);
+    }
+#endif
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
   return ret;
 }
 
