@@ -32,6 +32,8 @@
 #include <nuttx/semaphore.h>
 #ifdef CONFIG_SV6621_PM
 #include <nuttx/power/pm.h>
+#include <nuttx/spinlock.h>
+#include <nuttx/wqueue.h>
 #endif
 
 #include "include/sv6621.h"
@@ -124,8 +126,12 @@ struct sv6621_dev_s
   bool station_open;
 #ifdef CONFIG_SV6621_PM
   struct pm_callback_s pm_callback;
+  struct work_s pm_resume_work;
+  spinlock_t pm_lock;
   bool pm_registered;
+  bool pm_active;
   bool pm_suspended;
+  bool pm_resume_queued;
 #endif
 };
 

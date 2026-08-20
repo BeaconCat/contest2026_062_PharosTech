@@ -45,6 +45,10 @@ int kickpi_k7_storage_initialize(FAR struct sdio_dev_s *sdmmc,
 
 #ifdef CONFIG_KICKPI_K7_WIFI
 int kickpi_k7_wifi_initialize(void);
+#ifdef CONFIG_SV6621_PM
+int kickpi_k7_wifi_prepare_sleep(void);
+int kickpi_k7_wifi_abort_sleep(void);
+#endif
 #endif
 
 #endif /* __ASSEMBLY__ */

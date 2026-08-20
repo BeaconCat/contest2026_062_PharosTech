@@ -79,6 +79,7 @@ struct sv6621_wpa_s
   uint8_t replay[SV6621_WPA_REPLAY_SIZE];
   uint8_t gtk[SV6621_WPA_GTK_MAX_SIZE];
   uint8_t igtk[SV6621_WPA_IGTK_SIZE];
+  uint8_t igtk_ipn[SV6621_WPA_IPN_SIZE];
   uint8_t frame[SV6621_WPA_FRAME_CAPACITY];
   size_t frame_length;
   size_t gtk_length;
@@ -119,6 +120,7 @@ int sv6621_wpa_run(FAR struct sv6621_wpa_s *wpa,
                     FAR const struct sv6621_connection_peer_s *peer,
                     uint32_t timeout_ms);
 void sv6621_wpa_cancel(FAR struct sv6621_wpa_s *wpa, int result);
+void sv6621_wpa_disconnected(FAR struct sv6621_wpa_s *wpa, int result);
 void sv6621_wpa_input(FAR const struct sv6621_data_rx_s *rx, FAR void *arg);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_WPA_HANDSHAKE_H */
