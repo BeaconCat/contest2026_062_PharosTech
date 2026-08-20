@@ -366,7 +366,8 @@ static int sv6621_core_restore_station(FAR struct sv6621_dev_s *dev,
 #ifdef CONFIG_NET
   sv6621_network_set_link(&dev->network, false, NULL);
 #endif
-  close_ret = sv6621_wifi_close_device(&dev->command);
+  close_ret = sv6621_wifi_close_access_point(&dev->command,
+                                              SV6621_CORE_AP_INSTANCE);
   open_ret = sv6621_wifi_open_station(&dev->command, dev->wifi_info.mac);
   if (open_ret == 0)
     {
@@ -2991,7 +2992,7 @@ fail:
 #endif
   if (dev->station_open)
     {
-      sv6621_wifi_close_device(&dev->command);
+      sv6621_wifi_close_station(&dev->command);
       dev->station_open = false;
     }
 
@@ -3081,12 +3082,13 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
           sv6621_ap_reset(&dev->ap);
         }
 
-      close_ret = sv6621_wifi_close_device(&dev->command);
+      close_ret = sv6621_wifi_close_access_point(
+          &dev->command, SV6621_CORE_AP_INSTANCE);
       dev->station_open = false;
     }
   else if (dev->station_open)
     {
-      close_ret = sv6621_wifi_close_device(&dev->command);
+      close_ret = sv6621_wifi_close_station(&dev->command);
       dev->station_open = false;
     }
 
@@ -3992,7 +3994,7 @@ int sv6621_start_ap(FAR struct sv6621_dev_s *dev,
 #ifdef CONFIG_NET
   sv6621_network_set_link(&dev->network, false, NULL);
 #endif
-  ret = sv6621_wifi_close_device(&dev->command);
+  ret = sv6621_wifi_close_station(&dev->command);
   if (ret < 0)
     {
       goto unlock_lifecycle;
