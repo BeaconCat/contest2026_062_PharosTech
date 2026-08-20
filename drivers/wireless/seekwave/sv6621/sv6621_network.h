@@ -36,6 +36,7 @@
 #include <nuttx/wqueue.h>
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "include/sv6621.h"
@@ -55,6 +56,10 @@
  * Public Types
  ****************************************************************************/
 
+typedef int (*sv6621_network_tx_resolver_t)(
+    FAR const uint8_t *frame, size_t length,
+    FAR struct sv6621_data_tx_context_s *context, FAR void *arg);
+
 struct sv6621_network_s
 {
   struct net_driver_s dev;
@@ -66,6 +71,8 @@ struct sv6621_network_s
   FAR struct sv6621_command_engine_s *command;
   struct sv6621_ioctl_s ioctl;
   struct sv6621_data_tx_context_s tx_context;
+  sv6621_network_tx_resolver_t tx_resolver;
+  FAR void *tx_resolver_arg;
   struct sv6621_offload_addresses_s applied_addresses;
   bool registered;
   bool interface_up;
@@ -108,6 +115,9 @@ int sv6621_network_sync_link_addresses(
 void sv6621_network_set_link(
     FAR struct sv6621_network_s *network, bool link_up,
     FAR const struct sv6621_data_tx_context_s *context);
+void sv6621_network_set_tx_resolver(
+    FAR struct sv6621_network_s *network,
+    sv6621_network_tx_resolver_t resolver, FAR void *arg);
 void sv6621_network_credit_available(FAR struct sv6621_network_s *network);
 void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx,
                           FAR void *arg);

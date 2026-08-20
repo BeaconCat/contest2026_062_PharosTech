@@ -65,6 +65,9 @@ static void sv6621_network_collect_addresses(
 static bool sv6621_network_tx_snapshot(
     FAR struct sv6621_network_s *network,
     FAR struct sv6621_data_tx_context_s *context);
+static int sv6621_network_resolve_tx(
+    FAR struct sv6621_network_s *network, FAR const uint8_t *frame,
+    size_t length, FAR struct sv6621_data_tx_context_s *context);
 static int sv6621_network_transmit(FAR struct sv6621_network_s *network);
 static int sv6621_network_tx_poll(FAR struct net_driver_s *dev);
 static int sv6621_network_ifup(FAR struct net_driver_s *dev);
@@ -203,14 +206,45 @@ static bool sv6621_network_tx_snapshot(
   return ready;
 }
 
+static int sv6621_network_resolve_tx(
+    FAR struct sv6621_network_s *network, FAR const uint8_t *frame,
+    size_t length, FAR struct sv6621_data_tx_context_s *context)
+{
+  sv6621_network_tx_resolver_t resolver;
+  FAR void *resolver_arg;
+  irqstate_t flags;
+  bool ready;
+
+  flags = spin_lock_irqsave(&network->lock);
+  ready = network->interface_up && network->link_up;
+  *context = network->tx_context;
+  resolver = network->tx_resolver;
+  resolver_arg = network->tx_resolver_arg;
+  spin_unlock_irqrestore(&network->lock, flags);
+  if (!ready)
+    {
+      return -ENETDOWN;
+    }
+
+  return resolver == NULL ? 0 : resolver(frame, length, context,
+                                          resolver_arg);
+}
+
 static int sv6621_network_transmit(FAR struct sv6621_network_s *network)
 {
   struct sv6621_data_tx_context_s context;
   int ret;
 
-  if (!sv6621_network_tx_snapshot(network, &context))
+  ret = sv6621_network_resolve_tx(network, network->dev.d_buf,
+                                  network->dev.d_len, &context);
+  if (ret < 0)
     {
-      return -ENETDOWN;
+      if (ret != -EAGAIN)
+        {
+          NETDEV_TXERRORS(&network->dev);
+        }
+
+      return ret;
     }
 
   ret = sv6621_data_send(network->data, &context,
@@ -830,6 +864,8 @@ void sv6621_network_set_link(
       network->rx_tail = network->rx_head;
       network->addresses_applied = false;
       network->address_epoch++;
+      network->tx_resolver = NULL;
+      network->tx_resolver_arg = NULL;
     }
 
   spin_unlock_irqrestore(&network->lock, flags);
@@ -846,6 +882,23 @@ void sv6621_network_set_link(
     {
       netdev_carrier_off(&network->dev);
     }
+}
+
+void sv6621_network_set_tx_resolver(
+    FAR struct sv6621_network_s *network,
+    sv6621_network_tx_resolver_t resolver, FAR void *arg)
+{
+  irqstate_t flags;
+
+  if (network == NULL || !network->registered)
+    {
+      return;
+    }
+
+  flags = spin_lock_irqsave(&network->lock);
+  network->tx_resolver = resolver;
+  network->tx_resolver_arg = resolver == NULL ? NULL : arg;
+  spin_unlock_irqrestore(&network->lock, flags);
 }
 
 /****************************************************************************
