@@ -565,6 +565,39 @@ int sv6621_wpa_eapol_build_authenticator(
 }
 
 /****************************************************************************
+ * Name: sv6621_wpa_eapol_build_gtk_kde
+ ****************************************************************************/
+
+int sv6621_wpa_eapol_build_gtk_kde(
+    uint8_t key_index, FAR const uint8_t *gtk, size_t gtk_length,
+    FAR uint8_t *output, size_t capacity, FAR size_t *written)
+{
+  size_t length = 2 + SV6621_WPA_GTK_KDE_HEADER_SIZE + gtk_length;
+
+  if (gtk == NULL || output == NULL || written == NULL || key_index > 3 ||
+      gtk_length == 0 || gtk_length > SV6621_WPA_GTK_MAX_SIZE ||
+      length > UINT8_MAX || (length & 7) != 0)
+    {
+      return -EINVAL;
+    }
+
+  if (capacity < length)
+    {
+      return -ENOSPC;
+    }
+
+  output[0] = SV6621_WPA_IE_VENDOR;
+  output[1] = length - 2;
+  memcpy(output + 2, g_sv6621_wpa_gtk_selector,
+         sizeof(g_sv6621_wpa_gtk_selector));
+  output[6] = key_index;
+  output[7] = 0;
+  memcpy(output + 8, gtk, gtk_length);
+  *written = length;
+  return 0;
+}
+
+/****************************************************************************
  * Name: sv6621_wpa_eapol_extract_igtk
  ****************************************************************************/
 

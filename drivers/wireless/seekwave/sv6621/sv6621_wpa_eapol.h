@@ -113,6 +113,9 @@ int sv6621_wpa_eapol_build_authenticator(
     FAR const uint8_t kek[SV6621_WPA_KEK_SIZE],
     FAR const uint8_t *key_data, size_t key_data_length,
     FAR uint8_t *output, size_t capacity, FAR size_t *written);
+int sv6621_wpa_eapol_build_gtk_kde(
+    uint8_t key_index, FAR const uint8_t *gtk, size_t gtk_length,
+    FAR uint8_t *output, size_t capacity, FAR size_t *written);
 int sv6621_wpa_eapol_verify_mic(
     FAR const struct sv6621_wpa_eapol_s *eapol,
     enum sv6621_wpa_key_mgmt_e key_mgmt,
