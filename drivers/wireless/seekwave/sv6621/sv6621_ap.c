@@ -111,7 +111,7 @@ int sv6621_ap_encode_start(FAR const struct sv6621_ap_start_s *config,
       config->beacon_interval == 0 || config->beacon_interval > INT_MAX ||
       config->dtim_period == 0 ||
       config->hidden_ssid > 2 || config->channel == 0 ||
-      config->channel_width > SV6621_AP_CHANNEL_WIDTH_160 ||
+      config->channel_width > SV6621_CHANNEL_WIDTH_160 ||
       config->band > SV6621_BAND_5GHZ ||
       config->ssid_length > SV6621_SSID_MAX_LENGTH)
     {

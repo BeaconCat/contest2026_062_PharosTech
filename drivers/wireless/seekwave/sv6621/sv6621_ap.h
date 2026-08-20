@@ -41,15 +41,6 @@
  * Public Types
  ****************************************************************************/
 
-enum sv6621_ap_channel_width_e
-{
-  SV6621_AP_CHANNEL_WIDTH_20,
-  SV6621_AP_CHANNEL_WIDTH_40,
-  SV6621_AP_CHANNEL_WIDTH_80,
-  SV6621_AP_CHANNEL_WIDTH_80P80,
-  SV6621_AP_CHANNEL_WIDTH_160
-};
-
 struct sv6621_ap_blob_s
 {
   FAR const uint8_t *data;
@@ -62,7 +53,7 @@ struct sv6621_ap_start_s
   uint8_t dtim_period;
   uint8_t hidden_ssid;
   uint8_t channel;
-  enum sv6621_ap_channel_width_e channel_width;
+  enum sv6621_channel_width_e channel_width;
   uint8_t center_channel1;
   uint8_t center_channel2;
   enum sv6621_band_e band;
