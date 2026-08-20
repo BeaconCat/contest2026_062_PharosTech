@@ -75,6 +75,9 @@ static void sv6621_core_service_event(enum sv6621_service_event_e event,
 static void sv6621_core_rx_error(int error, FAR void *arg);
 static void sv6621_core_command_receive_kick(FAR void *arg);
 static void sv6621_core_command_error(int error, FAR void *arg);
+static void sv6621_core_ap_client(
+    bool connected, FAR const struct sv6621_ap_client_event_s *event,
+    FAR void *arg);
 static void sv6621_core_command_event(uint8_t instance, uint8_t id,
                                       FAR const uint8_t *payload,
                                       size_t length, FAR void *arg);
@@ -1329,6 +1332,41 @@ static void sv6621_core_command_error(int error, FAR void *arg)
   FAR struct sv6621_dev_s *dev = arg;
 
   sv6621_core_queue_recovery(dev, error);
+}
+
+static void sv6621_core_ap_client(
+    bool connected, FAR const struct sv6621_ap_client_event_s *event,
+    FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+
+  if (nxmutex_lock(&dev->status_lock) < 0)
+    {
+      return;
+    }
+
+  if (!dev->status.ap_active)
+    {
+      nxmutex_unlock(&dev->status_lock);
+      return;
+    }
+
+  if (connected)
+    {
+      if (dev->status.ap_client_count < UINT8_MAX)
+        {
+          dev->status.ap_client_count++;
+        }
+    }
+  else if (dev->status.ap_client_count != 0)
+    {
+      dev->status.ap_client_count--;
+    }
+
+  nxmutex_unlock(&dev->status_lock);
+  sv6621_core_report(dev, connected ? SV6621_EVENT_AP_CLIENT_CONNECTED :
+                                      SV6621_EVENT_AP_CLIENT_DISCONNECTED,
+                     event, sizeof(*event));
 }
 
 /****************************************************************************
@@ -2819,7 +2857,7 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       ret = sv6621_ap_init(&dev->ap, &dev->command,
                            dev->wifi_info.max_stations,
                            dev->wifi_info.mac, sv6621_core_command_error,
-                           dev);
+                           dev, sv6621_core_ap_client, dev);
       if (ret < 0)
         {
           goto fail;
