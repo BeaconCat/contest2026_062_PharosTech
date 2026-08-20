@@ -64,6 +64,7 @@
 #define SV6621_WPA_KEY_ERROR            0x0400
 #define SV6621_WPA_KEY_REQUEST          0x0800
 #define SV6621_WPA_KEY_SECURE           0x0200
+#define SV6621_WPA_KEY_ENCRYPTED        0x1000
 #define SV6621_WPA_EAPOL_MAX_SIZE       512
 #define SV6621_WPA_IE_VENDOR             221
 #define SV6621_WPA_GTK_KDE_HEADER_SIZE   6
@@ -234,6 +235,21 @@ int sv6621_wpa_eapol_parse(
       eapol->message = SV6621_WPA_MESSAGE_1;
     }
   else if ((key_info & (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK |
+                        SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_INSTALL |
+                        SV6621_WPA_KEY_SECURE)) ==
+           (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_MIC))
+    {
+      eapol->message = SV6621_WPA_MESSAGE_2;
+    }
+  else if ((key_info & (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK |
+                        SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_INSTALL |
+                        SV6621_WPA_KEY_SECURE)) ==
+           (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_MIC |
+            SV6621_WPA_KEY_SECURE))
+    {
+      eapol->message = SV6621_WPA_MESSAGE_4;
+    }
+  else if ((key_info & (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK |
                         SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_INSTALL)) ==
            (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK |
             SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_INSTALL))
@@ -247,6 +263,13 @@ int sv6621_wpa_eapol_parse(
             SV6621_WPA_KEY_SECURE))
     {
       eapol->message = SV6621_WPA_MESSAGE_GROUP_1;
+    }
+  else if ((key_info & (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK |
+                        SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_INSTALL |
+                        SV6621_WPA_KEY_SECURE)) ==
+           (SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_SECURE))
+    {
+      eapol->message = SV6621_WPA_MESSAGE_GROUP_2;
     }
 
   eapol->eapol = packet;
@@ -446,6 +469,132 @@ int sv6621_wpa_eapol_extract_gtk(
     }
 
   return -ENOENT;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_eapol_build_authenticator
+ ****************************************************************************/
+
+int sv6621_wpa_eapol_build_authenticator(
+    enum sv6621_wpa_message_e message,
+    enum sv6621_wpa_key_mgmt_e key_mgmt, uint8_t version,
+    FAR const uint8_t replay[SV6621_WPA_REPLAY_SIZE],
+    FAR const uint8_t anonce[SV6621_WPA_NONCE_SIZE],
+    FAR const uint8_t kck[SV6621_WPA_MIC_SIZE],
+    FAR const uint8_t kek[SV6621_WPA_KEK_SIZE],
+    FAR const uint8_t *key_data, size_t key_data_length,
+    FAR uint8_t *output, size_t capacity, FAR size_t *written)
+{
+  size_t encoded_key_data_length = 0;
+  size_t length;
+  uint16_t key_info;
+  int ret;
+
+  if (replay == NULL || anonce == NULL || output == NULL ||
+      written == NULL || key_mgmt > SV6621_WPA_KEY_MGMT_SAE ||
+      (message != SV6621_WPA_MESSAGE_1 &&
+       message != SV6621_WPA_MESSAGE_3) ||
+      version < SV6621_WPA_EAPOL_VERSION_MIN ||
+      version > SV6621_WPA_EAPOL_VERSION_MAX ||
+      (message == SV6621_WPA_MESSAGE_1 && key_data_length != 0) ||
+      (message == SV6621_WPA_MESSAGE_3 &&
+       (kck == NULL || kek == NULL || key_data == NULL ||
+        key_data_length < 16 || (key_data_length & 7) != 0)))
+    {
+      return -EINVAL;
+    }
+
+  if (message == SV6621_WPA_MESSAGE_3)
+    {
+      encoded_key_data_length = key_data_length + 8;
+    }
+
+  length = SV6621_WPA_KEY_FIXED_SIZE + encoded_key_data_length;
+  if (capacity < length)
+    {
+      return -ENOSPC;
+    }
+
+  memset(output, 0, length);
+  output[0] = version;
+  output[1] = SV6621_WPA_EAPOL_TYPE_KEY;
+  sv6621_wpa_eapol_put_be16(output + 2,
+                             length - SV6621_WPA_EAPOL_HEADER_SIZE);
+  output[4] = SV6621_WPA_KEY_DESCRIPTOR_RSN;
+  key_info = (key_mgmt == SV6621_WPA_KEY_MGMT_SAE ?
+                  SV6621_WPA_KEY_VERSION_AKM :
+                  SV6621_WPA_KEY_VERSION_SHA1) |
+             SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK;
+  if (message == SV6621_WPA_MESSAGE_3)
+    {
+      key_info |= SV6621_WPA_KEY_INSTALL | SV6621_WPA_KEY_MIC |
+                  SV6621_WPA_KEY_SECURE | SV6621_WPA_KEY_ENCRYPTED;
+    }
+
+  sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_INFO_OFFSET, key_info);
+  sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_LENGTH_OFFSET,
+                             SV6621_WPA_CCMP_KEY_SIZE);
+  memcpy(output + SV6621_WPA_KEY_REPLAY_OFFSET, replay,
+         SV6621_WPA_REPLAY_SIZE);
+  memcpy(output + SV6621_WPA_KEY_NONCE_OFFSET, anonce,
+         SV6621_WPA_NONCE_SIZE);
+  if (message == SV6621_WPA_MESSAGE_3)
+    {
+      ret = sv6621_wpa_wrap_key(
+          kek, key_data, key_data_length,
+          output + SV6621_WPA_KEY_DATA_OFFSET, encoded_key_data_length,
+          &encoded_key_data_length);
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_DATA_LEN_OFFSET,
+                                 encoded_key_data_length);
+      ret = sv6621_wpa_eapol_mic(
+          output, length, key_mgmt, kck,
+          output + SV6621_WPA_KEY_MIC_OFFSET);
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+
+  *written = length;
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_wpa_eapol_build_gtk_kde
+ ****************************************************************************/
+
+int sv6621_wpa_eapol_build_gtk_kde(
+    uint8_t key_index, FAR const uint8_t *gtk, size_t gtk_length,
+    FAR uint8_t *output, size_t capacity, FAR size_t *written)
+{
+  size_t length = 2 + SV6621_WPA_GTK_KDE_HEADER_SIZE + gtk_length;
+
+  if (gtk == NULL || output == NULL || written == NULL || key_index > 3 ||
+      gtk_length == 0 || gtk_length > SV6621_WPA_GTK_MAX_SIZE ||
+      length > UINT8_MAX || (length & 7) != 0)
+    {
+      return -EINVAL;
+    }
+
+  if (capacity < length)
+    {
+      return -ENOSPC;
+    }
+
+  output[0] = SV6621_WPA_IE_VENDOR;
+  output[1] = length - 2;
+  memcpy(output + 2, g_sv6621_wpa_gtk_selector,
+         sizeof(g_sv6621_wpa_gtk_selector));
+  output[6] = key_index;
+  output[7] = 0;
+  memcpy(output + 8, gtk, gtk_length);
+  *written = length;
+  return 0;
 }
 
 /****************************************************************************

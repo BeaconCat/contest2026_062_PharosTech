@@ -76,5 +76,9 @@ int sv6621_wpa_unwrap_key(
     FAR const uint8_t kek[SV6621_WPA_KEK_SIZE],
     FAR const uint8_t *wrapped, size_t wrapped_length, FAR uint8_t *plain,
     size_t capacity, FAR size_t *plain_length);
+int sv6621_wpa_wrap_key(
+    FAR const uint8_t kek[SV6621_WPA_KEK_SIZE], FAR const uint8_t *plain,
+    size_t plain_length, FAR uint8_t *wrapped, size_t capacity,
+    FAR size_t *wrapped_length);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_WPA_CRYPTO_H */
