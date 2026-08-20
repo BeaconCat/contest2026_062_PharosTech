@@ -32,6 +32,7 @@ if(CONFIG_SV6621)
        ${SV6621_DIR}/sv6621_ap_event.c
        ${SV6621_DIR}/sv6621_ap_mlme.c
        ${SV6621_DIR}/sv6621_ap_peer.c
+       ${SV6621_DIR}/sv6621_ap_wpa.c
        ${SV6621_DIR}/sv6621_connection.c
        ${SV6621_DIR}/sv6621_core.c
        ${SV6621_DIR}/sv6621_data.c

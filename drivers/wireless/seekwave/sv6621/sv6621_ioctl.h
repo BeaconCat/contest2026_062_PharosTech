@@ -43,6 +43,8 @@ struct sv6621_ioctl_s
   mutex_t lock;
   FAR struct sv6621_dev_s *owner;
   struct sv6621_connect_s connection;
+  struct sv6621_ap_config_s access_point;
+  uint8_t mode;
 };
 
 /****************************************************************************

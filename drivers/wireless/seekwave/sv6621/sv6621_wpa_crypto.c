@@ -578,3 +578,76 @@ int sv6621_wpa_unwrap_key(
   memset(block, 0, sizeof(block));
   return ret;
 }
+
+/****************************************************************************
+ * Name: sv6621_wpa_wrap_key
+ ****************************************************************************/
+
+int sv6621_wpa_wrap_key(
+    FAR const uint8_t kek[SV6621_WPA_KEK_SIZE], FAR const uint8_t *plain,
+    size_t plain_length, FAR uint8_t *wrapped, size_t capacity,
+    FAR size_t *wrapped_length)
+{
+  mbedtls_aes_context aes;
+  uint8_t block[16];
+  uint8_t a[8];
+  size_t count;
+  size_t index;
+  unsigned int round;
+  int ret;
+
+  if (kek == NULL || plain == NULL || wrapped == NULL ||
+      wrapped_length == NULL || plain_length < 16 ||
+      (plain_length & 7) != 0 || capacity < plain_length + 8)
+    {
+      return -EINVAL;
+    }
+
+  count = plain_length / 8;
+  memcpy(a, g_sv6621_wpa_wrap_iv, sizeof(a));
+  memcpy(wrapped + sizeof(a), plain, plain_length);
+  mbedtls_aes_init(&aes);
+  ret = mbedtls_aes_setkey_enc(&aes, kek, 128);
+  for (round = 0; ret == 0 && round < 6; round++)
+    {
+      for (index = 1; index <= count; index++)
+        {
+          uint64_t counter = (uint64_t)round * count + index;
+          size_t byte;
+
+          memcpy(block, a, sizeof(a));
+          memcpy(block + sizeof(a), wrapped + index * 8, 8);
+          ret = mbedtls_aes_crypt_ecb(&aes, MBEDTLS_AES_ENCRYPT, block,
+                                      block);
+          if (ret != 0)
+            {
+              break;
+            }
+
+          memcpy(a, block, sizeof(a));
+          for (byte = 0; byte < sizeof(a); byte++)
+            {
+              a[sizeof(a) - 1 - byte] ^= counter & 0xff;
+              counter >>= 8;
+            }
+
+          memcpy(wrapped + index * 8, block + sizeof(a), 8);
+        }
+    }
+
+  mbedtls_aes_free(&aes);
+  if (ret == 0)
+    {
+      memcpy(wrapped, a, sizeof(a));
+      *wrapped_length = plain_length + sizeof(a);
+    }
+  else
+    {
+      memset(wrapped, 0, plain_length + sizeof(a));
+      ret = -EIO;
+    }
+
+  memset(a, 0, sizeof(a));
+  memset(block, 0, sizeof(block));
+  return ret;
+}

@@ -49,9 +49,20 @@
 #define SV6621_AP_IE_SUPPORTED_RATES          1
 #define SV6621_AP_IE_DS_PARAMETERS            3
 #define SV6621_AP_IE_EXTENDED_RATES          50
+#define SV6621_AP_IE_RSN                     48
 
 #define SV6621_AP_HIDDEN_ZERO_LENGTH          1
 #define SV6621_AP_HIDDEN_ZERO_CONTENTS        2
+#define SV6621_AP_RSN_VERSION                 1
+#define SV6621_AP_RSN_OUI_0                   0x00
+#define SV6621_AP_RSN_OUI_1                   0x0f
+#define SV6621_AP_RSN_OUI_2                   0xac
+#define SV6621_AP_RSN_SUITE_CCMP              4
+#define SV6621_AP_RSN_SUITE_BIP_CMAC_128      6
+#define SV6621_AP_RSN_AKM_PSK                 2
+#define SV6621_AP_RSN_AKM_SAE                 8
+#define SV6621_AP_RSN_CAP_MFPR                (1 << 6)
+#define SV6621_AP_RSN_CAP_MFPC                (1 << 7)
 
 /****************************************************************************
  * Private Data
@@ -334,4 +345,86 @@ int sv6621_ap_build_beacon_templates(
       templates->probe_response, sizeof(templates->probe_response),
       &templates->probe_response_length, config->extra_ies,
       config->extra_ies_length);
+}
+
+/****************************************************************************
+ * Name: sv6621_ap_build_rsn_ie
+ ****************************************************************************/
+
+int sv6621_ap_build_rsn_ie(enum sv6621_security_e security,
+                           bool pmf_required, FAR uint8_t *ie,
+                           size_t capacity, FAR size_t *length)
+{
+  uint8_t akm_count;
+  uint8_t body_length;
+  uint16_t capabilities;
+  size_t offset;
+
+  if (ie == NULL || length == NULL ||
+      (security != SV6621_SECURITY_WPA2_PSK &&
+       security != SV6621_SECURITY_WPA3_SAE &&
+       security != SV6621_SECURITY_WPA2_WPA3_PSK))
+    {
+      return -EINVAL;
+    }
+
+  akm_count = security == SV6621_SECURITY_WPA2_WPA3_PSK ? 2 : 1;
+  capabilities = security == SV6621_SECURITY_WPA2_PSK ? 0 :
+                 SV6621_AP_RSN_CAP_MFPC;
+  if (pmf_required)
+    {
+      capabilities |= SV6621_AP_RSN_CAP_MFPR | SV6621_AP_RSN_CAP_MFPC;
+    }
+
+  body_length = security == SV6621_SECURITY_WPA2_PSK ? 20 :
+                security == SV6621_SECURITY_WPA3_SAE ? 26 : 30;
+  if (capacity < (size_t)body_length + 2)
+    {
+      return -ENOSPC;
+    }
+
+  ie[0] = SV6621_AP_IE_RSN;
+  ie[1] = body_length;
+  ie[2] = SV6621_AP_RSN_VERSION;
+  ie[3] = 0;
+  ie[4] = SV6621_AP_RSN_OUI_0;
+  ie[5] = SV6621_AP_RSN_OUI_1;
+  ie[6] = SV6621_AP_RSN_OUI_2;
+  ie[7] = SV6621_AP_RSN_SUITE_CCMP;
+  ie[8] = 1;
+  ie[9] = 0;
+  ie[10] = SV6621_AP_RSN_OUI_0;
+  ie[11] = SV6621_AP_RSN_OUI_1;
+  ie[12] = SV6621_AP_RSN_OUI_2;
+  ie[13] = SV6621_AP_RSN_SUITE_CCMP;
+  ie[14] = akm_count;
+  ie[15] = 0;
+  offset = 16;
+  ie[offset++] = SV6621_AP_RSN_OUI_0;
+  ie[offset++] = SV6621_AP_RSN_OUI_1;
+  ie[offset++] = SV6621_AP_RSN_OUI_2;
+  ie[offset++] = security == SV6621_SECURITY_WPA3_SAE ?
+                 SV6621_AP_RSN_AKM_SAE : SV6621_AP_RSN_AKM_PSK;
+  if (security == SV6621_SECURITY_WPA2_WPA3_PSK)
+    {
+      ie[offset++] = SV6621_AP_RSN_OUI_0;
+      ie[offset++] = SV6621_AP_RSN_OUI_1;
+      ie[offset++] = SV6621_AP_RSN_OUI_2;
+      ie[offset++] = SV6621_AP_RSN_AKM_SAE;
+    }
+
+  ie[offset++] = capabilities & 0xff;
+  ie[offset++] = capabilities >> 8;
+  if (security != SV6621_SECURITY_WPA2_PSK)
+    {
+      ie[offset++] = 0;
+      ie[offset++] = 0;
+      ie[offset++] = SV6621_AP_RSN_OUI_0;
+      ie[offset++] = SV6621_AP_RSN_OUI_1;
+      ie[offset++] = SV6621_AP_RSN_OUI_2;
+      ie[offset++] = SV6621_AP_RSN_SUITE_BIP_CMAC_128;
+    }
+
+  *length = offset;
+  return 0;
 }
