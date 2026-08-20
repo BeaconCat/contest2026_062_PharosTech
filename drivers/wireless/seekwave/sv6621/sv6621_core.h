@@ -120,6 +120,7 @@ struct sv6621_dev_s
   uint8_t signal_head;
   uint8_t signal_tail;
   bool signal_work_scheduled;
+  bool roam_scan_pending;
   bool suspended;
   bool powered;
   bool transport_open;

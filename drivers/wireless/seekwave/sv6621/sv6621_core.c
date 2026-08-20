@@ -99,6 +99,9 @@ static void sv6621_core_recovery_worker(FAR void *arg);
 static void sv6621_core_thermal_worker(FAR void *arg);
 static void sv6621_core_security_worker(FAR void *arg);
 static void sv6621_core_signal_worker(FAR void *arg);
+static int sv6621_core_start_roam_scan(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_signal_event_s *event);
 static int sv6621_core_channel_switch(FAR struct sv6621_dev_s *dev,
                                       FAR const uint8_t *payload,
                                       size_t length);
@@ -523,6 +526,118 @@ static void sv6621_core_security_worker(FAR void *arg)
 }
 
 /****************************************************************************
+ * Name: sv6621_core_valid_unicast_address
+ ****************************************************************************/
+
+static bool sv6621_core_valid_unicast_address(
+    FAR const uint8_t address[SV6621_MAC_LENGTH])
+{
+  uint8_t aggregate = 0;
+  size_t index;
+
+  if ((address[0] & 1) != 0)
+    {
+      return false;
+    }
+
+  for (index = 0; index < SV6621_MAC_LENGTH; index++)
+    {
+      aggregate |= address[index];
+    }
+
+  return aggregate != 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_core_start_roam_scan
+ ****************************************************************************/
+
+static int sv6621_core_start_roam_scan(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_signal_event_s *event)
+{
+  struct sv6621_scan_channel_s channel;
+  uint8_t ssid[SV6621_SSID_MAX_LENGTH];
+  size_t ssid_length;
+  size_t index;
+  int ret;
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  if (dev->status.state != SV6621_STATE_WIFI_READY ||
+      !dev->station_connected || dev->roam_scan_pending ||
+      dev->scan_reporting)
+    {
+      ret = -EBUSY;
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  ret = nxmutex_lock(&dev->station.lock);
+  if (ret < 0)
+    {
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  if (dev->station.request.bssid_valid ||
+      dev->station.request.ssid_length == 0)
+    {
+      ret = -EOPNOTSUPP;
+      nxmutex_unlock(&dev->station.lock);
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  ssid_length = dev->station.request.ssid_length;
+  memcpy(ssid, dev->station.request.ssid, ssid_length);
+  nxmutex_unlock(&dev->station.lock);
+
+  for (index = 0; index < dev->scan_channel_count; index++)
+    {
+      if (dev->scan_channels[index].number == event->channel &&
+          dev->scan_channels[index].band ==
+              (enum sv6621_scan_band_e)event->band)
+        {
+          channel = dev->scan_channels[index];
+          break;
+        }
+    }
+
+  if (index == dev->scan_channel_count)
+    {
+      ret = -EINVAL;
+      nxmutex_unlock(&dev->status_lock);
+      goto unlock_lifecycle;
+    }
+
+  dev->roam_scan_pending = true;
+  nxmutex_unlock(&dev->status_lock);
+
+  ret = sv6621_scan_controller_begin(&dev->scan, &channel, 1, ssid,
+                                     ssid_length);
+  if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
+    {
+      dev->roam_scan_pending = false;
+      nxmutex_unlock(&dev->status_lock);
+    }
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
+}
+
+/****************************************************************************
  * Name: sv6621_core_signal_worker
  ****************************************************************************/
 
@@ -556,7 +671,9 @@ static void sv6621_core_signal_worker(FAR void *arg)
           continue;
         }
 
-      if (memcmp(event.bssid, dev->station.target.bss.bssid,
+      if ((event.status == SV6621_SIGNAL_HIGH ||
+           event.status == SV6621_SIGNAL_TDLS_LOSS) &&
+          memcmp(event.bssid, dev->station.target.bss.bssid,
                  SV6621_MAC_LENGTH) != 0)
         {
           nxmutex_unlock(&dev->station.lock);
@@ -569,6 +686,13 @@ static void sv6621_core_signal_worker(FAR void *arg)
       nxmutex_unlock(&dev->status_lock);
       sv6621_core_report(dev, SV6621_EVENT_SIGNAL_CHANGED, &event,
                          sizeof(event));
+
+      if ((event.status == SV6621_SIGNAL_LOW ||
+           event.status == SV6621_SIGNAL_BEACON_LOSS) &&
+          sv6621_core_valid_unicast_address(event.bssid))
+        {
+          (void)sv6621_core_start_roam_scan(dev, &event);
+        }
     }
 }
 
@@ -622,6 +746,7 @@ static void sv6621_core_recovery_worker(FAR void *arg)
           dev->station_connected = false;
           dev->station_reason = disconnect_reason;
           dev->station_generation++;
+          dev->roam_scan_pending = false;
         }
 
       dev->status.connected = false;
@@ -1017,7 +1142,9 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
           return;
         }
 
-      if (memcmp(event.bssid, dev->station.target.bss.bssid,
+      if ((event.status == SV6621_SIGNAL_HIGH ||
+           event.status == SV6621_SIGNAL_TDLS_LOSS) &&
+          memcmp(event.bssid, dev->station.target.bss.bssid,
                  SV6621_MAC_LENGTH) != 0)
         {
           nxmutex_unlock(&dev->station.lock);
@@ -1153,6 +1280,10 @@ static void sv6621_core_station_event(bool connected, bool remote,
   dev->station_remote_disconnect = !connected && remote;
   dev->station_reason = reason;
   dev->station_generation++;
+  if (!connected)
+    {
+      dev->roam_scan_pending = false;
+    }
   if (!dev->station_work_scheduled)
     {
       dev->station_work_scheduled = true;
@@ -1509,6 +1640,7 @@ static void sv6621_core_scan_complete(int result, FAR void *arg)
   if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
     {
       dev->scan_reporting = false;
+      dev->roam_scan_pending = false;
       nxmutex_unlock(&dev->status_lock);
     }
 }
@@ -1548,6 +1680,7 @@ static void sv6621_core_scan_worker(FAR void *arg)
   if (nxmutex_lock(&dev->status_lock) >= 0)
     {
       dev->scan_reporting = false;
+      dev->roam_scan_pending = false;
       nxmutex_unlock(&dev->status_lock);
     }
 
