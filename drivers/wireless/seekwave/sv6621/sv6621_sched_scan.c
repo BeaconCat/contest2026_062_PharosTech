@@ -26,6 +26,8 @@
 
 #include <nuttx/config.h>
 
+#include <nuttx/kmalloc.h>
+
 #include <errno.h>
 #include <string.h>
 
@@ -41,6 +43,18 @@
 #define SV6621_SCHED_SCAN_MATCH_SIZE              44
 #define SV6621_SCHED_SCAN_PLAN_SIZE                8
 #define SV6621_SCHED_SCAN_PASSIVE_FLAG       (1 << 7)
+#define SV6621_SCHED_SCAN_INSTANCE                 0
+#define SV6621_SCHED_SCAN_COMMAND_START             7
+#define SV6621_SCHED_SCAN_COMMAND_STOP              8
+#define SV6621_SCHED_SCAN_COMMAND_TIMEOUT_MS     5000
+#define SV6621_SCHED_SCAN_STOP_PAYLOAD_SIZE         8
+#define SV6621_SCHED_SCAN_PAYLOAD_CAPACITY \
+  (SV6621_SCHED_SCAN_FIXED_SIZE + \
+   SV6621_SCHED_SCAN_MAX_SSIDS * SV6621_SCHED_SCAN_SSID_SIZE + \
+   UINT8_MAX * SV6621_SCHED_SCAN_CHANNEL_SIZE + \
+   SV6621_SCHED_SCAN_MAX_MATCHES * SV6621_SCHED_SCAN_MATCH_SIZE + \
+   SV6621_SCHED_SCAN_MAX_PLANS * SV6621_SCHED_SCAN_PLAN_SIZE + \
+   SV6621_SCHED_SCAN_MAX_IE_LENGTH)
 
 #define SV6621_SCHED_SCAN_REQUEST_ID_OFFSET        0
 #define SV6621_SCHED_SCAN_FLAGS_OFFSET             4
@@ -273,4 +287,53 @@ int sv6621_sched_scan_encode(
 
   *written = offset;
   return 0;
+}
+
+int sv6621_sched_scan_start(
+    FAR struct sv6621_command_engine_s *command,
+    FAR const struct sv6621_sched_scan_request_s *request)
+{
+  FAR uint8_t *payload;
+  size_t payload_length;
+  int ret;
+
+  if (command == NULL || request == NULL)
+    {
+      return -EINVAL;
+    }
+
+  payload = kmm_malloc(SV6621_SCHED_SCAN_PAYLOAD_CAPACITY);
+  if (payload == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  ret = sv6621_sched_scan_encode(request, payload,
+                                 SV6621_SCHED_SCAN_PAYLOAD_CAPACITY,
+                                 &payload_length);
+  if (ret == 0)
+    {
+      ret = sv6621_command_execute(
+          command, SV6621_SCHED_SCAN_INSTANCE,
+          SV6621_SCHED_SCAN_COMMAND_START, payload, payload_length,
+          NULL, NULL, SV6621_SCHED_SCAN_COMMAND_TIMEOUT_MS);
+    }
+
+  kmm_free(payload);
+  return ret;
+}
+
+int sv6621_sched_scan_stop(FAR struct sv6621_command_engine_s *command)
+{
+  uint8_t scan_id[SV6621_SCHED_SCAN_STOP_PAYLOAD_SIZE] = {0};
+
+  if (command == NULL)
+    {
+      return -EINVAL;
+    }
+
+  return sv6621_command_execute(
+      command, SV6621_SCHED_SCAN_INSTANCE, SV6621_SCHED_SCAN_COMMAND_STOP,
+      scan_id, sizeof(scan_id), NULL, NULL,
+      SV6621_SCHED_SCAN_COMMAND_TIMEOUT_MS);
 }

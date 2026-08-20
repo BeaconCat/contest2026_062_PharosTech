@@ -34,6 +34,7 @@
 #include <stdint.h>
 
 #include "include/sv6621.h"
+#include "sv6621_command.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -105,5 +106,9 @@ struct sv6621_sched_scan_request_s
 int sv6621_sched_scan_encode(
     FAR const struct sv6621_sched_scan_request_s *request,
     FAR uint8_t *payload, size_t capacity, FAR size_t *written);
+int sv6621_sched_scan_start(
+    FAR struct sv6621_command_engine_s *command,
+    FAR const struct sv6621_sched_scan_request_s *request);
+int sv6621_sched_scan_stop(FAR struct sv6621_command_engine_s *command);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_SCHED_SCAN_H */
