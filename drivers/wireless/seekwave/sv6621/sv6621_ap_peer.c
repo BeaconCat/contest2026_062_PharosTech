@@ -387,6 +387,114 @@ int sv6621_ap_peer_cancel_association(
   return 0;
 }
 
+int sv6621_ap_peer_begin_tx(FAR struct sv6621_ap_peer_table_s *table,
+                            FAR const uint8_t address[SV6621_MAC_LENGTH],
+                            uint64_t cookie)
+{
+  FAR struct sv6621_ap_peer_s *peer;
+  int ret;
+
+  if (table == NULL || address == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&table->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  peer = sv6621_ap_peer_find(table, address);
+  if (peer == NULL || peer->tx_pending)
+    {
+      nxmutex_unlock(&table->lock);
+      return peer == NULL ? -ENOENT : -EBUSY;
+    }
+
+  peer->pending_cookie = cookie;
+  peer->tx_pending = true;
+  nxmutex_unlock(&table->lock);
+  return 0;
+}
+
+int sv6621_ap_peer_cancel_tx(FAR struct sv6621_ap_peer_table_s *table,
+                             FAR const uint8_t address[SV6621_MAC_LENGTH],
+                             uint64_t cookie)
+{
+  FAR struct sv6621_ap_peer_s *peer;
+  int ret;
+
+  if (table == NULL || address == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&table->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  peer = sv6621_ap_peer_find(table, address);
+  if (peer == NULL || !peer->tx_pending || peer->pending_cookie != cookie)
+    {
+      nxmutex_unlock(&table->lock);
+      return peer == NULL ? -ENOENT : -ESTALE;
+    }
+
+  peer->pending_cookie = 0;
+  peer->tx_pending = false;
+  nxmutex_unlock(&table->lock);
+  return 0;
+}
+
+int sv6621_ap_peer_complete_tx(FAR struct sv6621_ap_peer_table_s *table,
+                               FAR const uint8_t address[SV6621_MAC_LENGTH],
+                               uint64_t cookie, bool association,
+                               bool success, FAR bool *remove)
+{
+  FAR struct sv6621_ap_peer_s *peer;
+  int ret;
+
+  if (table == NULL || address == NULL || remove == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&table->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  peer = sv6621_ap_peer_find(table, address);
+  if (peer == NULL || !peer->tx_pending || peer->pending_cookie != cookie ||
+      (association && peer->state != SV6621_AP_PEER_ASSOCIATING))
+    {
+      nxmutex_unlock(&table->lock);
+      return peer == NULL ? -ENOENT : -ESTALE;
+    }
+
+  peer->pending_cookie = 0;
+  peer->tx_pending = false;
+  *remove = !success;
+  if (success && association)
+    {
+      peer->state = SV6621_AP_PEER_ASSOCIATED;
+      peer->previous_state = SV6621_AP_PEER_FREE;
+      peer->previous_aid = 0;
+      peer->previous_capability = 0;
+    }
+  else if (!success)
+    {
+      memset(peer, 0, sizeof(*peer));
+    }
+
+  nxmutex_unlock(&table->lock);
+  return 0;
+}
+
 int sv6621_ap_peer_authorize(
     FAR struct sv6621_ap_peer_table_s *table,
     FAR const uint8_t address[SV6621_MAC_LENGTH])

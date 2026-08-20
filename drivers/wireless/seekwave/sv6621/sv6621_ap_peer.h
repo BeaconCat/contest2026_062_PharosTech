@@ -65,7 +65,9 @@ struct sv6621_ap_peer_s
   enum sv6621_ap_peer_state_e previous_state;
   uint16_t previous_aid;
   uint16_t previous_capability;
+  uint64_t pending_cookie;
   bool bound;
+  bool tx_pending;
 };
 
 struct sv6621_ap_peer_table_s
@@ -105,6 +107,16 @@ int sv6621_ap_peer_prepare_association(
 int sv6621_ap_peer_cancel_association(
     FAR struct sv6621_ap_peer_table_s *table,
     FAR const uint8_t address[SV6621_MAC_LENGTH]);
+int sv6621_ap_peer_begin_tx(FAR struct sv6621_ap_peer_table_s *table,
+                            FAR const uint8_t address[SV6621_MAC_LENGTH],
+                            uint64_t cookie);
+int sv6621_ap_peer_cancel_tx(FAR struct sv6621_ap_peer_table_s *table,
+                             FAR const uint8_t address[SV6621_MAC_LENGTH],
+                             uint64_t cookie);
+int sv6621_ap_peer_complete_tx(FAR struct sv6621_ap_peer_table_s *table,
+                               FAR const uint8_t address[SV6621_MAC_LENGTH],
+                               uint64_t cookie, bool association,
+                               bool success, FAR bool *remove);
 int sv6621_ap_peer_authorize(
     FAR struct sv6621_ap_peer_table_s *table,
     FAR const uint8_t address[SV6621_MAC_LENGTH]);
