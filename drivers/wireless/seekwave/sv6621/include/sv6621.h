@@ -332,6 +332,7 @@ struct sv6621_ap_config_s
   uint16_t beacon_interval;
   uint8_t dtim_period;
   enum sv6621_security_e security;
+  bool isolate;
   uint8_t credential[SV6621_KEY_MAX_LENGTH];
   uint8_t credential_length;
 };

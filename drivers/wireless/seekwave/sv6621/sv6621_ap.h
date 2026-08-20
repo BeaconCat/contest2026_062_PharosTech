@@ -133,6 +133,9 @@ int sv6621_ap_resolve_tx(
     FAR struct sv6621_data_tx_context_s *context);
 int sv6621_ap_validate_rx(FAR struct sv6621_ap_s *ap,
                           FAR const struct sv6621_data_rx_s *rx);
+int sv6621_ap_forward_policy(FAR struct sv6621_ap_s *ap,
+                             FAR const struct sv6621_data_rx_s *rx,
+                             FAR bool *forward, FAR bool *deliver_local);
 bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_H */

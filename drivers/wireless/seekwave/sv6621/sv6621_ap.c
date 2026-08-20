@@ -745,6 +745,35 @@ int sv6621_ap_validate_rx(FAR struct sv6621_ap_s *ap,
   return matched ? 0 : -EHOSTUNREACH;
 }
 
+int sv6621_ap_forward_policy(FAR struct sv6621_ap_s *ap,
+                             FAR const struct sv6621_data_rx_s *rx,
+                             FAR bool *forward, FAR bool *deliver_local)
+{
+  int ret;
+
+  if (ap == NULL || rx == NULL || forward == NULL || deliver_local == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&ap->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!ap->active)
+    {
+      nxmutex_unlock(&ap->lock);
+      return -ENETDOWN;
+    }
+
+  *forward = rx->need_forward && !ap->config.isolate;
+  *deliver_local = !*forward || rx->multicast;
+  nxmutex_unlock(&ap->lock);
+  return 0;
+}
+
 bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap)
 {
   bool active = false;
