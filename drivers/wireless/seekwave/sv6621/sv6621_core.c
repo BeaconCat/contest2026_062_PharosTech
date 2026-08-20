@@ -94,6 +94,7 @@ static void sv6621_core_queue_fatal(FAR struct sv6621_dev_s *dev);
 static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
                                        int error);
 static int sv6621_core_recovery_thread(int argc, FAR char *argv[]);
+static int sv6621_core_roam_thread(int argc, FAR char *argv[]);
 static void sv6621_core_recovery_worker(FAR void *arg);
 static void sv6621_core_thermal_worker(FAR void *arg);
 static void sv6621_core_security_worker(FAR void *arg);
@@ -451,6 +452,42 @@ static int sv6621_core_recovery_thread(int argc, FAR char *argv[])
     }
 
   nxsem_post(&dev->recovery_exit_sem);
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_core_roam_thread
+ ****************************************************************************/
+
+static int sv6621_core_roam_thread(int argc, FAR char *argv[])
+{
+  FAR struct sv6621_dev_s *dev =
+      (FAR struct sv6621_dev_s *)(uintptr_t)strtoull(argv[1], NULL, 16);
+
+  (void)argc;
+
+  for (;;)
+    {
+      if (nxsem_wait_uninterruptible(&dev->roam_sem) < 0)
+        {
+          continue;
+        }
+
+      if (nxmutex_lock(&dev->status_lock) < 0)
+        {
+          continue;
+        }
+
+      if (dev->roam_shutdown)
+        {
+          nxmutex_unlock(&dev->status_lock);
+          break;
+        }
+
+      nxmutex_unlock(&dev->status_lock);
+    }
+
+  nxsem_post(&dev->roam_exit_sem);
   return 0;
 }
 
@@ -1779,8 +1816,8 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
                   FAR struct sv6621_dev_s **dev_out)
 {
   FAR struct sv6621_dev_s *dev;
-  char recovery_arg[2 + sizeof(uintptr_t) * 2 + 1];
-  FAR char *recovery_argv[2];
+  char thread_arg[2 + sizeof(uintptr_t) * 2 + 1];
+  FAR char *thread_argv[2];
   int ret;
 
   if (config == NULL || dev_out == NULL || config->transport == NULL ||
@@ -1945,17 +1982,37 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
       goto destroy_recovery_sem;
     }
 
-  snprintf(recovery_arg, sizeof(recovery_arg), "%" PRIxPTR,
-           (uintptr_t)dev);
-  recovery_argv[0] = recovery_arg;
-  recovery_argv[1] = NULL;
+  snprintf(thread_arg, sizeof(thread_arg), "%" PRIxPTR, (uintptr_t)dev);
+  thread_argv[0] = thread_arg;
+  thread_argv[1] = NULL;
   ret = kthread_create("sv6621_recovery", CONFIG_SV6621_RECOVERY_PRIO,
                        CONFIG_SV6621_RECOVERY_STACK,
-                       sv6621_core_recovery_thread, recovery_argv);
+                       sv6621_core_recovery_thread, thread_argv);
   if (ret <= 0)
     {
       ret = ret < 0 ? ret : -ECHILD;
       goto destroy_recovery_exit_sem;
+    }
+
+  ret = nxsem_init(&dev->roam_sem, 0, 0);
+  if (ret < 0)
+    {
+      goto stop_recovery_thread;
+    }
+
+  ret = nxsem_init(&dev->roam_exit_sem, 0, 0);
+  if (ret < 0)
+    {
+      goto destroy_roam_sem;
+    }
+
+  ret = kthread_create("sv6621_roam", CONFIG_SV6621_RECOVERY_PRIO,
+                       CONFIG_SV6621_RECOVERY_STACK,
+                       sv6621_core_roam_thread, thread_argv);
+  if (ret <= 0)
+    {
+      ret = ret < 0 ? ret : -ECHILD;
+      goto destroy_roam_exit_sem;
     }
 
 #ifdef CONFIG_SV6621_PM
@@ -1965,7 +2022,7 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
   ret = pm_register(&dev->pm_callback);
   if (ret < 0)
     {
-      goto stop_recovery_thread;
+      goto stop_roam_thread;
     }
 
   dev->pm_registered = true;
@@ -1975,11 +2032,19 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
   return 0;
 
 #ifdef CONFIG_SV6621_PM
+stop_roam_thread:
+  dev->roam_shutdown = true;
+  nxsem_post(&dev->roam_sem);
+  nxsem_wait_uninterruptible(&dev->roam_exit_sem);
+#endif
+destroy_roam_exit_sem:
+  nxsem_destroy(&dev->roam_exit_sem);
+destroy_roam_sem:
+  nxsem_destroy(&dev->roam_sem);
 stop_recovery_thread:
   dev->recovery_shutdown = true;
   nxsem_post(&dev->recovery_sem);
   nxsem_wait_uninterruptible(&dev->recovery_exit_sem);
-#endif
 destroy_recovery_exit_sem:
   nxsem_destroy(&dev->recovery_exit_sem);
 destroy_recovery_sem:
@@ -2039,10 +2104,13 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
   if (nxmutex_lock(&dev->status_lock) >= 0)
     {
       dev->recovery_shutdown = true;
+      dev->roam_shutdown = true;
       nxmutex_unlock(&dev->status_lock);
     }
 
   sv6621_stop(dev);
+  nxsem_post(&dev->roam_sem);
+  nxsem_wait_uninterruptible(&dev->roam_exit_sem);
   nxsem_post(&dev->recovery_sem);
   nxsem_wait_uninterruptible(&dev->recovery_exit_sem);
   work_cancel_sync(LPWORK, &dev->thermal_work);
@@ -2068,6 +2136,8 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
   sv6621_data_deinit(&dev->data);
   sv6621_tx_deinit(&dev->tx);
   sv6621_packet_router_deinit(&dev->router);
+  nxsem_destroy(&dev->roam_exit_sem);
+  nxsem_destroy(&dev->roam_sem);
   nxsem_destroy(&dev->recovery_exit_sem);
   nxsem_destroy(&dev->recovery_sem);
   nxmutex_destroy(&dev->status_lock);

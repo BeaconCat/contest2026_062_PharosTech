@@ -108,6 +108,9 @@ struct sv6621_dev_s
   bool recovery_pending;
   bool recovery_running;
   bool recovery_shutdown;
+  sem_t roam_sem;
+  sem_t roam_exit_sem;
+  bool roam_shutdown;
   uint32_t thermal_generation;
   bool thermal_blocked;
   bool thermal_work_scheduled;
