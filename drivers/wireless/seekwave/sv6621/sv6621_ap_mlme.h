@@ -85,5 +85,10 @@ int sv6621_ap_authenticate_open(
     FAR const uint8_t ap_address[SV6621_MAC_LENGTH],
     FAR const struct sv6621_ap_mgmt_s *request, uint64_t cookie,
     FAR bool *accepted);
+int sv6621_ap_validate_association(
+    FAR struct sv6621_ap_peer_table_s *peers,
+    FAR const uint8_t ap_address[SV6621_MAC_LENGTH],
+    FAR const uint8_t *ssid, size_t ssid_length,
+    FAR const struct sv6621_ap_mgmt_s *request, FAR uint16_t *status);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_MLME_H */

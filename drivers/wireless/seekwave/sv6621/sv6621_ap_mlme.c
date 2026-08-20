@@ -61,7 +61,11 @@
 #define SV6621_AP_STATUS_UNSPECIFIED         1
 #define SV6621_AP_STATUS_AUTH_UNSUPPORTED   13
 #define SV6621_AP_STATUS_AUTH_TRANSACTION   14
+#define SV6621_AP_STATUS_UNSUPPORTED_RATES  18
 #define SV6621_AP_REASON_LEAVING             3
+#define SV6621_AP_IE_SSID                     0
+#define SV6621_AP_IE_SUPPORTED_RATES          1
+#define SV6621_AP_IE_EXTENDED_RATES          50
 
 /****************************************************************************
  * Private Function Prototypes
@@ -75,6 +79,8 @@ static void sv6621_ap_mlme_build_auth_response(
     FAR const uint8_t destination[SV6621_MAC_LENGTH],
     FAR const uint8_t ap_address[SV6621_MAC_LENGTH], uint16_t algorithm,
     uint16_t transaction, uint16_t status);
+static bool sv6621_ap_mlme_rate_supported(enum sv6621_band_e band,
+                                          uint8_t rate);
 
 /****************************************************************************
  * Private Functions
@@ -112,6 +118,35 @@ static void sv6621_ap_mlme_build_auth_response(
   response[27] = transaction >> 8;
   response[28] = status;
   response[29] = status >> 8;
+}
+
+static bool sv6621_ap_mlme_rate_supported(enum sv6621_band_e band,
+                                          uint8_t rate)
+{
+  static const uint8_t rates_2ghz[] =
+  {
+    2, 4, 11, 22, 12, 18, 24, 36, 48, 72, 96, 108
+  };
+  static const uint8_t rates_5ghz[] =
+  {
+    12, 18, 24, 36, 48, 72, 96, 108
+  };
+  FAR const uint8_t *rates = band == SV6621_BAND_2GHZ ? rates_2ghz :
+                                                              rates_5ghz;
+  size_t count = band == SV6621_BAND_2GHZ ? sizeof(rates_2ghz) :
+                                            sizeof(rates_5ghz);
+  size_t index;
+
+  rate &= 0x7f;
+  for (index = 0; index < count; index++)
+    {
+      if (rates[index] == rate)
+        {
+          return true;
+        }
+    }
+
+  return false;
 }
 
 /****************************************************************************
@@ -319,5 +354,109 @@ int sv6621_ap_authenticate_open(
     }
 
   *accepted = status == SV6621_AP_STATUS_SUCCESS;
+  return 0;
+}
+
+int sv6621_ap_validate_association(
+    FAR struct sv6621_ap_peer_table_s *peers,
+    FAR const uint8_t ap_address[SV6621_MAC_LENGTH],
+    FAR const uint8_t *ssid, size_t ssid_length,
+    FAR const struct sv6621_ap_mgmt_s *request, FAR uint16_t *status)
+{
+  struct sv6621_ap_peer_s peer;
+  FAR const uint8_t *position;
+  size_t remaining;
+  bool rates_present = false;
+  bool rates_compatible = false;
+  bool ssid_present = false;
+  int ret;
+
+  if (peers == NULL || ap_address == NULL || ssid == NULL ||
+      ssid_length == 0 || ssid_length > SV6621_SSID_MAX_LENGTH ||
+      request == NULL || status == NULL ||
+      (request->type != SV6621_AP_MGMT_ASSOC_REQUEST &&
+       request->type != SV6621_AP_MGMT_REASSOC_REQUEST))
+    {
+      return -EINVAL;
+    }
+
+  *status = SV6621_AP_STATUS_UNSPECIFIED;
+  if (memcmp(request->bssid, ap_address, SV6621_MAC_LENGTH) != 0 ||
+      memcmp(request->destination, ap_address, SV6621_MAC_LENGTH) != 0)
+    {
+      return 0;
+    }
+
+  ret = sv6621_ap_peer_lookup(peers, request->source, &peer);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (peer.state < SV6621_AP_PEER_AUTHENTICATED || !peer.bound)
+    {
+      return -EACCES;
+    }
+
+  position = request->information_elements;
+  remaining = request->information_element_length;
+  while (remaining != 0)
+    {
+      uint8_t identifier;
+      uint8_t length;
+      size_t index;
+
+      if (remaining < 2)
+        {
+          return -EPROTO;
+        }
+
+      identifier = position[0];
+      length = position[1];
+      if ((size_t)length > remaining - 2)
+        {
+          return -EPROTO;
+        }
+
+      if (identifier == SV6621_AP_IE_SSID)
+        {
+          if (ssid_present || length != ssid_length ||
+              memcmp(position + 2, ssid, ssid_length) != 0)
+            {
+              return 0;
+            }
+
+          ssid_present = true;
+        }
+      else if (identifier == SV6621_AP_IE_SUPPORTED_RATES ||
+               identifier == SV6621_AP_IE_EXTENDED_RATES)
+        {
+          rates_present = true;
+          for (index = 0; index < length; index++)
+            {
+              if (sv6621_ap_mlme_rate_supported(request->band,
+                                                position[2 + index]))
+                {
+                  rates_compatible = true;
+                }
+            }
+        }
+
+      position += (size_t)length + 2;
+      remaining -= (size_t)length + 2;
+    }
+
+  if (!ssid_present)
+    {
+      return 0;
+    }
+
+  if (!rates_present || !rates_compatible)
+    {
+      *status = SV6621_AP_STATUS_UNSUPPORTED_RATES;
+      return 0;
+    }
+
+  *status = SV6621_AP_STATUS_SUCCESS;
   return 0;
 }
