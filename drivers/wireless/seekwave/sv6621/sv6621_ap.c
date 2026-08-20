@@ -184,6 +184,16 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
         {
           notify_connected = sv6621_ap_tx_client_event(
               ap, payload, length, &client_event);
+          if (notify_connected &&
+              ap->config.security == SV6621_SECURITY_OPEN)
+            {
+              ret = sv6621_ap_peer_authorize(&ap->peers,
+                                             client_event.address);
+              if (ret < 0)
+                {
+                  notify_connected = false;
+                }
+            }
         }
     }
   else if (id == SV6621_AP_EVENT_DEL_STA)
