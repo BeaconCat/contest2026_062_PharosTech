@@ -39,6 +39,7 @@
 #include "sv6621_ap_event.h"
 #include "sv6621_ap_peer.h"
 #include "sv6621_command.h"
+#include "sv6621_data.h"
 
 /****************************************************************************
  * Public Types
@@ -121,6 +122,9 @@ int sv6621_ap_reset(FAR struct sv6621_ap_s *ap);
 int sv6621_ap_queue_event(FAR struct sv6621_ap_s *ap, uint8_t instance,
                           uint8_t id, FAR const uint8_t *payload,
                           size_t length);
+int sv6621_ap_resolve_tx(
+    FAR struct sv6621_ap_s *ap, FAR const uint8_t *frame, size_t length,
+    FAR struct sv6621_data_tx_context_s *context);
 bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_H */

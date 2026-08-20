@@ -576,6 +576,66 @@ int sv6621_ap_queue_event(FAR struct sv6621_ap_s *ap, uint8_t instance,
                                       length);
 }
 
+int sv6621_ap_resolve_tx(
+    FAR struct sv6621_ap_s *ap, FAR const uint8_t *frame, size_t length,
+    FAR struct sv6621_data_tx_context_s *context)
+{
+  struct sv6621_ap_peer_s peer;
+  bool multicast;
+  int ret;
+
+  if (ap == NULL || frame == NULL || length < SV6621_MAC_LENGTH ||
+      context == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&ap->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!ap->active)
+    {
+      nxmutex_unlock(&ap->lock);
+      return -ENETDOWN;
+    }
+
+  multicast = (frame[0] & 1) != 0;
+  if (!multicast)
+    {
+      ret = sv6621_ap_peer_lookup(&ap->peers, frame, &peer);
+      if (ret < 0)
+        {
+          nxmutex_unlock(&ap->lock);
+          return ret;
+        }
+
+      if (!peer.bound ||
+          (ap->config.security == SV6621_SECURITY_OPEN ?
+           peer.state < SV6621_AP_PEER_ASSOCIATED :
+           peer.state < SV6621_AP_PEER_AUTHORIZED))
+        {
+          nxmutex_unlock(&ap->lock);
+          return -EHOSTUNREACH;
+        }
+
+      context->peer_index = peer.peer_index;
+    }
+  else
+    {
+      context->peer_index = ap->context.multicast_index;
+    }
+
+  context->multicast_index = ap->context.multicast_index;
+  context->instance = ap->context.instance;
+  context->lmac_id = ap->context.lmac_id;
+  context->tid = 0;
+  nxmutex_unlock(&ap->lock);
+  return 0;
+}
+
 bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap)
 {
   bool active = false;
