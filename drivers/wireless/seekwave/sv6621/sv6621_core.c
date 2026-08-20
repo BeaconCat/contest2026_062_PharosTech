@@ -1528,6 +1528,22 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
       return;
     }
 
+  if (dev->ap_initialized && sv6621_ap_is_active(&dev->ap) &&
+      (id == SV6621_AP_EVENT_RX_MGMT ||
+       id == SV6621_AP_EVENT_DEL_STA ||
+       id == SV6621_AP_EVENT_MGMT_TX_STATUS))
+    {
+      int ret = sv6621_ap_queue_event(&dev->ap, instance, id, payload,
+                                      length);
+
+      if (ret < 0)
+        {
+          sv6621_core_queue_recovery(dev, ret);
+        }
+
+      return;
+    }
+
   sv6621_scan_command_event(instance, id, payload, length, &dev->scan);
   sv6621_sched_scan_command_event(instance, id, payload, length,
                                   &dev->scheduled_scan);
@@ -2393,6 +2409,11 @@ void sv6621_destroy(FAR struct sv6621_dev_s *dev)
   sv6621_data_set_eapol_input(&dev->data, NULL, NULL);
   sv6621_wpa_deinit(&dev->wpa);
   sv6621_station_deinit(&dev->station);
+  if (dev->ap_initialized)
+    {
+      sv6621_ap_deinit(&dev->ap);
+    }
+
   sv6621_sched_scan_deinit(&dev->scheduled_scan);
   sv6621_scan_controller_deinit(&dev->scan);
   sv6621_command_engine_deinit(&dev->command);
@@ -2585,6 +2606,20 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
     {
       ret = ret < 0 ? ret : -EREMOTEIO;
       goto fail;
+    }
+
+  if (!dev->ap_initialized)
+    {
+      ret = sv6621_ap_init(&dev->ap, &dev->command,
+                           dev->wifi_info.max_stations,
+                           dev->wifi_info.mac, sv6621_core_command_error,
+                           dev);
+      if (ret < 0)
+        {
+          goto fail;
+        }
+
+      dev->ap_initialized = true;
     }
 
   ret = sv6621_station_configure_ht(

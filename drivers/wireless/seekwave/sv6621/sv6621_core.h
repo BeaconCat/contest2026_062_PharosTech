@@ -38,6 +38,7 @@
 #endif
 
 #include "include/sv6621.h"
+#include "sv6621_ap.h"
 #include "sv6621_command.h"
 #include "sv6621_data.h"
 #include "sv6621_network.h"
@@ -79,6 +80,7 @@ struct sv6621_dev_s
   struct sv6621_network_s network;
 #endif
   struct sv6621_command_engine_s command;
+  struct sv6621_ap_s ap;
   struct sv6621_scan_s scan;
   struct sv6621_sched_scan_s scheduled_scan;
   struct sv6621_station_s station;
@@ -140,6 +142,7 @@ struct sv6621_dev_s
   bool powered;
   bool transport_open;
   bool station_open;
+  bool ap_initialized;
 #ifdef CONFIG_SV6621_PM
   struct pm_callback_s pm_callback;
   struct work_s pm_resume_work;
