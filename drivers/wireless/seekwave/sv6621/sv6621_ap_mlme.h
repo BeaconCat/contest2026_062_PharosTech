@@ -90,5 +90,14 @@ int sv6621_ap_validate_association(
     FAR const uint8_t ap_address[SV6621_MAC_LENGTH],
     FAR const uint8_t *ssid, size_t ssid_length,
     FAR const struct sv6621_ap_mgmt_s *request, FAR uint16_t *status);
+int sv6621_ap_respond_association(
+    FAR struct sv6621_ap_peer_table_s *peers,
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
+    uint8_t channel, enum sv6621_band_e band,
+    FAR const uint8_t ap_address[SV6621_MAC_LENGTH],
+    FAR const uint8_t *ssid, size_t ssid_length,
+    FAR const uint8_t *response_ies, size_t response_ies_length,
+    FAR const struct sv6621_ap_mgmt_s *request, uint64_t cookie,
+    FAR bool *accepted);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_MLME_H */

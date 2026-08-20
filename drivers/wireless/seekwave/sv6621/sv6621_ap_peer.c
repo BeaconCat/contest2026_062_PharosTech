@@ -86,7 +86,7 @@ static bool sv6621_ap_peer_aid_used(
 
   for (index = 0; index < table->capacity; index++)
     {
-      if (table->peers[index].state >= SV6621_AP_PEER_ASSOCIATED &&
+      if (table->peers[index].state >= SV6621_AP_PEER_ASSOCIATING &&
           table->peers[index].aid == aid)
         {
           return true;
@@ -229,6 +229,9 @@ int sv6621_ap_peer_authenticate(
       peer->state = SV6621_AP_PEER_AUTHENTICATED;
       peer->aid = 0;
       peer->capability = 0;
+      peer->previous_state = SV6621_AP_PEER_FREE;
+      peer->previous_aid = 0;
+      peer->previous_capability = 0;
       nxmutex_unlock(&table->lock);
       return 0;
     }
@@ -300,7 +303,7 @@ int sv6621_ap_peer_bind(FAR struct sv6621_ap_peer_table_s *table,
   return 0;
 }
 
-int sv6621_ap_peer_associate(
+int sv6621_ap_peer_prepare_association(
                         FAR struct sv6621_ap_peer_table_s *table,
                         FAR const uint8_t address[SV6621_MAC_LENGTH],
                         uint16_t capability,
@@ -321,25 +324,65 @@ int sv6621_ap_peer_associate(
     }
 
   peer = sv6621_ap_peer_find(table, address);
-  if (peer == NULL || peer->state != SV6621_AP_PEER_AUTHENTICATED ||
-      !peer->bound)
+  if (peer == NULL || peer->state < SV6621_AP_PEER_AUTHENTICATED ||
+      peer->state == SV6621_AP_PEER_ASSOCIATING || !peer->bound)
     {
       nxmutex_unlock(&table->lock);
       return peer == NULL ? -ENOENT :
-             peer->state != SV6621_AP_PEER_AUTHENTICATED ? -EALREADY :
-             -EAGAIN;
+             !peer->bound ? -EAGAIN : -EALREADY;
     }
 
-  peer->aid = sv6621_ap_peer_allocate_aid(table);
-  if (peer->aid == 0)
+  peer->previous_state = peer->state;
+  peer->previous_aid = peer->aid;
+  peer->previous_capability = peer->capability;
+  if (peer->state == SV6621_AP_PEER_AUTHENTICATED)
     {
-      nxmutex_unlock(&table->lock);
-      return -ENOSPC;
+      peer->aid = sv6621_ap_peer_allocate_aid(table);
+      if (peer->aid == 0)
+        {
+          nxmutex_unlock(&table->lock);
+          return -ENOSPC;
+        }
     }
 
   peer->capability = capability;
-  peer->state = SV6621_AP_PEER_ASSOCIATED;
+  peer->state = SV6621_AP_PEER_ASSOCIATING;
   *aid = peer->aid;
+  nxmutex_unlock(&table->lock);
+  return 0;
+}
+
+int sv6621_ap_peer_cancel_association(
+    FAR struct sv6621_ap_peer_table_s *table,
+    FAR const uint8_t address[SV6621_MAC_LENGTH])
+{
+  FAR struct sv6621_ap_peer_s *peer;
+  int ret;
+
+  if (table == NULL || address == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&table->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  peer = sv6621_ap_peer_find(table, address);
+  if (peer == NULL || peer->state != SV6621_AP_PEER_ASSOCIATING)
+    {
+      nxmutex_unlock(&table->lock);
+      return peer == NULL ? -ENOENT : -EALREADY;
+    }
+
+  peer->aid = peer->previous_aid;
+  peer->capability = peer->previous_capability;
+  peer->state = peer->previous_state;
+  peer->previous_aid = 0;
+  peer->previous_capability = 0;
+  peer->previous_state = SV6621_AP_PEER_FREE;
   nxmutex_unlock(&table->lock);
   return 0;
 }

@@ -50,6 +50,7 @@ enum sv6621_ap_peer_state_e
 {
   SV6621_AP_PEER_FREE,
   SV6621_AP_PEER_AUTHENTICATED,
+  SV6621_AP_PEER_ASSOCIATING,
   SV6621_AP_PEER_ASSOCIATED,
   SV6621_AP_PEER_AUTHORIZED
 };
@@ -61,6 +62,9 @@ struct sv6621_ap_peer_s
   uint8_t peer_index;
   uint16_t aid;
   uint16_t capability;
+  enum sv6621_ap_peer_state_e previous_state;
+  uint16_t previous_aid;
+  uint16_t previous_capability;
   bool bound;
 };
 
@@ -93,11 +97,14 @@ int sv6621_ap_peer_authenticate(
 int sv6621_ap_peer_bind(FAR struct sv6621_ap_peer_table_s *table,
                         FAR const uint8_t address[SV6621_MAC_LENGTH],
                         uint8_t peer_index);
-int sv6621_ap_peer_associate(
+int sv6621_ap_peer_prepare_association(
                         FAR struct sv6621_ap_peer_table_s *table,
                         FAR const uint8_t address[SV6621_MAC_LENGTH],
                         uint16_t capability,
                         FAR uint16_t *aid);
+int sv6621_ap_peer_cancel_association(
+    FAR struct sv6621_ap_peer_table_s *table,
+    FAR const uint8_t address[SV6621_MAC_LENGTH]);
 int sv6621_ap_peer_authorize(
     FAR struct sv6621_ap_peer_table_s *table,
     FAR const uint8_t address[SV6621_MAC_LENGTH]);

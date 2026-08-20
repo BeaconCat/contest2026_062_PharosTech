@@ -54,6 +54,8 @@
 #define SV6621_AP_MGMT_AUTH_FIXED_SIZE     30
 #define SV6621_AP_MGMT_REASON_FIXED_SIZE   26
 #define SV6621_AP_MGMT_AUTH_RESPONSE_SIZE  30
+#define SV6621_AP_MGMT_ASSOC_RESPONSE_SIZE 30
+#define SV6621_AP_MGMT_RESPONSE_MAX_SIZE 1024
 #define SV6621_AP_AUTH_OPEN                  0
 #define SV6621_AP_AUTH_REQUEST_TRANSACTION   1
 #define SV6621_AP_AUTH_RESPONSE_TRANSACTION  2
@@ -66,6 +68,13 @@
 #define SV6621_AP_IE_SSID                     0
 #define SV6621_AP_IE_SUPPORTED_RATES          1
 #define SV6621_AP_IE_EXTENDED_RATES          50
+#define SV6621_AP_IE_HT_CAPABILITY            45
+#define SV6621_AP_IE_HT_OPERATION             61
+#define SV6621_AP_IE_EXTENDED_CAPABILITY     127
+#define SV6621_AP_IE_VHT_CAPABILITY          191
+#define SV6621_AP_IE_VHT_OPERATION           192
+#define SV6621_AP_IE_VENDOR                   221
+#define SV6621_AP_IE_EXTENSION                255
 
 /****************************************************************************
  * Private Function Prototypes
@@ -81,6 +90,10 @@ static void sv6621_ap_mlme_build_auth_response(
     uint16_t transaction, uint16_t status);
 static bool sv6621_ap_mlme_rate_supported(enum sv6621_band_e band,
                                           uint8_t rate);
+static bool sv6621_ap_mlme_assoc_response_ie(uint8_t identifier);
+static int sv6621_ap_mlme_copy_response_ies(
+    FAR uint8_t *response, size_t capacity, FAR size_t *response_length,
+    FAR const uint8_t *ies, size_t ies_length);
 
 /****************************************************************************
  * Private Functions
@@ -147,6 +160,52 @@ static bool sv6621_ap_mlme_rate_supported(enum sv6621_band_e band,
     }
 
   return false;
+}
+
+static bool sv6621_ap_mlme_assoc_response_ie(uint8_t identifier)
+{
+  return identifier == SV6621_AP_IE_SUPPORTED_RATES ||
+         identifier == SV6621_AP_IE_EXTENDED_RATES ||
+         identifier == SV6621_AP_IE_HT_CAPABILITY ||
+         identifier == SV6621_AP_IE_HT_OPERATION ||
+         identifier == SV6621_AP_IE_EXTENDED_CAPABILITY ||
+         identifier == SV6621_AP_IE_VHT_CAPABILITY ||
+         identifier == SV6621_AP_IE_VHT_OPERATION ||
+         identifier == SV6621_AP_IE_VENDOR ||
+         identifier == SV6621_AP_IE_EXTENSION;
+}
+
+static int sv6621_ap_mlme_copy_response_ies(
+    FAR uint8_t *response, size_t capacity, FAR size_t *response_length,
+    FAR const uint8_t *ies, size_t ies_length)
+{
+  while (ies_length != 0)
+    {
+      size_t element_length;
+
+      if (ies_length < 2 || (size_t)ies[1] > ies_length - 2)
+        {
+          return -EPROTO;
+        }
+
+      element_length = (size_t)ies[1] + 2;
+      if (sv6621_ap_mlme_assoc_response_ie(ies[0]))
+        {
+          if (*response_length > capacity ||
+              element_length > capacity - *response_length)
+            {
+              return -ENOSPC;
+            }
+
+          memcpy(response + *response_length, ies, element_length);
+          *response_length += element_length;
+        }
+
+      ies += element_length;
+      ies_length -= element_length;
+    }
+
+  return 0;
 }
 
 /****************************************************************************
@@ -458,5 +517,92 @@ int sv6621_ap_validate_association(
     }
 
   *status = SV6621_AP_STATUS_SUCCESS;
+  return 0;
+}
+
+int sv6621_ap_respond_association(
+    FAR struct sv6621_ap_peer_table_s *peers,
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
+    uint8_t channel, enum sv6621_band_e band,
+    FAR const uint8_t ap_address[SV6621_MAC_LENGTH],
+    FAR const uint8_t *ssid, size_t ssid_length,
+    FAR const uint8_t *response_ies, size_t response_ies_length,
+    FAR const struct sv6621_ap_mgmt_s *request, uint64_t cookie,
+    FAR bool *accepted)
+{
+  uint8_t response[SV6621_AP_MGMT_RESPONSE_MAX_SIZE];
+  size_t response_length = SV6621_AP_MGMT_ASSOC_RESPONSE_SIZE;
+  uint16_t status;
+  uint16_t aid = 0;
+  int ret;
+
+  if (peers == NULL || command == NULL || ap_address == NULL ||
+      ssid == NULL || request == NULL || accepted == NULL || channel == 0 ||
+      band > SV6621_BAND_5GHZ ||
+      (response_ies_length != 0 && response_ies == NULL))
+    {
+      return -EINVAL;
+    }
+
+  *accepted = false;
+  ret = sv6621_ap_validate_association(peers, ap_address, ssid, ssid_length,
+                                       request, &status);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (status == SV6621_AP_STATUS_SUCCESS)
+    {
+      ret = sv6621_ap_peer_prepare_association(
+          peers, request->source, request->capability, &aid);
+      if (ret < 0)
+        {
+          status = SV6621_AP_STATUS_UNSPECIFIED;
+        }
+    }
+
+  memset(response, 0, sizeof(response));
+  response[0] = request->type == SV6621_AP_MGMT_REASSOC_REQUEST ?
+                0x30 : 0x10;
+  memcpy(response + SV6621_AP_MGMT_DESTINATION_OFFSET, request->source,
+         SV6621_MAC_LENGTH);
+  memcpy(response + SV6621_AP_MGMT_SOURCE_OFFSET, ap_address,
+         SV6621_MAC_LENGTH);
+  memcpy(response + SV6621_AP_MGMT_BSSID_OFFSET, ap_address,
+         SV6621_MAC_LENGTH);
+  response[24] = request->capability;
+  response[25] = request->capability >> 8;
+  response[26] = status;
+  response[27] = status >> 8;
+  response[28] = aid;
+  response[29] = aid >> 8;
+
+  if (status == SV6621_AP_STATUS_SUCCESS)
+    {
+      ret = sv6621_ap_mlme_copy_response_ies(
+          response, sizeof(response), &response_length, response_ies,
+          response_ies_length);
+      if (ret < 0)
+        {
+          sv6621_ap_peer_cancel_association(peers, request->source);
+          return ret;
+        }
+    }
+
+  ret = sv6621_management_tx(command, instance, 0, cookie, channel, band,
+                             false, response, response_length,
+                             response_length);
+  if (ret < 0)
+    {
+      if (status == SV6621_AP_STATUS_SUCCESS)
+        {
+          sv6621_ap_peer_cancel_association(peers, request->source);
+        }
+
+      return ret;
+    }
+
+  *accepted = status == SV6621_AP_STATUS_SUCCESS;
   return 0;
 }
