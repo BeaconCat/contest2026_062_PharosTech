@@ -580,11 +580,15 @@ static int sv6621_core_roam_transaction(
   struct sv6621_connect_s connection;
   struct sv6621_connect_s rollback;
   struct sv6621_scan_entry_s previous;
+  struct sv6621_roam_result_s event;
 #ifdef CONFIG_NET
   struct sv6621_data_tx_context_s context;
 #endif
   bool inserted;
+  bool attempted = false;
   int ret;
+
+  memset(&event, 0, sizeof(event));
 
   ret = nxmutex_lock(&dev->lifecycle_lock);
   if (ret < 0)
@@ -626,6 +630,8 @@ static int sv6621_core_roam_transaction(
   connection = dev->station.request;
   rollback = dev->station.request;
   previous = dev->station.target;
+  memcpy(event.old_bssid, previous.bss.bssid, SV6621_MAC_LENGTH);
+  memcpy(event.new_bssid, candidate->bss.bssid, SV6621_MAC_LENGTH);
   memcpy(connection.bssid, candidate->bss.bssid, SV6621_MAC_LENGTH);
   connection.bssid_valid = true;
   connection.channel = candidate->bss.channel;
@@ -639,16 +645,19 @@ static int sv6621_core_roam_transaction(
       goto unlock_lifecycle;
     }
 
+  attempted = true;
   ret = sv6621_core_connect_locked(dev, &connection, true);
   if (ret < 0)
     {
       int roam_error = ret;
 
+      event.result = roam_error;
       sv6621_wpa_cancel(&dev->wpa, roam_error);
       sv6621_station_reset(&dev->station, roam_error);
       ret = sv6621_scan_cache_store(&dev->scan.cache, &previous, &inserted);
       if (ret < 0)
         {
+          event.rollback_result = ret;
           goto unlock_lifecycle;
         }
 
@@ -656,10 +665,13 @@ static int sv6621_core_roam_transaction(
       rollback.bssid_valid = true;
       rollback.channel = previous.bss.channel;
       ret = sv6621_core_connect_locked(dev, &rollback, false);
+      event.rollback_result = ret;
       if (ret < 0)
         {
           goto unlock_lifecycle;
         }
+
+      event.restored = true;
     }
 
 #ifdef CONFIG_NET
@@ -689,6 +701,17 @@ static int sv6621_core_roam_transaction(
 
 unlock_lifecycle:
   nxmutex_unlock(&dev->lifecycle_lock);
+  if (attempted)
+    {
+      if (event.result == 0 && ret < 0)
+        {
+          event.result = ret;
+        }
+
+      sv6621_core_report(dev, SV6621_EVENT_ROAM_COMPLETE, &event,
+                         sizeof(event));
+    }
+
   return ret;
 }
 

@@ -147,7 +147,8 @@ enum sv6621_event_e
   SV6621_EVENT_MIC_FAILURE,
   SV6621_EVENT_SIGNAL_CHANGED,
   SV6621_EVENT_FATAL,
-  SV6621_EVENT_ROAM_CANDIDATE
+  SV6621_EVENT_ROAM_CANDIDATE,
+  SV6621_EVENT_ROAM_COMPLETE
 };
 
 enum sv6621_signal_status_e
@@ -218,6 +219,15 @@ struct sv6621_roam_candidate_s
   struct sv6621_bss_s candidate;
   int16_t current_signal_dbm;
   uint8_t gain_db;
+};
+
+struct sv6621_roam_result_s
+{
+  uint8_t old_bssid[SV6621_MAC_LENGTH];
+  uint8_t new_bssid[SV6621_MAC_LENGTH];
+  int32_t result;
+  int32_t rollback_result;
+  bool restored;
 };
 
 struct sv6621_roam_policy_s
