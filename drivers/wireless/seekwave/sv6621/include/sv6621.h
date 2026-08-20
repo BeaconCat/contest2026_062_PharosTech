@@ -517,6 +517,8 @@ int sv6621_start_scheduled_scan(
     FAR struct sv6621_dev_s *dev,
     FAR const struct sv6621_sched_scan_request_s *request);
 int sv6621_stop_scheduled_scan(FAR struct sv6621_dev_s *dev);
+int sv6621_start_ap(FAR struct sv6621_dev_s *dev,
+                    FAR const struct sv6621_ap_config_s *config);
 int sv6621_suspend(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_suspend_s *config);
 int sv6621_resume(FAR struct sv6621_dev_s *dev);
