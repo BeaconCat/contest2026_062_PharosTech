@@ -2692,7 +2692,7 @@ fail:
 #endif
   if (dev->station_open)
     {
-      sv6621_wifi_close_station(&dev->command);
+      sv6621_wifi_close_device(&dev->command);
       dev->station_open = false;
     }
 
@@ -2773,7 +2773,7 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
   sv6621_station_reset(&dev->station, -ESHUTDOWN);
   if (dev->station_open)
     {
-      close_ret = sv6621_wifi_close_station(&dev->command);
+      close_ret = sv6621_wifi_close_device(&dev->command);
       dev->station_open = false;
     }
 
