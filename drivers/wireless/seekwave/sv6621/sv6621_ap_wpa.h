@@ -66,6 +66,7 @@ struct sv6621_ap_wpa_peer_s
   uint8_t replay[SV6621_WPA_REPLAY_SIZE];
   uint8_t peer_index;
   enum sv6621_ap_wpa_state_e state;
+  bool group_rekey_pending;
 };
 
 struct sv6621_ap_wpa_s
@@ -76,10 +77,13 @@ struct sv6621_ap_wpa_s
   uint8_t authenticator[SV6621_MAC_LENGTH];
   uint8_t pmk[SV6621_WPA_PMK_SIZE];
   uint8_t gtk[16];
+  uint8_t previous_gtk[16];
   uint8_t lmac_id;
   uint8_t instance;
   uint8_t multicast_index;
   uint8_t gtk_index;
+  uint8_t previous_gtk_index;
+  bool group_rekey_active;
   bool enabled;
 };
 
@@ -99,6 +103,7 @@ int sv6621_ap_wpa_enable(FAR struct sv6621_ap_wpa_s *wpa,
 void sv6621_ap_wpa_disable(FAR struct sv6621_ap_wpa_s *wpa);
 int sv6621_ap_wpa_begin(FAR struct sv6621_ap_wpa_s *wpa,
                          FAR const struct sv6621_ap_peer_s *peer);
+int sv6621_ap_wpa_rekey(FAR struct sv6621_ap_wpa_s *wpa);
 void sv6621_ap_wpa_forget(
     FAR struct sv6621_ap_wpa_s *wpa,
     FAR const uint8_t address[SV6621_MAC_LENGTH]);
