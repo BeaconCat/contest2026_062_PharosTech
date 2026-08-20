@@ -60,6 +60,8 @@
 #define SV6621_WIFI_COMMAND_TX_DATA         15
 #define SV6621_WIFI_COMMAND_SET_IP          16
 #define SV6621_WIFI_COMMAND_DISCONNECT      17
+#define SV6621_WIFI_COMMAND_START_AP        19
+#define SV6621_WIFI_COMMAND_STOP_AP         20
 #define SV6621_WIFI_COMMAND_GET_STA         23
 #define SV6621_WIFI_COMMAND_SET_MC_ADDR     26
 #define SV6621_WIFI_COMMAND_RESUME          27
@@ -97,6 +99,7 @@
 #define SV6621_WIFI_CALIBRATION_MAX_SIZE    (256 * 512)
 
 #define SV6621_WIFI_OPEN_MODE_STATION       1
+#define SV6621_WIFI_OPEN_MODE_ACCESS_POINT  2
 #define SV6621_WIFI_OPEN_PAYLOAD_SIZE       10
 
 #define SV6621_WIFI_MIB_LENGTH_SIZE         2
@@ -130,6 +133,8 @@ static const uint8_t g_sv6621_wifi_supported_commands[] =
   SV6621_WIFI_COMMAND_TX_DATA,
   SV6621_WIFI_COMMAND_SET_IP,
   SV6621_WIFI_COMMAND_DISCONNECT,
+  SV6621_WIFI_COMMAND_START_AP,
+  SV6621_WIFI_COMMAND_STOP_AP,
   SV6621_WIFI_COMMAND_GET_STA,
   SV6621_WIFI_COMMAND_SET_MC_ADDR,
   SV6621_WIFI_COMMAND_RESUME,
@@ -153,6 +158,9 @@ static int sv6621_wifi_select_address(
     FAR const struct sv6621_board_ops_s *board_ops, FAR void *board_arg,
     FAR const uint8_t firmware_address[SV6621_MAC_LENGTH],
     uint8_t selected[SV6621_MAC_LENGTH]);
+static int sv6621_wifi_open_device(
+    FAR struct sv6621_command_engine_s *command, uint8_t mode,
+    FAR const uint8_t address[SV6621_MAC_LENGTH]);
 
 /****************************************************************************
  * Private Functions
@@ -236,6 +244,32 @@ static int sv6621_wifi_select_address(
 
   ret = board_ops->store_address(board_arg, selected);
   return ret < 0 ? ret : 0;
+}
+
+static int sv6621_wifi_open_device(
+    FAR struct sv6621_command_engine_s *command, uint8_t mode,
+    FAR const uint8_t address[SV6621_MAC_LENGTH])
+{
+  uint8_t payload[SV6621_WIFI_OPEN_PAYLOAD_SIZE];
+  int ret;
+
+  if (command == NULL || address == NULL ||
+      (mode != SV6621_WIFI_OPEN_MODE_STATION &&
+       mode != SV6621_WIFI_OPEN_MODE_ACCESS_POINT) ||
+      !sv6621_wifi_address_valid(address))
+    {
+      return -EINVAL;
+    }
+
+  payload[0] = mode;
+  payload[1] = 0;
+  payload[2] = 0;
+  payload[3] = 0;
+  memcpy(payload + 4, address, SV6621_MAC_LENGTH);
+  ret = sv6621_command_execute(
+      command, SV6621_WIFI_INSTANCE, SV6621_WIFI_COMMAND_OPEN_DEVICE, payload,
+      sizeof(payload), NULL, NULL, SV6621_WIFI_COMMAND_TIMEOUT_MS);
+  return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
 }
 
 /****************************************************************************
@@ -435,27 +469,20 @@ int sv6621_wifi_download_calibration(
 int sv6621_wifi_open_station(FAR struct sv6621_command_engine_s *command,
                              FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
-  uint8_t payload[SV6621_WIFI_OPEN_PAYLOAD_SIZE];
-  int ret;
-
-  if (command == NULL || address == NULL ||
-      !sv6621_wifi_address_valid(address))
-    {
-      return -EINVAL;
-    }
-
-  payload[0] = SV6621_WIFI_OPEN_MODE_STATION;
-  payload[1] = 0;
-  payload[2] = 0;
-  payload[3] = 0;
-  memcpy(payload + 4, address, SV6621_MAC_LENGTH);
-  ret = sv6621_command_execute(
-      command, SV6621_WIFI_INSTANCE, SV6621_WIFI_COMMAND_OPEN_DEVICE, payload,
-      sizeof(payload), NULL, NULL, SV6621_WIFI_COMMAND_TIMEOUT_MS);
-  return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
+  return sv6621_wifi_open_device(command, SV6621_WIFI_OPEN_MODE_STATION,
+                                 address);
 }
 
-int sv6621_wifi_close_station(FAR struct sv6621_command_engine_s *command)
+int sv6621_wifi_open_access_point(
+    FAR struct sv6621_command_engine_s *command,
+    FAR const uint8_t address[SV6621_MAC_LENGTH])
+{
+  return sv6621_wifi_open_device(command,
+                                 SV6621_WIFI_OPEN_MODE_ACCESS_POINT,
+                                 address);
+}
+
+int sv6621_wifi_close_device(FAR struct sv6621_command_engine_s *command)
 {
   int ret;
 
