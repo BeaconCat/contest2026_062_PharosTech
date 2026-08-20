@@ -255,13 +255,13 @@ int sv6621_ap_peer_authenticate(
 
 int sv6621_ap_peer_bind(FAR struct sv6621_ap_peer_table_s *table,
                         FAR const uint8_t address[SV6621_MAC_LENGTH],
-                        uint8_t peer_index, uint16_t capability,
-                        FAR uint16_t *aid)
+                        uint8_t peer_index)
 {
   FAR struct sv6621_ap_peer_s *peer;
+  unsigned int index;
   int ret;
 
-  if (table == NULL || address == NULL || aid == NULL ||
+  if (table == NULL || address == NULL ||
       peer_index > SV6621_AP_PEER_INDEX_MAX)
     {
       return -EINVAL;
@@ -280,6 +280,54 @@ int sv6621_ap_peer_bind(FAR struct sv6621_ap_peer_table_s *table,
       return peer == NULL ? -ENOENT : -EALREADY;
     }
 
+  for (index = 0; index < table->capacity; index++)
+    {
+      if (&table->peers[index] != peer &&
+          table->peers[index].state != SV6621_AP_PEER_FREE &&
+          table->peers[index].bound &&
+          table->peers[index].peer_index == peer_index)
+        {
+          nxmutex_unlock(&table->lock);
+          return -EEXIST;
+        }
+    }
+
+  peer->peer_index = peer_index;
+  peer->bound = true;
+  nxmutex_unlock(&table->lock);
+  return 0;
+}
+
+int sv6621_ap_peer_associate(
+                        FAR struct sv6621_ap_peer_table_s *table,
+                        FAR const uint8_t address[SV6621_MAC_LENGTH],
+                        uint16_t capability,
+                        FAR uint16_t *aid)
+{
+  FAR struct sv6621_ap_peer_s *peer;
+  int ret;
+
+  if (table == NULL || address == NULL || aid == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&table->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  peer = sv6621_ap_peer_find(table, address);
+  if (peer == NULL || peer->state != SV6621_AP_PEER_AUTHENTICATED ||
+      !peer->bound)
+    {
+      nxmutex_unlock(&table->lock);
+      return peer == NULL ? -ENOENT :
+             peer->state != SV6621_AP_PEER_AUTHENTICATED ? -EALREADY :
+             -EAGAIN;
+    }
+
   peer->aid = sv6621_ap_peer_allocate_aid(table);
   if (peer->aid == 0)
     {
@@ -287,7 +335,6 @@ int sv6621_ap_peer_bind(FAR struct sv6621_ap_peer_table_s *table,
       return -ENOSPC;
     }
 
-  peer->peer_index = peer_index;
   peer->capability = capability;
   peer->state = SV6621_AP_PEER_ASSOCIATED;
   *aid = peer->aid;

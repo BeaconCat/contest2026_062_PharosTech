@@ -61,6 +61,7 @@ struct sv6621_ap_peer_s
   uint8_t peer_index;
   uint16_t aid;
   uint16_t capability;
+  bool bound;
 };
 
 struct sv6621_ap_peer_table_s
@@ -91,7 +92,11 @@ int sv6621_ap_peer_authenticate(
     FAR const uint8_t address[SV6621_MAC_LENGTH]);
 int sv6621_ap_peer_bind(FAR struct sv6621_ap_peer_table_s *table,
                         FAR const uint8_t address[SV6621_MAC_LENGTH],
-                        uint8_t peer_index, uint16_t capability,
+                        uint8_t peer_index);
+int sv6621_ap_peer_associate(
+                        FAR struct sv6621_ap_peer_table_s *table,
+                        FAR const uint8_t address[SV6621_MAC_LENGTH],
+                        uint16_t capability,
                         FAR uint16_t *aid);
 int sv6621_ap_peer_authorize(
     FAR struct sv6621_ap_peer_table_s *table,
