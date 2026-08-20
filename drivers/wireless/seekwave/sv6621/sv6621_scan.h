@@ -157,6 +157,12 @@ int sv6621_scan_cache_snapshot(FAR struct sv6621_scan_cache_s *cache,
 int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
                            FAR const struct sv6621_connect_s *request,
                            FAR struct sv6621_scan_entry_s *entry);
+int sv6621_scan_cache_find_roam_candidate(
+    FAR struct sv6621_scan_cache_s *cache,
+    FAR const struct sv6621_connect_s *request,
+    FAR const uint8_t current_bssid[SV6621_MAC_LENGTH],
+    int16_t current_signal_dbm, uint8_t minimum_gain_db,
+    FAR struct sv6621_scan_entry_s *entry);
 int sv6621_scan_controller_init(FAR struct sv6621_scan_s *scan,
                                 FAR struct sv6621_command_engine_s *command,
                                 FAR struct sv6621_rx_s *rx,
