@@ -700,7 +700,7 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
 
   ret = sv6621_connection_join(
       station->command, &station->target, station->bandwidth_capabilities,
-      &station->peer);
+      false, &station->peer);
   if (ret < 0)
     {
       sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
