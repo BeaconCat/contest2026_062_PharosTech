@@ -248,7 +248,7 @@ static void sv6621_connection_select_vht_channel(
 
 int sv6621_connection_join(FAR struct sv6621_command_engine_s *command,
                            FAR const struct sv6621_scan_entry_s *entry,
-                           uint32_t bandwidth_capabilities,
+                           uint32_t bandwidth_capabilities, bool roaming,
                            FAR struct sv6621_connection_peer_s *peer)
 {
   uint8_t response[SV6621_CONNECTION_JOIN_RESPONSE_SIZE];
@@ -288,6 +288,7 @@ int sv6621_connection_join(FAR struct sv6621_command_engine_s *command,
   payload[9] = entry->bssid_index;
   payload[10] = entry->max_bssid_indicator;
   memcpy(payload + 11, entry->bss.bssid, SV6621_MAC_LENGTH);
+  sv6621_connection_put_le16(payload + 17, roaming ? 1 : 0);
   sv6621_connection_put_le16(payload + 19,
                              SV6621_CONNECTION_JOIN_HEADER_SIZE);
   sv6621_connection_put_le32(payload + 21, entry->ie_length);

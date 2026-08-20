@@ -137,7 +137,7 @@ int sv6621_station_set_local_address(
 void sv6621_station_deinit(FAR struct sv6621_station_s *station);
 int sv6621_station_connect(FAR struct sv6621_station_s *station,
                            FAR const struct sv6621_connect_s *request,
-                           uint32_t timeout_ms);
+                           bool roaming, uint32_t timeout_ms);
 int sv6621_station_disconnect(FAR struct sv6621_station_s *station,
                               uint16_t reason);
 int sv6621_station_mark_connected(FAR struct sv6621_station_s *station);
