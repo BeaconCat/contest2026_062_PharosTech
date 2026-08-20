@@ -69,6 +69,23 @@ int sv6621_security_add_key(
     FAR const uint8_t *key, size_t key_length,
     FAR const uint8_t packet_number[SV6621_SECURITY_PACKET_NUMBER_SIZE])
 {
+  return sv6621_security_add_key_instance(
+      command, SV6621_SECURITY_INSTANCE, type, cipher, address, key_index,
+      key, key_length, packet_number);
+}
+
+/****************************************************************************
+ * Name: sv6621_security_add_key_instance
+ ****************************************************************************/
+
+int sv6621_security_add_key_instance(
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
+    enum sv6621_security_key_type_e type,
+    enum sv6621_security_cipher_e cipher,
+    FAR const uint8_t address[SV6621_MAC_LENGTH], uint8_t key_index,
+    FAR const uint8_t *key, size_t key_length,
+    FAR const uint8_t packet_number[SV6621_SECURITY_PACKET_NUMBER_SIZE])
+{
   uint8_t payload[SV6621_SECURITY_KEY_PAYLOAD_SIZE];
   bool valid_key;
 
@@ -109,7 +126,7 @@ int sv6621_security_add_key(
   memcpy(payload + SV6621_SECURITY_KEY_OFFSET, key, key_length);
 
   return sv6621_command_execute(
-      command, SV6621_SECURITY_INSTANCE, SV6621_SECURITY_COMMAND_ADD_KEY,
+      command, instance, SV6621_SECURITY_COMMAND_ADD_KEY,
       payload, sizeof(payload), NULL, NULL,
       SV6621_SECURITY_COMMAND_TIMEOUT_MS);
 }
@@ -120,6 +137,20 @@ int sv6621_security_add_key(
 
 int sv6621_security_delete_key(
     FAR struct sv6621_command_engine_s *command,
+    enum sv6621_security_key_type_e type,
+    enum sv6621_security_cipher_e cipher,
+    FAR const uint8_t address[SV6621_MAC_LENGTH], uint8_t key_index)
+{
+  return sv6621_security_delete_key_instance(
+      command, SV6621_SECURITY_INSTANCE, type, cipher, address, key_index);
+}
+
+/****************************************************************************
+ * Name: sv6621_security_delete_key_instance
+ ****************************************************************************/
+
+int sv6621_security_delete_key_instance(
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
     enum sv6621_security_key_type_e type,
     enum sv6621_security_cipher_e cipher,
     FAR const uint8_t address[SV6621_MAC_LENGTH], uint8_t key_index)
@@ -147,7 +178,7 @@ int sv6621_security_delete_key(
   payload[SV6621_SECURITY_KEY_INDEX_OFFSET] = key_index;
 
   return sv6621_command_execute(
-      command, SV6621_SECURITY_INSTANCE, SV6621_SECURITY_COMMAND_DEL_KEY,
+      command, instance, SV6621_SECURITY_COMMAND_DEL_KEY,
       payload, sizeof(payload), NULL, NULL,
       SV6621_SECURITY_COMMAND_TIMEOUT_MS);
 }
@@ -158,6 +189,19 @@ int sv6621_security_delete_key(
 
 int sv6621_security_send_eapol(
     FAR struct sv6621_command_engine_s *command,
+    FAR const struct sv6621_data_tx_context_s *context,
+    FAR const uint8_t *frame, size_t frame_length)
+{
+  return sv6621_security_send_eapol_instance(
+      command, SV6621_SECURITY_INSTANCE, context, frame, frame_length);
+}
+
+/****************************************************************************
+ * Name: sv6621_security_send_eapol_instance
+ ****************************************************************************/
+
+int sv6621_security_send_eapol_instance(
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
     FAR const struct sv6621_data_tx_context_s *context,
     FAR const uint8_t *frame, size_t frame_length)
 {
@@ -182,7 +226,7 @@ int sv6621_security_send_eapol(
     }
 
   return sv6621_command_execute(
-      command, SV6621_SECURITY_INSTANCE, SV6621_SECURITY_COMMAND_TX_DATA,
+      command, instance, SV6621_SECURITY_COMMAND_TX_DATA,
       payload, payload_length, NULL, NULL,
       SV6621_SECURITY_COMMAND_TIMEOUT_MS);
 }

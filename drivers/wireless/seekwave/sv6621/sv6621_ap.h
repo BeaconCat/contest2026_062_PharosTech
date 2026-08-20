@@ -38,6 +38,7 @@
 #include "sv6621_ap_beacon.h"
 #include "sv6621_ap_event.h"
 #include "sv6621_ap_peer.h"
+#include "sv6621_ap_wpa.h"
 #include "sv6621_command.h"
 #include "sv6621_data.h"
 
@@ -88,6 +89,7 @@ struct sv6621_ap_s
   FAR struct sv6621_command_engine_s *command;
   struct sv6621_ap_event_queue_s events;
   struct sv6621_ap_peer_table_s peers;
+  struct sv6621_ap_wpa_s wpa;
   struct sv6621_ap_beacon_templates_s templates;
   struct sv6621_ap_config_s config;
   struct sv6621_ap_context_s context;
@@ -137,5 +139,7 @@ int sv6621_ap_forward_policy(FAR struct sv6621_ap_s *ap,
                              FAR const struct sv6621_data_rx_s *rx,
                              FAR bool *forward, FAR bool *deliver_local);
 bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap);
+void sv6621_ap_eapol_input(FAR const struct sv6621_data_rx_s *rx,
+                            FAR void *arg);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_H */
