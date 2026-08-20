@@ -33,6 +33,8 @@
 #include <stdint.h>
 
 #include "include/sv6621.h"
+#include "sv6621_ap_peer.h"
+#include "sv6621_command.h"
 
 /****************************************************************************
  * Public Types
@@ -76,5 +78,12 @@ struct sv6621_ap_mgmt_s
 
 int sv6621_ap_parse_mgmt(FAR const uint8_t *payload, size_t payload_length,
                          FAR struct sv6621_ap_mgmt_s *event);
+int sv6621_ap_authenticate_open(
+    FAR struct sv6621_ap_peer_table_s *peers,
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
+    uint8_t channel, enum sv6621_band_e band,
+    FAR const uint8_t ap_address[SV6621_MAC_LENGTH],
+    FAR const struct sv6621_ap_mgmt_s *request, uint64_t cookie,
+    FAR bool *accepted);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_MLME_H */

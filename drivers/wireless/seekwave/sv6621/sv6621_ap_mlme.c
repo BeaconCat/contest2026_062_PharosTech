@@ -30,6 +30,7 @@
 #include <string.h>
 
 #include "sv6621_ap_mlme.h"
+#include "sv6621_management.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -52,6 +53,15 @@
 #define SV6621_AP_MGMT_REASSOC_FIXED_SIZE  34
 #define SV6621_AP_MGMT_AUTH_FIXED_SIZE     30
 #define SV6621_AP_MGMT_REASON_FIXED_SIZE   26
+#define SV6621_AP_MGMT_AUTH_RESPONSE_SIZE  30
+#define SV6621_AP_AUTH_OPEN                  0
+#define SV6621_AP_AUTH_REQUEST_TRANSACTION   1
+#define SV6621_AP_AUTH_RESPONSE_TRANSACTION  2
+#define SV6621_AP_STATUS_SUCCESS             0
+#define SV6621_AP_STATUS_UNSPECIFIED         1
+#define SV6621_AP_STATUS_AUTH_UNSUPPORTED   13
+#define SV6621_AP_STATUS_AUTH_TRANSACTION   14
+#define SV6621_AP_REASON_LEAVING             3
 
 /****************************************************************************
  * Private Function Prototypes
@@ -60,6 +70,11 @@
 static uint16_t sv6621_ap_mlme_get_le16(FAR const uint8_t *value);
 static void sv6621_ap_mlme_set_ies(FAR struct sv6621_ap_mgmt_s *event,
                                   size_t offset);
+static void sv6621_ap_mlme_build_auth_response(
+    FAR uint8_t response[SV6621_AP_MGMT_AUTH_RESPONSE_SIZE],
+    FAR const uint8_t destination[SV6621_MAC_LENGTH],
+    FAR const uint8_t ap_address[SV6621_MAC_LENGTH], uint16_t algorithm,
+    uint16_t transaction, uint16_t status);
 
 /****************************************************************************
  * Private Functions
@@ -75,6 +90,28 @@ static void sv6621_ap_mlme_set_ies(FAR struct sv6621_ap_mgmt_s *event,
 {
   event->information_elements = event->frame + offset;
   event->information_element_length = event->frame_length - offset;
+}
+
+static void sv6621_ap_mlme_build_auth_response(
+    FAR uint8_t response[SV6621_AP_MGMT_AUTH_RESPONSE_SIZE],
+    FAR const uint8_t destination[SV6621_MAC_LENGTH],
+    FAR const uint8_t ap_address[SV6621_MAC_LENGTH], uint16_t algorithm,
+    uint16_t transaction, uint16_t status)
+{
+  memset(response, 0, SV6621_AP_MGMT_AUTH_RESPONSE_SIZE);
+  response[0] = SV6621_AP_FRAME_AUTH;
+  memcpy(response + SV6621_AP_MGMT_DESTINATION_OFFSET, destination,
+         SV6621_MAC_LENGTH);
+  memcpy(response + SV6621_AP_MGMT_SOURCE_OFFSET, ap_address,
+         SV6621_MAC_LENGTH);
+  memcpy(response + SV6621_AP_MGMT_BSSID_OFFSET, ap_address,
+         SV6621_MAC_LENGTH);
+  response[24] = algorithm;
+  response[25] = algorithm >> 8;
+  response[26] = transaction;
+  response[27] = transaction >> 8;
+  response[28] = status;
+  response[29] = status >> 8;
 }
 
 /****************************************************************************
@@ -180,5 +217,107 @@ int sv6621_ap_parse_mgmt(FAR const uint8_t *payload, size_t payload_length,
         return -ENOMSG;
     }
 
+  return 0;
+}
+
+int sv6621_ap_authenticate_open(
+    FAR struct sv6621_ap_peer_table_s *peers,
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
+    uint8_t channel, enum sv6621_band_e band,
+    FAR const uint8_t ap_address[SV6621_MAC_LENGTH],
+    FAR const struct sv6621_ap_mgmt_s *request, uint64_t cookie,
+    FAR bool *accepted)
+{
+  struct sv6621_ap_peer_s peer;
+  uint8_t response[SV6621_AP_MGMT_AUTH_RESPONSE_SIZE];
+  uint16_t status = SV6621_AP_STATUS_SUCCESS;
+  int ret;
+
+  if (peers == NULL || command == NULL || ap_address == NULL ||
+      request == NULL || accepted == NULL || channel == 0 ||
+      band > SV6621_BAND_5GHZ || request->type != SV6621_AP_MGMT_AUTH)
+    {
+      return -EINVAL;
+    }
+
+  *accepted = false;
+  if (memcmp(request->bssid, ap_address, SV6621_MAC_LENGTH) != 0 ||
+      memcmp(request->destination, ap_address, SV6621_MAC_LENGTH) != 0)
+    {
+      status = SV6621_AP_STATUS_UNSPECIFIED;
+    }
+  else if (request->algorithm != SV6621_AP_AUTH_OPEN)
+    {
+      status = SV6621_AP_STATUS_AUTH_UNSUPPORTED;
+    }
+  else if (request->transaction != SV6621_AP_AUTH_REQUEST_TRANSACTION)
+    {
+      status = SV6621_AP_STATUS_AUTH_TRANSACTION;
+    }
+  else if (request->status != SV6621_AP_STATUS_SUCCESS)
+    {
+      return -ECONNREFUSED;
+    }
+
+  if (status == SV6621_AP_STATUS_SUCCESS)
+    {
+      ret = sv6621_ap_peer_authenticate(peers, request->source);
+      if (ret < 0)
+        {
+          status = SV6621_AP_STATUS_UNSPECIFIED;
+        }
+      else
+        {
+          ret = sv6621_ap_peer_lookup(peers, request->source, &peer);
+          if (ret < 0)
+            {
+              return ret;
+            }
+
+          if (!peer.bound)
+            {
+              ret = sv6621_ap_add_peer(command, instance, request->source,
+                                       &peer.peer_index);
+              if (ret < 0)
+                {
+                  sv6621_ap_peer_forget(peers, request->source, NULL);
+                  status = SV6621_AP_STATUS_UNSPECIFIED;
+                }
+              else
+                {
+                  ret = sv6621_ap_peer_bind(peers, request->source,
+                                            peer.peer_index);
+                  if (ret < 0)
+                    {
+                      sv6621_ap_remove_peer(command, instance,
+                                            request->source,
+                                            SV6621_AP_REASON_LEAVING, false);
+                      sv6621_ap_peer_forget(peers, request->source, NULL);
+                      status = SV6621_AP_STATUS_UNSPECIFIED;
+                    }
+                }
+            }
+        }
+    }
+
+  sv6621_ap_mlme_build_auth_response(
+      response, request->source, ap_address, request->algorithm,
+      request->transaction + 1, status);
+  ret = sv6621_management_tx(command, instance, 0, cookie, channel, band,
+                             false, response, sizeof(response),
+                             sizeof(response));
+  if (ret < 0)
+    {
+      if (status == SV6621_AP_STATUS_SUCCESS)
+        {
+          sv6621_ap_remove_peer(command, instance, request->source,
+                                SV6621_AP_REASON_LEAVING, false);
+          sv6621_ap_peer_forget(peers, request->source, NULL);
+        }
+
+      return ret;
+    }
+
+  *accepted = status == SV6621_AP_STATUS_SUCCESS;
   return 0;
 }

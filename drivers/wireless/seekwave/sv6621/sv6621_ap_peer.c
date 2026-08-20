@@ -226,9 +226,11 @@ int sv6621_ap_peer_authenticate(
   peer = sv6621_ap_peer_find(table, address);
   if (peer != NULL)
     {
-      ret = peer->state == SV6621_AP_PEER_AUTHENTICATED ? 0 : -EALREADY;
+      peer->state = SV6621_AP_PEER_AUTHENTICATED;
+      peer->aid = 0;
+      peer->capability = 0;
       nxmutex_unlock(&table->lock);
-      return ret;
+      return 0;
     }
 
   for (index = 0; index < table->capacity; index++)
