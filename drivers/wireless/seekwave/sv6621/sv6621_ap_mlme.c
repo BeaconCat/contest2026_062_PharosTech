@@ -692,3 +692,19 @@ int sv6621_ap_handle_tx_status(
                               SV6621_AP_REASON_LEAVING, false);
   return ret;
 }
+
+int sv6621_ap_handle_departure(
+    FAR struct sv6621_ap_peer_table_s *peers,
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
+    FAR const struct sv6621_ap_mgmt_s *event)
+{
+  if (peers == NULL || command == NULL || event == NULL ||
+      (event->type != SV6621_AP_MGMT_DEAUTH &&
+       event->type != SV6621_AP_MGMT_DISASSOC))
+    {
+      return -EINVAL;
+    }
+
+  return sv6621_ap_peer_departed(peers, command, instance, event->source,
+                                 event->reason, false);
+}

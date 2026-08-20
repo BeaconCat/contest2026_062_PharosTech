@@ -31,6 +31,7 @@
 #include <nuttx/mutex.h>
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "include/sv6621.h"
@@ -126,5 +127,13 @@ int sv6621_ap_peer_lookup(FAR struct sv6621_ap_peer_table_s *table,
 int sv6621_ap_peer_forget(FAR struct sv6621_ap_peer_table_s *table,
                           FAR const uint8_t address[SV6621_MAC_LENGTH],
                           FAR struct sv6621_ap_peer_s *peer);
+int sv6621_ap_parse_peer_departure(
+    FAR const uint8_t *payload, size_t payload_length,
+    FAR uint8_t address[SV6621_MAC_LENGTH], FAR uint16_t *reason);
+int sv6621_ap_peer_departed(FAR struct sv6621_ap_peer_table_s *table,
+                            FAR struct sv6621_command_engine_s *command,
+                            uint8_t instance,
+                            FAR const uint8_t address[SV6621_MAC_LENGTH],
+                            uint16_t reason, bool firmware_event);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_PEER_H */
