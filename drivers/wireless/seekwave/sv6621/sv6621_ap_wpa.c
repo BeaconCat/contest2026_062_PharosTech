@@ -339,7 +339,7 @@ int sv6621_ap_wpa_rekey(FAR struct sv6621_ap_wpa_s *wpa)
 
   memcpy(wpa->previous_gtk, wpa->gtk, sizeof(wpa->gtk));
   wpa->previous_gtk_index = wpa->gtk_index;
-  wpa->gtk_index = (uint8_t)((wpa->gtk_index & 3) + 1);
+  wpa->gtk_index = wpa->gtk_index >= 3 ? 1 : wpa->gtk_index + 1;
   memcpy(wpa->gtk, gtk, sizeof(wpa->gtk));
   ret = sv6621_security_add_key_instance(
       wpa->command, wpa->instance, SV6621_SECURITY_KEY_GROUP,
