@@ -497,6 +497,8 @@ int sv6621_ap_enable(FAR struct sv6621_ap_s *ap, uint8_t instance,
   struct sv6621_ap_beacon_config_s beacon;
   struct sv6621_ap_start_s start;
   struct sv6621_ap_context_s context;
+  uint8_t rsn_ie[64];
+  size_t rsn_ie_length = 0;
   int ret;
 
   if (ap == NULL || config == NULL || config->ssid_length == 0 ||
@@ -509,10 +511,28 @@ int sv6621_ap_enable(FAR struct sv6621_ap_s *ap, uint8_t instance,
       return -EINVAL;
     }
 
-  if (config->security != SV6621_SECURITY_OPEN ||
-      config->credential_length != 0)
+  if (config->security != SV6621_SECURITY_OPEN &&
+      config->security != SV6621_SECURITY_WPA2_PSK)
     {
       return -EOPNOTSUPP;
+    }
+
+  if ((config->security == SV6621_SECURITY_OPEN &&
+       config->credential_length != 0) ||
+      (config->security == SV6621_SECURITY_WPA2_PSK &&
+       (config->credential_length < 8 || config->credential_length > 63)))
+    {
+      return -EINVAL;
+    }
+
+  if (config->security == SV6621_SECURITY_WPA2_PSK)
+    {
+      ret = sv6621_ap_build_rsn_ie(config->security, false, rsn_ie,
+                                   sizeof(rsn_ie), &rsn_ie_length);
+      if (ret < 0)
+        {
+          return ret;
+        }
     }
 
   ret = nxmutex_lock(&ap->lock);
@@ -535,6 +555,9 @@ int sv6621_ap_enable(FAR struct sv6621_ap_s *ap, uint8_t instance,
   beacon.channel = config->channel;
   beacon.band = config->band;
   beacon.beacon_interval = config->beacon_interval;
+  beacon.privacy = config->security != SV6621_SECURITY_OPEN;
+  beacon.extra_ies = rsn_ie;
+  beacon.extra_ies_length = rsn_ie_length;
   ret = sv6621_ap_build_beacon_templates(&beacon, &ap->templates);
   if (ret < 0)
     {
