@@ -150,6 +150,40 @@ void sv6621_ap_event_queue_deinit(FAR struct sv6621_ap_event_queue_s *queue)
   memset(queue, 0, sizeof(*queue));
 }
 
+int sv6621_ap_event_queue_reset(FAR struct sv6621_ap_event_queue_s *queue)
+{
+  int ret;
+
+  if (queue == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&queue->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  queue->stopping = true;
+  nxmutex_unlock(&queue->lock);
+  work_cancel_sync(LPWORK, &queue->work);
+
+  ret = nxmutex_lock(&queue->lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  queue->head = 0;
+  queue->tail = 0;
+  queue->count = 0;
+  queue->work_scheduled = false;
+  queue->stopping = false;
+  nxmutex_unlock(&queue->lock);
+  return 0;
+}
+
 int sv6621_ap_event_queue_submit(FAR struct sv6621_ap_event_queue_s *queue,
                                  uint8_t instance, uint8_t id,
                                  FAR const uint8_t *payload, size_t length)

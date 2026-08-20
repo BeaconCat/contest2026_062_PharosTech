@@ -90,6 +90,7 @@ int sv6621_ap_event_queue_init(FAR struct sv6621_ap_event_queue_s *queue,
                                sv6621_ap_event_error_t error,
                                FAR void *arg);
 void sv6621_ap_event_queue_deinit(FAR struct sv6621_ap_event_queue_s *queue);
+int sv6621_ap_event_queue_reset(FAR struct sv6621_ap_event_queue_s *queue);
 int sv6621_ap_event_queue_submit(FAR struct sv6621_ap_event_queue_s *queue,
                                  uint8_t instance, uint8_t id,
                                  FAR const uint8_t *payload, size_t length);
