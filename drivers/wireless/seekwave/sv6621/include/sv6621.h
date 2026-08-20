@@ -46,6 +46,10 @@
 #define SV6621_KEY_MAX_LENGTH  64
 #define SV6621_REGULATORY_MAX_RULES 8
 #define SV6621_DRIVER_STATS_VERSION 1
+#define SV6621_ROAM_DEFAULT_THRESHOLD_DBM (-70)
+#define SV6621_ROAM_DEFAULT_HYSTERESIS_DB 40
+#define SV6621_ROAM_DEFAULT_MINIMUM_GAIN_DB 8
+#define SV6621_ROAM_DEFAULT_COOLDOWN_MS 15000
 
 #ifdef CONFIG_NET
 #define SV6621IOC_GET_DRIVER_STATS SIOCDEVPRIVATE
@@ -214,6 +218,15 @@ struct sv6621_roam_candidate_s
   struct sv6621_bss_s candidate;
   int16_t current_signal_dbm;
   uint8_t gain_db;
+};
+
+struct sv6621_roam_policy_s
+{
+  bool enabled;
+  int8_t threshold_dbm;
+  uint8_t hysteresis_db;
+  uint8_t minimum_gain_db;
+  uint32_t cooldown_ms;
 };
 
 struct sv6621_connect_s
@@ -394,6 +407,8 @@ int sv6621_disconnect(FAR struct sv6621_dev_s *dev, uint16_t reason);
 int sv6621_set_signal_threshold(FAR struct sv6621_dev_s *dev,
                                 int32_t threshold_dbm,
                                 uint8_t hysteresis_db);
+int sv6621_set_roam_policy(FAR struct sv6621_dev_s *dev,
+                           FAR const struct sv6621_roam_policy_s *policy);
 int sv6621_suspend(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_suspend_s *config);
 int sv6621_resume(FAR struct sv6621_dev_s *dev);

@@ -28,6 +28,7 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include <nuttx/clock.h>
 #include <nuttx/mutex.h>
 #include <nuttx/semaphore.h>
 #ifdef CONFIG_SV6621_PM
@@ -123,6 +124,9 @@ struct sv6621_dev_s
   uint32_t roam_scan_generation;
   int16_t roam_scan_signal_dbm;
   bool roam_scan_pending;
+  struct sv6621_roam_policy_s roam_policy;
+  clock_t roam_candidate_ticks;
+  bool roam_candidate_ticks_valid;
   bool suspended;
   bool powered;
   bool transport_open;

@@ -62,9 +62,7 @@
 #define SV6621_CORE_MIC_FAILURE_SIZE    9
 #define SV6621_CORE_CQM_EVENT_SIZE      11
 #define SV6621_CORE_CHANNEL_EVENT_SIZE  11
-#define SV6621_CORE_CQM_THRESHOLD_DBM  -70
-#define SV6621_CORE_CQM_HYSTERESIS_DB   40
-#define SV6621_CORE_ROAM_MINIMUM_GAIN_DB 8
+#define SV6621_CORE_ROAM_MAX_COOLDOWN_MS 3600000
 
 /****************************************************************************
  * Private Function Prototypes
@@ -651,6 +649,7 @@ static void sv6621_core_signal_worker(FAR void *arg)
   for (;;)
     {
       struct sv6621_signal_event_s event;
+      bool roam_enabled;
 
       if (nxmutex_lock(&dev->status_lock) < 0)
         {
@@ -686,12 +685,14 @@ static void sv6621_core_signal_worker(FAR void *arg)
 
       nxmutex_unlock(&dev->station.lock);
       dev->status.signal_dbm = event.signal_dbm;
+      roam_enabled = dev->roam_policy.enabled;
       nxmutex_unlock(&dev->status_lock);
       sv6621_core_report(dev, SV6621_EVENT_SIGNAL_CHANGED, &event,
                          sizeof(event));
 
       if ((event.status == SV6621_SIGNAL_LOW ||
            event.status == SV6621_SIGNAL_BEACON_LOSS) &&
+          roam_enabled &&
           sv6621_core_valid_unicast_address(event.bssid))
         {
           (void)sv6621_core_start_roam_scan(dev, &event);
@@ -750,6 +751,7 @@ static void sv6621_core_recovery_worker(FAR void *arg)
           dev->station_reason = disconnect_reason;
           dev->station_generation++;
           dev->roam_scan_pending = false;
+          dev->roam_candidate_ticks_valid = false;
         }
 
       dev->status.connected = false;
@@ -1286,6 +1288,7 @@ static void sv6621_core_station_event(bool connected, bool remote,
   if (!connected)
     {
       dev->roam_scan_pending = false;
+      dev->roam_candidate_ticks_valid = false;
     }
   if (!dev->station_work_scheduled)
     {
@@ -1343,6 +1346,7 @@ static void sv6621_core_station_worker(FAR void *arg)
   for (;;)
     {
       struct sv6621_status_s status;
+      struct sv6621_roam_policy_s roam_policy;
       bool event_current = false;
 #ifdef CONFIG_NET
       struct sv6621_data_tx_context_s context;
@@ -1403,6 +1407,7 @@ static void sv6621_core_station_worker(FAR void *arg)
 
       dev->status.connected = false;
       status = dev->status;
+      roam_policy = dev->roam_policy;
       nxmutex_unlock(&dev->status_lock);
 #ifdef CONFIG_NET
       if (connected && !station_ready)
@@ -1570,9 +1575,13 @@ static void sv6621_core_station_worker(FAR void *arg)
 
       if (connected)
         {
-          (void)sv6621_set_signal_threshold(
-              dev, SV6621_CORE_CQM_THRESHOLD_DBM,
-              SV6621_CORE_CQM_HYSTERESIS_DB);
+          if (roam_policy.enabled)
+            {
+              (void)sv6621_set_signal_threshold(
+                  dev, roam_policy.threshold_dbm,
+                  roam_policy.hysteresis_db);
+            }
+
           sv6621_core_report(dev, SV6621_EVENT_CONNECTED, &status,
                              sizeof(status));
         }
@@ -1659,6 +1668,7 @@ static void sv6621_core_scan_worker(FAR void *arg)
   struct sv6621_roam_candidate_s roam_event;
   struct sv6621_scan_entry_s roam_entry;
   struct sv6621_connect_s request;
+  struct sv6621_roam_policy_s roam_policy;
   uint8_t current_bssid[SV6621_MAC_LENGTH];
   uint32_t roam_generation = 0;
   size_t count = SV6621_SCAN_CACHE_CAPACITY;
@@ -1691,6 +1701,7 @@ static void sv6621_core_scan_worker(FAR void *arg)
       roam_scan = dev->roam_scan_pending;
       roam_generation = dev->roam_scan_generation;
       roam_signal_dbm = dev->roam_scan_signal_dbm;
+      roam_policy = dev->roam_policy;
       dev->scan_reporting = false;
       dev->roam_scan_pending = false;
       nxmutex_unlock(&dev->status_lock);
@@ -1711,15 +1722,39 @@ static void sv6621_core_scan_worker(FAR void *arg)
 
           ret = sv6621_scan_cache_find_roam_candidate(
               &dev->scan.cache, &request, current_bssid, roam_signal_dbm,
-              SV6621_CORE_ROAM_MINIMUM_GAIN_DB, &roam_entry);
+              roam_policy.minimum_gain_db, &roam_entry);
           if (ret == 0)
             {
-              roam_event.candidate = roam_entry.bss;
-              roam_event.current_signal_dbm = roam_signal_dbm;
-              roam_event.gain_db =
-                  (uint8_t)(roam_entry.bss.signal_dbm - roam_signal_dbm);
-              sv6621_core_report(dev, SV6621_EVENT_ROAM_CANDIDATE,
-                                 &roam_event, sizeof(roam_event));
+              clock_t now = clock_systime_ticks();
+
+              if (nxmutex_lock(&dev->status_lock) >= 0)
+                {
+                  bool current = dev->station_connected &&
+                      dev->station_generation == roam_generation &&
+                      dev->roam_policy.enabled;
+                  bool cooldown_elapsed =
+                      !dev->roam_candidate_ticks_valid ||
+                      now - dev->roam_candidate_ticks >=
+                          MSEC2TICK(dev->roam_policy.cooldown_ms);
+
+                  if (current && cooldown_elapsed)
+                    {
+                      dev->roam_candidate_ticks = now;
+                      dev->roam_candidate_ticks_valid = true;
+                    }
+
+                  nxmutex_unlock(&dev->status_lock);
+                  if (current && cooldown_elapsed)
+                    {
+                      roam_event.candidate = roam_entry.bss;
+                      roam_event.current_signal_dbm = roam_signal_dbm;
+                      roam_event.gain_db = (uint8_t)
+                          (roam_entry.bss.signal_dbm - roam_signal_dbm);
+                      sv6621_core_report(dev,
+                                         SV6621_EVENT_ROAM_CANDIDATE,
+                                         &roam_event, sizeof(roam_event));
+                    }
+                }
             }
         }
       else
@@ -1788,6 +1823,12 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
 
   dev->config = *config;
   dev->regulatory = *config->regulatory;
+  dev->roam_policy.enabled = true;
+  dev->roam_policy.threshold_dbm = SV6621_ROAM_DEFAULT_THRESHOLD_DBM;
+  dev->roam_policy.hysteresis_db = SV6621_ROAM_DEFAULT_HYSTERESIS_DB;
+  dev->roam_policy.minimum_gain_db =
+      SV6621_ROAM_DEFAULT_MINIMUM_GAIN_DB;
+  dev->roam_policy.cooldown_ms = SV6621_ROAM_DEFAULT_COOLDOWN_MS;
   dev->status.state = SV6621_STATE_OFF;
   ret = sv6621_regulatory_scan_channels(
       &dev->regulatory, dev->scan_channels,
@@ -3091,6 +3132,79 @@ int sv6621_set_signal_threshold(FAR struct sv6621_dev_s *dev,
   nxmutex_unlock(&dev->station.lock);
   ret = sv6621_signal_configure(&dev->command, instance, threshold_dbm,
                                 hysteresis_db);
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_set_roam_policy
+ ****************************************************************************/
+
+int sv6621_set_roam_policy(FAR struct sv6621_dev_s *dev,
+                           FAR const struct sv6621_roam_policy_s *policy)
+{
+  struct sv6621_roam_policy_s previous;
+  uint8_t instance = 0;
+  bool connected;
+  int ret;
+
+  if (dev == NULL || policy == NULL || policy->threshold_dbm > 0 ||
+      policy->hysteresis_db > INT8_MAX || policy->minimum_gain_db == 0 ||
+      policy->minimum_gain_db > INT8_MAX || policy->cooldown_ms == 0 ||
+      policy->cooldown_ms > SV6621_CORE_ROAM_MAX_COOLDOWN_MS)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  previous = dev->roam_policy;
+  connected = dev->station_connected;
+  if (connected)
+    {
+      ret = nxmutex_lock(&dev->station.lock);
+      if (ret < 0)
+        {
+          nxmutex_unlock(&dev->status_lock);
+          goto unlock_lifecycle;
+        }
+
+      instance = dev->station.peer.instance;
+      nxmutex_unlock(&dev->station.lock);
+    }
+
+  dev->roam_policy = *policy;
+  dev->roam_scan_pending = false;
+  dev->roam_candidate_ticks_valid = false;
+  nxmutex_unlock(&dev->status_lock);
+
+  if (connected && policy->enabled)
+    {
+      ret = sv6621_signal_configure(&dev->command, instance,
+                                    policy->threshold_dbm,
+                                    policy->hysteresis_db);
+      if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
+        {
+          dev->roam_policy = previous;
+          nxmutex_unlock(&dev->status_lock);
+        }
+    }
+  else
+    {
+      ret = 0;
+    }
 
 unlock_lifecycle:
   nxmutex_unlock(&dev->lifecycle_lock);
