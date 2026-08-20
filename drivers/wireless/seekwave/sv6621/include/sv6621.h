@@ -138,6 +138,15 @@ enum sv6621_band_e
   SV6621_BAND_5GHZ
 };
 
+enum sv6621_channel_width_e
+{
+  SV6621_CHANNEL_WIDTH_20,
+  SV6621_CHANNEL_WIDTH_40,
+  SV6621_CHANNEL_WIDTH_80,
+  SV6621_CHANNEL_WIDTH_80P80,
+  SV6621_CHANNEL_WIDTH_160
+};
+
 enum sv6621_event_e
 {
   SV6621_EVENT_STATE_CHANGED = 0,
@@ -153,7 +162,11 @@ enum sv6621_event_e
   SV6621_EVENT_FATAL,
   SV6621_EVENT_ROAM_CANDIDATE,
   SV6621_EVENT_ROAM_COMPLETE,
-  SV6621_EVENT_SCHEDULED_SCAN_RESULTS
+  SV6621_EVENT_SCHEDULED_SCAN_RESULTS,
+  SV6621_EVENT_AP_STARTED,
+  SV6621_EVENT_AP_STOPPED,
+  SV6621_EVENT_AP_CLIENT_CONNECTED,
+  SV6621_EVENT_AP_CLIENT_DISCONNECTED
 };
 
 enum sv6621_signal_status_e
@@ -306,6 +319,30 @@ struct sv6621_connect_s
   uint8_t credential_length;
 };
 
+struct sv6621_ap_config_s
+{
+  uint8_t ssid[SV6621_SSID_MAX_LENGTH];
+  uint8_t ssid_length;
+  uint8_t hidden_ssid;
+  uint8_t channel;
+  enum sv6621_channel_width_e channel_width;
+  uint8_t center_channel1;
+  uint8_t center_channel2;
+  enum sv6621_band_e band;
+  uint16_t beacon_interval;
+  uint8_t dtim_period;
+  enum sv6621_security_e security;
+  uint8_t credential[SV6621_KEY_MAX_LENGTH];
+  uint8_t credential_length;
+};
+
+struct sv6621_ap_client_event_s
+{
+  uint8_t address[SV6621_MAC_LENGTH];
+  uint16_t aid;
+  uint16_t reason;
+};
+
 struct sv6621_suspend_s
 {
   bool wake_enabled;
@@ -394,6 +431,8 @@ struct sv6621_status_s
 {
   enum sv6621_state_e state;
   bool connected;
+  bool ap_active;
+  uint8_t ap_client_count;
   uint8_t mac[SV6621_MAC_LENGTH];
   uint8_t bssid[SV6621_MAC_LENGTH];
   uint8_t ssid[SV6621_SSID_MAX_LENGTH];
@@ -478,6 +517,8 @@ int sv6621_start_scheduled_scan(
     FAR struct sv6621_dev_s *dev,
     FAR const struct sv6621_sched_scan_request_s *request);
 int sv6621_stop_scheduled_scan(FAR struct sv6621_dev_s *dev);
+int sv6621_start_ap(FAR struct sv6621_dev_s *dev,
+                    FAR const struct sv6621_ap_config_s *config);
 int sv6621_suspend(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_suspend_s *config);
 int sv6621_resume(FAR struct sv6621_dev_s *dev);
