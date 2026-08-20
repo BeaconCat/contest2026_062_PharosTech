@@ -163,7 +163,8 @@ static int sv6621_wifi_select_address(
     FAR const uint8_t firmware_address[SV6621_MAC_LENGTH],
     uint8_t selected[SV6621_MAC_LENGTH]);
 static int sv6621_wifi_open_device(
-    FAR struct sv6621_command_engine_s *command, uint8_t mode,
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
+    uint8_t mode,
     FAR const uint8_t address[SV6621_MAC_LENGTH]);
 
 /****************************************************************************
@@ -251,8 +252,8 @@ static int sv6621_wifi_select_address(
 }
 
 static int sv6621_wifi_open_device(
-    FAR struct sv6621_command_engine_s *command, uint8_t mode,
-    FAR const uint8_t address[SV6621_MAC_LENGTH])
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
+    uint8_t mode, FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
   uint8_t payload[SV6621_WIFI_OPEN_PAYLOAD_SIZE];
   int ret;
@@ -271,7 +272,7 @@ static int sv6621_wifi_open_device(
   payload[3] = 0;
   memcpy(payload + 4, address, SV6621_MAC_LENGTH);
   ret = sv6621_command_execute(
-      command, SV6621_WIFI_INSTANCE, SV6621_WIFI_COMMAND_OPEN_DEVICE, payload,
+      command, instance, SV6621_WIFI_COMMAND_OPEN_DEVICE, payload,
       sizeof(payload), NULL, NULL, SV6621_WIFI_COMMAND_TIMEOUT_MS);
   return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
 }
@@ -473,20 +474,21 @@ int sv6621_wifi_download_calibration(
 int sv6621_wifi_open_station(FAR struct sv6621_command_engine_s *command,
                              FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
-  return sv6621_wifi_open_device(command, SV6621_WIFI_OPEN_MODE_STATION,
-                                 address);
+  return sv6621_wifi_open_device(command, SV6621_WIFI_INSTANCE,
+                                 SV6621_WIFI_OPEN_MODE_STATION, address);
 }
 
 int sv6621_wifi_open_access_point(
     FAR struct sv6621_command_engine_s *command,
+    uint8_t instance,
     FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
-  return sv6621_wifi_open_device(command,
-                                 SV6621_WIFI_OPEN_MODE_ACCESS_POINT,
-                                 address);
+  return sv6621_wifi_open_device(command, instance,
+                                 SV6621_WIFI_OPEN_MODE_ACCESS_POINT, address);
 }
 
-int sv6621_wifi_close_device(FAR struct sv6621_command_engine_s *command)
+static int sv6621_wifi_close_device(
+    FAR struct sv6621_command_engine_s *command, uint8_t instance)
 {
   int ret;
 
@@ -495,10 +497,21 @@ int sv6621_wifi_close_device(FAR struct sv6621_command_engine_s *command)
       return -EINVAL;
     }
 
-  ret = sv6621_command_execute(command, SV6621_WIFI_INSTANCE,
+  ret = sv6621_command_execute(command, instance,
                                SV6621_WIFI_COMMAND_CLOSE_DEVICE, NULL, 0, NULL,
                                NULL, SV6621_WIFI_COMMAND_TIMEOUT_MS);
   return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
+}
+
+int sv6621_wifi_close_station(FAR struct sv6621_command_engine_s *command)
+{
+  return sv6621_wifi_close_device(command, SV6621_WIFI_INSTANCE);
+}
+
+int sv6621_wifi_close_access_point(
+    FAR struct sv6621_command_engine_s *command, uint8_t instance)
+{
+  return sv6621_wifi_close_device(command, instance);
 }
 
 int sv6621_wifi_set_mib(FAR struct sv6621_command_engine_s *command,

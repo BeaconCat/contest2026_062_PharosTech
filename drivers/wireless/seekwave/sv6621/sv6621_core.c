@@ -64,6 +64,7 @@
 #define SV6621_CORE_CHANNEL_EVENT_SIZE  11
 #define SV6621_CORE_ROAM_MAX_COOLDOWN_MS 3600000
 #define SV6621_CORE_WIFI_INSTANCE        0
+#define SV6621_CORE_AP_INSTANCE          2
 
 /****************************************************************************
  * Private Function Prototypes
@@ -75,6 +76,9 @@ static void sv6621_core_service_event(enum sv6621_service_event_e event,
 static void sv6621_core_rx_error(int error, FAR void *arg);
 static void sv6621_core_command_receive_kick(FAR void *arg);
 static void sv6621_core_command_error(int error, FAR void *arg);
+static void sv6621_core_ap_client(
+    bool connected, FAR const struct sv6621_ap_client_event_s *event,
+    FAR void *arg);
 static void sv6621_core_command_event(uint8_t instance, uint8_t id,
                                       FAR const uint8_t *payload,
                                       size_t length, FAR void *arg);
@@ -91,6 +95,11 @@ static bool sv6621_core_station_worker_stop(
 static void sv6621_core_station_worker(FAR void *arg);
 static void sv6621_core_data_input(FAR const struct sv6621_data_rx_s *rx,
                                    FAR void *arg);
+#ifdef CONFIG_NET
+static int sv6621_core_ap_resolve_tx(
+    FAR const uint8_t *frame, size_t length,
+    FAR struct sv6621_data_tx_context_s *context, FAR void *arg);
+#endif
 static void sv6621_core_report(FAR struct sv6621_dev_s *dev,
                                enum sv6621_event_e event, FAR const void *data,
                                size_t length);
@@ -354,7 +363,11 @@ static int sv6621_core_restore_station(FAR struct sv6621_dev_s *dev,
   int close_ret;
   int open_ret;
 
-  close_ret = sv6621_wifi_close_device(&dev->command);
+#ifdef CONFIG_NET
+  sv6621_network_set_link(&dev->network, false, NULL);
+#endif
+  close_ret = sv6621_wifi_close_access_point(&dev->command,
+                                              SV6621_CORE_AP_INSTANCE);
   open_ret = sv6621_wifi_open_station(&dev->command, dev->wifi_info.mac);
   if (open_ret == 0)
     {
@@ -1197,6 +1210,8 @@ static void sv6621_core_recovery_worker(FAR void *arg)
         }
 
       dev->status.connected = false;
+      dev->status.ap_active = false;
+      dev->status.ap_client_count = 0;
       memset(dev->status.bssid, 0, sizeof(dev->status.bssid));
       memset(dev->status.ssid, 0, sizeof(dev->status.ssid));
       dev->status.ssid_length = 0;
@@ -1211,6 +1226,11 @@ static void sv6621_core_recovery_worker(FAR void *arg)
 #ifdef CONFIG_NET
       sv6621_network_set_link(&dev->network, false, NULL);
 #endif
+      if (dev->ap_initialized)
+        {
+          sv6621_ap_reset(&dev->ap);
+        }
+
       sv6621_sched_scan_cancel(&dev->scheduled_scan);
       sv6621_scan_controller_cancel(&dev->scan);
       sv6621_wpa_cancel(&dev->wpa, error);
@@ -1314,6 +1334,41 @@ static void sv6621_core_command_error(int error, FAR void *arg)
   FAR struct sv6621_dev_s *dev = arg;
 
   sv6621_core_queue_recovery(dev, error);
+}
+
+static void sv6621_core_ap_client(
+    bool connected, FAR const struct sv6621_ap_client_event_s *event,
+    FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+
+  if (nxmutex_lock(&dev->status_lock) < 0)
+    {
+      return;
+    }
+
+  if (!dev->status.ap_active)
+    {
+      nxmutex_unlock(&dev->status_lock);
+      return;
+    }
+
+  if (connected)
+    {
+      if (dev->status.ap_client_count < UINT8_MAX)
+        {
+          dev->status.ap_client_count++;
+        }
+    }
+  else if (dev->status.ap_client_count != 0)
+    {
+      dev->status.ap_client_count--;
+    }
+
+  nxmutex_unlock(&dev->status_lock);
+  sv6621_core_report(dev, connected ? SV6621_EVENT_AP_CLIENT_CONNECTED :
+                                      SV6621_EVENT_AP_CLIENT_DISCONNECTED,
+                     event, sizeof(*event));
 }
 
 /****************************************************************************
@@ -2077,13 +2132,49 @@ static void sv6621_core_data_input(FAR const struct sv6621_data_rx_s *rx,
 {
 #ifdef CONFIG_NET
   FAR struct sv6621_dev_s *dev = arg;
+  struct sv6621_data_tx_context_s context;
+  bool deliver_local = true;
+  bool forward = false;
 
-  sv6621_network_input(rx, &dev->network);
+  if (dev->ap_initialized && sv6621_ap_is_active(&dev->ap) &&
+      sv6621_ap_validate_rx(&dev->ap, rx) < 0)
+    {
+      return;
+    }
+
+  if (dev->ap_initialized && sv6621_ap_is_active(&dev->ap) &&
+      sv6621_ap_forward_policy(&dev->ap, rx, &forward,
+                               &deliver_local) == 0 && forward)
+    {
+      if (sv6621_ap_resolve_tx(&dev->ap, rx->frame, rx->frame_length,
+                               &context) < 0 ||
+          sv6621_network_forward(&dev->network, rx->frame,
+                                 rx->frame_length) < 0)
+        {
+          deliver_local = true;
+        }
+    }
+
+  if (deliver_local)
+    {
+      sv6621_network_input(rx, &dev->network);
+    }
 #else
   (void)rx;
   (void)arg;
 #endif
 }
+
+#ifdef CONFIG_NET
+static int sv6621_core_ap_resolve_tx(
+    FAR const uint8_t *frame, size_t length,
+    FAR struct sv6621_data_tx_context_s *context, FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+
+  return sv6621_ap_resolve_tx(&dev->ap, frame, length, context);
+}
+#endif
 
 /****************************************************************************
  * Name: sv6621_core_scan_complete
@@ -2787,7 +2878,7 @@ int sv6621_start(FAR struct sv6621_dev_s *dev)
       ret = sv6621_ap_init(&dev->ap, &dev->command,
                            dev->wifi_info.max_stations,
                            dev->wifi_info.mac, sv6621_core_command_error,
-                           dev);
+                           dev, sv6621_core_ap_client, dev);
       if (ret < 0)
         {
           goto fail;
@@ -2901,7 +2992,7 @@ fail:
 #endif
   if (dev->station_open)
     {
-      sv6621_wifi_close_device(&dev->command);
+      sv6621_wifi_close_station(&dev->command);
       dev->station_open = false;
     }
 
@@ -2938,6 +3029,8 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 {
   enum sv6621_state_e state;
   uint32_t recovery_count;
+  bool ap_was_active;
+  int ap_ret = 0;
   int scheduled_scan_ret = 0;
   int scan_ret = 0;
   int close_ret = 0;
@@ -2975,14 +3068,27 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
 #ifdef CONFIG_NET
   sv6621_network_set_link(&dev->network, false, NULL);
 #endif
+  ap_was_active = dev->ap_initialized && sv6621_ap_is_active(&dev->ap);
   scheduled_scan_ret = sv6621_sched_scan_cancel(&dev->scheduled_scan);
   scan_ret = sv6621_scan_controller_cancel(&dev->scan);
   sv6621_station_disconnect(&dev->station, 3);
   sv6621_wpa_disconnected(&dev->wpa, -ESHUTDOWN);
   sv6621_station_reset(&dev->station, -ESHUTDOWN);
-  if (dev->station_open)
+  if (ap_was_active)
     {
-      close_ret = sv6621_wifi_close_device(&dev->command);
+      ap_ret = sv6621_ap_disable(&dev->ap);
+      if (ap_ret < 0)
+        {
+          sv6621_ap_reset(&dev->ap);
+        }
+
+      close_ret = sv6621_wifi_close_access_point(
+          &dev->command, SV6621_CORE_AP_INSTANCE);
+      dev->station_open = false;
+    }
+  else if (dev->station_open)
+    {
+      close_ret = sv6621_wifi_close_station(&dev->command);
       dev->station_open = false;
     }
 
@@ -3023,6 +3129,11 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
     }
 
   state = SV6621_STATE_OFF;
+  if (ap_was_active)
+    {
+      sv6621_core_report(dev, SV6621_EVENT_AP_STOPPED, NULL, 0);
+    }
+
   sv6621_core_report(dev, SV6621_EVENT_STATE_CHANGED, &state, sizeof(state));
   if (scan_ret < 0)
     {
@@ -3032,6 +3143,11 @@ int sv6621_stop(FAR struct sv6621_dev_s *dev)
   if (scheduled_scan_ret < 0)
     {
       return scheduled_scan_ret;
+    }
+
+  if (ap_ret < 0)
+    {
+      return ap_ret;
     }
 
   return close_ret < 0 ? close_ret : 0;
@@ -3878,26 +3994,43 @@ int sv6621_start_ap(FAR struct sv6621_dev_s *dev,
 #ifdef CONFIG_NET
   sv6621_network_set_link(&dev->network, false, NULL);
 #endif
-  ret = sv6621_wifi_close_device(&dev->command);
+  ret = sv6621_wifi_close_station(&dev->command);
   if (ret < 0)
     {
       goto unlock_lifecycle;
     }
 
   dev->station_open = false;
-  ret = sv6621_wifi_open_access_point(&dev->command, dev->wifi_info.mac);
+  ret = sv6621_wifi_open_access_point(&dev->command,
+                                      SV6621_CORE_AP_INSTANCE,
+                                      dev->wifi_info.mac);
   if (ret < 0)
     {
       ret = sv6621_core_restore_station(dev, ret);
       goto unlock_lifecycle;
     }
 
-  ret = sv6621_ap_enable(&dev->ap, SV6621_CORE_WIFI_INSTANCE, config);
+  ret = sv6621_ap_enable(&dev->ap, SV6621_CORE_AP_INSTANCE, config);
   if (ret < 0)
     {
       ret = sv6621_core_restore_station(dev, ret);
       goto unlock_lifecycle;
     }
+
+#ifdef CONFIG_NET
+  {
+    struct sv6621_data_tx_context_s context;
+
+    context.peer_index = dev->ap.context.multicast_index;
+    context.multicast_index = dev->ap.context.multicast_index;
+    context.instance = dev->ap.context.instance;
+    context.lmac_id = dev->ap.context.lmac_id;
+    context.tid = 0;
+    sv6621_network_set_tx_resolver(&dev->network,
+                                   sv6621_core_ap_resolve_tx, dev);
+    sv6621_network_set_link(&dev->network, true, &context);
+  }
+#endif
 
   ret = nxmutex_lock(&dev->status_lock);
   if (ret < 0)
@@ -3927,6 +4060,99 @@ unlock_lifecycle:
     {
       sv6621_core_report(dev, SV6621_EVENT_AP_STARTED, config,
                          sizeof(*config));
+    }
+
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_stop_ap
+ ****************************************************************************/
+
+int sv6621_stop_ap(FAR struct sv6621_dev_s *dev)
+{
+  bool report = false;
+  int ret;
+
+  if (dev == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  if (dev->status.state != SV6621_STATE_WIFI_READY)
+    {
+      ret = -ENETDOWN;
+    }
+  else if (!dev->status.ap_active)
+    {
+      ret = -ENOTCONN;
+    }
+  else
+    {
+      ret = 0;
+    }
+
+  nxmutex_unlock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_ap_disable(&dev->ap);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  ret = sv6621_core_restore_station(dev, 0);
+#ifdef CONFIG_NET
+  if (ret == 0)
+    {
+      ret = sv6621_network_sync_multicast(&dev->network);
+      if (ret < 0)
+        {
+          sv6621_core_queue_recovery(dev, ret);
+        }
+    }
+#endif
+
+  if (nxmutex_lock(&dev->status_lock) < 0)
+    {
+      if (ret == 0)
+        {
+          ret = -EINTR;
+        }
+
+      sv6621_core_queue_recovery(dev, ret);
+      goto unlock_lifecycle;
+    }
+
+  dev->status.ap_active = false;
+  dev->status.ap_client_count = 0;
+  memset(dev->status.ssid, 0, sizeof(dev->status.ssid));
+  dev->status.ssid_length = 0;
+  dev->status.channel = 0;
+  dev->status.band = SV6621_BAND_2GHZ;
+  nxmutex_unlock(&dev->status_lock);
+  report = true;
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  if (report)
+    {
+      sv6621_core_report(dev, SV6621_EVENT_AP_STOPPED, NULL, 0);
     }
 
   return ret;
