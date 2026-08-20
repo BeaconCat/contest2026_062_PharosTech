@@ -235,16 +235,17 @@ int sv6621_wpa_eapol_parse(
       eapol->message = SV6621_WPA_MESSAGE_1;
     }
   else if ((key_info & (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK |
-                        SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_INSTALL)) ==
-           (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_MIC) &&
-           key_data_length != 0)
+                        SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_INSTALL |
+                        SV6621_WPA_KEY_SECURE)) ==
+           (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_MIC))
     {
       eapol->message = SV6621_WPA_MESSAGE_2;
     }
   else if ((key_info & (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK |
-                        SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_INSTALL)) ==
-           (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_MIC) &&
-           key_data_length == 0)
+                        SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_INSTALL |
+                        SV6621_WPA_KEY_SECURE)) ==
+           (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_MIC |
+            SV6621_WPA_KEY_SECURE))
     {
       eapol->message = SV6621_WPA_MESSAGE_4;
     }
