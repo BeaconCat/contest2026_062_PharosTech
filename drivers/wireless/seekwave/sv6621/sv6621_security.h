@@ -65,13 +65,29 @@ int sv6621_security_add_key(
     FAR const uint8_t address[SV6621_MAC_LENGTH], uint8_t key_index,
     FAR const uint8_t *key, size_t key_length,
     FAR const uint8_t packet_number[6]);
+int sv6621_security_add_key_instance(
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
+    enum sv6621_security_key_type_e type,
+    enum sv6621_security_cipher_e cipher,
+    FAR const uint8_t address[SV6621_MAC_LENGTH], uint8_t key_index,
+    FAR const uint8_t *key, size_t key_length,
+    FAR const uint8_t packet_number[6]);
 int sv6621_security_delete_key(
     FAR struct sv6621_command_engine_s *command,
     enum sv6621_security_key_type_e type,
     enum sv6621_security_cipher_e cipher,
     FAR const uint8_t address[SV6621_MAC_LENGTH], uint8_t key_index);
+int sv6621_security_delete_key_instance(
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
+    enum sv6621_security_key_type_e type,
+    enum sv6621_security_cipher_e cipher,
+    FAR const uint8_t address[SV6621_MAC_LENGTH], uint8_t key_index);
 int sv6621_security_send_eapol(
     FAR struct sv6621_command_engine_s *command,
+    FAR const struct sv6621_data_tx_context_s *context,
+    FAR const uint8_t *frame, size_t frame_length);
+int sv6621_security_send_eapol_instance(
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
     FAR const struct sv6621_data_tx_context_s *context,
     FAR const uint8_t *frame, size_t frame_length);
 
