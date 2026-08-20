@@ -99,5 +99,13 @@ int sv6621_ap_respond_association(
     FAR const uint8_t *response_ies, size_t response_ies_length,
     FAR const struct sv6621_ap_mgmt_s *request, uint64_t cookie,
     FAR bool *accepted);
+int sv6621_ap_handle_tx_status(
+    FAR struct sv6621_ap_peer_table_s *peers,
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
+    FAR const uint8_t *payload, size_t payload_length);
+int sv6621_ap_handle_departure(
+    FAR struct sv6621_ap_peer_table_s *peers,
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
+    FAR const struct sv6621_ap_mgmt_s *event);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_MLME_H */

@@ -35,20 +35,16 @@
 #include <stdint.h>
 
 #include "include/sv6621.h"
+#include "sv6621_ap_beacon.h"
+#include "sv6621_ap_event.h"
+#include "sv6621_ap_peer.h"
 #include "sv6621_command.h"
 
 /****************************************************************************
  * Public Types
  ****************************************************************************/
 
-enum sv6621_ap_channel_width_e
-{
-  SV6621_AP_CHANNEL_WIDTH_20,
-  SV6621_AP_CHANNEL_WIDTH_40,
-  SV6621_AP_CHANNEL_WIDTH_80,
-  SV6621_AP_CHANNEL_WIDTH_80P80,
-  SV6621_AP_CHANNEL_WIDTH_160
-};
+typedef void (*sv6621_ap_error_t)(int error, FAR void *arg);
 
 struct sv6621_ap_blob_s
 {
@@ -62,7 +58,7 @@ struct sv6621_ap_start_s
   uint8_t dtim_period;
   uint8_t hidden_ssid;
   uint8_t channel;
-  enum sv6621_ap_channel_width_e channel_width;
+  enum sv6621_channel_width_e channel_width;
   uint8_t center_channel1;
   uint8_t center_channel2;
   enum sv6621_band_e band;
@@ -85,7 +81,16 @@ struct sv6621_ap_context_s
 struct sv6621_ap_s
 {
   mutex_t lock;
+  FAR struct sv6621_command_engine_s *command;
+  struct sv6621_ap_event_queue_s events;
+  struct sv6621_ap_peer_table_s peers;
+  struct sv6621_ap_beacon_templates_s templates;
+  struct sv6621_ap_config_s config;
   struct sv6621_ap_context_s context;
+  uint8_t address[SV6621_MAC_LENGTH];
+  uint64_t next_cookie;
+  sv6621_ap_error_t error;
+  FAR void *error_arg;
   uint8_t instance;
   bool active;
 };
@@ -103,14 +108,19 @@ int sv6621_ap_start(FAR struct sv6621_command_engine_s *command,
                     FAR struct sv6621_ap_context_s *context);
 int sv6621_ap_stop(FAR struct sv6621_command_engine_s *command,
                    uint8_t instance);
-int sv6621_ap_init(FAR struct sv6621_ap_s *ap);
+int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
+                   FAR struct sv6621_command_engine_s *command,
+                   uint8_t max_stations,
+                   FAR const uint8_t address[SV6621_MAC_LENGTH],
+                   sv6621_ap_error_t error, FAR void *error_arg);
 void sv6621_ap_deinit(FAR struct sv6621_ap_s *ap);
-int sv6621_ap_enable(FAR struct sv6621_ap_s *ap,
-                     FAR struct sv6621_command_engine_s *command,
-                     uint8_t instance,
-                     FAR const struct sv6621_ap_start_s *config);
-int sv6621_ap_disable(FAR struct sv6621_ap_s *ap,
-                      FAR struct sv6621_command_engine_s *command);
+int sv6621_ap_enable(FAR struct sv6621_ap_s *ap, uint8_t instance,
+                     FAR const struct sv6621_ap_config_s *config);
+int sv6621_ap_disable(FAR struct sv6621_ap_s *ap);
+int sv6621_ap_reset(FAR struct sv6621_ap_s *ap);
+int sv6621_ap_queue_event(FAR struct sv6621_ap_s *ap, uint8_t instance,
+                          uint8_t id, FAR const uint8_t *payload,
+                          size_t length);
 bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_H */
