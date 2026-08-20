@@ -35,6 +35,8 @@
 #include <debug.h>
 #include <errno.h>
 #include <nuttx/config.h>
+
+#include <nuttx/power/pm.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -65,6 +67,8 @@
 #define WIFI_HOST_WAKE                                                        \
   (GPIO_PORT1 | GPIO_PIN_D5 | GPIO_INPUT | GPIO_PULLDOWN | GPIO_EXTI |       \
    GPIO_INT_EDGE | GPIO_INT_HIGH_RISING)
+
+#define WIFI_HOST_WAKE_ACTIVITY 1
 
 /* IOC drive-strength registers for the SDIO bus pins (max drive). */
 
@@ -277,19 +281,19 @@ static int kickpi_k7_wifi_store_address(
  * Name: kickpi_k7_wifi_host_wake_isr
  *
  * Description:
- *   Request deferred firmware resume when the combo asserts its dedicated
- *   active-high host-wake line.  No SDIO transaction is permitted here.
+ *   Report activity when the combo asserts its dedicated active-high
+ *   host-wake line.  The interrupt wakes the CPU from WFI; the platform PM
+ *   path subsequently enters PM_RESTORE and resumes the Wi-Fi transport.
+ *   No SDIO transaction or driver resume is permitted here.
  ****************************************************************************/
 
 static int kickpi_k7_wifi_host_wake_isr(int irq, FAR void *context,
                                         FAR void *arg)
 {
-  FAR struct sv6621_dev_s *dev = arg;
-
   UNUSED(irq);
   UNUSED(context);
-  (void)rk3576_gpio_irq_enable(WIFI_HOST_WAKE, false);
-  (void)sv6621_resume_async(dev);
+  UNUSED(arg);
+  pm_activity(PM_IDLE_DOMAIN, WIFI_HOST_WAKE_ACTIVITY);
   return OK;
 }
 #endif
@@ -504,7 +508,13 @@ int kickpi_k7_wifi_initialize(void)
 
   ret = rk3576_gpio_irq_attach(WIFI_HOST_WAKE,
                                kickpi_k7_wifi_host_wake_isr,
-                               g_kickpi_k7_wifi_dev);
+                               NULL);
+  if (ret < 0)
+    {
+      goto stop_driver;
+    }
+
+  ret = rk3576_gpio_irq_enable(WIFI_HOST_WAKE, true);
   if (ret < 0)
     {
       goto stop_driver;
