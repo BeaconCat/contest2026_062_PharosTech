@@ -602,7 +602,7 @@ void sv6621_station_deinit(FAR struct sv6621_station_s *station)
 
 int sv6621_station_connect(FAR struct sv6621_station_s *station,
                            FAR const struct sv6621_connect_s *request,
-                           uint32_t timeout_ms)
+                           bool roaming, uint32_t timeout_ms)
 {
   FAR struct sv6621_scan_entry_s *target;
   bool direct_association = false;
@@ -663,10 +663,20 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
       goto free_target;
     }
 
-  if (station->state != SV6621_STATION_IDLE)
+  if ((!roaming && station->state != SV6621_STATION_IDLE) ||
+      (roaming && station->state != SV6621_STATION_CONNECTED))
     {
       nxmutex_unlock(&station->lock);
       ret = -EBUSY;
+      goto free_target;
+    }
+
+  if (roaming &&
+      memcmp(target->bss.bssid, station->target.bss.bssid,
+             SV6621_MAC_LENGTH) == 0)
+    {
+      nxmutex_unlock(&station->lock);
+      ret = -EALREADY;
       goto free_target;
     }
 
@@ -700,7 +710,7 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
 
   ret = sv6621_connection_join(
       station->command, &station->target, station->bandwidth_capabilities,
-      &station->peer);
+      roaming, &station->peer);
   if (ret < 0)
     {
       sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
