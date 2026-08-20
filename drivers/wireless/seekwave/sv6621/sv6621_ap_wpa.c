@@ -32,6 +32,7 @@
 #include <string.h>
 
 #include "sv6621_ap.h"
+#include "sv6621_ap_beacon.h"
 #include "sv6621_ap_wpa.h"
 #include "sv6621_security.h"
 
@@ -400,7 +401,8 @@ int sv6621_ap_wpa_input(FAR struct sv6621_ap_wpa_s *wpa,
 {
   FAR struct sv6621_ap_wpa_peer_s *peer;
   struct sv6621_wpa_eapol_s eapol;
-  uint8_t key_data[32];
+  uint8_t key_data[64];
+  size_t gtk_kde_length;
   size_t key_data_length;
   int ret;
 
@@ -464,9 +466,30 @@ int sv6621_ap_wpa_input(FAR struct sv6621_ap_wpa_s *wpa,
 
       if (ret == 0)
         {
-          ret = sv6621_wpa_eapol_build_gtk_kde(
-              wpa->gtk_index, wpa->gtk, sizeof(wpa->gtk), key_data,
+          ret = sv6621_ap_build_rsn_ie(
+              SV6621_SECURITY_WPA2_PSK, false, key_data,
               sizeof(key_data), &key_data_length);
+        }
+
+      if (ret == 0)
+        {
+          ret = sv6621_wpa_eapol_build_gtk_kde(
+              wpa->gtk_index, wpa->gtk, sizeof(wpa->gtk),
+              key_data + key_data_length,
+              sizeof(key_data) - key_data_length, &gtk_kde_length);
+          if (ret == 0)
+            {
+              key_data_length += gtk_kde_length;
+            }
+        }
+
+      if (ret == 0 && (key_data_length & 7) != 0)
+        {
+          key_data[key_data_length++] = 0xdd;
+          while ((key_data_length & 7) != 0)
+            {
+              key_data[key_data_length++] = 0;
+            }
         }
 
       if (ret == 0)
