@@ -95,6 +95,10 @@ static void sv6621_core_queue_recovery(FAR struct sv6621_dev_s *dev,
                                        int error);
 static int sv6621_core_recovery_thread(int argc, FAR char *argv[]);
 static int sv6621_core_roam_thread(int argc, FAR char *argv[]);
+static int sv6621_core_queue_roam_candidate(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_scan_entry_s *candidate,
+    uint32_t generation, int16_t signal_dbm);
 static void sv6621_core_recovery_worker(FAR void *arg);
 static void sv6621_core_thermal_worker(FAR void *arg);
 static void sv6621_core_security_worker(FAR void *arg);
@@ -468,6 +472,8 @@ static int sv6621_core_roam_thread(int argc, FAR char *argv[])
 
   for (;;)
     {
+      struct sv6621_roam_candidate_s event;
+
       if (nxsem_wait_uninterruptible(&dev->roam_sem) < 0)
         {
           continue;
@@ -484,11 +490,68 @@ static int sv6621_core_roam_thread(int argc, FAR char *argv[])
           break;
         }
 
+      if (!dev->roam_candidate_pending)
+        {
+          nxmutex_unlock(&dev->status_lock);
+          continue;
+        }
+
+      event.candidate = dev->roam_candidate.bss;
+      event.current_signal_dbm = dev->roam_candidate_signal_dbm;
+      event.gain_db = (uint8_t)(dev->roam_candidate.bss.signal_dbm -
+                                dev->roam_candidate_signal_dbm);
+      dev->roam_candidate_pending = false;
       nxmutex_unlock(&dev->status_lock);
+      sv6621_core_report(dev, SV6621_EVENT_ROAM_CANDIDATE, &event,
+                         sizeof(event));
     }
 
   nxsem_post(&dev->roam_exit_sem);
   return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_core_queue_roam_candidate
+ ****************************************************************************/
+
+static int sv6621_core_queue_roam_candidate(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_scan_entry_s *candidate,
+    uint32_t generation, int16_t signal_dbm)
+{
+  int ret;
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (dev->roam_shutdown || dev->roam_candidate_pending)
+    {
+      nxmutex_unlock(&dev->status_lock);
+      return -EBUSY;
+    }
+
+  dev->roam_candidate = *candidate;
+  dev->roam_candidate_generation = generation;
+  dev->roam_candidate_signal_dbm = signal_dbm;
+  dev->roam_candidate_pending = true;
+  nxmutex_unlock(&dev->status_lock);
+
+  ret = nxsem_post(&dev->roam_sem);
+  if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
+    {
+      if (dev->roam_candidate_pending &&
+          dev->roam_candidate_generation == generation)
+        {
+          dev->roam_candidate_pending = false;
+        }
+
+      nxmutex_unlock(&dev->status_lock);
+    }
+
+  return ret;
 }
 
 /****************************************************************************
@@ -1705,7 +1768,6 @@ static void sv6621_core_scan_worker(FAR void *arg)
 {
   FAR struct sv6621_dev_s *dev = arg;
   FAR struct sv6621_bss_s *entries;
-  struct sv6621_roam_candidate_s roam_event;
   struct sv6621_scan_entry_s roam_entry;
   struct sv6621_connect_s request;
   struct sv6621_roam_policy_s roam_policy;
@@ -1786,13 +1848,9 @@ static void sv6621_core_scan_worker(FAR void *arg)
                   nxmutex_unlock(&dev->status_lock);
                   if (current && cooldown_elapsed)
                     {
-                      roam_event.candidate = roam_entry.bss;
-                      roam_event.current_signal_dbm = roam_signal_dbm;
-                      roam_event.gain_db = (uint8_t)
-                          (roam_entry.bss.signal_dbm - roam_signal_dbm);
-                      sv6621_core_report(dev,
-                                         SV6621_EVENT_ROAM_CANDIDATE,
-                                         &roam_event, sizeof(roam_event));
+                      (void)sv6621_core_queue_roam_candidate(
+                          dev, &roam_entry, roam_generation,
+                          roam_signal_dbm);
                     }
                 }
             }

@@ -128,6 +128,10 @@ struct sv6621_dev_s
   int16_t roam_scan_signal_dbm;
   bool roam_scan_pending;
   struct sv6621_roam_policy_s roam_policy;
+  struct sv6621_scan_entry_s roam_candidate;
+  uint32_t roam_candidate_generation;
+  int16_t roam_candidate_signal_dbm;
+  bool roam_candidate_pending;
   clock_t roam_candidate_ticks;
   bool roam_candidate_ticks_valid;
   bool suspended;
