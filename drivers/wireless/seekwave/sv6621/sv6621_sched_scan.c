@@ -343,6 +343,7 @@ int sv6621_sched_scan_stop(FAR struct sv6621_command_engine_s *command)
 int sv6621_sched_scan_init(FAR struct sv6621_sched_scan_s *scan,
                            FAR struct sv6621_command_engine_s *command,
                            FAR struct sv6621_scan_cache_s *cache,
+                           sv6621_sched_scan_result_t result,
                            sv6621_sched_scan_complete_t complete,
                            FAR void *complete_arg)
 {
@@ -362,6 +363,7 @@ int sv6621_sched_scan_init(FAR struct sv6621_sched_scan_s *scan,
 
   scan->command = command;
   scan->cache = cache;
+  scan->result = result;
   scan->complete = complete;
   scan->complete_arg = complete_arg;
   return 0;
@@ -445,6 +447,7 @@ void sv6621_sched_scan_command_event(uint8_t instance, uint8_t id,
   FAR struct sv6621_sched_scan_s *scan = arg;
   struct sv6621_scan_entry_s entry;
   sv6621_sched_scan_complete_t complete;
+  sv6621_sched_scan_result_t result;
   FAR void *complete_arg;
   uint32_t request_id;
   uint32_t generation;
@@ -469,6 +472,7 @@ void sv6621_sched_scan_command_event(uint8_t instance, uint8_t id,
     }
 
   complete = scan->complete;
+  result = scan->result;
   complete_arg = scan->complete_arg;
   request_id = scan->request_id;
   generation = scan->generation;
@@ -498,6 +502,10 @@ void sv6621_sched_scan_command_event(uint8_t instance, uint8_t id,
 
   if (sv6621_scan_parse_report(payload, length, &entry) == 0)
     {
-      (void)sv6621_scan_cache_store(scan->cache, &entry, &inserted);
+      if (sv6621_scan_cache_store(scan->cache, &entry, &inserted) == 0 &&
+          result != NULL)
+        {
+          result(&entry, complete_arg);
+        }
     }
 }

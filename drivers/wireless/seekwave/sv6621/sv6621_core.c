@@ -78,6 +78,10 @@ static void sv6621_core_command_event(uint8_t instance, uint8_t id,
                                       FAR const uint8_t *payload,
                                       size_t length, FAR void *arg);
 static void sv6621_core_scan_complete(int result, FAR void *arg);
+static void sv6621_core_sched_scan_result(
+    FAR const struct sv6621_scan_entry_s *entry, FAR void *arg);
+static void sv6621_core_sched_scan_complete(uint32_t request_id,
+                                            FAR void *arg);
 static void sv6621_core_scan_worker(FAR void *arg);
 static void sv6621_core_station_event(bool connected, bool remote,
                                       uint16_t reason, FAR void *arg);
@@ -2031,6 +2035,32 @@ static void sv6621_core_scan_worker(FAR void *arg)
 }
 
 /****************************************************************************
+ * Name: sv6621_core_sched_scan_result
+ ****************************************************************************/
+
+static void sv6621_core_sched_scan_result(
+    FAR const struct sv6621_scan_entry_s *entry, FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+
+  sv6621_core_report(dev, SV6621_EVENT_SCAN_RESULT, &entry->bss,
+                     sizeof(entry->bss));
+}
+
+/****************************************************************************
+ * Name: sv6621_core_sched_scan_complete
+ ****************************************************************************/
+
+static void sv6621_core_sched_scan_complete(uint32_t request_id,
+                                            FAR void *arg)
+{
+  FAR struct sv6621_dev_s *dev = arg;
+
+  sv6621_core_report(dev, SV6621_EVENT_SCHEDULED_SCAN_RESULTS,
+                     &request_id, sizeof(request_id));
+}
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -2140,7 +2170,9 @@ int sv6621_create(FAR const struct sv6621_config_s *config,
     }
 
   ret = sv6621_sched_scan_init(&dev->scheduled_scan, &dev->command,
-                               &dev->scan.cache, NULL, NULL);
+                               &dev->scan.cache,
+                               sv6621_core_sched_scan_result,
+                               sv6621_core_sched_scan_complete, dev);
   if (ret < 0)
     {
       goto deinit_scan;
@@ -3536,6 +3568,73 @@ int sv6621_set_roam_policy(FAR struct sv6621_dev_s *dev,
     }
 
 unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_start_scheduled_scan
+ ****************************************************************************/
+
+int sv6621_start_scheduled_scan(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_sched_scan_request_s *request)
+{
+  int ret;
+
+  if (dev == NULL || request == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  if (dev->status.state != SV6621_STATE_WIFI_READY)
+    {
+      ret = -ENETDOWN;
+    }
+
+  nxmutex_unlock(&dev->status_lock);
+  if (ret >= 0)
+    {
+      ret = sv6621_sched_scan_begin(&dev->scheduled_scan, request);
+    }
+
+unlock_lifecycle:
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: sv6621_stop_scheduled_scan
+ ****************************************************************************/
+
+int sv6621_stop_scheduled_scan(FAR struct sv6621_dev_s *dev)
+{
+  int ret;
+
+  if (dev == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = sv6621_sched_scan_cancel(&dev->scheduled_scan);
   nxmutex_unlock(&dev->lifecycle_lock);
   return ret;
 }

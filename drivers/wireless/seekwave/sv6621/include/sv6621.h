@@ -50,6 +50,10 @@
 #define SV6621_ROAM_DEFAULT_HYSTERESIS_DB 40
 #define SV6621_ROAM_DEFAULT_MINIMUM_GAIN_DB 8
 #define SV6621_ROAM_DEFAULT_COOLDOWN_MS 15000
+#define SV6621_SCHED_SCAN_MAX_SSIDS 10
+#define SV6621_SCHED_SCAN_MAX_MATCHES 10
+#define SV6621_SCHED_SCAN_MAX_PLANS 4
+#define SV6621_SCHED_SCAN_MAX_IE_LENGTH 512
 
 #ifdef CONFIG_NET
 #define SV6621IOC_GET_DRIVER_STATS SIOCDEVPRIVATE
@@ -148,7 +152,8 @@ enum sv6621_event_e
   SV6621_EVENT_SIGNAL_CHANGED,
   SV6621_EVENT_FATAL,
   SV6621_EVENT_ROAM_CANDIDATE,
-  SV6621_EVENT_ROAM_COMPLETE
+  SV6621_EVENT_ROAM_COMPLETE,
+  SV6621_EVENT_SCHEDULED_SCAN_RESULTS
 };
 
 enum sv6621_signal_status_e
@@ -237,6 +242,56 @@ struct sv6621_roam_policy_s
   uint8_t hysteresis_db;
   uint8_t minimum_gain_db;
   uint32_t cooldown_ms;
+};
+
+struct sv6621_sched_scan_ssid_s
+{
+  uint8_t ssid[SV6621_SSID_MAX_LENGTH];
+  uint8_t length;
+};
+
+struct sv6621_sched_scan_channel_s
+{
+  uint8_t number;
+  enum sv6621_band_e band;
+  bool passive;
+};
+
+struct sv6621_sched_scan_match_s
+{
+  uint8_t ssid[SV6621_SSID_MAX_LENGTH];
+  uint16_t ssid_length;
+  uint8_t bssid[SV6621_MAC_LENGTH];
+  int32_t rssi_threshold_dbm;
+};
+
+struct sv6621_sched_scan_plan_s
+{
+  uint32_t interval_seconds;
+  uint32_t iterations;
+};
+
+struct sv6621_sched_scan_request_s
+{
+  uint32_t request_id;
+  uint32_t flags;
+  int32_t minimum_rssi_dbm;
+  uint32_t delay_seconds;
+  uint8_t random_address[SV6621_MAC_LENGTH];
+  uint8_t random_address_mask[SV6621_MAC_LENGTH];
+  bool relative_rssi_set;
+  int8_t relative_rssi_db;
+  uint8_t scan_width;
+  FAR const struct sv6621_sched_scan_ssid_s *ssids;
+  size_t ssid_count;
+  FAR const struct sv6621_sched_scan_channel_s *channels;
+  size_t channel_count;
+  FAR const struct sv6621_sched_scan_match_s *matches;
+  size_t match_count;
+  FAR const struct sv6621_sched_scan_plan_s *plans;
+  size_t plan_count;
+  FAR const uint8_t *information_elements;
+  size_t information_element_length;
 };
 
 struct sv6621_connect_s
@@ -419,6 +474,10 @@ int sv6621_set_signal_threshold(FAR struct sv6621_dev_s *dev,
                                 uint8_t hysteresis_db);
 int sv6621_set_roam_policy(FAR struct sv6621_dev_s *dev,
                            FAR const struct sv6621_roam_policy_s *policy);
+int sv6621_start_scheduled_scan(
+    FAR struct sv6621_dev_s *dev,
+    FAR const struct sv6621_sched_scan_request_s *request);
+int sv6621_stop_scheduled_scan(FAR struct sv6621_dev_s *dev);
 int sv6621_suspend(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_suspend_s *config);
 int sv6621_resume(FAR struct sv6621_dev_s *dev);
