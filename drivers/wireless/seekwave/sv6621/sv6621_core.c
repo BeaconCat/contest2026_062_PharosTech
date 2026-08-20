@@ -2130,6 +2130,9 @@ static void sv6621_core_data_input(FAR const struct sv6621_data_rx_s *rx,
 {
 #ifdef CONFIG_NET
   FAR struct sv6621_dev_s *dev = arg;
+  struct sv6621_data_tx_context_s context;
+  bool deliver_local = true;
+  bool forward = false;
 
   if (dev->ap_initialized && sv6621_ap_is_active(&dev->ap) &&
       sv6621_ap_validate_rx(&dev->ap, rx) < 0)
@@ -2137,7 +2140,23 @@ static void sv6621_core_data_input(FAR const struct sv6621_data_rx_s *rx,
       return;
     }
 
-  sv6621_network_input(rx, &dev->network);
+  if (dev->ap_initialized && sv6621_ap_is_active(&dev->ap) &&
+      sv6621_ap_forward_policy(&dev->ap, rx, &forward,
+                               &deliver_local) == 0 && forward)
+    {
+      if (sv6621_ap_resolve_tx(&dev->ap, rx->frame, rx->frame_length,
+                               &context) < 0 ||
+          sv6621_network_forward(&dev->network, rx->frame,
+                                 rx->frame_length) < 0)
+        {
+          deliver_local = true;
+        }
+    }
+
+  if (deliver_local)
+    {
+      sv6621_network_input(rx, &dev->network);
+    }
 #else
   (void)rx;
   (void)arg;
