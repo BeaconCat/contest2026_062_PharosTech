@@ -457,15 +457,6 @@ int sv6621_ap_wpa_input(FAR struct sv6621_ap_wpa_s *wpa,
 
       if (ret == 0)
         {
-          ret = sv6621_security_add_key_instance(
-              wpa->command, wpa->instance,
-              SV6621_SECURITY_KEY_PAIRWISE, SV6621_SECURITY_CIPHER_CCMP,
-              peer->address, 0, peer->ptk + SV6621_AP_WPA_TK_OFFSET,
-              SV6621_AP_WPA_KEY_SIZE, NULL);
-        }
-
-      if (ret == 0)
-        {
           ret = sv6621_ap_build_rsn_ie(
               SV6621_SECURITY_WPA2_PSK, false, key_data,
               sizeof(key_data), &key_data_length);
@@ -510,6 +501,15 @@ int sv6621_ap_wpa_input(FAR struct sv6621_ap_wpa_s *wpa,
       ret = sv6621_wpa_eapol_verify_mic(
           &eapol, SV6621_WPA_KEY_MGMT_PSK,
           peer->ptk + SV6621_AP_WPA_KCK_OFFSET);
+      if (ret == 0)
+        {
+          ret = sv6621_security_add_key_instance(
+              wpa->command, wpa->instance,
+              SV6621_SECURITY_KEY_PAIRWISE, SV6621_SECURITY_CIPHER_CCMP,
+              peer->address, 0, peer->ptk + SV6621_AP_WPA_TK_OFFSET,
+              SV6621_AP_WPA_KEY_SIZE, NULL);
+        }
+
       if (ret == 0)
         {
           peer->state = SV6621_AP_WPA_COMPLETE;
