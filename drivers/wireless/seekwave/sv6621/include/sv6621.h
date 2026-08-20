@@ -29,6 +29,10 @@
 
 #include <nuttx/config.h>
 
+#ifdef CONFIG_NET
+#include <nuttx/net/ioctl.h>
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -41,6 +45,11 @@
 #define SV6621_SSID_MAX_LENGTH 32
 #define SV6621_KEY_MAX_LENGTH  64
 #define SV6621_REGULATORY_MAX_RULES 8
+#define SV6621_DRIVER_STATS_VERSION 1
+
+#ifdef CONFIG_NET
+#define SV6621IOC_GET_DRIVER_STATS SIOCDEVPRIVATE
+#endif
 
 #define SV6621_REGULATORY_FLAG_NO_OFDM    (1 << 0)
 #define SV6621_REGULATORY_FLAG_NO_OUTDOOR (1 << 3)
@@ -252,6 +261,48 @@ struct sv6621_link_stats_s
   uint32_t tx_failed;
 };
 
+struct sv6621_driver_stats_s
+{
+  uint16_t version;
+  uint16_t size;
+  uint32_t commands;
+  uint32_t command_timeouts;
+  uint32_t command_cancelled;
+  uint32_t command_malformed;
+  uint32_t stale_acknowledgements;
+  uint32_t missed_events;
+  uint32_t rx_interrupts;
+  uint32_t rx_bursts;
+  uint32_t rx_packets;
+  uint32_t rx_malformed_bursts;
+  uint32_t rx_transport_errors;
+  uint32_t tx_packets;
+  uint64_t tx_bytes;
+  uint32_t tx_transport_errors;
+  uint32_t tx_doorbell_errors;
+  uint32_t data_received;
+  uint32_t data_received_bytes;
+  uint32_t data_malformed;
+  uint32_t data_transmitted;
+  uint32_t data_transmitted_bytes;
+  uint32_t data_transmit_errors;
+  uint32_t credit_starvations;
+  uint32_t fragments;
+  uint32_t fragment_drops;
+  uint32_t fragment_pn_drops;
+  uint32_t reassembled;
+  uint32_t reorder_duplicates;
+  uint32_t reorder_stale;
+  uint32_t reorder_allocation_failures;
+  uint32_t reorder_timeouts;
+  uint32_t reorder_schedule_errors;
+  uint32_t recovery_count;
+  uint32_t unprotected_frames;
+  uint32_t mic_failures;
+  uint32_t mic_failures_dropped;
+  uint32_t signal_events_dropped;
+};
+
 struct sv6621_status_s
 {
   enum sv6621_state_e state;
@@ -322,6 +373,8 @@ int sv6621_get_status(FAR struct sv6621_dev_s *dev,
                       FAR struct sv6621_status_s *status);
 int sv6621_get_link_stats(FAR struct sv6621_dev_s *dev,
                           FAR struct sv6621_link_stats_s *stats);
+int sv6621_get_driver_stats(FAR struct sv6621_dev_s *dev,
+                            FAR struct sv6621_driver_stats_s *stats);
 int sv6621_set_country(FAR struct sv6621_dev_s *dev,
                        FAR const char country[2]);
 int sv6621_get_country(FAR struct sv6621_dev_s *dev, FAR char country[3]);
