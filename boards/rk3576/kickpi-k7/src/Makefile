@@ -26,6 +26,9 @@ CSRCS = kickpi_k7_boardinit.c
 CSRCS += kickpi_k7_appinit.c
 CSRCS += kickpi_k7_reset.c
 
+ifeq ($(CONFIG_KICKPI_K7_WIFI),y)
+CSRCS += kickpi_k7_wifi.c
+CFLAGS += -Wa,-I$(abspath $(BOARD_DIR)/firmware)
 # Makefile (legacy) build mode: expose the platform driver's public header
 # directory (boards/rk3576/drivers/include, shared by all platform drivers) so
 # this kernel-side board code can #include "<driver>.h".  Both this board code
@@ -36,11 +39,6 @@ CSRCS += kickpi_k7_reset.c
 ifeq ($(CONFIG_NYABULA_CUSTOM_DRIVERS),y)
   CFLAGS += ${INCDIR_PREFIX}"$(BOARD_DIR)$(DELIM)..$(DELIM)drivers$(DELIM)include"
 endif
-
-ifeq ($(CONFIG_KICKPI_K7_WIFI),y)
-CSRCS += kickpi_k7_wifi.c
-CFLAGS += -Wa,-I$(abspath $(BOARD_DIR)/firmware)
-CFLAGS += $(INCDIR_PREFIX)$(abspath $(BOARD_DIR)/../../../drivers/wireless/seekwave/sv6621/include)
 endif
 
 ifeq ($(CONFIG_KICKPI_K7_AUDIO),y)
