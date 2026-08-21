@@ -4332,7 +4332,8 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
       goto unlock_lifecycle;
     }
 
-  ret = sv6621_rx_suspend(&dev->rx);
+  ret = sv6621_power_suspend(&dev->command, config->wake_enabled,
+                             config->wake_flags);
   if (ret < 0)
     {
       sv6621_data_set_tx_block(&dev->data, SV6621_DATA_TX_BLOCK_SLEEP,
@@ -4340,11 +4341,16 @@ int sv6621_suspend(FAR struct sv6621_dev_s *dev,
       goto unlock_lifecycle;
     }
 
-  ret = sv6621_power_suspend(&dev->command, config->wake_enabled,
-                             config->wake_flags);
+  ret = sv6621_rx_suspend(&dev->rx);
   if (ret < 0)
     {
-      sv6621_rx_resume(&dev->rx);
+      int resume_ret = sv6621_power_resume(&dev->command);
+
+      if (resume_ret != 0)
+        {
+          ret = resume_ret < 0 ? resume_ret : -EREMOTEIO;
+        }
+
       sv6621_data_set_tx_block(&dev->data, SV6621_DATA_TX_BLOCK_SLEEP,
                                false);
       goto unlock_lifecycle;
