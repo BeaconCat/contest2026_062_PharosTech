@@ -73,6 +73,24 @@ static const uint8_t g_sv6621_ap_rates_2ghz[] =
   0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24
 };
 
+static const uint8_t g_sv6621_ap_rsn_ccmp[] =
+{
+  SV6621_AP_RSN_OUI_0, SV6621_AP_RSN_OUI_1, SV6621_AP_RSN_OUI_2,
+  SV6621_AP_RSN_SUITE_CCMP
+};
+
+static const uint8_t g_sv6621_ap_rsn_psk[] =
+{
+  SV6621_AP_RSN_OUI_0, SV6621_AP_RSN_OUI_1, SV6621_AP_RSN_OUI_2,
+  SV6621_AP_RSN_AKM_PSK
+};
+
+static const uint8_t g_sv6621_ap_rsn_sae[] =
+{
+  SV6621_AP_RSN_OUI_0, SV6621_AP_RSN_OUI_1, SV6621_AP_RSN_OUI_2,
+  SV6621_AP_RSN_AKM_SAE
+};
+
 static const uint8_t g_sv6621_ap_extended_rates_2ghz[] =
 {
   0x30, 0x48, 0x60, 0x6c
@@ -426,5 +444,123 @@ int sv6621_ap_build_rsn_ie(enum sv6621_security_e security,
     }
 
   *length = offset;
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_ap_validate_rsn_ie
+ ****************************************************************************/
+
+int sv6621_ap_validate_rsn_ie(enum sv6621_security_e security,
+                              bool pmf_required, FAR const uint8_t *ies,
+                              size_t ies_length, FAR bool *sae)
+{
+  FAR const uint8_t *rsn = NULL;
+  size_t rsn_length = 0;
+  size_t offset = 0;
+  uint16_t pairwise_count;
+  uint16_t akm_count;
+  uint16_t capabilities = 0;
+  bool pairwise_ccmp = false;
+  bool psk_akm = false;
+  bool sae_akm = false;
+  size_t index;
+
+  if (ies == NULL || sae == NULL ||
+      (security != SV6621_SECURITY_WPA2_PSK &&
+       security != SV6621_SECURITY_WPA3_SAE &&
+       security != SV6621_SECURITY_WPA2_WPA3_PSK))
+    {
+      return -EINVAL;
+    }
+
+  while (offset < ies_length)
+    {
+      size_t element_length;
+
+      if (ies_length - offset < 2 ||
+          (size_t)ies[offset + 1] > ies_length - offset - 2)
+        {
+          return -EPROTO;
+        }
+
+      element_length = (size_t)ies[offset + 1] + 2;
+      if (ies[offset] == SV6621_AP_IE_RSN)
+        {
+          rsn = ies + offset + 2;
+          rsn_length = element_length - 2;
+          break;
+        }
+
+      offset += element_length;
+    }
+
+  if (rsn == NULL || rsn_length < 18 || rsn[0] != 1 || rsn[1] != 0 ||
+      memcmp(rsn + 2, g_sv6621_ap_rsn_ccmp,
+             sizeof(g_sv6621_ap_rsn_ccmp)) != 0)
+    {
+      return -EACCES;
+    }
+
+  pairwise_count = rsn[6] | ((uint16_t)rsn[7] << 8);
+  offset = 8;
+  if (pairwise_count == 0 || pairwise_count > (rsn_length - offset) / 4)
+    {
+      return -EPROTO;
+    }
+
+  for (index = 0; index < pairwise_count; index++, offset += 4)
+    {
+      if (memcmp(rsn + offset, g_sv6621_ap_rsn_ccmp,
+                 sizeof(g_sv6621_ap_rsn_ccmp)) == 0)
+        {
+          pairwise_ccmp = true;
+        }
+    }
+
+  if (rsn_length - offset < 2)
+    {
+      return -EPROTO;
+    }
+
+  akm_count = rsn[offset] | ((uint16_t)rsn[offset + 1] << 8);
+  offset += 2;
+  if (akm_count == 0 || akm_count > (rsn_length - offset) / 4)
+    {
+      return -EPROTO;
+    }
+
+  for (index = 0; index < akm_count; index++, offset += 4)
+    {
+      if (memcmp(rsn + offset, g_sv6621_ap_rsn_psk,
+                 sizeof(g_sv6621_ap_rsn_psk)) == 0)
+        {
+          psk_akm = true;
+        }
+      else if (memcmp(rsn + offset, g_sv6621_ap_rsn_sae,
+                      sizeof(g_sv6621_ap_rsn_sae)) == 0)
+        {
+          sae_akm = true;
+        }
+    }
+
+  if (rsn_length - offset >= 2)
+    {
+      capabilities = rsn[offset] | ((uint16_t)rsn[offset + 1] << 8);
+    }
+
+  if (!pairwise_ccmp ||
+      (security == SV6621_SECURITY_WPA2_PSK && !psk_akm) ||
+      (security == SV6621_SECURITY_WPA3_SAE && !sae_akm) ||
+      (security == SV6621_SECURITY_WPA2_WPA3_PSK &&
+       !psk_akm && !sae_akm) ||
+      (pmf_required &&
+       (capabilities & SV6621_AP_RSN_CAP_MFPC) == 0))
+    {
+      return -EACCES;
+    }
+
+  *sae = sae_akm &&
+         (security == SV6621_SECURITY_WPA3_SAE || !psk_akm);
   return 0;
 }

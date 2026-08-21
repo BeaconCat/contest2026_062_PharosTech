@@ -82,5 +82,8 @@ int sv6621_ap_build_beacon_templates(
 int sv6621_ap_build_rsn_ie(enum sv6621_security_e security,
                            bool pmf_required, FAR uint8_t *ie,
                            size_t capacity, FAR size_t *length);
+int sv6621_ap_validate_rsn_ie(enum sv6621_security_e security,
+                              bool pmf_required, FAR const uint8_t *ies,
+                              size_t ies_length, FAR bool *sae);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_BEACON_H */
