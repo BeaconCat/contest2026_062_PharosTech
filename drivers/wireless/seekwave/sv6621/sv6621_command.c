@@ -221,15 +221,11 @@ int sv6621_command_decode_header(
   return 0;
 }
 
-int sv6621_command_engine_init(FAR struct sv6621_command_engine_s *engine,
-                               sv6621_command_sender_t sender,
-                               FAR void *sender_arg,
-                               sv6621_command_receive_kick_t receive_kick,
-                               FAR void *receive_kick_arg,
-                               sv6621_command_event_t event,
-                               FAR void *event_arg,
-                               sv6621_command_error_t error,
-                               FAR void *error_arg)
+int sv6621_command_engine_init(
+    FAR struct sv6621_command_engine_s *engine, sv6621_command_sender_t sender,
+    FAR void *sender_arg, sv6621_command_receive_kick_t receive_kick,
+    FAR void *receive_kick_arg, sv6621_command_event_t event,
+    FAR void *event_arg, sv6621_command_error_t error, FAR void *error_arg)
 {
   int ret;
 
@@ -372,7 +368,7 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
                            FAR void *response, FAR size_t *response_length,
                            uint32_t timeout_ms)
 {
-  struct sv6621_message_header_s header = {0};
+  struct sv6621_message_header_s header = { 0 };
   FAR uint8_t *message;
   FAR uint8_t *packet;
   size_t message_length;
@@ -555,9 +551,9 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
               *response_length = engine->response_length;
             }
 
-          ret = engine->completion_result < 0 ? engine->completion_result :
-                engine->firmware_status == 0 ? 0 :
-                -(int)engine->firmware_status;
+          ret = engine->completion_result < 0  ? engine->completion_result
+                : engine->firmware_status == 0 ? 0
+                                               : -(int)engine->firmware_status;
           nxmutex_unlock(&engine->state_lock);
         }
     }
@@ -599,8 +595,7 @@ free_buffers:
 
 int sv6621_command_send_noack(FAR struct sv6621_command_engine_s *engine,
                               uint8_t instance, uint8_t id,
-                              FAR const void *payload,
-                              size_t payload_length)
+                              FAR const void *payload, size_t payload_length)
 {
   struct sv6621_message_header_s header;
   FAR uint8_t *message;
@@ -679,9 +674,9 @@ int sv6621_command_send_noack(FAR struct sv6621_command_engine_s *engine,
       memcpy(message + SV6621_COMMAND_HEADER_SIZE, payload, payload_length);
     }
 
-  ret = sv6621_packet_build(SV6621_CHANNEL_WIFI_COMMAND, message,
-                            message_length, packet, packet_capacity,
-                            &packet_length);
+  ret =
+      sv6621_packet_build(SV6621_CHANNEL_WIFI_COMMAND, message, message_length,
+                          packet, packet_capacity, &packet_length);
   if (ret >= 0)
     {
       ret = engine->sender(packet, packet_length, engine->sender_arg);

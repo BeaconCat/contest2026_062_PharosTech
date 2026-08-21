@@ -39,9 +39,9 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_COMMAND_HEADER_SIZE         8
-#define SV6621_COMMAND_ACK_STATUS_SIZE     2
-#define SV6621_COMMAND_MAX_MESSAGE_SIZE    1588
+#define SV6621_COMMAND_HEADER_SIZE      8
+#define SV6621_COMMAND_ACK_STATUS_SIZE  2
+#define SV6621_COMMAND_MAX_MESSAGE_SIZE 1588
 
 /****************************************************************************
  * Public Types
@@ -125,15 +125,11 @@ int sv6621_command_encode_header(
 int sv6621_command_decode_header(
     FAR const uint8_t encoded[SV6621_COMMAND_HEADER_SIZE], size_t available,
     FAR struct sv6621_message_header_s *header);
-int sv6621_command_engine_init(FAR struct sv6621_command_engine_s *engine,
-                               sv6621_command_sender_t sender,
-                               FAR void *sender_arg,
-                               sv6621_command_receive_kick_t receive_kick,
-                               FAR void *receive_kick_arg,
-                               sv6621_command_event_t event,
-                               FAR void *event_arg,
-                               sv6621_command_error_t error,
-                               FAR void *error_arg);
+int sv6621_command_engine_init(
+    FAR struct sv6621_command_engine_s *engine, sv6621_command_sender_t sender,
+    FAR void *sender_arg, sv6621_command_receive_kick_t receive_kick,
+    FAR void *receive_kick_arg, sv6621_command_event_t event,
+    FAR void *event_arg, sv6621_command_error_t error, FAR void *error_arg);
 void sv6621_command_engine_deinit(FAR struct sv6621_command_engine_s *engine);
 int sv6621_command_reset(FAR struct sv6621_command_engine_s *engine);
 int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
@@ -143,8 +139,7 @@ int sv6621_command_execute(FAR struct sv6621_command_engine_s *engine,
                            uint32_t timeout_ms);
 int sv6621_command_send_noack(FAR struct sv6621_command_engine_s *engine,
                               uint8_t instance, uint8_t id,
-                              FAR const void *payload,
-                              size_t payload_length);
+                              FAR const void *payload, size_t payload_length);
 int sv6621_command_cancel(FAR struct sv6621_command_engine_s *engine,
                           int result);
 int sv6621_command_receive(FAR struct sv6621_command_engine_s *engine,

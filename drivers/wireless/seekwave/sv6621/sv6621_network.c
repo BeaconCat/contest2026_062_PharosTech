@@ -40,8 +40,8 @@
 #include <errno.h>
 #include <string.h>
 
-#include "sv6621_network.h"
 #include "sv6621_filter.h"
+#include "sv6621_network.h"
 
 /****************************************************************************
  * Private Function Prototypes
@@ -50,12 +50,12 @@
 static void sv6621_network_rx_worker(FAR void *arg);
 static void sv6621_network_tx_worker(FAR void *arg);
 static void sv6621_network_forward_worker(FAR void *arg);
-static int sv6621_network_schedule_forward(
-    FAR struct sv6621_network_s *network);
+static int
+sv6621_network_schedule_forward(FAR struct sv6621_network_s *network);
 #if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
 static void sv6621_network_multicast_worker(FAR void *arg);
-static int sv6621_network_queue_multicast(
-    FAR struct sv6621_network_s *network);
+static int
+sv6621_network_queue_multicast(FAR struct sv6621_network_s *network);
 #endif
 static void sv6621_network_reply(FAR struct sv6621_network_s *network);
 static int sv6621_network_queue_tx(FAR struct sv6621_network_s *network);
@@ -65,12 +65,13 @@ static bool sv6621_network_addresses_equal(
 static void sv6621_network_collect_addresses(
     FAR struct sv6621_network_s *network,
     FAR struct sv6621_offload_addresses_s *addresses);
-static bool sv6621_network_tx_snapshot(
-    FAR struct sv6621_network_s *network,
-    FAR struct sv6621_data_tx_context_s *context);
-static int sv6621_network_resolve_tx(
-    FAR struct sv6621_network_s *network, FAR const uint8_t *frame,
-    size_t length, FAR struct sv6621_data_tx_context_s *context);
+static bool
+sv6621_network_tx_snapshot(FAR struct sv6621_network_s *network,
+                           FAR struct sv6621_data_tx_context_s *context);
+static int
+sv6621_network_resolve_tx(FAR struct sv6621_network_s *network,
+                          FAR const uint8_t *frame, size_t length,
+                          FAR struct sv6621_data_tx_context_s *context);
 static int sv6621_network_transmit(FAR struct sv6621_network_s *network);
 static int sv6621_network_tx_poll(FAR struct net_driver_s *dev);
 static int sv6621_network_ifup(FAR struct net_driver_s *dev);
@@ -149,9 +150,8 @@ static void sv6621_network_collect_addresses(
     }
 #endif
 #ifdef CONFIG_NET_IPv6
-  for (index = 0;
-       index < CONFIG_NETDEV_MAX_IPv6_ADDR &&
-       addresses->ipv6_count < SV6621_OFFLOAD_IPV6_LIMIT;
+  for (index = 0; index < CONFIG_NETDEV_MAX_IPv6_ADDR &&
+                  addresses->ipv6_count < SV6621_OFFLOAD_IPV6_LIMIT;
        index++)
     {
       FAR const uint8_t *address =
@@ -167,8 +167,7 @@ static void sv6621_network_collect_addresses(
 
   if (addresses->ipv6_count == 0)
     {
-      FAR const uint8_t *mac =
-          network->dev.d_mac.ether.ether_addr_octet;
+      FAR const uint8_t *mac = network->dev.d_mac.ether.ether_addr_octet;
       FAR uint8_t *link_local = addresses->ipv6[0];
 
       link_local[0] = 0xfe;
@@ -191,9 +190,9 @@ static void sv6621_network_collect_addresses(
  * Name: sv6621_network_tx_snapshot
  ****************************************************************************/
 
-static bool sv6621_network_tx_snapshot(
-    FAR struct sv6621_network_s *network,
-    FAR struct sv6621_data_tx_context_s *context)
+static bool
+sv6621_network_tx_snapshot(FAR struct sv6621_network_s *network,
+                           FAR struct sv6621_data_tx_context_s *context)
 {
   irqstate_t flags;
   bool ready;
@@ -209,9 +208,10 @@ static bool sv6621_network_tx_snapshot(
   return ready;
 }
 
-static int sv6621_network_resolve_tx(
-    FAR struct sv6621_network_s *network, FAR const uint8_t *frame,
-    size_t length, FAR struct sv6621_data_tx_context_s *context)
+static int
+sv6621_network_resolve_tx(FAR struct sv6621_network_s *network,
+                          FAR const uint8_t *frame, size_t length,
+                          FAR struct sv6621_data_tx_context_s *context)
 {
   sv6621_network_tx_resolver_t resolver;
   FAR void *resolver_arg;
@@ -229,8 +229,7 @@ static int sv6621_network_resolve_tx(
       return -ENETDOWN;
     }
 
-  return resolver == NULL ? 0 : resolver(frame, length, context,
-                                          resolver_arg);
+  return resolver == NULL ? 0 : resolver(frame, length, context, resolver_arg);
 }
 
 static int sv6621_network_transmit(FAR struct sv6621_network_s *network)
@@ -250,8 +249,8 @@ static int sv6621_network_transmit(FAR struct sv6621_network_s *network)
       return ret;
     }
 
-  ret = sv6621_data_send(network->data, &context,
-                          network->dev.d_buf, network->dev.d_len);
+  ret = sv6621_data_send(network->data, &context, network->dev.d_buf,
+                         network->dev.d_len);
   if (ret < 0)
     {
       if (ret != -EAGAIN)
@@ -365,8 +364,7 @@ static void sv6621_network_forward_worker(FAR void *arg)
 
       flags = spin_lock_irqsave(&network->lock);
       if (!network->registered || !network->interface_up ||
-          !network->link_up ||
-          network->forward_tail == network->forward_head)
+          !network->link_up || network->forward_tail == network->forward_head)
         {
           network->forward_scheduled = false;
           spin_unlock_irqrestore(&network->lock, flags);
@@ -376,9 +374,8 @@ static void sv6621_network_forward_worker(FAR void *arg)
       tail = network->forward_tail;
       spin_unlock_irqrestore(&network->lock, flags);
 
-      ret = sv6621_network_resolve_tx(
-          network, network->forward_frame[tail],
-          network->forward_length[tail], &context);
+      ret = sv6621_network_resolve_tx(network, network->forward_frame[tail],
+                                      network->forward_length[tail], &context);
       if (ret == 0)
         {
           ret = sv6621_data_send(network->data, &context,
@@ -400,8 +397,8 @@ static void sv6621_network_forward_worker(FAR void *arg)
     }
 }
 
-static int sv6621_network_schedule_forward(
-    FAR struct sv6621_network_s *network)
+static int
+sv6621_network_schedule_forward(FAR struct sv6621_network_s *network)
 {
   irqstate_t flags;
   bool schedule = false;
@@ -452,7 +449,7 @@ static void sv6621_network_multicast_worker(FAR void *arg)
 
       flags = spin_lock_irqsave(&network->lock);
       retry = ret == 0 && network->multicast_applied_generation !=
-                            network->multicast_generation;
+                              network->multicast_generation;
       if (!retry)
         {
           network->multicast_scheduled = false;
@@ -467,8 +464,7 @@ static void sv6621_network_multicast_worker(FAR void *arg)
  * Name: sv6621_network_queue_multicast
  ****************************************************************************/
 
-static int sv6621_network_queue_multicast(
-    FAR struct sv6621_network_s *network)
+static int sv6621_network_queue_multicast(FAR struct sv6621_network_s *network)
 {
   irqstate_t flags;
   bool schedule = false;
@@ -476,8 +472,7 @@ static int sv6621_network_queue_multicast(
 
   flags = spin_lock_irqsave(&network->lock);
   if (!network->multicast_scheduled &&
-      network->multicast_applied_generation !=
-          network->multicast_generation)
+      network->multicast_applied_generation != network->multicast_generation)
     {
       network->multicast_scheduled = true;
       schedule = true;
@@ -732,8 +727,7 @@ int sv6621_network_init(FAR struct sv6621_network_s *network,
   int ret;
 
   if (network == NULL || owner == NULL || data == NULL || command == NULL ||
-      mac == NULL ||
-      multicast_limit == 0)
+      mac == NULL || multicast_limit == 0)
     {
       return -EINVAL;
     }
@@ -742,8 +736,9 @@ int sv6621_network_init(FAR struct sv6621_network_s *network,
   network->data = data;
   network->command = command;
   network->multicast_limit =
-      multicast_limit > SV6621_NETWORK_MULTICAST_CAPACITY ?
-      SV6621_NETWORK_MULTICAST_CAPACITY : multicast_limit;
+      multicast_limit > SV6621_NETWORK_MULTICAST_CAPACITY
+          ? SV6621_NETWORK_MULTICAST_CAPACITY
+          : multicast_limit;
   network->multicast_count = 1;
   network->multicast_generation = 1;
   memset(network->multicast[0], 0xff, SV6621_MAC_LENGTH);
@@ -875,10 +870,10 @@ int sv6621_network_sync_link_addresses(
   sv6621_network_collect_addresses(network, &addresses);
   flags = spin_lock_irqsave(&network->lock);
   epoch = network->address_epoch;
-  already_applied = network->addresses_applied &&
-                    network->applied_address_instance == context->instance &&
-                    sv6621_network_addresses_equal(
-                        &network->applied_addresses, &addresses);
+  already_applied =
+      network->addresses_applied &&
+      network->applied_address_instance == context->instance &&
+      sv6621_network_addresses_equal(&network->applied_addresses, &addresses);
   spin_unlock_irqrestore(&network->lock, flags);
   if (already_applied)
     {
@@ -886,9 +881,9 @@ int sv6621_network_sync_link_addresses(
     }
 
   has_addresses = addresses.ipv4_valid || addresses.ipv6_count != 0;
-  ret = has_addresses ?
-        sv6621_offload_set_addresses(network->command, context->instance,
-                                     &addresses) : 0;
+  ret = has_addresses ? sv6621_offload_set_addresses(
+                            network->command, context->instance, &addresses)
+                      : 0;
   if (ret == 0)
     {
       flags = spin_lock_irqsave(&network->lock);
@@ -932,8 +927,7 @@ void sv6621_network_set_link(
 {
   irqstate_t flags;
 
-  if (network == NULL || !network->registered ||
-      (link_up && context == NULL))
+  if (network == NULL || !network->registered || (link_up && context == NULL))
     {
       return;
     }
@@ -971,9 +965,9 @@ void sv6621_network_set_link(
     }
 }
 
-void sv6621_network_set_tx_resolver(
-    FAR struct sv6621_network_s *network,
-    sv6621_network_tx_resolver_t resolver, FAR void *arg)
+void sv6621_network_set_tx_resolver(FAR struct sv6621_network_s *network,
+                                    sv6621_network_tx_resolver_t resolver,
+                                    FAR void *arg)
 {
   irqstate_t flags;
 
@@ -1002,7 +996,7 @@ void sv6621_network_credit_available(FAR struct sv6621_network_s *network)
 }
 
 int sv6621_network_forward(FAR struct sv6621_network_s *network,
-                            FAR const uint8_t *frame, size_t length)
+                           FAR const uint8_t *frame, size_t length)
 {
   irqstate_t flags;
   uint8_t next;
@@ -1036,8 +1030,7 @@ int sv6621_network_forward(FAR struct sv6621_network_s *network,
   return 0;
 }
 
-void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx,
-                          FAR void *arg)
+void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx, FAR void *arg)
 {
   FAR struct sv6621_network_s *network = arg;
   irqstate_t flags;
@@ -1046,8 +1039,7 @@ void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx,
   uint8_t next;
   int ret;
 
-  if (network == NULL || rx == NULL ||
-      rx->frame_length > MAX_NETDEV_PKTSIZE)
+  if (network == NULL || rx == NULL || rx->frame_length > MAX_NETDEV_PKTSIZE)
     {
       return;
     }

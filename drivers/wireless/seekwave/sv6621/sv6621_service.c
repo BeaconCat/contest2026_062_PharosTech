@@ -108,13 +108,14 @@ static void sv6621_service_log_message(int priority,
 {
   char text[96];
   size_t index;
-  size_t count = message_length < sizeof(text) - 1 ?
-                 message_length : sizeof(text) - 1;
+  size_t count =
+      message_length < sizeof(text) - 1 ? message_length : sizeof(text) - 1;
 
   for (index = 0; index < count; index++)
     {
-      text[index] = message[index] >= 0x20 && message[index] < 0x7f ?
-                    message[index] : '.';
+      text[index] = message[index] >= 0x20 && message[index] < 0x7f
+                        ? message[index]
+                        : '.';
     }
 
   text[count] = '\0';

@@ -38,77 +38,75 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_DATA_RX_STATUS_OFFSET       0
-#define SV6621_DATA_RX_MSDU_LENGTH_OFFSET  2
-#define SV6621_DATA_RX_ATTRIBUTES_OFFSET   4
-#define SV6621_DATA_RX_CHECKSUM_OFFSET     5
-#define SV6621_DATA_RX_FILTER_OFFSET       7
-#define SV6621_DATA_RX_SEQUENCE_OFFSET     8
-#define SV6621_DATA_RX_CONTEXT_OFFSET      10
-#define SV6621_DATA_RX_PN_OFFSET           12
-#define SV6621_DATA_RX_REUSED_LENGTH_OFFSET 16
-#define SV6621_DATA_RX_MSDU_OFFSET_OFFSET  18
-#define SV6621_DATA_RX_AMSDU_INDEX_OFFSET  19
-#define SV6621_DATA_RX_ETHERNET_HEADER_TAIL 6
+#define SV6621_DATA_RX_STATUS_OFFSET           0
+#define SV6621_DATA_RX_MSDU_LENGTH_OFFSET      2
+#define SV6621_DATA_RX_ATTRIBUTES_OFFSET       4
+#define SV6621_DATA_RX_CHECKSUM_OFFSET         5
+#define SV6621_DATA_RX_FILTER_OFFSET           7
+#define SV6621_DATA_RX_SEQUENCE_OFFSET         8
+#define SV6621_DATA_RX_CONTEXT_OFFSET          10
+#define SV6621_DATA_RX_PN_OFFSET               12
+#define SV6621_DATA_RX_REUSED_LENGTH_OFFSET    16
+#define SV6621_DATA_RX_MSDU_OFFSET_OFFSET      18
+#define SV6621_DATA_RX_AMSDU_INDEX_OFFSET      19
+#define SV6621_DATA_RX_ETHERNET_HEADER_TAIL    6
 #define SV6621_DATA_RX_COMPACT_SEQUENCE_OFFSET 4
 #define SV6621_DATA_RX_COMPACT_CONTEXT_OFFSET  6
 #define SV6621_DATA_RX_COMPACT_PN_OFFSET       8
 #define SV6621_DATA_RX_COMPACT_LENGTH_OFFSET   12
 #define SV6621_DATA_RX_COMPACT_FRAME_OFFSET    18
-#define SV6621_DATA_RX_MORE_DATA_MASK      (1 << 1)
-#define SV6621_DATA_RX_RETRY_MASK          (1 << 3)
-#define SV6621_DATA_RX_CIPHER_MASK         0x0f
-#define SV6621_DATA_RX_EAPOL_MASK          (1 << 6)
-#define SV6621_DATA_RX_CHECKSUM_VALID_MASK (1 << 0)
-#define SV6621_DATA_RX_AMPDU_MASK          (1 << 1)
-#define SV6621_DATA_RX_SNAP_MATCH_MASK     (1 << 2)
-#define SV6621_DATA_RX_AMSDU_MASK          (1 << 3)
-#define SV6621_DATA_RX_QOS_DATA_MASK       (1 << 4)
-#define SV6621_DATA_RX_AMSDU_FIRST_MASK    (1 << 5)
-#define SV6621_DATA_RX_AMSDU_LAST_MASK     (1 << 6)
-#define SV6621_DATA_RX_MORE_FRAGMENTS_MASK (1 << 3)
-#define SV6621_DATA_RX_FIRST_MSDU_MASK     (1 << 11)
-#define SV6621_DATA_RX_AMSDU_INDEX_MASK    0x3f
-#define SV6621_DATA_RX_NEED_FORWARD_MASK   (1 << 6)
-#define SV6621_DATA_RX_MAC_DROP_FRAG_MASK  (1 << 7)
-#define SV6621_DATA_ETHERNET_HEADER_SIZE    14
-#define SV6621_DATA_MSDU_LENGTH_MASK        0x0fff
-#define SV6621_DATA_PEER_INDEX_MASK         0x1f
-#define SV6621_DATA_INSTANCE_MASK           0x03
-#define SV6621_DATA_LMAC_MASK               0x03
-#define SV6621_DATA_TID_MASK                0x0f
-#define SV6621_DATA_ETHERTYPE_EAPOL         0x888e
-#define SV6621_DATA_CIPHER_CCMP              8
-#define SV6621_DATA_CIPHER_CCMP_256          9
-#define SV6621_DATA_CIPHER_GCMP              10
-#define SV6621_DATA_CIPHER_GCMP_256          11
+#define SV6621_DATA_RX_MORE_DATA_MASK          (1 << 1)
+#define SV6621_DATA_RX_RETRY_MASK              (1 << 3)
+#define SV6621_DATA_RX_CIPHER_MASK             0x0f
+#define SV6621_DATA_RX_EAPOL_MASK              (1 << 6)
+#define SV6621_DATA_RX_CHECKSUM_VALID_MASK     (1 << 0)
+#define SV6621_DATA_RX_AMPDU_MASK              (1 << 1)
+#define SV6621_DATA_RX_SNAP_MATCH_MASK         (1 << 2)
+#define SV6621_DATA_RX_AMSDU_MASK              (1 << 3)
+#define SV6621_DATA_RX_QOS_DATA_MASK           (1 << 4)
+#define SV6621_DATA_RX_AMSDU_FIRST_MASK        (1 << 5)
+#define SV6621_DATA_RX_AMSDU_LAST_MASK         (1 << 6)
+#define SV6621_DATA_RX_MORE_FRAGMENTS_MASK     (1 << 3)
+#define SV6621_DATA_RX_FIRST_MSDU_MASK         (1 << 11)
+#define SV6621_DATA_RX_AMSDU_INDEX_MASK        0x3f
+#define SV6621_DATA_RX_NEED_FORWARD_MASK       (1 << 6)
+#define SV6621_DATA_RX_MAC_DROP_FRAG_MASK      (1 << 7)
+#define SV6621_DATA_ETHERNET_HEADER_SIZE       14
+#define SV6621_DATA_MSDU_LENGTH_MASK           0x0fff
+#define SV6621_DATA_PEER_INDEX_MASK            0x1f
+#define SV6621_DATA_INSTANCE_MASK              0x03
+#define SV6621_DATA_LMAC_MASK                  0x03
+#define SV6621_DATA_TID_MASK                   0x0f
+#define SV6621_DATA_ETHERTYPE_EAPOL            0x888e
+#define SV6621_DATA_CIPHER_CCMP                8
+#define SV6621_DATA_CIPHER_CCMP_256            9
+#define SV6621_DATA_CIPHER_GCMP                10
+#define SV6621_DATA_CIPHER_GCMP_256            11
 
-#define SV6621_DATA_BA_EVENT_SIZE             12
-#define SV6621_DATA_BA_ACTION_OFFSET          0
-#define SV6621_DATA_BA_LMAC_OFFSET            1
-#define SV6621_DATA_BA_PEER_OFFSET            2
-#define SV6621_DATA_BA_TID_OFFSET             3
-#define SV6621_DATA_BA_WINDOW_START_OFFSET    8
-#define SV6621_DATA_BA_WINDOW_SIZE_OFFSET     10
-#define SV6621_DATA_BA_ADD_TX                 0
-#define SV6621_DATA_BA_DEL_TX                 1
-#define SV6621_DATA_BA_ADD_RX                 2
-#define SV6621_DATA_BA_DEL_RX                 3
-#define SV6621_DATA_BA_REQ_RX                 4
-#define SV6621_DATA_BA_MAX_WINDOW             256
+#define SV6621_DATA_BA_EVENT_SIZE              12
+#define SV6621_DATA_BA_ACTION_OFFSET           0
+#define SV6621_DATA_BA_LMAC_OFFSET             1
+#define SV6621_DATA_BA_PEER_OFFSET             2
+#define SV6621_DATA_BA_TID_OFFSET              3
+#define SV6621_DATA_BA_WINDOW_START_OFFSET     8
+#define SV6621_DATA_BA_WINDOW_SIZE_OFFSET      10
+#define SV6621_DATA_BA_ADD_TX                  0
+#define SV6621_DATA_BA_DEL_TX                  1
+#define SV6621_DATA_BA_ADD_RX                  2
+#define SV6621_DATA_BA_DEL_RX                  3
+#define SV6621_DATA_BA_REQ_RX                  4
+#define SV6621_DATA_BA_MAX_WINDOW              256
 #define SV6621_DATA_BA_MIN_CAPACITY            64
 #define SV6621_DATA_SEQUENCE_MASK              0x0fff
 #define SV6621_DATA_SEQUENCE_HALF              0x0800
-#define SV6621_DATA_REORDER_TIMEOUT_MS          100
+#define SV6621_DATA_REORDER_TIMEOUT_MS         100
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static const uint8_t g_sv6621_data_snap_header[6] =
-{
-  0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00
-};
+static const uint8_t g_sv6621_data_snap_header[6] = { 0xaa, 0xaa, 0x03,
+                                                      0x00, 0x00, 0x00 };
 
 /****************************************************************************
  * Private Function Prototypes
@@ -116,8 +114,7 @@ static const uint8_t g_sv6621_data_snap_header[6] =
 
 static uint16_t sv6621_data_get_le16(FAR const uint8_t *value);
 static void sv6621_data_put_le16(FAR uint8_t *output, uint16_t value);
-static void sv6621_data_packet(uint8_t channel,
-                               FAR const uint8_t encoded[4],
+static void sv6621_data_packet(uint8_t channel, FAR const uint8_t encoded[4],
                                FAR const uint8_t *payload, size_t length,
                                FAR void *arg);
 static FAR struct sv6621_data_fragment_s *
@@ -127,37 +124,37 @@ static FAR struct sv6621_data_fragment_s *
 sv6621_data_select_fragment(FAR struct sv6621_data_s *data);
 static bool sv6621_data_cipher_uses_pn(uint8_t cipher);
 static bool sv6621_data_pn_after(FAR const uint8_t *previous,
-                                 FAR const uint8_t *current,
-                                 size_t length);
-static void sv6621_data_free_ba_session(
-    FAR struct sv6621_data_ba_session_s *session);
-static int sv6621_data_configure_ba_session(
-    FAR struct sv6621_data_s *data,
-    FAR struct sv6621_data_ba_session_s *session,
-    uint8_t peer_index, uint16_t window_start, uint16_t window_size);
+                                 FAR const uint8_t *current, size_t length);
+static void
+sv6621_data_free_ba_session(FAR struct sv6621_data_ba_session_s *session);
+static int
+sv6621_data_configure_ba_session(FAR struct sv6621_data_s *data,
+                                 FAR struct sv6621_data_ba_session_s *session,
+                                 uint8_t peer_index, uint16_t window_start,
+                                 uint16_t window_size);
 static bool sv6621_data_sequence_less(uint16_t left, uint16_t right);
 static uint16_t sv6621_data_sequence_add(uint16_t sequence, uint16_t value);
 static void sv6621_data_deliver(FAR struct sv6621_data_s *data,
                                 FAR const struct sv6621_data_rx_s *rx);
-static void sv6621_data_purge_reorder_slot(
-    FAR struct sv6621_data_reorder_slot_s *slot);
-static void sv6621_data_release_reorder_slot(
-    FAR struct sv6621_data_s *data,
-    FAR struct sv6621_data_ba_session_s *session,
-    FAR struct sv6621_data_reorder_slot_s *slot);
+static void
+sv6621_data_purge_reorder_slot(FAR struct sv6621_data_reorder_slot_s *slot);
+static void
+sv6621_data_release_reorder_slot(FAR struct sv6621_data_s *data,
+                                 FAR struct sv6621_data_ba_session_s *session,
+                                 FAR struct sv6621_data_reorder_slot_s *slot);
 static void sv6621_data_advance_reorder_window(
     FAR struct sv6621_data_s *data,
     FAR struct sv6621_data_ba_session_s *session, uint16_t new_start);
-static void sv6621_data_release_ready(
-    FAR struct sv6621_data_s *data,
-    FAR struct sv6621_data_ba_session_s *session);
-static void sv6621_data_flush_ba_session(
-    FAR struct sv6621_data_s *data,
-    FAR struct sv6621_data_ba_session_s *session);
+static void
+sv6621_data_release_ready(FAR struct sv6621_data_s *data,
+                          FAR struct sv6621_data_ba_session_s *session);
+static void
+sv6621_data_flush_ba_session(FAR struct sv6621_data_s *data,
+                             FAR struct sv6621_data_ba_session_s *session);
 static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
                                 FAR const struct sv6621_data_rx_s *rx);
-static void sv6621_data_schedule_reorder_locked(
-    FAR struct sv6621_data_s *data, clock_t delay);
+static void sv6621_data_schedule_reorder_locked(FAR struct sv6621_data_s *data,
+                                                clock_t delay);
 static void sv6621_data_reorder_worker(FAR void *arg);
 static int sv6621_data_reassemble(FAR struct sv6621_data_s *data,
                                   FAR struct sv6621_data_rx_s *rx);
@@ -263,8 +260,7 @@ static bool sv6621_data_cipher_uses_pn(uint8_t cipher)
  ****************************************************************************/
 
 static bool sv6621_data_pn_after(FAR const uint8_t *previous,
-                                 FAR const uint8_t *current,
-                                 size_t length)
+                                 FAR const uint8_t *current, size_t length)
 {
   size_t index = length;
 
@@ -284,8 +280,8 @@ static bool sv6621_data_pn_after(FAR const uint8_t *previous,
  * Name: sv6621_data_free_ba_session
  ****************************************************************************/
 
-static void sv6621_data_free_ba_session(
-    FAR struct sv6621_data_ba_session_s *session)
+static void
+sv6621_data_free_ba_session(FAR struct sv6621_data_ba_session_s *session)
 {
   uint16_t index;
 
@@ -312,14 +308,16 @@ static void sv6621_data_free_ba_session(
  * Name: sv6621_data_configure_ba_session
  ****************************************************************************/
 
-static int sv6621_data_configure_ba_session(
-    FAR struct sv6621_data_s *data,
-    FAR struct sv6621_data_ba_session_s *session,
-    uint8_t peer_index, uint16_t window_start, uint16_t window_size)
+static int
+sv6621_data_configure_ba_session(FAR struct sv6621_data_s *data,
+                                 FAR struct sv6621_data_ba_session_s *session,
+                                 uint8_t peer_index, uint16_t window_start,
+                                 uint16_t window_size)
 {
   FAR struct sv6621_data_reorder_slot_s *slots;
-  uint16_t capacity = window_size < SV6621_DATA_BA_MIN_CAPACITY ?
-                      SV6621_DATA_BA_MIN_CAPACITY : window_size;
+  uint16_t capacity = window_size < SV6621_DATA_BA_MIN_CAPACITY
+                          ? SV6621_DATA_BA_MIN_CAPACITY
+                          : window_size;
 
   capacity *= 2;
   slots = kmm_zalloc((size_t)capacity * sizeof(*slots));
@@ -368,9 +366,8 @@ static void sv6621_data_deliver(FAR struct sv6621_data_s *data,
 {
   data->stats.received++;
   data->stats.received_bytes += rx->frame_length;
-  if ((rx->eapol ||
-       (((uint16_t)rx->frame[12] << 8) | rx->frame[13]) ==
-           SV6621_DATA_ETHERTYPE_EAPOL) &&
+  if ((rx->eapol || (((uint16_t)rx->frame[12] << 8) | rx->frame[13]) ==
+                        SV6621_DATA_ETHERTYPE_EAPOL) &&
       data->eapol_input != NULL)
     {
       data->eapol_input(rx, data->eapol_arg);
@@ -385,8 +382,8 @@ static void sv6621_data_deliver(FAR struct sv6621_data_s *data,
  * Name: sv6621_data_purge_reorder_slot
  ****************************************************************************/
 
-static void sv6621_data_purge_reorder_slot(
-    FAR struct sv6621_data_reorder_slot_s *slot)
+static void
+sv6621_data_purge_reorder_slot(FAR struct sv6621_data_reorder_slot_s *slot)
 {
   FAR struct sv6621_data_reorder_frame_s *frame;
 
@@ -403,10 +400,10 @@ static void sv6621_data_purge_reorder_slot(
  * Name: sv6621_data_release_reorder_slot
  ****************************************************************************/
 
-static void sv6621_data_release_reorder_slot(
-    FAR struct sv6621_data_s *data,
-    FAR struct sv6621_data_ba_session_s *session,
-    FAR struct sv6621_data_reorder_slot_s *slot)
+static void
+sv6621_data_release_reorder_slot(FAR struct sv6621_data_s *data,
+                                 FAR struct sv6621_data_ba_session_s *session,
+                                 FAR struct sv6621_data_reorder_slot_s *slot)
 {
   FAR struct sv6621_data_reorder_frame_s *frame;
 
@@ -464,9 +461,9 @@ static void sv6621_data_advance_reorder_window(
  * Name: sv6621_data_release_ready
  ****************************************************************************/
 
-static void sv6621_data_release_ready(
-    FAR struct sv6621_data_s *data,
-    FAR struct sv6621_data_ba_session_s *session)
+static void
+sv6621_data_release_ready(FAR struct sv6621_data_s *data,
+                          FAR struct sv6621_data_ba_session_s *session)
 {
   while (session->queued_sequences > 0)
     {
@@ -488,17 +485,16 @@ static void sv6621_data_release_ready(
  * Name: sv6621_data_flush_ba_session
  ****************************************************************************/
 
-static void sv6621_data_flush_ba_session(
-    FAR struct sv6621_data_s *data,
-    FAR struct sv6621_data_ba_session_s *session)
+static void
+sv6621_data_flush_ba_session(FAR struct sv6621_data_s *data,
+                             FAR struct sv6621_data_ba_session_s *session)
 {
   if (session->active && session->slots != NULL &&
       session->queued_sequences > 0)
     {
       sv6621_data_advance_reorder_window(
           data, session,
-          sv6621_data_sequence_add(session->window_start,
-                                   session->capacity));
+          sv6621_data_sequence_add(session->window_start, session->capacity));
     }
 }
 
@@ -540,13 +536,13 @@ static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
       return true;
     }
 
-  window_end = sv6621_data_sequence_add(session->window_start,
-                                        session->capacity);
+  window_end =
+      sv6621_data_sequence_add(session->window_start, session->capacity);
   if (!sv6621_data_sequence_less(rx->sequence, window_end))
     {
-      new_start = sv6621_data_sequence_add(
-          rx->sequence, (SV6621_DATA_SEQUENCE_MASK + 1) -
-                            session->capacity + 1);
+      new_start = sv6621_data_sequence_add(rx->sequence,
+                                           (SV6621_DATA_SEQUENCE_MASK + 1) -
+                                               session->capacity + 1);
       sv6621_data_advance_reorder_window(data, session, new_start);
     }
 
@@ -562,15 +558,13 @@ static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
             }
 
           amsdu_bit = UINT64_C(1) << rx->amsdu_index;
-          if (slot->complete ||
-              (slot->amsdu_bitmap & amsdu_bit) != 0)
+          if (slot->complete || (slot->amsdu_bitmap & amsdu_bit) != 0)
             {
               data->stats.reorder_duplicates++;
               return true;
             }
 
-          if (slot->amsdu_last &&
-              (slot->amsdu_mask & amsdu_bit) == 0)
+          if (slot->amsdu_last && (slot->amsdu_mask & amsdu_bit) == 0)
             {
               slot->tainted = true;
               return true;
@@ -618,8 +612,7 @@ static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
     {
       previous = NULL;
       current = slot->head;
-      while (current != NULL &&
-             current->rx.amsdu_index < rx->amsdu_index)
+      while (current != NULL && current->rx.amsdu_index < rx->amsdu_index)
         {
           previous = current;
           current = current->next;
@@ -642,18 +635,17 @@ static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
 
       amsdu_bit = UINT64_C(1) << rx->amsdu_index;
       slot->amsdu_bitmap |= amsdu_bit;
-      if (rx->amsdu_first &&
-          memcmp(rx->frame, g_sv6621_data_snap_header,
-                 sizeof(g_sv6621_data_snap_header)) == 0)
+      if (rx->amsdu_first && memcmp(rx->frame, g_sv6621_data_snap_header,
+                                    sizeof(g_sv6621_data_snap_header)) == 0)
         {
           slot->tainted = true;
         }
 
       if (rx->amsdu_last)
         {
-          uint64_t mask = rx->amsdu_index == 63 ?
-                          UINT64_MAX :
-                          (UINT64_C(1) << (rx->amsdu_index + 1)) - 1;
+          uint64_t mask = rx->amsdu_index == 63
+                              ? UINT64_MAX
+                              : (UINT64_C(1) << (rx->amsdu_index + 1)) - 1;
 
           if (slot->amsdu_last && slot->amsdu_mask != mask)
             {
@@ -664,8 +656,8 @@ static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
           slot->amsdu_mask = mask;
         }
 
-      slot->complete = slot->amsdu_last &&
-                       slot->amsdu_bitmap == slot->amsdu_mask;
+      slot->complete =
+          slot->amsdu_last && slot->amsdu_bitmap == slot->amsdu_mask;
       if (slot->complete)
         {
           data->stats.reorder_amsdu_completed++;
@@ -701,8 +693,8 @@ static bool sv6621_data_reorder(FAR struct sv6621_data_s *data,
  * Name: sv6621_data_schedule_reorder_locked
  ****************************************************************************/
 
-static void sv6621_data_schedule_reorder_locked(
-    FAR struct sv6621_data_s *data, clock_t delay)
+static void sv6621_data_schedule_reorder_locked(FAR struct sv6621_data_s *data,
+                                                clock_t delay)
 {
   int ret;
 
@@ -712,8 +704,8 @@ static void sv6621_data_schedule_reorder_locked(
     }
 
   data->reorder_work_scheduled = true;
-  ret = work_queue(LPWORK, &data->reorder_work,
-                   sv6621_data_reorder_worker, data, delay);
+  ret = work_queue(LPWORK, &data->reorder_work, sv6621_data_reorder_worker,
+                   data, delay);
   if (ret < 0)
     {
       data->reorder_work_scheduled = false;
@@ -758,13 +750,12 @@ static void sv6621_data_reorder_worker(FAR void *arg)
 
               for (offset = 0; offset < session->capacity; offset++)
                 {
-                  uint16_t sequence = sv6621_data_sequence_add(
-                      session->window_start, offset);
+                  uint16_t sequence =
+                      sv6621_data_sequence_add(session->window_start, offset);
                   FAR struct sv6621_data_reorder_slot_s *candidate =
                       &session->slots[sequence % session->capacity];
 
-                  if (candidate->occupied &&
-                      candidate->sequence == sequence)
+                  if (candidate->occupied && candidate->sequence == sequence)
                     {
                       slot = candidate;
                       break;
@@ -792,8 +783,7 @@ static void sv6621_data_reorder_worker(FAR void *arg)
                 }
 
               sv6621_data_advance_reorder_window(
-                  data, session,
-                  sv6621_data_sequence_add(slot->sequence, 1));
+                  data, session, sv6621_data_sequence_add(slot->sequence, 1));
               sv6621_data_release_ready(data, session);
               data->stats.reorder_timeouts++;
             }
@@ -880,8 +870,8 @@ static int sv6621_data_reassemble(FAR struct sv6621_data_s *data,
       size_t pn_length = data->pn_reuse ? 4 : 6;
 
       if (rx->cipher != entry->first.cipher ||
-          !sv6621_data_pn_after(entry->last_packet_number,
-                                rx->packet_number, pn_length))
+          !sv6621_data_pn_after(entry->last_packet_number, rx->packet_number,
+                                pn_length))
         {
           entry->active = false;
           data->stats.fragment_drops++;
@@ -924,8 +914,7 @@ static int sv6621_data_reassemble(FAR struct sv6621_data_s *data,
  * Name: sv6621_data_packet
  ****************************************************************************/
 
-static void sv6621_data_packet(uint8_t channel,
-                               FAR const uint8_t encoded[4],
+static void sv6621_data_packet(uint8_t channel, FAR const uint8_t encoded[4],
                                FAR const uint8_t *payload, size_t length,
                                FAR void *arg)
 {
@@ -949,10 +938,9 @@ static void sv6621_data_packet(uint8_t channel,
       goto unlock;
     }
 
-  descriptor = data->pn_reuse ? payload :
-               payload + SV6621_RX_LINK_HEADER_SIZE;
-  descriptor_length = data->pn_reuse ? length :
-                      length - SV6621_RX_LINK_HEADER_SIZE;
+  descriptor = data->pn_reuse ? payload : payload + SV6621_RX_LINK_HEADER_SIZE;
+  descriptor_length =
+      data->pn_reuse ? length : length - SV6621_RX_LINK_HEADER_SIZE;
   ret = sv6621_data_decode_rx(descriptor, descriptor_length, data->pn_reuse,
                               &rx);
   if (ret < 0)
@@ -995,8 +983,7 @@ static bool sv6621_data_take_credit(FAR struct sv6621_data_s *data,
   bool available;
 
   flags = spin_lock_irqsave(&data->credit_lock);
-  available = lmac_id < SV6621_DATA_LMAC_COUNT &&
-              data->credits[lmac_id] > 0;
+  available = lmac_id < SV6621_DATA_LMAC_COUNT && data->credits[lmac_id] > 0;
   if (available)
     {
       data->credits[lmac_id]--;
@@ -1045,8 +1032,7 @@ int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
   size_t frame_length;
   uint8_t frame_offset;
 
-  if (payload == NULL || rx == NULL ||
-      length < SV6621_DATA_RX_DESCRIPTOR_SIZE)
+  if (payload == NULL || rx == NULL || length < SV6621_DATA_RX_DESCRIPTOR_SIZE)
     {
       return -EINVAL;
     }
@@ -1063,10 +1049,10 @@ int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
           return -EPROTO;
         }
 
-      sequence = sv6621_data_get_le16(
-                     payload + SV6621_DATA_RX_COMPACT_SEQUENCE_OFFSET);
-      context = sv6621_data_get_le16(
-                    payload + SV6621_DATA_RX_COMPACT_CONTEXT_OFFSET);
+      sequence = sv6621_data_get_le16(payload +
+                                      SV6621_DATA_RX_COMPACT_SEQUENCE_OFFSET);
+      context = sv6621_data_get_le16(payload +
+                                     SV6621_DATA_RX_COMPACT_CONTEXT_OFFSET);
       memset(rx, 0, sizeof(*rx));
       rx->frame = payload + frame_offset;
       rx->frame_length = frame_length;
@@ -1078,8 +1064,7 @@ int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
       rx->peer_valid = (context & (1 << 9)) != 0;
       rx->multicast = (context & (1 << 10)) != 0;
       rx->tid = context >> 12;
-      memcpy(rx->packet_number,
-             payload + SV6621_DATA_RX_COMPACT_PN_OFFSET, 4);
+      memcpy(rx->packet_number, payload + SV6621_DATA_RX_COMPACT_PN_OFFSET, 4);
       rx->eapol = (((uint16_t)rx->frame[12] << 8) | rx->frame[13]) ==
                   SV6621_DATA_ETHERTYPE_EAPOL;
       rx->first_msdu = true;
@@ -1087,20 +1072,18 @@ int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
     }
 
   frame_offset = payload[SV6621_DATA_RX_MSDU_OFFSET_OFFSET];
-  frame_length = sv6621_data_get_le16(
-                     payload + (pn_reuse ?
-                       SV6621_DATA_RX_REUSED_LENGTH_OFFSET :
-                       SV6621_DATA_RX_MSDU_LENGTH_OFFSET)) +
-                 SV6621_DATA_RX_ETHERNET_HEADER_TAIL;
-  if (frame_offset < SV6621_DATA_RX_PREFIX_SIZE ||
-      frame_length < 14 || frame_offset > length ||
-      frame_length > length - frame_offset)
+  frame_length =
+      sv6621_data_get_le16(payload +
+                           (pn_reuse ? SV6621_DATA_RX_REUSED_LENGTH_OFFSET
+                                     : SV6621_DATA_RX_MSDU_LENGTH_OFFSET)) +
+      SV6621_DATA_RX_ETHERNET_HEADER_TAIL;
+  if (frame_offset < SV6621_DATA_RX_PREFIX_SIZE || frame_length < 14 ||
+      frame_offset > length || frame_length > length - frame_offset)
     {
       return -EPROTO;
     }
 
-  sequence = sv6621_data_get_le16(
-      payload + SV6621_DATA_RX_SEQUENCE_OFFSET);
+  sequence = sv6621_data_get_le16(payload + SV6621_DATA_RX_SEQUENCE_OFFSET);
   context = sv6621_data_get_le16(payload + SV6621_DATA_RX_CONTEXT_OFFSET);
 
   memset(rx, 0, sizeof(*rx));
@@ -1132,8 +1115,8 @@ int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
                SV6621_DATA_RX_EAPOL_MASK) != 0;
   rx->more_data = (payload[SV6621_DATA_RX_STATUS_OFFSET] &
                    SV6621_DATA_RX_MORE_DATA_MASK) != 0;
-  rx->retry = (payload[SV6621_DATA_RX_STATUS_OFFSET] &
-               SV6621_DATA_RX_RETRY_MASK) != 0;
+  rx->retry =
+      (payload[SV6621_DATA_RX_STATUS_OFFSET] & SV6621_DATA_RX_RETRY_MASK) != 0;
   rx->checksum_valid = (payload[SV6621_DATA_RX_ATTRIBUTES_OFFSET] &
                         SV6621_DATA_RX_CHECKSUM_VALID_MASK) != 0;
   rx->ampdu = (payload[SV6621_DATA_RX_ATTRIBUTES_OFFSET] &
@@ -1152,9 +1135,8 @@ int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
   rx->first_msdu = (context & SV6621_DATA_RX_FIRST_MSDU_MASK) != 0;
   rx->need_forward = (payload[SV6621_DATA_RX_AMSDU_INDEX_OFFSET] &
                       SV6621_DATA_RX_NEED_FORWARD_MASK) != 0;
-  rx->mac_dropped_fragments =
-      (payload[SV6621_DATA_RX_AMSDU_INDEX_OFFSET] &
-       SV6621_DATA_RX_MAC_DROP_FRAG_MASK) != 0;
+  rx->mac_dropped_fragments = (payload[SV6621_DATA_RX_AMSDU_INDEX_OFFSET] &
+                               SV6621_DATA_RX_MAC_DROP_FRAG_MASK) != 0;
   return 0;
 }
 
@@ -1162,10 +1144,10 @@ int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
  * Name: sv6621_data_encode_tx
  ****************************************************************************/
 
-int sv6621_data_encode_tx(
-    FAR const struct sv6621_data_tx_context_s *context,
-    FAR const uint8_t *frame, size_t frame_length, FAR uint8_t *payload,
-    size_t capacity, FAR size_t *written)
+int sv6621_data_encode_tx(FAR const struct sv6621_data_tx_context_s *context,
+                          FAR const uint8_t *frame, size_t frame_length,
+                          FAR uint8_t *payload, size_t capacity,
+                          FAR size_t *written)
 {
   uint16_t descriptor;
   uint8_t peer_index;
@@ -1183,15 +1165,13 @@ int sv6621_data_encode_tx(
       return -EINVAL;
     }
 
-  peer_index = (frame[0] & 1) != 0 ? context->multicast_index :
-                                     context->peer_index;
+  peer_index =
+      (frame[0] & 1) != 0 ? context->multicast_index : context->peer_index;
   descriptor = ((uint16_t)context->instance << 2) |
-               ((uint16_t)context->tid << 4) |
-               ((uint16_t)peer_index << 8);
+               ((uint16_t)context->tid << 4) | ((uint16_t)peer_index << 8);
   sv6621_data_put_le16(payload, descriptor);
 
-  descriptor = (uint16_t)frame_length |
-               ((uint16_t)context->lmac_id << 12);
+  descriptor = (uint16_t)frame_length | ((uint16_t)context->lmac_id << 12);
   sv6621_data_put_le16(payload + 2, descriptor);
 
   payload[4] = frame[12];
@@ -1290,7 +1270,7 @@ void sv6621_data_deinit(FAR struct sv6621_data_s *data)
  ****************************************************************************/
 
 void sv6621_data_set_eapol_input(FAR struct sv6621_data_s *data,
-                                  sv6621_data_input_t input, FAR void *arg)
+                                 sv6621_data_input_t input, FAR void *arg)
 {
   if (data != NULL)
     {
@@ -1303,8 +1283,8 @@ void sv6621_data_set_eapol_input(FAR struct sv6621_data_s *data,
  * Name: sv6621_data_add_credits
  ****************************************************************************/
 
-void sv6621_data_add_credits(FAR struct sv6621_data_s *data,
-                             uint16_t lmac0, uint16_t lmac1)
+void sv6621_data_add_credits(FAR struct sv6621_data_s *data, uint16_t lmac0,
+                             uint16_t lmac1)
 {
   const uint16_t added[SV6621_DATA_LMAC_COUNT] = { lmac0, lmac1 };
   irqstate_t flags;
@@ -1403,15 +1383,15 @@ int sv6621_data_ba_event(FAR struct sv6621_data_s *data,
   lmac_id = payload[SV6621_DATA_BA_LMAC_OFFSET];
   peer_index = payload[SV6621_DATA_BA_PEER_OFFSET];
   tid = payload[SV6621_DATA_BA_TID_OFFSET];
-  window_start = sv6621_data_get_le16(
-      payload + SV6621_DATA_BA_WINDOW_START_OFFSET) & 0x0fff;
-  window_size = sv6621_data_get_le16(
-      payload + SV6621_DATA_BA_WINDOW_SIZE_OFFSET);
+  window_start =
+      sv6621_data_get_le16(payload + SV6621_DATA_BA_WINDOW_START_OFFSET) &
+      0x0fff;
+  window_size =
+      sv6621_data_get_le16(payload + SV6621_DATA_BA_WINDOW_SIZE_OFFSET);
   if (lmac_id >= SV6621_DATA_LMAC_COUNT ||
       peer_index > SV6621_DATA_PEER_INDEX_MASK ||
       tid >= SV6621_DATA_TID_COUNT ||
-      (action != SV6621_DATA_BA_ADD_RX &&
-       action != SV6621_DATA_BA_DEL_RX &&
+      (action != SV6621_DATA_BA_ADD_RX && action != SV6621_DATA_BA_DEL_RX &&
        action != SV6621_DATA_BA_REQ_RX))
     {
       data->stats.ba_event_errors++;
@@ -1443,8 +1423,8 @@ int sv6621_data_ba_event(FAR struct sv6621_data_s *data,
   else if (action == SV6621_DATA_BA_ADD_RX ||
            (session->active && session->peer_index == peer_index))
     {
-      ret = sv6621_data_configure_ba_session(
-          data, session, peer_index, window_start, window_size);
+      ret = sv6621_data_configure_ba_session(data, session, peer_index,
+                                             window_start, window_size);
     }
 
   data->stats.ba_events++;
@@ -1521,8 +1501,7 @@ int sv6621_data_send(FAR struct sv6621_data_s *data,
                      FAR const struct sv6621_data_tx_context_s *context,
                      FAR const uint8_t *frame, size_t frame_length)
 {
-  uint8_t payload[SV6621_DATA_TX_DESCRIPTOR_SIZE +
-                  SV6621_DATA_MAX_FRAME_SIZE];
+  uint8_t payload[SV6621_DATA_TX_DESCRIPTOR_SIZE + SV6621_DATA_MAX_FRAME_SIZE];
   size_t payload_length;
   size_t packet_length;
   int ret;
@@ -1552,9 +1531,9 @@ int sv6621_data_send(FAR struct sv6621_data_s *data,
       goto unlock;
     }
 
-  ret = sv6621_packet_build(SV6621_CHANNEL_WIFI_DATA, payload,
-                            payload_length, data->tx_buffer,
-                            sizeof(data->tx_buffer), &packet_length);
+  ret = sv6621_packet_build(SV6621_CHANNEL_WIFI_DATA, payload, payload_length,
+                            data->tx_buffer, sizeof(data->tx_buffer),
+                            &packet_length);
   if (ret < 0)
     {
       goto unlock;

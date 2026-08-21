@@ -34,10 +34,10 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_POWER_INSTANCE          0
-#define SV6621_POWER_COMMAND_RESUME    27
-#define SV6621_POWER_COMMAND_SUSPEND   28
-#define SV6621_POWER_SUSPEND_SIZE      4
+#define SV6621_POWER_INSTANCE           0
+#define SV6621_POWER_COMMAND_RESUME     27
+#define SV6621_POWER_COMMAND_SUSPEND    28
+#define SV6621_POWER_SUSPEND_SIZE       4
 #define SV6621_POWER_COMMAND_TIMEOUT_MS 2000
 
 /****************************************************************************

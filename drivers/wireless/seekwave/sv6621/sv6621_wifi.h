@@ -80,12 +80,11 @@ int sv6621_wifi_download_calibration(
 int sv6621_wifi_open_station(FAR struct sv6621_command_engine_s *command,
                              FAR const uint8_t address[SV6621_MAC_LENGTH]);
 int sv6621_wifi_open_access_point(
-    FAR struct sv6621_command_engine_s *command,
-    uint8_t instance,
+    FAR struct sv6621_command_engine_s *command, uint8_t instance,
     FAR const uint8_t address[SV6621_MAC_LENGTH]);
 int sv6621_wifi_close_station(FAR struct sv6621_command_engine_s *command);
-int sv6621_wifi_close_access_point(
-    FAR struct sv6621_command_engine_s *command, uint8_t instance);
+int sv6621_wifi_close_access_point(FAR struct sv6621_command_engine_s *command,
+                                   uint8_t instance);
 int sv6621_wifi_set_mib(FAR struct sv6621_command_engine_s *command,
                         uint16_t type, FAR const void *value, uint16_t length);
 int sv6621_wifi_configure_baseline(

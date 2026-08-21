@@ -37,52 +37,97 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_CONNECTION_INSTANCE           0
-#define SV6621_CONNECTION_COMMAND_JOIN        9
-#define SV6621_CONNECTION_COMMAND_AUTH        10
-#define SV6621_CONNECTION_COMMAND_ASSOC       11
-#define SV6621_CONNECTION_COMMAND_DISCONNECT  17
-#define SV6621_CONNECTION_COMMAND_TIMEOUT_MS  5000
-#define SV6621_CONNECTION_JOIN_HEADER_SIZE    25
-#define SV6621_CONNECTION_JOIN_RESPONSE_SIZE  4
-#define SV6621_CONNECTION_JOIN_BANDWIDTH_20MHZ 0
-#define SV6621_CONNECTION_JOIN_BANDWIDTH_40MHZ 1
-#define SV6621_CONNECTION_JOIN_BANDWIDTH_80MHZ 2
+#define SV6621_CONNECTION_INSTANCE                0
+#define SV6621_CONNECTION_COMMAND_JOIN            9
+#define SV6621_CONNECTION_COMMAND_AUTH            10
+#define SV6621_CONNECTION_COMMAND_ASSOC           11
+#define SV6621_CONNECTION_COMMAND_DISCONNECT      17
+#define SV6621_CONNECTION_COMMAND_TIMEOUT_MS      5000
+#define SV6621_CONNECTION_JOIN_HEADER_SIZE        25
+#define SV6621_CONNECTION_JOIN_RESPONSE_SIZE      4
+#define SV6621_CONNECTION_JOIN_BANDWIDTH_20MHZ    0
+#define SV6621_CONNECTION_JOIN_BANDWIDTH_40MHZ    1
+#define SV6621_CONNECTION_JOIN_BANDWIDTH_80MHZ    2
 #define SV6621_CONNECTION_JOIN_BANDWIDTH_80P80MHZ 3
-#define SV6621_CONNECTION_JOIN_BANDWIDTH_160MHZ 4
-#define SV6621_CONNECTION_HT_SECONDARY_NONE    0
-#define SV6621_CONNECTION_HT_SECONDARY_ABOVE   1
-#define SV6621_CONNECTION_HT_SECONDARY_BELOW   3
-#define SV6621_CONNECTION_VHT_WIDTH_80MHZ       1
-#define SV6621_CONNECTION_VHT_WIDTH_160MHZ      2
-#define SV6621_CONNECTION_VHT_WIDTH_80P80MHZ    3
-#define SV6621_CONNECTION_VHT_160_SEGMENT_DELTA 8
-#define SV6621_CONNECTION_AUTH_HEADER_SIZE     14
-#define SV6621_CONNECTION_AUTH_MAX_DATA_SIZE   512
-#define SV6621_CONNECTION_ASSOC_HEADER_SIZE    54
-#define SV6621_CONNECTION_ASSOC_BSSID_OFFSET   38
+#define SV6621_CONNECTION_JOIN_BANDWIDTH_160MHZ   4
+#define SV6621_CONNECTION_HT_SECONDARY_NONE       0
+#define SV6621_CONNECTION_HT_SECONDARY_ABOVE      1
+#define SV6621_CONNECTION_HT_SECONDARY_BELOW      3
+#define SV6621_CONNECTION_VHT_WIDTH_80MHZ         1
+#define SV6621_CONNECTION_VHT_WIDTH_160MHZ        2
+#define SV6621_CONNECTION_VHT_WIDTH_80P80MHZ      3
+#define SV6621_CONNECTION_VHT_160_SEGMENT_DELTA   8
+#define SV6621_CONNECTION_AUTH_HEADER_SIZE        14
+#define SV6621_CONNECTION_AUTH_MAX_DATA_SIZE      512
+#define SV6621_CONNECTION_ASSOC_HEADER_SIZE       54
+#define SV6621_CONNECTION_ASSOC_BSSID_OFFSET      38
 #define SV6621_CONNECTION_ASSOC_IE_OFFSET_OFFSET  50
 #define SV6621_CONNECTION_ASSOC_IE_LENGTH_OFFSET  52
 #define SV6621_CONNECTION_ASSOC_MAX_IE_SIZE       1024
 #define SV6621_CONNECTION_DISCONNECT_HEADER_SIZE  8
 #define SV6621_CONNECTION_DISCONNECT_MAX_IE_SIZE  512
-#define SV6621_CONNECTION_IE_SUPPORTED_RATES       1
-#define SV6621_CONNECTION_IE_RSN                   48
-#define SV6621_CONNECTION_IE_EXT_SUPPORTED_RATES   50
+#define SV6621_CONNECTION_IE_SUPPORTED_RATES      1
+#define SV6621_CONNECTION_IE_RSN                  48
+#define SV6621_CONNECTION_IE_EXT_SUPPORTED_RATES  50
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
 static const uint8_t g_sv6621_connection_rsn_psk_ccmp[] = {
-  SV6621_CONNECTION_IE_RSN, 20, 1, 0, 0x00, 0x0f, 0xac, 4,
-  1, 0, 0x00, 0x0f, 0xac, 4, 1, 0, 0x00, 0x0f, 0xac, 2, 0, 0
+  SV6621_CONNECTION_IE_RSN,
+  20,
+  1,
+  0,
+  0x00,
+  0x0f,
+  0xac,
+  4,
+  1,
+  0,
+  0x00,
+  0x0f,
+  0xac,
+  4,
+  1,
+  0,
+  0x00,
+  0x0f,
+  0xac,
+  2,
+  0,
+  0
 };
 
 static const uint8_t g_sv6621_connection_rsn_sae_ccmp[] = {
-  SV6621_CONNECTION_IE_RSN, 26, 1, 0, 0x00, 0x0f, 0xac, 4,
-  1, 0, 0x00, 0x0f, 0xac, 4, 1, 0, 0x00, 0x0f, 0xac, 8, 0xc0, 0,
-  0, 0, 0x00, 0x0f, 0xac, 6
+  SV6621_CONNECTION_IE_RSN,
+  26,
+  1,
+  0,
+  0x00,
+  0x0f,
+  0xac,
+  4,
+  1,
+  0,
+  0x00,
+  0x0f,
+  0xac,
+  4,
+  1,
+  0,
+  0x00,
+  0x0f,
+  0xac,
+  8,
+  0xc0,
+  0,
+  0,
+  0,
+  0x00,
+  0x0f,
+  0xac,
+  6
 };
 
 /****************************************************************************
@@ -139,9 +184,9 @@ static void sv6621_connection_select_ht_channel(
 
   *center_channel = entry->bss.channel;
   *bandwidth = SV6621_CONNECTION_JOIN_BANDWIDTH_20MHZ;
-  required_capability = entry->bss.band == SV6621_BAND_2GHZ ?
-      SV6621_CONNECTION_BW_CAP_2GHZ_40MHZ :
-      SV6621_CONNECTION_BW_CAP_5GHZ_40MHZ;
+  required_capability = entry->bss.band == SV6621_BAND_2GHZ
+                            ? SV6621_CONNECTION_BW_CAP_2GHZ_40MHZ
+                            : SV6621_CONNECTION_BW_CAP_5GHZ_40MHZ;
   if (!entry->ht_operation_present ||
       entry->ht_primary_channel != entry->bss.channel ||
       (bandwidth_capabilities & required_capability) == 0 ||
@@ -176,33 +221,27 @@ static void sv6621_connection_select_vht_channel(
 {
   uint8_t segment_delta;
 
-  if (entry->bss.band != SV6621_BAND_5GHZ ||
-      !entry->vht_operation_present ||
+  if (entry->bss.band != SV6621_BAND_5GHZ || !entry->vht_operation_present ||
       entry->vht_center_segment0 == 0)
     {
       return;
     }
 
-  segment_delta = entry->vht_center_segment0 >
-                          entry->vht_center_segment1 ?
-                      entry->vht_center_segment0 -
-                          entry->vht_center_segment1 :
-                      entry->vht_center_segment1 -
-                          entry->vht_center_segment0;
+  segment_delta =
+      entry->vht_center_segment0 > entry->vht_center_segment1
+          ? entry->vht_center_segment0 - entry->vht_center_segment1
+          : entry->vht_center_segment1 - entry->vht_center_segment0;
 
-  if ((bandwidth_capabilities &
-       SV6621_CONNECTION_BW_CAP_5GHZ_160MHZ) != 0)
+  if ((bandwidth_capabilities & SV6621_CONNECTION_BW_CAP_5GHZ_160MHZ) != 0)
     {
-      if (entry->vht_channel_width ==
-          SV6621_CONNECTION_VHT_WIDTH_160MHZ)
+      if (entry->vht_channel_width == SV6621_CONNECTION_VHT_WIDTH_160MHZ)
         {
           *center_channel1 = entry->vht_center_segment0;
           *bandwidth = SV6621_CONNECTION_JOIN_BANDWIDTH_160MHZ;
           return;
         }
 
-      if (entry->vht_channel_width ==
-              SV6621_CONNECTION_VHT_WIDTH_80MHZ &&
+      if (entry->vht_channel_width == SV6621_CONNECTION_VHT_WIDTH_80MHZ &&
           entry->vht_center_segment1 != 0 &&
           segment_delta == SV6621_CONNECTION_VHT_160_SEGMENT_DELTA)
         {
@@ -212,13 +251,10 @@ static void sv6621_connection_select_vht_channel(
         }
     }
 
-  if ((bandwidth_capabilities &
-       SV6621_CONNECTION_BW_CAP_5GHZ_80P80MHZ) != 0 &&
+  if ((bandwidth_capabilities & SV6621_CONNECTION_BW_CAP_5GHZ_80P80MHZ) != 0 &&
       entry->vht_center_segment1 != 0 &&
-      (entry->vht_channel_width ==
-           SV6621_CONNECTION_VHT_WIDTH_80P80MHZ ||
-       (entry->vht_channel_width ==
-            SV6621_CONNECTION_VHT_WIDTH_80MHZ &&
+      (entry->vht_channel_width == SV6621_CONNECTION_VHT_WIDTH_80P80MHZ ||
+       (entry->vht_channel_width == SV6621_CONNECTION_VHT_WIDTH_80MHZ &&
         segment_delta > SV6621_CONNECTION_VHT_160_SEGMENT_DELTA)))
     {
       *center_channel1 = entry->vht_center_segment0;
@@ -228,8 +264,7 @@ static void sv6621_connection_select_vht_channel(
     }
 
   if (entry->vht_channel_width != SV6621_CONNECTION_VHT_WIDTH_80MHZ ||
-      (bandwidth_capabilities &
-       SV6621_CONNECTION_BW_CAP_5GHZ_80MHZ) == 0)
+      (bandwidth_capabilities & SV6621_CONNECTION_BW_CAP_5GHZ_80MHZ) == 0)
     {
       return;
     }
@@ -289,16 +324,15 @@ int sv6621_connection_join(FAR struct sv6621_command_engine_s *command,
   payload[10] = entry->max_bssid_indicator;
   memcpy(payload + 11, entry->bss.bssid, SV6621_MAC_LENGTH);
   sv6621_connection_put_le16(payload + 17, roaming ? 1 : 0);
-  sv6621_connection_put_le16(payload + 19,
-                             SV6621_CONNECTION_JOIN_HEADER_SIZE);
+  sv6621_connection_put_le16(payload + 19, SV6621_CONNECTION_JOIN_HEADER_SIZE);
   sv6621_connection_put_le32(payload + 21, entry->ie_length);
   memcpy(payload + SV6621_CONNECTION_JOIN_HEADER_SIZE, entry->ies,
          entry->ie_length);
 
-  ret = sv6621_command_execute(
-      command, SV6621_CONNECTION_INSTANCE, SV6621_CONNECTION_COMMAND_JOIN,
-      payload, payload_length, response, &response_length,
-      SV6621_CONNECTION_COMMAND_TIMEOUT_MS);
+  ret = sv6621_command_execute(command, SV6621_CONNECTION_INSTANCE,
+                               SV6621_CONNECTION_COMMAND_JOIN, payload,
+                               payload_length, response, &response_length,
+                               SV6621_CONNECTION_COMMAND_TIMEOUT_MS);
   kmm_free(payload);
   if (ret != 0)
     {
@@ -342,8 +376,8 @@ int sv6621_connection_authenticate(
       return -EINVAL;
     }
 
-  payload_length = SV6621_CONNECTION_AUTH_HEADER_SIZE + auth_data_length +
-                   auth_ies_length;
+  payload_length =
+      SV6621_CONNECTION_AUTH_HEADER_SIZE + auth_data_length + auth_ies_length;
   payload = kmm_zalloc(payload_length);
   if (payload == NULL)
     {
@@ -367,10 +401,10 @@ int sv6621_connection_authenticate(
       memcpy(payload + offset, auth_ies, auth_ies_length);
     }
 
-  ret = sv6621_command_execute(
-      command, SV6621_CONNECTION_INSTANCE, SV6621_CONNECTION_COMMAND_AUTH,
-      payload, payload_length, NULL, NULL,
-      SV6621_CONNECTION_COMMAND_TIMEOUT_MS);
+  ret = sv6621_command_execute(command, SV6621_CONNECTION_INSTANCE,
+                               SV6621_CONNECTION_COMMAND_AUTH, payload,
+                               payload_length, NULL, NULL,
+                               SV6621_CONNECTION_COMMAND_TIMEOUT_MS);
   kmm_free(payload);
   return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
 }
@@ -409,9 +443,9 @@ int sv6621_connection_associate(
          SV6621_CONNECTION_VHT_CAPABILITY_SIZE);
   memcpy(payload + SV6621_CONNECTION_ASSOC_BSSID_OFFSET, bssid,
          SV6621_MAC_LENGTH);
-  sv6621_connection_put_le16(
-      payload + SV6621_CONNECTION_ASSOC_IE_OFFSET_OFFSET,
-      SV6621_CONNECTION_ASSOC_HEADER_SIZE);
+  sv6621_connection_put_le16(payload +
+                                 SV6621_CONNECTION_ASSOC_IE_OFFSET_OFFSET,
+                             SV6621_CONNECTION_ASSOC_HEADER_SIZE);
   sv6621_connection_put_le16(
       payload + SV6621_CONNECTION_ASSOC_IE_LENGTH_OFFSET, ies_length);
   if (ies_length > 0)
@@ -419,10 +453,10 @@ int sv6621_connection_associate(
       memcpy(payload + SV6621_CONNECTION_ASSOC_HEADER_SIZE, ies, ies_length);
     }
 
-  ret = sv6621_command_execute(
-      command, SV6621_CONNECTION_INSTANCE, SV6621_CONNECTION_COMMAND_ASSOC,
-      payload, payload_length, NULL, NULL,
-      SV6621_CONNECTION_COMMAND_TIMEOUT_MS);
+  ret = sv6621_command_execute(command, SV6621_CONNECTION_INSTANCE,
+                               SV6621_CONNECTION_COMMAND_ASSOC, payload,
+                               payload_length, NULL, NULL,
+                               SV6621_CONNECTION_COMMAND_TIMEOUT_MS);
   kmm_free(payload);
   return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
 }
@@ -431,10 +465,10 @@ int sv6621_connection_associate(
  * Name: sv6621_connection_disconnect
  ****************************************************************************/
 
-int sv6621_connection_disconnect(
-    FAR struct sv6621_command_engine_s *command,
-    enum sv6621_connection_disconnect_mode_e mode, bool local_state_change,
-    uint16_t reason, FAR const uint8_t *ies, size_t ies_length)
+int sv6621_connection_disconnect(FAR struct sv6621_command_engine_s *command,
+                                 enum sv6621_connection_disconnect_mode_e mode,
+                                 bool local_state_change, uint16_t reason,
+                                 FAR const uint8_t *ies, size_t ies_length)
 {
   FAR uint8_t *payload;
   size_t payload_length;
@@ -460,17 +494,17 @@ int sv6621_connection_disconnect(
   sv6621_connection_put_le16(payload + 2, reason);
   if (ies_length > 0)
     {
-      sv6621_connection_put_le16(
-          payload + 4, SV6621_CONNECTION_DISCONNECT_HEADER_SIZE);
+      sv6621_connection_put_le16(payload + 4,
+                                 SV6621_CONNECTION_DISCONNECT_HEADER_SIZE);
       sv6621_connection_put_le16(payload + 6, ies_length);
       memcpy(payload + SV6621_CONNECTION_DISCONNECT_HEADER_SIZE, ies,
              ies_length);
     }
 
-  ret = sv6621_command_execute(
-      command, SV6621_CONNECTION_INSTANCE,
-      SV6621_CONNECTION_COMMAND_DISCONNECT, payload, payload_length, NULL,
-      NULL, SV6621_CONNECTION_COMMAND_TIMEOUT_MS);
+  ret = sv6621_command_execute(command, SV6621_CONNECTION_INSTANCE,
+                               SV6621_CONNECTION_COMMAND_DISCONNECT, payload,
+                               payload_length, NULL, NULL,
+                               SV6621_CONNECTION_COMMAND_TIMEOUT_MS);
   kmm_free(payload);
   return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
 }
@@ -537,12 +571,12 @@ int sv6621_connection_build_association_ies(
 
   if (security != SV6621_SECURITY_OPEN)
     {
-      FAR const uint8_t *rsn = security == SV6621_SECURITY_WPA3_SAE ?
-                                   g_sv6621_connection_rsn_sae_ccmp :
-                                   g_sv6621_connection_rsn_psk_ccmp;
-      size_t rsn_length = security == SV6621_SECURITY_WPA3_SAE ?
-                              sizeof(g_sv6621_connection_rsn_sae_ccmp) :
-                              sizeof(g_sv6621_connection_rsn_psk_ccmp);
+      FAR const uint8_t *rsn = security == SV6621_SECURITY_WPA3_SAE
+                                   ? g_sv6621_connection_rsn_sae_ccmp
+                                   : g_sv6621_connection_rsn_psk_ccmp;
+      size_t rsn_length = security == SV6621_SECURITY_WPA3_SAE
+                              ? sizeof(g_sv6621_connection_rsn_sae_ccmp)
+                              : sizeof(g_sv6621_connection_rsn_psk_ccmp);
 
       if (rsn_length > capacity - output)
         {

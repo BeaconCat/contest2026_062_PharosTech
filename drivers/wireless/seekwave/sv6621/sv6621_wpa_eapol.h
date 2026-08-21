@@ -38,11 +38,11 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_WPA_REPLAY_SIZE 8
-#define SV6621_WPA_MIC_SIZE    16
+#define SV6621_WPA_REPLAY_SIZE  8
+#define SV6621_WPA_MIC_SIZE     16
 #define SV6621_WPA_GTK_MAX_SIZE 32
 #define SV6621_WPA_IGTK_SIZE    16
-#define SV6621_WPA_IPN_SIZE      6
+#define SV6621_WPA_IPN_SIZE     6
 
 /****************************************************************************
  * Public Types
@@ -93,44 +93,43 @@ struct sv6621_wpa_eapol_s
  * Public Function Prototypes
  ****************************************************************************/
 
-int sv6621_wpa_eapol_parse(
-    FAR const uint8_t *frame, size_t frame_length,
-    enum sv6621_wpa_key_mgmt_e key_mgmt,
-    FAR struct sv6621_wpa_eapol_s *eapol);
-int sv6621_wpa_eapol_build(
-    enum sv6621_wpa_response_e response,
-    enum sv6621_wpa_key_mgmt_e key_mgmt, uint8_t version,
-    FAR const uint8_t replay[SV6621_WPA_REPLAY_SIZE],
-    FAR const uint8_t snonce[SV6621_WPA_NONCE_SIZE],
-    FAR const uint8_t kck[SV6621_WPA_MIC_SIZE], FAR uint8_t *output,
-    size_t capacity, FAR size_t *written);
+int sv6621_wpa_eapol_parse(FAR const uint8_t *frame, size_t frame_length,
+                           enum sv6621_wpa_key_mgmt_e key_mgmt,
+                           FAR struct sv6621_wpa_eapol_s *eapol);
+int sv6621_wpa_eapol_build(enum sv6621_wpa_response_e response,
+                           enum sv6621_wpa_key_mgmt_e key_mgmt,
+                           uint8_t version,
+                           FAR const uint8_t replay[SV6621_WPA_REPLAY_SIZE],
+                           FAR const uint8_t snonce[SV6621_WPA_NONCE_SIZE],
+                           FAR const uint8_t kck[SV6621_WPA_MIC_SIZE],
+                           FAR uint8_t *output, size_t capacity,
+                           FAR size_t *written);
 int sv6621_wpa_eapol_build_authenticator(
-    enum sv6621_wpa_message_e message,
-    enum sv6621_wpa_key_mgmt_e key_mgmt, uint8_t version,
-    FAR const uint8_t replay[SV6621_WPA_REPLAY_SIZE],
+    enum sv6621_wpa_message_e message, enum sv6621_wpa_key_mgmt_e key_mgmt,
+    uint8_t version, FAR const uint8_t replay[SV6621_WPA_REPLAY_SIZE],
     FAR const uint8_t anonce[SV6621_WPA_NONCE_SIZE],
     FAR const uint8_t kck[SV6621_WPA_MIC_SIZE],
-    FAR const uint8_t kek[SV6621_WPA_KEK_SIZE],
-    FAR const uint8_t *key_data, size_t key_data_length,
-    FAR uint8_t *output, size_t capacity, FAR size_t *written);
-int sv6621_wpa_eapol_build_gtk_kde(
-    uint8_t key_index, FAR const uint8_t *gtk, size_t gtk_length,
-    FAR uint8_t *output, size_t capacity, FAR size_t *written);
+    FAR const uint8_t kek[SV6621_WPA_KEK_SIZE], FAR const uint8_t *key_data,
+    size_t key_data_length, FAR uint8_t *output, size_t capacity,
+    FAR size_t *written);
+int sv6621_wpa_eapol_build_gtk_kde(uint8_t key_index, FAR const uint8_t *gtk,
+                                   size_t gtk_length, FAR uint8_t *output,
+                                   size_t capacity, FAR size_t *written);
 int sv6621_wpa_eapol_build_igtk_kde(
     uint8_t key_index, FAR const uint8_t ipn[SV6621_WPA_IPN_SIZE],
     FAR const uint8_t igtk[SV6621_WPA_IGTK_SIZE], FAR uint8_t *output,
     size_t capacity, FAR size_t *written);
-int sv6621_wpa_eapol_verify_mic(
-    FAR const struct sv6621_wpa_eapol_s *eapol,
-    enum sv6621_wpa_key_mgmt_e key_mgmt,
-    FAR const uint8_t kck[SV6621_WPA_MIC_SIZE]);
-int sv6621_wpa_eapol_extract_gtk(
-    FAR const uint8_t *key_data, size_t key_data_length,
-    FAR uint8_t *key_index, FAR uint8_t *gtk, size_t capacity,
-    FAR size_t *gtk_length);
-int sv6621_wpa_eapol_extract_igtk(
-    FAR const uint8_t *key_data, size_t key_data_length,
-    FAR uint8_t *key_index, FAR uint8_t ipn[SV6621_WPA_IPN_SIZE],
-    FAR uint8_t igtk[SV6621_WPA_IGTK_SIZE]);
+int sv6621_wpa_eapol_verify_mic(FAR const struct sv6621_wpa_eapol_s *eapol,
+                                enum sv6621_wpa_key_mgmt_e key_mgmt,
+                                FAR const uint8_t kck[SV6621_WPA_MIC_SIZE]);
+int sv6621_wpa_eapol_extract_gtk(FAR const uint8_t *key_data,
+                                 size_t key_data_length,
+                                 FAR uint8_t *key_index, FAR uint8_t *gtk,
+                                 size_t capacity, FAR size_t *gtk_length);
+int sv6621_wpa_eapol_extract_igtk(FAR const uint8_t *key_data,
+                                  size_t key_data_length,
+                                  FAR uint8_t *key_index,
+                                  FAR uint8_t ipn[SV6621_WPA_IPN_SIZE],
+                                  FAR uint8_t igtk[SV6621_WPA_IGTK_SIZE]);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_WPA_EAPOL_H */

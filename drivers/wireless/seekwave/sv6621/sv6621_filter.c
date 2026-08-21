@@ -35,11 +35,11 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_FILTER_INSTANCE             0
+#define SV6621_FILTER_INSTANCE            0
 #define SV6621_FILTER_COMMAND_SET_MC_ADDR 26
-#define SV6621_FILTER_COMMAND_TIMEOUT_MS 5000
-#define SV6621_FILTER_MAX_MULTICAST         32
-#define SV6621_FILTER_COUNT_SIZE             2
+#define SV6621_FILTER_COMMAND_TIMEOUT_MS  5000
+#define SV6621_FILTER_MAX_MULTICAST       32
+#define SV6621_FILTER_COUNT_SIZE          2
 
 /****************************************************************************
  * Private Function Prototypes
@@ -93,6 +93,5 @@ int sv6621_filter_set_multicast(
 
   return sv6621_command_execute(
       command, SV6621_FILTER_INSTANCE, SV6621_FILTER_COMMAND_SET_MC_ADDR,
-      payload, payload_length, NULL, NULL,
-      SV6621_FILTER_COMMAND_TIMEOUT_MS);
+      payload, payload_length, NULL, NULL, SV6621_FILTER_COMMAND_TIMEOUT_MS);
 }

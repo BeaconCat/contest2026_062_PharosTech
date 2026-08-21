@@ -39,8 +39,8 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_AP_BEACON_HEAD_MAX_LENGTH     128
-#define SV6621_AP_BEACON_TAIL_MAX_LENGTH     768
+#define SV6621_AP_BEACON_HEAD_MAX_LENGTH    128
+#define SV6621_AP_BEACON_TAIL_MAX_LENGTH    768
 #define SV6621_AP_PROBE_RESPONSE_MAX_LENGTH 1024
 
 /****************************************************************************
@@ -79,9 +79,9 @@ int sv6621_ap_build_beacon_templates(
     FAR const struct sv6621_ap_beacon_config_s *config,
     FAR struct sv6621_ap_beacon_templates_s *templates);
 
-int sv6621_ap_build_rsn_ie(enum sv6621_security_e security,
-                           bool pmf_required, FAR uint8_t *ie,
-                           size_t capacity, FAR size_t *length);
+int sv6621_ap_build_rsn_ie(enum sv6621_security_e security, bool pmf_required,
+                           FAR uint8_t *ie, size_t capacity,
+                           FAR size_t *length);
 int sv6621_ap_validate_rsn_ie(enum sv6621_security_e security,
                               bool pmf_required, FAR const uint8_t *ies,
                               size_t ies_length, FAR bool *sae);

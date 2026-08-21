@@ -54,9 +54,9 @@ struct sv6621_management_tx_status_s
 
 int sv6621_management_tx(FAR struct sv6621_command_engine_s *command,
                          uint8_t instance, uint32_t wait_ms, uint64_t cookie,
-                         uint8_t channel, enum sv6621_band_e band,
-                         bool no_ack, FAR const uint8_t *frame,
-                         size_t frame_length, size_t total_frame_length);
+                         uint8_t channel, enum sv6621_band_e band, bool no_ack,
+                         FAR const uint8_t *frame, size_t frame_length,
+                         size_t total_frame_length);
 int sv6621_management_parse_tx_status(
     FAR const uint8_t *payload, size_t payload_length,
     FAR struct sv6621_management_tx_status_s *status);

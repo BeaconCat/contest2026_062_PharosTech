@@ -40,31 +40,31 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_AP_COMMAND_START              19
-#define SV6621_AP_COMMAND_STOP               20
-#define SV6621_AP_COMMAND_TIMEOUT_MS        5000
-#define SV6621_AP_FIXED_SIZE                  64
-#define SV6621_AP_RESPONSE_SIZE                3
+#define SV6621_AP_COMMAND_START      19
+#define SV6621_AP_COMMAND_STOP       20
+#define SV6621_AP_COMMAND_TIMEOUT_MS 5000
+#define SV6621_AP_FIXED_SIZE         64
+#define SV6621_AP_RESPONSE_SIZE      3
 #define SV6621_AP_MAX_PAYLOAD \
   (SV6621_COMMAND_MAX_MESSAGE_SIZE - SV6621_COMMAND_HEADER_SIZE)
 
-#define SV6621_AP_BEACON_INTERVAL_OFFSET      0
-#define SV6621_AP_DTIM_OFFSET                  4
-#define SV6621_AP_FLAGS_OFFSET                 5
-#define SV6621_AP_CHANNEL_OFFSET               6
-#define SV6621_AP_WIDTH_OFFSET                 7
-#define SV6621_AP_CENTER1_OFFSET               8
-#define SV6621_AP_CENTER2_OFFSET               9
-#define SV6621_AP_BAND_OFFSET                 10
-#define SV6621_AP_SSID_LENGTH_OFFSET          11
-#define SV6621_AP_SSID_OFFSET                 12
-#define SV6621_AP_BLOB_TABLE_OFFSET           44
-#define SV6621_AP_BLOB_COUNT                   5
-#define SV6621_AP_PROBE_RESPONSE_IE_OFFSET     36 /* Header + fixed fields */
-#define SV6621_AP_EAPOL_HEADER_SIZE              3
-#define SV6621_AP_AUTH_OPEN                       0
-#define SV6621_AP_AUTH_SAE                        3
-#define SV6621_AP_REASON_LEAVING                   3
+#define SV6621_AP_BEACON_INTERVAL_OFFSET   0
+#define SV6621_AP_DTIM_OFFSET              4
+#define SV6621_AP_FLAGS_OFFSET             5
+#define SV6621_AP_CHANNEL_OFFSET           6
+#define SV6621_AP_WIDTH_OFFSET             7
+#define SV6621_AP_CENTER1_OFFSET           8
+#define SV6621_AP_CENTER2_OFFSET           9
+#define SV6621_AP_BAND_OFFSET              10
+#define SV6621_AP_SSID_LENGTH_OFFSET       11
+#define SV6621_AP_SSID_OFFSET              12
+#define SV6621_AP_BLOB_TABLE_OFFSET        44
+#define SV6621_AP_BLOB_COUNT               5
+#define SV6621_AP_PROBE_RESPONSE_IE_OFFSET 36 /* Header + fixed fields */
+#define SV6621_AP_EAPOL_HEADER_SIZE        3
+#define SV6621_AP_AUTH_OPEN                0
+#define SV6621_AP_AUTH_SAE                 3
+#define SV6621_AP_REASON_LEAVING           3
 
 /****************************************************************************
  * Private Types
@@ -84,16 +84,16 @@ static void sv6621_ap_put_le16(FAR uint8_t *value, uint16_t number);
 static void sv6621_ap_put_le32(FAR uint8_t *value, uint32_t number);
 static uint64_t sv6621_ap_next_cookie(FAR struct sv6621_ap_s *ap);
 static bool sv6621_ap_expected_event_error(int error);
-static bool sv6621_ap_tx_client_event(
-    FAR struct sv6621_ap_s *ap, FAR const uint8_t *payload, size_t length,
-    FAR struct sv6621_ap_client_event_s *event);
+static bool
+sv6621_ap_tx_client_event(FAR struct sv6621_ap_s *ap,
+                          FAR const uint8_t *payload, size_t length,
+                          FAR struct sv6621_ap_client_event_s *event);
 static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
-                                    FAR const uint8_t *payload,
-                                    size_t length, FAR void *arg);
+                                    FAR const uint8_t *payload, size_t length,
+                                    FAR void *arg);
 static void sv6621_ap_dispatch_error(int error, FAR void *arg);
 static int sv6621_ap_handle_eapol(FAR struct sv6621_ap_s *ap,
-                                  FAR const uint8_t *payload,
-                                  size_t length);
+                                  FAR const uint8_t *payload, size_t length);
 
 /****************************************************************************
  * Private Functions
@@ -129,13 +129,13 @@ static bool sv6621_ap_expected_event_error(int error)
 {
   return error == -EACCES || error == -ECONNREFUSED || error == -ENOENT ||
          error == -ENOMSG || error == -EPROTO || error == -ESTALE ||
-         error == -EALREADY || error == -EKEYREJECTED ||
-         error == -EOPNOTSUPP;
+         error == -EALREADY || error == -EKEYREJECTED || error == -EOPNOTSUPP;
 }
 
-static bool sv6621_ap_tx_client_event(
-    FAR struct sv6621_ap_s *ap, FAR const uint8_t *payload, size_t length,
-    FAR struct sv6621_ap_client_event_s *event)
+static bool
+sv6621_ap_tx_client_event(FAR struct sv6621_ap_s *ap,
+                          FAR const uint8_t *payload, size_t length,
+                          FAR struct sv6621_ap_client_event_s *event)
 {
   struct sv6621_management_tx_status_s status;
   struct sv6621_ap_peer_s peer;
@@ -160,8 +160,7 @@ static bool sv6621_ap_tx_client_event(
 }
 
 static int sv6621_ap_handle_eapol(FAR struct sv6621_ap_s *ap,
-                                  FAR const uint8_t *payload,
-                                  size_t length)
+                                  FAR const uint8_t *payload, size_t length)
 {
   struct sv6621_ap_client_event_s event;
   struct sv6621_ap_peer_s peer;
@@ -209,8 +208,8 @@ static int sv6621_ap_handle_eapol(FAR struct sv6621_ap_s *ap,
 }
 
 static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
-                                    FAR const uint8_t *payload,
-                                    size_t length, FAR void *arg)
+                                    FAR const uint8_t *payload, size_t length,
+                                    FAR void *arg)
 {
   FAR struct sv6621_ap_s *ap = arg;
   struct sv6621_ap_mgmt_s mgmt;
@@ -240,17 +239,15 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
     }
   else if (id == SV6621_AP_EVENT_MGMT_TX_STATUS)
     {
-      ret = sv6621_ap_handle_tx_status(&ap->peers, ap->command,
-                                       ap->instance, payload, length);
+      ret = sv6621_ap_handle_tx_status(&ap->peers, ap->command, ap->instance,
+                                       payload, length);
       if (ret == 0)
         {
-          notify_connected = sv6621_ap_tx_client_event(
-              ap, payload, length, &client_event);
-          if (notify_connected &&
-              ap->config.security == SV6621_SECURITY_OPEN)
+          notify_connected =
+              sv6621_ap_tx_client_event(ap, payload, length, &client_event);
+          if (notify_connected && ap->config.security == SV6621_SECURITY_OPEN)
             {
-              ret = sv6621_ap_peer_authorize(&ap->peers,
-                                             client_event.address);
+              ret = sv6621_ap_peer_authorize(&ap->peers, client_event.address);
               if (ret < 0)
                 {
                   notify_connected = false;
@@ -263,22 +260,21 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
               uint8_t pmk[SV6621_SAE_PMK_SIZE];
 
               notify_connected = false;
-              ret = sv6621_ap_peer_lookup(&ap->peers,
-                                           client_event.address, &peer);
+              ret = sv6621_ap_peer_lookup(&ap->peers, client_event.address,
+                                          &peer);
               if (ret == 0)
                 {
                   if (ap->config.security == SV6621_SECURITY_WPA3_SAE)
                     {
-                      ret = sv6621_ap_sae_get_pmk(
-                          &ap->sae, client_event.address, pmk);
+                      ret = sv6621_ap_sae_get_pmk(&ap->sae,
+                                                  client_event.address, pmk);
                       if (ret == 0)
                         {
-                          ret = sv6621_ap_wpa_begin_pmk(&ap->wpa, &peer,
-                                                       pmk);
+                          ret = sv6621_ap_wpa_begin_pmk(&ap->wpa, &peer, pmk);
                         }
                     }
                   else if (ap->config.security ==
-                           SV6621_SECURITY_WPA2_WPA3_PSK &&
+                               SV6621_SECURITY_WPA2_WPA3_PSK &&
                            sv6621_ap_sae_get_pmk(
                                &ap->sae, client_event.address, pmk) == 0)
                     {
@@ -302,8 +298,8 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
           memcpy(client_event.address, address, SV6621_MAC_LENGTH);
           client_event.aid = 0;
           client_event.reason = reason;
-          ret = sv6621_ap_peer_departed(&ap->peers, ap->command,
-                                        ap->instance, address, reason, true);
+          ret = sv6621_ap_peer_departed(&ap->peers, ap->command, ap->instance,
+                                        address, reason, true);
           notify_disconnected = ret == 0;
           if (notify_disconnected)
             {
@@ -325,8 +321,7 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                 {
                   struct sv6621_ap_peer_s peer;
 
-                  ret = sv6621_ap_peer_authenticate(&ap->peers,
-                                                     mgmt.source);
+                  ret = sv6621_ap_peer_authenticate(&ap->peers, mgmt.source);
                   if (ret == 0)
                     {
                       ret = sv6621_ap_peer_lookup(&ap->peers, mgmt.source,
@@ -336,8 +331,7 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                   if (ret == 0 && !peer.bound)
                     {
                       ret = sv6621_ap_add_peer(ap->command, ap->instance,
-                                               mgmt.source,
-                                               &peer.peer_index);
+                                               mgmt.source, &peer.peer_index);
                       if (ret == 0)
                         {
                           ret = sv6621_ap_peer_bind(&ap->peers, mgmt.source,
@@ -349,8 +343,8 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
               if (ret == 0)
                 {
                   ret = sv6621_ap_sae_input(&ap->sae, mgmt.frame,
-                                             mgmt.frame_length, &accepted,
-                                             address);
+                                            mgmt.frame_length, &accepted,
+                                            address);
                 }
 
               if (ret == 0 && accepted)
@@ -359,11 +353,10 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                 }
               else if (ret < 0 && mgmt.transaction == 1)
                 {
-                  (void)sv6621_ap_remove_peer(
-                      ap->command, ap->instance, mgmt.source,
-                      SV6621_AP_REASON_LEAVING, false);
-                  (void)sv6621_ap_peer_forget(&ap->peers, mgmt.source,
-                                              NULL);
+                  (void)sv6621_ap_remove_peer(ap->command, ap->instance,
+                                              mgmt.source,
+                                              SV6621_AP_REASON_LEAVING, false);
+                  (void)sv6621_ap_peer_forget(&ap->peers, mgmt.source, NULL);
                   sv6621_ap_sae_forget(&ap->sae, mgmt.source);
                 }
             }
@@ -371,8 +364,8 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                    ap->config.security != SV6621_SECURITY_WPA3_SAE)
             {
               ret = sv6621_ap_authenticate_open(
-                  &ap->peers, ap->command, ap->instance,
-                  ap->config.channel, ap->config.band, ap->address, &mgmt,
+                  &ap->peers, ap->command, ap->instance, ap->config.channel,
+                  ap->config.band, ap->address, &mgmt,
                   sv6621_ap_next_cookie(ap), &accepted);
             }
           else
@@ -380,9 +373,8 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
               ret = -EACCES;
             }
         }
-      else if (ret == 0 &&
-               (mgmt.type == SV6621_AP_MGMT_ASSOC_REQUEST ||
-                mgmt.type == SV6621_AP_MGMT_REASSOC_REQUEST))
+      else if (ret == 0 && (mgmt.type == SV6621_AP_MGMT_ASSOC_REQUEST ||
+                            mgmt.type == SV6621_AP_MGMT_REASSOC_REQUEST))
         {
           if (ap->templates.probe_response_length <
               SV6621_AP_PROBE_RESPONSE_IE_OFFSET)
@@ -416,9 +408,8 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                 }
             }
         }
-      else if (ret == 0 &&
-               (mgmt.type == SV6621_AP_MGMT_DEAUTH ||
-                mgmt.type == SV6621_AP_MGMT_DISASSOC))
+      else if (ret == 0 && (mgmt.type == SV6621_AP_MGMT_DEAUTH ||
+                            mgmt.type == SV6621_AP_MGMT_DISASSOC))
         {
           memcpy(client_event.address, mgmt.source, SV6621_MAC_LENGTH);
           client_event.aid = 0;
@@ -472,8 +463,8 @@ int sv6621_ap_encode_start(FAR const struct sv6621_ap_start_s *config,
 
   if (config == NULL || payload == NULL || written == NULL ||
       config->beacon_interval == 0 || config->beacon_interval > INT_MAX ||
-      config->dtim_period == 0 ||
-      config->hidden_ssid > 2 || config->channel == 0 ||
+      config->dtim_period == 0 || config->hidden_ssid > 2 ||
+      config->channel == 0 ||
       config->channel_width > SV6621_CHANNEL_WIDTH_160 ||
       config->band > SV6621_BAND_5GHZ ||
       config->ssid_length > SV6621_SSID_MAX_LENGTH)
@@ -488,8 +479,7 @@ int sv6621_ap_encode_start(FAR const struct sv6621_ap_start_s *config,
   fields[4].blob = &config->association_response_ies;
   for (index = 0; index < SV6621_AP_BLOB_COUNT; index++)
     {
-      fields[index].table_offset =
-          SV6621_AP_BLOB_TABLE_OFFSET + index * 4;
+      fields[index].table_offset = SV6621_AP_BLOB_TABLE_OFFSET + index * 4;
       if ((fields[index].blob->length != 0 &&
            fields[index].blob->data == NULL) ||
           fields[index].blob->length > UINT16_MAX ||
@@ -517,16 +507,14 @@ int sv6621_ap_encode_start(FAR const struct sv6621_ap_start_s *config,
   payload[SV6621_AP_CENTER2_OFFSET] = config->center_channel2;
   payload[SV6621_AP_BAND_OFFSET] = config->band;
   payload[SV6621_AP_SSID_LENGTH_OFFSET] = config->ssid_length;
-  memcpy(payload + SV6621_AP_SSID_OFFSET, config->ssid,
-         config->ssid_length);
+  memcpy(payload + SV6621_AP_SSID_OFFSET, config->ssid, config->ssid_length);
 
   offset = SV6621_AP_FIXED_SIZE;
   for (index = 0; index < SV6621_AP_BLOB_COUNT; index++)
     {
       if (fields[index].blob->length != 0)
         {
-          sv6621_ap_put_le16(payload + fields[index].table_offset,
-                             offset);
+          sv6621_ap_put_le16(payload + fields[index].table_offset, offset);
           sv6621_ap_put_le16(payload + fields[index].table_offset + 2,
                              fields[index].blob->length);
           memcpy(payload + offset, fields[index].blob->data,
@@ -565,11 +553,9 @@ int sv6621_ap_start(FAR struct sv6621_command_engine_s *command,
                                &payload_length);
   if (ret == 0)
     {
-      ret = sv6621_command_execute(command, instance,
-                                   SV6621_AP_COMMAND_START, payload,
-                                   payload_length, response,
-                                   &response_length,
-                                   SV6621_AP_COMMAND_TIMEOUT_MS);
+      ret = sv6621_command_execute(
+          command, instance, SV6621_AP_COMMAND_START, payload, payload_length,
+          response, &response_length, SV6621_AP_COMMAND_TIMEOUT_MS);
     }
 
   kmm_free(payload);
@@ -611,8 +597,7 @@ int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
 {
   int ret;
 
-  if (ap == NULL || command == NULL || address == NULL ||
-      max_stations == 0)
+  if (ap == NULL || command == NULL || address == NULL || max_stations == 0)
     {
       return -EINVAL;
     }
@@ -624,9 +609,10 @@ int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
       return ret;
     }
 
-  ret = sv6621_ap_peer_table_init(
-      &ap->peers, max_stations > SV6621_AP_PEER_CAPACITY ?
-                  SV6621_AP_PEER_CAPACITY : max_stations);
+  ret = sv6621_ap_peer_table_init(&ap->peers,
+                                  max_stations > SV6621_AP_PEER_CAPACITY
+                                      ? SV6621_AP_PEER_CAPACITY
+                                      : max_stations);
   if (ret < 0)
     {
       nxmutex_destroy(&ap->lock);
@@ -732,9 +718,8 @@ int sv6621_ap_enable(FAR struct sv6621_ap_s *ap, uint8_t instance,
   if (config->security != SV6621_SECURITY_OPEN)
     {
       ret = sv6621_ap_build_rsn_ie(
-          config->security,
-          config->security == SV6621_SECURITY_WPA3_SAE, rsn_ie,
-                                   sizeof(rsn_ie), &rsn_ie_length);
+          config->security, config->security == SV6621_SECURITY_WPA3_SAE,
+          rsn_ie, sizeof(rsn_ie), &rsn_ie_length);
       if (ret < 0)
         {
           return ret;
@@ -798,13 +783,12 @@ int sv6621_ap_enable(FAR struct sv6621_ap_s *ap, uint8_t instance,
         }
     }
 
-  if (ret == 0 &&
-      (config->security == SV6621_SECURITY_WPA3_SAE ||
-       config->security == SV6621_SECURITY_WPA2_WPA3_PSK))
+  if (ret == 0 && (config->security == SV6621_SECURITY_WPA3_SAE ||
+                   config->security == SV6621_SECURITY_WPA2_WPA3_PSK))
     {
-      ret = sv6621_ap_sae_enable(
-          &ap->sae, context.instance, config->channel, config->band,
-          config->credential, config->credential_length);
+      ret = sv6621_ap_sae_enable(&ap->sae, context.instance, config->channel,
+                                 config->band, config->credential,
+                                 config->credential_length);
       if (ret < 0)
         {
           sv6621_ap_wpa_disable(&ap->wpa);
@@ -912,9 +896,9 @@ int sv6621_ap_queue_event(FAR struct sv6621_ap_s *ap, uint8_t instance,
                                       length);
 }
 
-int sv6621_ap_resolve_tx(
-    FAR struct sv6621_ap_s *ap, FAR const uint8_t *frame, size_t length,
-    FAR struct sv6621_data_tx_context_s *context)
+int sv6621_ap_resolve_tx(FAR struct sv6621_ap_s *ap, FAR const uint8_t *frame,
+                         size_t length,
+                         FAR struct sv6621_data_tx_context_s *context)
 {
   struct sv6621_ap_peer_s peer;
   bool multicast;
@@ -948,10 +932,9 @@ int sv6621_ap_resolve_tx(
           return ret;
         }
 
-      if (!peer.bound ||
-          (ap->config.security == SV6621_SECURITY_OPEN ?
-           peer.state < SV6621_AP_PEER_ASSOCIATED :
-           peer.state < SV6621_AP_PEER_AUTHORIZED))
+      if (!peer.bound || (ap->config.security == SV6621_SECURITY_OPEN
+                              ? peer.state < SV6621_AP_PEER_ASSOCIATED
+                              : peer.state < SV6621_AP_PEER_AUTHORIZED))
         {
           nxmutex_unlock(&ap->lock);
           return -EHOSTUNREACH;
@@ -1011,9 +994,9 @@ int sv6621_ap_validate_rx(FAR struct sv6621_ap_s *ap,
       if (peer.state != SV6621_AP_PEER_FREE && peer.bound &&
           peer.peer_index == rx->peer_index)
         {
-          matched = ap->config.security == SV6621_SECURITY_OPEN ?
-              peer.state >= SV6621_AP_PEER_ASSOCIATED :
-              peer.state >= SV6621_AP_PEER_AUTHORIZED;
+          matched = ap->config.security == SV6621_SECURITY_OPEN
+                        ? peer.state >= SV6621_AP_PEER_ASSOCIATED
+                        : peer.state >= SV6621_AP_PEER_AUTHORIZED;
           break;
         }
     }
@@ -1066,15 +1049,15 @@ bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap)
 }
 
 void sv6621_ap_eapol_input(FAR const struct sv6621_data_rx_s *rx,
-                            FAR void *arg)
+                           FAR void *arg)
 {
   FAR struct sv6621_ap_s *ap = arg;
   FAR uint8_t *payload;
   size_t length;
 
   if (ap == NULL || rx == NULL || rx->frame == NULL ||
-      rx->frame_length > SV6621_AP_EVENT_MAX_PAYLOAD -
-                         SV6621_AP_EAPOL_HEADER_SIZE)
+      rx->frame_length >
+          SV6621_AP_EVENT_MAX_PAYLOAD - SV6621_AP_EAPOL_HEADER_SIZE)
     {
       return;
     }
@@ -1089,10 +1072,8 @@ void sv6621_ap_eapol_input(FAR const struct sv6621_data_rx_s *rx,
   payload[0] = rx->lmac_id;
   payload[1] = rx->peer_index;
   payload[2] = rx->peer_valid;
-  memcpy(payload + SV6621_AP_EAPOL_HEADER_SIZE, rx->frame,
-         rx->frame_length);
+  memcpy(payload + SV6621_AP_EAPOL_HEADER_SIZE, rx->frame, rx->frame_length);
   (void)sv6621_ap_event_queue_submit(&ap->events, rx->instance,
-                                      SV6621_AP_EVENT_EAPOL, payload,
-                                      length);
+                                     SV6621_AP_EVENT_EAPOL, payload, length);
   kmm_free(payload);
 }

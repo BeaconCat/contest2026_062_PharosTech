@@ -35,8 +35,8 @@
 #include "include/sv6621.h"
 #include "sv6621_command.h"
 #include "sv6621_connection.h"
-#include "sv6621_scan.h"
 #include "sv6621_sae.h"
+#include "sv6621_scan.h"
 
 /****************************************************************************
  * Public Types
@@ -114,9 +114,9 @@ struct sv6621_station_s
 
 int sv6621_station_parse_mgmt(FAR const uint8_t *payload, size_t length,
                               FAR struct sv6621_station_mgmt_s *event);
-int sv6621_station_parse_disconnect(
-    FAR const uint8_t *payload, size_t length,
-    uint8_t bssid[SV6621_MAC_LENGTH], FAR uint16_t *reason);
+int sv6621_station_parse_disconnect(FAR const uint8_t *payload, size_t length,
+                                    uint8_t bssid[SV6621_MAC_LENGTH],
+                                    FAR uint16_t *reason);
 int sv6621_station_init(FAR struct sv6621_station_s *station,
                         FAR struct sv6621_command_engine_s *command,
                         FAR struct sv6621_scan_s *scan,
@@ -124,16 +124,16 @@ int sv6621_station_init(FAR struct sv6621_station_s *station,
 int sv6621_station_configure_ht(FAR struct sv6621_station_s *station,
                                 uint16_t capabilities,
                                 uint16_t extended_capabilities,
-                                uint16_t ampdu_parameters,
-                                uint32_t tx_mcs, uint32_t rx_mcs);
+                                uint16_t ampdu_parameters, uint32_t tx_mcs,
+                                uint32_t rx_mcs);
 int sv6621_station_configure_vht(FAR struct sv6621_station_s *station,
-                                 uint32_t capabilities,
-                                 uint16_t tx_mcs, uint16_t rx_mcs);
+                                 uint32_t capabilities, uint16_t tx_mcs,
+                                 uint16_t rx_mcs);
 int sv6621_station_configure_bandwidth(FAR struct sv6621_station_s *station,
                                        uint32_t capabilities);
-int sv6621_station_set_local_address(
-    FAR struct sv6621_station_s *station,
-    FAR const uint8_t address[SV6621_MAC_LENGTH]);
+int sv6621_station_set_local_address(FAR struct sv6621_station_s *station,
+                                     FAR const uint8_t
+                                         address[SV6621_MAC_LENGTH]);
 void sv6621_station_deinit(FAR struct sv6621_station_s *station);
 int sv6621_station_connect(FAR struct sv6621_station_s *station,
                            FAR const struct sv6621_connect_s *request,
@@ -141,10 +141,9 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
 int sv6621_station_disconnect(FAR struct sv6621_station_s *station,
                               uint16_t reason);
 int sv6621_station_mark_connected(FAR struct sv6621_station_s *station);
-int sv6621_station_get_sae_pmk(
-    FAR struct sv6621_station_s *station,
-    uint8_t pmk[SV6621_SAE_PMK_SIZE],
-    uint8_t pmkid[SV6621_SAE_PMKID_SIZE]);
+int sv6621_station_get_sae_pmk(FAR struct sv6621_station_s *station,
+                               uint8_t pmk[SV6621_SAE_PMK_SIZE],
+                               uint8_t pmkid[SV6621_SAE_PMKID_SIZE]);
 void sv6621_station_reset(FAR struct sv6621_station_s *station, int result);
 void sv6621_station_command_event(uint8_t instance, uint8_t id,
                                   FAR const uint8_t *payload, size_t length,

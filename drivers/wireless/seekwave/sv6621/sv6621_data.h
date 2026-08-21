@@ -207,8 +207,8 @@ struct sv6621_data_s
   bool pn_reuse;
   bool reorder_work_scheduled;
   struct sv6621_data_fragment_s fragments[SV6621_DATA_FRAGMENT_ENTRIES];
-  struct sv6621_data_ba_session_s
-      ba[SV6621_DATA_LMAC_COUNT][SV6621_DATA_TID_COUNT];
+  struct sv6621_data_ba_session_s ba[SV6621_DATA_LMAC_COUNT]
+                                    [SV6621_DATA_TID_COUNT];
   uint8_t tx_buffer[SV6621_DATA_TX_BUFFER_SIZE];
 };
 
@@ -218,19 +218,19 @@ struct sv6621_data_s
 
 int sv6621_data_decode_rx(FAR const uint8_t *payload, size_t length,
                           bool pn_reuse, FAR struct sv6621_data_rx_s *rx);
-int sv6621_data_encode_tx(
-    FAR const struct sv6621_data_tx_context_s *context,
-    FAR const uint8_t *frame, size_t frame_length, FAR uint8_t *payload,
-    size_t capacity, FAR size_t *written);
+int sv6621_data_encode_tx(FAR const struct sv6621_data_tx_context_s *context,
+                          FAR const uint8_t *frame, size_t frame_length,
+                          FAR uint8_t *payload, size_t capacity,
+                          FAR size_t *written);
 int sv6621_data_init(FAR struct sv6621_data_s *data,
                      FAR struct sv6621_packet_router_s *router,
                      FAR struct sv6621_tx_s *tx, sv6621_data_input_t input,
                      FAR void *input_arg);
 void sv6621_data_deinit(FAR struct sv6621_data_s *data);
 void sv6621_data_set_eapol_input(FAR struct sv6621_data_s *data,
-                                  sv6621_data_input_t input, FAR void *arg);
-void sv6621_data_add_credits(FAR struct sv6621_data_s *data,
-                             uint16_t lmac0, uint16_t lmac1);
+                                 sv6621_data_input_t input, FAR void *arg);
+void sv6621_data_add_credits(FAR struct sv6621_data_s *data, uint16_t lmac0,
+                             uint16_t lmac1);
 void sv6621_data_reset_credits(FAR struct sv6621_data_s *data);
 void sv6621_data_reset_fragments(FAR struct sv6621_data_s *data);
 void sv6621_data_set_pn_reuse(FAR struct sv6621_data_s *data, bool enabled);

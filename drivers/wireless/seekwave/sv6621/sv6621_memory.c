@@ -115,9 +115,9 @@ static int sv6621_memory_transfer(FAR struct sv6621_transport_s *transport,
               break;
             }
 
-          ret = transport->ops->write_byte(
-              transport, SV6621_SDIO_FUNCTION_CONTROL,
-              SV6621_SDIO_CCCR_ABORT, 0x01);
+          ret = transport->ops->write_byte(transport,
+                                           SV6621_SDIO_FUNCTION_CONTROL,
+                                           SV6621_SDIO_CCCR_ABORT, 0x01);
           if (ret < 0)
             {
               break;

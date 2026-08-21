@@ -41,9 +41,9 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_SAE_TIMEOUT_MS        1000
-#define SV6621_SAE_MAX_RETRIES       3
-#define SV6621_SAE_BODY_CAPACITY     384
+#define SV6621_SAE_TIMEOUT_MS    1000
+#define SV6621_SAE_MAX_RETRIES   3
+#define SV6621_SAE_BODY_CAPACITY 384
 
 /****************************************************************************
  * Private Function Prototypes
@@ -67,8 +67,7 @@ static void sv6621_sae_timeout_worker(FAR void *arg);
 
 static bool sv6621_sae_active(enum sv6621_sae_state_e state)
 {
-  return state == SV6621_SAE_COMMIT_SENT ||
-         state == SV6621_SAE_CONFIRM_SENT;
+  return state == SV6621_SAE_COMMIT_SENT || state == SV6621_SAE_CONFIRM_SENT;
 }
 
 static void sv6621_sae_clear(FAR struct sv6621_sae_s *sae)
@@ -128,8 +127,8 @@ static void sv6621_sae_finish(FAR struct sv6621_sae_s *sae, int result)
   nxmutex_unlock(&sae->lock);
   if (complete != NULL)
     {
-      complete(result, result == 0 ? pmk : NULL,
-               result == 0 ? pmkid : NULL, complete_arg);
+      complete(result, result == 0 ? pmk : NULL, result == 0 ? pmkid : NULL,
+               complete_arg);
     }
 
   sv6621_sae_zeroize(pmk, sizeof(pmk));
@@ -153,8 +152,8 @@ static int sv6621_sae_schedule_timeout(FAR struct sv6621_sae_s *sae,
     }
 
   nxmutex_unlock(&sae->lock);
-  ret = work_queue(LPWORK, &sae->timeout_work, sv6621_sae_timeout_worker,
-                   sae, MSEC2TICK(SV6621_SAE_TIMEOUT_MS));
+  ret = work_queue(LPWORK, &sae->timeout_work, sv6621_sae_timeout_worker, sae,
+                   MSEC2TICK(SV6621_SAE_TIMEOUT_MS));
   return ret;
 }
 
@@ -183,8 +182,7 @@ static int sv6621_sae_send_commit(FAR struct sv6621_sae_s *sae,
       return ret;
     }
 
-  if (sae->generation != generation ||
-      sae->state != SV6621_SAE_COMMIT_SENT)
+  if (sae->generation != generation || sae->state != SV6621_SAE_COMMIT_SENT)
     {
       nxmutex_unlock(&sae->lock);
       return -ECANCELED;
@@ -202,9 +200,9 @@ static int sv6621_sae_send_commit(FAR struct sv6621_sae_s *sae,
   cookie = ++sae->cookie;
   nxmutex_unlock(&sae->lock);
 
-  ret = sv6621_sae_commit_build(SV6621_SAE_GROUP_19, token, token_length,
-                                 scalar, element, body, sizeof(body),
-                                 &body_length);
+  ret =
+      sv6621_sae_commit_build(SV6621_SAE_GROUP_19, token, token_length, scalar,
+                              element, body, sizeof(body), &body_length);
   if (ret == 0)
     {
       ret = sv6621_sae_auth_build(peer, local, peer, 1, 0, body, body_length,
@@ -213,9 +211,9 @@ static int sv6621_sae_send_commit(FAR struct sv6621_sae_s *sae,
 
   if (ret == 0)
     {
-      ret = sv6621_management_tx(sae->command, instance, 0, cookie, channel,
-                                 band, false, frame, frame_length,
-                                 frame_length);
+      ret =
+          sv6621_management_tx(sae->command, instance, 0, cookie, channel,
+                               band, false, frame, frame_length, frame_length);
     }
 
   sv6621_sae_zeroize(scalar, sizeof(scalar));
@@ -249,17 +247,16 @@ static int sv6621_sae_send_confirm(FAR struct sv6621_sae_s *sae,
       return ret;
     }
 
-  if (sae->generation != generation ||
-      sae->state != SV6621_SAE_CONFIRM_SENT)
+  if (sae->generation != generation || sae->state != SV6621_SAE_CONFIRM_SENT)
     {
       nxmutex_unlock(&sae->lock);
       return -ECANCELED;
     }
 
   counter = sae->send_confirm;
-  ret = sv6621_sae_compute_confirm(
-      sae->kck, counter, sae->scalar, sae->element, sae->peer_scalar,
-      sae->peer_element, confirm);
+  ret =
+      sv6621_sae_compute_confirm(sae->kck, counter, sae->scalar, sae->element,
+                                 sae->peer_scalar, sae->peer_element, confirm);
   memcpy(local, sae->local, sizeof(local));
   memcpy(peer, sae->peer, sizeof(peer));
   channel = sae->channel;
@@ -271,7 +268,7 @@ static int sv6621_sae_send_confirm(FAR struct sv6621_sae_s *sae,
   if (ret == 0)
     {
       ret = sv6621_sae_confirm_build(counter, confirm, body, sizeof(body),
-                                      &body_length);
+                                     &body_length);
     }
 
   if (ret == 0)
@@ -282,9 +279,9 @@ static int sv6621_sae_send_confirm(FAR struct sv6621_sae_s *sae,
 
   if (ret == 0)
     {
-      ret = sv6621_management_tx(sae->command, instance, 0, cookie, channel,
-                                 band, false, frame, frame_length,
-                                 frame_length);
+      ret =
+          sv6621_management_tx(sae->command, instance, 0, cookie, channel,
+                               band, false, frame, frame_length, frame_length);
     }
 
   sv6621_sae_zeroize(confirm, sizeof(confirm));
@@ -409,9 +406,9 @@ static void sv6621_sae_worker(FAR void *arg)
           goto finish;
         }
 
-      ret = sv6621_sae_group_derive_secret(
-          sae->pwe, sae->private_random, sae->scalar, commit.scalar,
-          commit.element, secret);
+      ret = sv6621_sae_group_derive_secret(sae->pwe, sae->private_random,
+                                           sae->scalar, commit.scalar,
+                                           commit.element, secret);
       if (ret < 0)
         {
           goto finish;
@@ -433,9 +430,8 @@ static void sv6621_sae_worker(FAR void *arg)
 
       memcpy(sae->peer_scalar, commit.scalar, sizeof(sae->peer_scalar));
       memcpy(sae->peer_element, commit.element, sizeof(sae->peer_element));
-      ret = sv6621_sae_derive_keys(
-          secret, sae->scalar, sae->peer_scalar, sae->kck, sae->pmk,
-          sae->pmkid);
+      ret = sv6621_sae_derive_keys(secret, sae->scalar, sae->peer_scalar,
+                                   sae->kck, sae->pmk, sae->pmkid);
       if (ret == 0)
         {
           sae->state = SV6621_SAE_CONFIRM_SENT;
@@ -478,13 +474,12 @@ static void sv6621_sae_worker(FAR void *arg)
           goto done;
         }
 
-      ret = sv6621_sae_compute_confirm(
-          sae->kck, received.counter, sae->peer_scalar, sae->peer_element,
-          sae->scalar, sae->element, expected);
+      ret = sv6621_sae_compute_confirm(sae->kck, received.counter,
+                                       sae->peer_scalar, sae->peer_element,
+                                       sae->scalar, sae->element, expected);
       nxmutex_unlock(&sae->lock);
-      if (ret == 0 &&
-          !sv6621_sae_constant_equal(expected, received.value,
-                                      sizeof(expected)))
+      if (ret == 0 && !sv6621_sae_constant_equal(expected, received.value,
+                                                 sizeof(expected)))
         {
           ret = -EKEYREJECTED;
         }
@@ -542,9 +537,9 @@ static void sv6621_sae_timeout_worker(FAR void *arg)
   state = sae->state;
   generation = sae->generation;
   nxmutex_unlock(&sae->lock);
-  ret = state == SV6621_SAE_COMMIT_SENT ?
-            sv6621_sae_send_commit(sae, generation) :
-            sv6621_sae_send_confirm(sae, generation);
+  ret = state == SV6621_SAE_COMMIT_SENT
+            ? sv6621_sae_send_commit(sae, generation)
+            : sv6621_sae_send_confirm(sae, generation);
   if (ret == 0)
     {
       ret = sv6621_sae_schedule_timeout(sae, generation);
@@ -606,12 +601,12 @@ void sv6621_sae_deinit(FAR struct sv6621_sae_s *sae)
   nxmutex_destroy(&sae->lock);
 }
 
-int sv6621_sae_start(
-    FAR struct sv6621_sae_s *sae,
-    FAR const uint8_t local[SV6621_MAC_LENGTH],
-    FAR const uint8_t peer[SV6621_MAC_LENGTH], uint8_t instance,
-    uint8_t channel, enum sv6621_band_e band, FAR const uint8_t *password,
-    size_t password_length)
+int sv6621_sae_start(FAR struct sv6621_sae_s *sae,
+                     FAR const uint8_t local[SV6621_MAC_LENGTH],
+                     FAR const uint8_t peer[SV6621_MAC_LENGTH],
+                     uint8_t instance, uint8_t channel,
+                     enum sv6621_band_e band, FAR const uint8_t *password,
+                     size_t password_length)
 {
   uint32_t generation;
   int ret;
@@ -652,11 +647,11 @@ int sv6621_sae_start(
   sae->generation++;
   generation = sae->generation;
   ret = sv6621_sae_group_derive_pwe(local, peer, password, password_length,
-                                     sae->pwe);
+                                    sae->pwe);
   if (ret == 0)
     {
-      ret = sv6621_sae_group_generate_commit(
-          sae->pwe, sae->private_random, sae->scalar, sae->element);
+      ret = sv6621_sae_group_generate_commit(sae->pwe, sae->private_random,
+                                             sae->scalar, sae->element);
     }
 
   if (ret == 0)
@@ -697,8 +692,8 @@ int sv6621_sae_start(
   return ret;
 }
 
-int sv6621_sae_input(FAR struct sv6621_sae_s *sae,
-                     FAR const uint8_t *frame, size_t frame_length)
+int sv6621_sae_input(FAR struct sv6621_sae_s *sae, FAR const uint8_t *frame,
+                     size_t frame_length)
 {
   int ret;
 
