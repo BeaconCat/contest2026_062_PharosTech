@@ -7,6 +7,8 @@ endif()
 
 if(CONFIG_KICKPI_K7_WIFI)
   list(APPEND SRCS kickpi_k7_wifi.c)
+  target_compile_options(
+    board PRIVATE "-Wa,-I${NUTTX_BOARD_DIR}/firmware")
   target_include_directories(
     board PRIVATE
     ${NUTTX_BOARD_DIR}/../../../drivers/wireless/seekwave/sv6621/include)
