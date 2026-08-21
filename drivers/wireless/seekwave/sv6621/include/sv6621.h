@@ -41,19 +41,19 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_MAC_LENGTH      6
-#define SV6621_SSID_MAX_LENGTH 32
-#define SV6621_KEY_MAX_LENGTH  64
-#define SV6621_REGULATORY_MAX_RULES 8
-#define SV6621_DRIVER_STATS_VERSION 1
-#define SV6621_ROAM_DEFAULT_THRESHOLD_DBM (-70)
-#define SV6621_ROAM_DEFAULT_HYSTERESIS_DB 40
+#define SV6621_MAC_LENGTH                   6
+#define SV6621_SSID_MAX_LENGTH              32
+#define SV6621_KEY_MAX_LENGTH               64
+#define SV6621_REGULATORY_MAX_RULES         8
+#define SV6621_DRIVER_STATS_VERSION         1
+#define SV6621_ROAM_DEFAULT_THRESHOLD_DBM   (-70)
+#define SV6621_ROAM_DEFAULT_HYSTERESIS_DB   40
 #define SV6621_ROAM_DEFAULT_MINIMUM_GAIN_DB 8
-#define SV6621_ROAM_DEFAULT_COOLDOWN_MS 15000
-#define SV6621_SCHED_SCAN_MAX_SSIDS 10
-#define SV6621_SCHED_SCAN_MAX_MATCHES 10
-#define SV6621_SCHED_SCAN_MAX_PLANS 4
-#define SV6621_SCHED_SCAN_MAX_IE_LENGTH 512
+#define SV6621_ROAM_DEFAULT_COOLDOWN_MS     15000
+#define SV6621_SCHED_SCAN_MAX_SSIDS         10
+#define SV6621_SCHED_SCAN_MAX_MATCHES       10
+#define SV6621_SCHED_SCAN_MAX_PLANS         4
+#define SV6621_SCHED_SCAN_MAX_IE_LENGTH     512
 
 #ifdef CONFIG_NET
 #define SV6621IOC_GET_DRIVER_STATS SIOCDEVPRIVATE
@@ -72,7 +72,7 @@
 #define SV6621_WAKE_EAP_IDENTITY_REQUEST  (1 << 3)
 #define SV6621_WAKE_FOUR_WAY_HANDSHAKE    (1 << 4)
 #define SV6621_WAKE_RFKILL_RELEASE        (1 << 5)
-#define SV6621_WAKE_ALL                    0x003f
+#define SV6621_WAKE_ALL                   0x003f
 
 /****************************************************************************
  * Public Types
@@ -90,8 +90,8 @@ struct sv6621_transport_ops_s
   void (*close)(FAR struct sv6621_transport_s *transport);
   int (*read_byte)(FAR struct sv6621_transport_s *transport, uint8_t function,
                    uint32_t address, FAR uint8_t *value);
-  int (*write_byte)(FAR struct sv6621_transport_s *transport,
-                    uint8_t function, uint32_t address, uint8_t value);
+  int (*write_byte)(FAR struct sv6621_transport_s *transport, uint8_t function,
+                    uint32_t address, uint8_t value);
   int (*read)(FAR struct sv6621_transport_s *transport, uint8_t function,
               uint32_t address, bool increment, FAR void *buffer,
               size_t length);
@@ -510,8 +510,7 @@ int sv6621_connect(FAR struct sv6621_dev_s *dev,
                    FAR const struct sv6621_connect_s *request);
 int sv6621_disconnect(FAR struct sv6621_dev_s *dev, uint16_t reason);
 int sv6621_set_signal_threshold(FAR struct sv6621_dev_s *dev,
-                                int32_t threshold_dbm,
-                                uint8_t hysteresis_db);
+                                int32_t threshold_dbm, uint8_t hysteresis_db);
 int sv6621_set_roam_policy(FAR struct sv6621_dev_s *dev,
                            FAR const struct sv6621_roam_policy_s *policy);
 int sv6621_start_scheduled_scan(

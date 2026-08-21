@@ -35,43 +35,43 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_AP_COMMAND_ADD_PEER          21
-#define SV6621_AP_COMMAND_REMOVE_PEER       22
-#define SV6621_AP_REMOVE_PEER_PAYLOAD_SIZE   9
-#define SV6621_AP_PEER_RESPONSE_SIZE         1
-#define SV6621_AP_PEER_COMMAND_TIMEOUT_MS 1000
-#define SV6621_AP_PEER_INDEX_MAX            31
-#define SV6621_AP_PEER_DEPARTURE_SIZE         7
-#define SV6621_AP_AID_MIN                     1
+#define SV6621_AP_COMMAND_ADD_PEER         21
+#define SV6621_AP_COMMAND_REMOVE_PEER      22
+#define SV6621_AP_REMOVE_PEER_PAYLOAD_SIZE 9
+#define SV6621_AP_PEER_RESPONSE_SIZE       1
+#define SV6621_AP_PEER_COMMAND_TIMEOUT_MS  1000
+#define SV6621_AP_PEER_INDEX_MAX           31
+#define SV6621_AP_PEER_DEPARTURE_SIZE      7
+#define SV6621_AP_AID_MIN                  1
 #define SV6621_AP_AID_MAX                  2007
 
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
-static FAR struct sv6621_ap_peer_s *sv6621_ap_peer_find(
-    FAR struct sv6621_ap_peer_table_s *table,
-    FAR const uint8_t address[SV6621_MAC_LENGTH]);
-static bool sv6621_ap_peer_aid_used(
-    FAR const struct sv6621_ap_peer_table_s *table, uint16_t aid);
-static uint16_t sv6621_ap_peer_allocate_aid(
-    FAR struct sv6621_ap_peer_table_s *table);
+static FAR struct sv6621_ap_peer_s *
+sv6621_ap_peer_find(FAR struct sv6621_ap_peer_table_s *table,
+                    FAR const uint8_t address[SV6621_MAC_LENGTH]);
+static bool
+sv6621_ap_peer_aid_used(FAR const struct sv6621_ap_peer_table_s *table,
+                        uint16_t aid);
+static uint16_t
+sv6621_ap_peer_allocate_aid(FAR struct sv6621_ap_peer_table_s *table);
 
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
 
-static FAR struct sv6621_ap_peer_s *sv6621_ap_peer_find(
-    FAR struct sv6621_ap_peer_table_s *table,
-    FAR const uint8_t address[SV6621_MAC_LENGTH])
+static FAR struct sv6621_ap_peer_s *
+sv6621_ap_peer_find(FAR struct sv6621_ap_peer_table_s *table,
+                    FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
   unsigned int index;
 
   for (index = 0; index < table->capacity; index++)
     {
       if (table->peers[index].state != SV6621_AP_PEER_FREE &&
-          memcmp(table->peers[index].address, address,
-                 SV6621_MAC_LENGTH) == 0)
+          memcmp(table->peers[index].address, address, SV6621_MAC_LENGTH) == 0)
         {
           return &table->peers[index];
         }
@@ -80,8 +80,9 @@ static FAR struct sv6621_ap_peer_s *sv6621_ap_peer_find(
   return NULL;
 }
 
-static bool sv6621_ap_peer_aid_used(
-    FAR const struct sv6621_ap_peer_table_s *table, uint16_t aid)
+static bool
+sv6621_ap_peer_aid_used(FAR const struct sv6621_ap_peer_table_s *table,
+                        uint16_t aid)
 {
   unsigned int index;
 
@@ -97,8 +98,8 @@ static bool sv6621_ap_peer_aid_used(
   return false;
 }
 
-static uint16_t sv6621_ap_peer_allocate_aid(
-    FAR struct sv6621_ap_peer_table_s *table)
+static uint16_t
+sv6621_ap_peer_allocate_aid(FAR struct sv6621_ap_peer_table_s *table)
 {
   uint16_t aid;
   uint16_t attempts;
@@ -107,8 +108,7 @@ static uint16_t sv6621_ap_peer_allocate_aid(
        attempts++)
     {
       aid = table->next_aid;
-      table->next_aid = aid == SV6621_AP_AID_MAX ?
-                        SV6621_AP_AID_MIN : aid + 1;
+      table->next_aid = aid == SV6621_AP_AID_MAX ? SV6621_AP_AID_MIN : aid + 1;
       if (!sv6621_ap_peer_aid_used(table, aid))
         {
           return aid;
@@ -137,9 +137,8 @@ int sv6621_ap_add_peer(FAR struct sv6621_command_engine_s *command,
       return -EINVAL;
     }
 
-  ret = sv6621_command_execute(command, instance,
-                               SV6621_AP_COMMAND_ADD_PEER, address,
-                               SV6621_MAC_LENGTH, response,
+  ret = sv6621_command_execute(command, instance, SV6621_AP_COMMAND_ADD_PEER,
+                               address, SV6621_MAC_LENGTH, response,
                                &response_length,
                                SV6621_AP_PEER_COMMAND_TIMEOUT_MS);
   if (ret < 0)
@@ -173,17 +172,15 @@ int sv6621_ap_remove_peer(FAR struct sv6621_command_engine_s *command,
   payload[6] = reason;
   payload[7] = reason >> 8;
   payload[8] = transmit_frame;
-  return sv6621_command_execute(command, instance,
-                                SV6621_AP_COMMAND_REMOVE_PEER, payload,
-                                sizeof(payload), NULL, NULL,
-                                SV6621_AP_PEER_COMMAND_TIMEOUT_MS);
+  return sv6621_command_execute(
+      command, instance, SV6621_AP_COMMAND_REMOVE_PEER, payload,
+      sizeof(payload), NULL, NULL, SV6621_AP_PEER_COMMAND_TIMEOUT_MS);
 }
 
 int sv6621_ap_peer_table_init(FAR struct sv6621_ap_peer_table_s *table,
                               uint8_t capacity)
 {
-  if (table == NULL || capacity == 0 ||
-      capacity > SV6621_AP_PEER_CAPACITY)
+  if (table == NULL || capacity == 0 || capacity > SV6621_AP_PEER_CAPACITY)
     {
       return -EINVAL;
     }
@@ -226,9 +223,8 @@ int sv6621_ap_peer_table_reset(FAR struct sv6621_ap_peer_table_s *table)
   return 0;
 }
 
-int sv6621_ap_peer_authenticate(
-    FAR struct sv6621_ap_peer_table_s *table,
-    FAR const uint8_t address[SV6621_MAC_LENGTH])
+int sv6621_ap_peer_authenticate(FAR struct sv6621_ap_peer_table_s *table,
+                                FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
   FAR struct sv6621_ap_peer_s *peer = NULL;
   unsigned int index;
@@ -326,10 +322,9 @@ int sv6621_ap_peer_bind(FAR struct sv6621_ap_peer_table_s *table,
 }
 
 int sv6621_ap_peer_prepare_association(
-                        FAR struct sv6621_ap_peer_table_s *table,
-                        FAR const uint8_t address[SV6621_MAC_LENGTH],
-                        uint16_t capability,
-                        FAR uint16_t *aid)
+    FAR struct sv6621_ap_peer_table_s *table,
+    FAR const uint8_t address[SV6621_MAC_LENGTH], uint16_t capability,
+    FAR uint16_t *aid)
 {
   FAR struct sv6621_ap_peer_s *peer;
   int ret;
@@ -350,8 +345,7 @@ int sv6621_ap_peer_prepare_association(
       peer->state == SV6621_AP_PEER_ASSOCIATING || !peer->bound)
     {
       nxmutex_unlock(&table->lock);
-      return peer == NULL ? -ENOENT :
-             !peer->bound ? -EAGAIN : -EALREADY;
+      return peer == NULL ? -ENOENT : !peer->bound ? -EAGAIN : -EALREADY;
     }
 
   peer->previous_state = peer->state;
@@ -374,9 +368,9 @@ int sv6621_ap_peer_prepare_association(
   return 0;
 }
 
-int sv6621_ap_peer_cancel_association(
-    FAR struct sv6621_ap_peer_table_s *table,
-    FAR const uint8_t address[SV6621_MAC_LENGTH])
+int sv6621_ap_peer_cancel_association(FAR struct sv6621_ap_peer_table_s *table,
+                                      FAR const uint8_t
+                                          address[SV6621_MAC_LENGTH])
 {
   FAR struct sv6621_ap_peer_s *peer;
   int ret;
@@ -473,8 +467,8 @@ int sv6621_ap_peer_cancel_tx(FAR struct sv6621_ap_peer_table_s *table,
 
 int sv6621_ap_peer_complete_tx(FAR struct sv6621_ap_peer_table_s *table,
                                FAR const uint8_t address[SV6621_MAC_LENGTH],
-                               uint64_t cookie, bool association,
-                               bool success, FAR bool *remove)
+                               uint64_t cookie, bool association, bool success,
+                               FAR bool *remove)
 {
   FAR struct sv6621_ap_peer_s *peer;
   int ret;
@@ -517,9 +511,8 @@ int sv6621_ap_peer_complete_tx(FAR struct sv6621_ap_peer_table_s *table,
   return 0;
 }
 
-int sv6621_ap_peer_authorize(
-    FAR struct sv6621_ap_peer_table_s *table,
-    FAR const uint8_t address[SV6621_MAC_LENGTH])
+int sv6621_ap_peer_authorize(FAR struct sv6621_ap_peer_table_s *table,
+                             FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
   FAR struct sv6621_ap_peer_s *peer;
   int ret;
@@ -610,9 +603,10 @@ int sv6621_ap_peer_forget(FAR struct sv6621_ap_peer_table_s *table,
   return 0;
 }
 
-int sv6621_ap_parse_peer_departure(
-    FAR const uint8_t *payload, size_t payload_length,
-    FAR uint8_t address[SV6621_MAC_LENGTH], FAR uint16_t *reason)
+int sv6621_ap_parse_peer_departure(FAR const uint8_t *payload,
+                                   size_t payload_length,
+                                   FAR uint8_t address[SV6621_MAC_LENGTH],
+                                   FAR uint16_t *reason)
 {
   if (payload == NULL || address == NULL || reason == NULL ||
       payload_length != SV6621_AP_PEER_DEPARTURE_SIZE)

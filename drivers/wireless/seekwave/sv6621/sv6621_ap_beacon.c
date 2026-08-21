@@ -35,89 +35,80 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_AP_FRAME_HEADER_LENGTH        24
-#define SV6621_AP_FIXED_PARAMETERS_LENGTH    12
-#define SV6621_AP_BEACON_FRAME_CONTROL     0x80
-#define SV6621_AP_PROBE_FRAME_CONTROL      0x50
+#define SV6621_AP_FRAME_HEADER_LENGTH       24
+#define SV6621_AP_FIXED_PARAMETERS_LENGTH   12
+#define SV6621_AP_BEACON_FRAME_CONTROL      0x80
+#define SV6621_AP_PROBE_FRAME_CONTROL       0x50
 
-#define SV6621_AP_CAPABILITY_ESS         0x0001
-#define SV6621_AP_CAPABILITY_PRIVACY     0x0010
+#define SV6621_AP_CAPABILITY_ESS            0x0001
+#define SV6621_AP_CAPABILITY_PRIVACY        0x0010
 #define SV6621_AP_CAPABILITY_SHORT_PREAMBLE 0x0020
-#define SV6621_AP_CAPABILITY_SHORT_SLOT  0x0400
+#define SV6621_AP_CAPABILITY_SHORT_SLOT     0x0400
 
-#define SV6621_AP_IE_SSID                     0
-#define SV6621_AP_IE_SUPPORTED_RATES          1
-#define SV6621_AP_IE_DS_PARAMETERS            3
-#define SV6621_AP_IE_EXTENDED_RATES          50
-#define SV6621_AP_IE_RSN                     48
+#define SV6621_AP_IE_SSID                   0
+#define SV6621_AP_IE_SUPPORTED_RATES        1
+#define SV6621_AP_IE_DS_PARAMETERS          3
+#define SV6621_AP_IE_EXTENDED_RATES         50
+#define SV6621_AP_IE_RSN                    48
 
-#define SV6621_AP_HIDDEN_ZERO_LENGTH          1
-#define SV6621_AP_HIDDEN_ZERO_CONTENTS        2
-#define SV6621_AP_RSN_VERSION                 1
-#define SV6621_AP_RSN_OUI_0                   0x00
-#define SV6621_AP_RSN_OUI_1                   0x0f
-#define SV6621_AP_RSN_OUI_2                   0xac
-#define SV6621_AP_RSN_SUITE_CCMP              4
-#define SV6621_AP_RSN_SUITE_BIP_CMAC_128      6
-#define SV6621_AP_RSN_AKM_PSK                 2
-#define SV6621_AP_RSN_AKM_SAE                 8
-#define SV6621_AP_RSN_CAP_MFPR                (1 << 6)
-#define SV6621_AP_RSN_CAP_MFPC                (1 << 7)
+#define SV6621_AP_HIDDEN_ZERO_LENGTH        1
+#define SV6621_AP_HIDDEN_ZERO_CONTENTS      2
+#define SV6621_AP_RSN_VERSION               1
+#define SV6621_AP_RSN_OUI_0                 0x00
+#define SV6621_AP_RSN_OUI_1                 0x0f
+#define SV6621_AP_RSN_OUI_2                 0xac
+#define SV6621_AP_RSN_SUITE_CCMP            4
+#define SV6621_AP_RSN_SUITE_BIP_CMAC_128    6
+#define SV6621_AP_RSN_AKM_PSK               2
+#define SV6621_AP_RSN_AKM_SAE               8
+#define SV6621_AP_RSN_CAP_MFPR              (1 << 6)
+#define SV6621_AP_RSN_CAP_MFPC              (1 << 7)
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static const uint8_t g_sv6621_ap_rates_2ghz[] =
-{
-  0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24
-};
+static const uint8_t g_sv6621_ap_rates_2ghz[] = { 0x82, 0x84, 0x8b, 0x96,
+                                                  0x0c, 0x12, 0x18, 0x24 };
 
-static const uint8_t g_sv6621_ap_rsn_ccmp[] =
-{
-  SV6621_AP_RSN_OUI_0, SV6621_AP_RSN_OUI_1, SV6621_AP_RSN_OUI_2,
-  SV6621_AP_RSN_SUITE_CCMP
-};
+static const uint8_t g_sv6621_ap_rsn_ccmp[] = { SV6621_AP_RSN_OUI_0,
+                                                SV6621_AP_RSN_OUI_1,
+                                                SV6621_AP_RSN_OUI_2,
+                                                SV6621_AP_RSN_SUITE_CCMP };
 
-static const uint8_t g_sv6621_ap_rsn_psk[] =
-{
-  SV6621_AP_RSN_OUI_0, SV6621_AP_RSN_OUI_1, SV6621_AP_RSN_OUI_2,
-  SV6621_AP_RSN_AKM_PSK
-};
+static const uint8_t g_sv6621_ap_rsn_psk[] = { SV6621_AP_RSN_OUI_0,
+                                               SV6621_AP_RSN_OUI_1,
+                                               SV6621_AP_RSN_OUI_2,
+                                               SV6621_AP_RSN_AKM_PSK };
 
-static const uint8_t g_sv6621_ap_rsn_sae[] =
-{
-  SV6621_AP_RSN_OUI_0, SV6621_AP_RSN_OUI_1, SV6621_AP_RSN_OUI_2,
-  SV6621_AP_RSN_AKM_SAE
-};
+static const uint8_t g_sv6621_ap_rsn_sae[] = { SV6621_AP_RSN_OUI_0,
+                                               SV6621_AP_RSN_OUI_1,
+                                               SV6621_AP_RSN_OUI_2,
+                                               SV6621_AP_RSN_AKM_SAE };
 
-static const uint8_t g_sv6621_ap_extended_rates_2ghz[] =
-{
-  0x30, 0x48, 0x60, 0x6c
-};
+static const uint8_t g_sv6621_ap_extended_rates_2ghz[] = { 0x30, 0x48, 0x60,
+                                                           0x6c };
 
-static const uint8_t g_sv6621_ap_rates_5ghz[] =
-{
-  0x8c, 0x12, 0x98, 0x24, 0xb0, 0x48, 0x60, 0x6c
-};
+static const uint8_t g_sv6621_ap_rates_5ghz[] = { 0x8c, 0x12, 0x98, 0x24,
+                                                  0xb0, 0x48, 0x60, 0x6c };
 
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
-static void sv6621_ap_beacon_put_le16(FAR uint8_t *value,
-                                      uint16_t number);
+static void sv6621_ap_beacon_put_le16(FAR uint8_t *value, uint16_t number);
 static int sv6621_ap_beacon_append(FAR uint8_t *buffer, size_t capacity,
-                                  FAR size_t *length,
-                                  FAR const void *data, size_t data_length);
+                                   FAR size_t *length, FAR const void *data,
+                                   size_t data_length);
 static int sv6621_ap_beacon_append_ie(FAR uint8_t *buffer, size_t capacity,
-                                     FAR size_t *length, uint8_t identifier,
-                                     FAR const void *data,
-                                     size_t data_length);
-static int sv6621_ap_beacon_write_fixed(
-    FAR uint8_t *buffer, size_t capacity, FAR size_t *length,
-    uint8_t frame_control, FAR const uint8_t address[SV6621_MAC_LENGTH],
-    uint16_t beacon_interval, uint16_t capabilities);
+                                      FAR size_t *length, uint8_t identifier,
+                                      FAR const void *data,
+                                      size_t data_length);
+static int
+sv6621_ap_beacon_write_fixed(FAR uint8_t *buffer, size_t capacity,
+                             FAR size_t *length, uint8_t frame_control,
+                             FAR const uint8_t address[SV6621_MAC_LENGTH],
+                             uint16_t beacon_interval, uint16_t capabilities);
 static int sv6621_ap_beacon_append_identity(
     FAR uint8_t *buffer, size_t capacity, FAR size_t *length,
     FAR const struct sv6621_ap_beacon_config_s *config, bool reveal_ssid);
@@ -126,16 +117,15 @@ static int sv6621_ap_beacon_append_identity(
  * Private Functions
  ****************************************************************************/
 
-static void sv6621_ap_beacon_put_le16(FAR uint8_t *value,
-                                      uint16_t number)
+static void sv6621_ap_beacon_put_le16(FAR uint8_t *value, uint16_t number)
 {
   value[0] = number & 0xff;
   value[1] = number >> 8;
 }
 
 static int sv6621_ap_beacon_append(FAR uint8_t *buffer, size_t capacity,
-                                  FAR size_t *length,
-                                  FAR const void *data, size_t data_length)
+                                   FAR size_t *length, FAR const void *data,
+                                   size_t data_length)
 {
   if (*length > capacity || data_length > capacity - *length)
     {
@@ -152,9 +142,8 @@ static int sv6621_ap_beacon_append(FAR uint8_t *buffer, size_t capacity,
 }
 
 static int sv6621_ap_beacon_append_ie(FAR uint8_t *buffer, size_t capacity,
-                                     FAR size_t *length, uint8_t identifier,
-                                     FAR const void *data,
-                                     size_t data_length)
+                                      FAR size_t *length, uint8_t identifier,
+                                      FAR const void *data, size_t data_length)
 {
   uint8_t header[2];
   int ret;
@@ -173,38 +162,35 @@ static int sv6621_ap_beacon_append_ie(FAR uint8_t *buffer, size_t capacity,
       return ret;
     }
 
-  return sv6621_ap_beacon_append(buffer, capacity, length, data,
-                                 data_length);
+  return sv6621_ap_beacon_append(buffer, capacity, length, data, data_length);
 }
 
-static int sv6621_ap_beacon_write_fixed(
-    FAR uint8_t *buffer, size_t capacity, FAR size_t *length,
-    uint8_t frame_control, FAR const uint8_t address[SV6621_MAC_LENGTH],
-    uint16_t beacon_interval, uint16_t capabilities)
+static int
+sv6621_ap_beacon_write_fixed(FAR uint8_t *buffer, size_t capacity,
+                             FAR size_t *length, uint8_t frame_control,
+                             FAR const uint8_t address[SV6621_MAC_LENGTH],
+                             uint16_t beacon_interval, uint16_t capabilities)
 {
-  static const uint8_t broadcast[SV6621_MAC_LENGTH] =
-  {
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff
-  };
+  static const uint8_t broadcast[SV6621_MAC_LENGTH] = { 0xff, 0xff, 0xff,
+                                                        0xff, 0xff, 0xff };
 
-  if (capacity < SV6621_AP_FRAME_HEADER_LENGTH +
-                 SV6621_AP_FIXED_PARAMETERS_LENGTH)
+  if (capacity <
+      SV6621_AP_FRAME_HEADER_LENGTH + SV6621_AP_FIXED_PARAMETERS_LENGTH)
     {
       return -ENOSPC;
     }
 
-  memset(buffer, 0, SV6621_AP_FRAME_HEADER_LENGTH +
-                    SV6621_AP_FIXED_PARAMETERS_LENGTH);
+  memset(buffer, 0,
+         SV6621_AP_FRAME_HEADER_LENGTH + SV6621_AP_FIXED_PARAMETERS_LENGTH);
   buffer[0] = frame_control;
   memcpy(buffer + 4, broadcast, sizeof(broadcast));
   memcpy(buffer + 10, address, SV6621_MAC_LENGTH);
   memcpy(buffer + 16, address, SV6621_MAC_LENGTH);
   sv6621_ap_beacon_put_le16(buffer + SV6621_AP_FRAME_HEADER_LENGTH + 8,
-                           beacon_interval);
+                            beacon_interval);
   sv6621_ap_beacon_put_le16(buffer + SV6621_AP_FRAME_HEADER_LENGTH + 10,
-                           capabilities);
-  *length = SV6621_AP_FRAME_HEADER_LENGTH +
-            SV6621_AP_FIXED_PARAMETERS_LENGTH;
+                            capabilities);
+  *length = SV6621_AP_FRAME_HEADER_LENGTH + SV6621_AP_FIXED_PARAMETERS_LENGTH;
   return 0;
 }
 
@@ -228,8 +214,8 @@ static int sv6621_ap_beacon_append_identity(
       ssid = hidden_ssid;
     }
 
-  ret = sv6621_ap_beacon_append_ie(buffer, capacity, length,
-                                   SV6621_AP_IE_SSID, ssid, ssid_length);
+  ret = sv6621_ap_beacon_append_ie(buffer, capacity, length, SV6621_AP_IE_SSID,
+                                   ssid, ssid_length);
   if (ret < 0)
     {
       return ret;
@@ -263,8 +249,8 @@ int sv6621_ap_build_beacon_templates(
     FAR const struct sv6621_ap_beacon_config_s *config,
     FAR struct sv6621_ap_beacon_templates_s *templates)
 {
-  uint16_t capabilities = SV6621_AP_CAPABILITY_ESS |
-                          SV6621_AP_CAPABILITY_SHORT_SLOT;
+  uint16_t capabilities =
+      SV6621_AP_CAPABILITY_ESS | SV6621_AP_CAPABILITY_SHORT_SLOT;
   int ret;
 
   if (config == NULL || templates == NULL || config->ssid_length == 0 ||
@@ -319,10 +305,10 @@ int sv6621_ap_build_beacon_templates(
         }
     }
 
-  ret = sv6621_ap_beacon_append(
-      templates->beacon_tail, sizeof(templates->beacon_tail),
-      &templates->beacon_tail_length, config->extra_ies,
-      config->extra_ies_length);
+  ret = sv6621_ap_beacon_append(templates->beacon_tail,
+                                sizeof(templates->beacon_tail),
+                                &templates->beacon_tail_length,
+                                config->extra_ies, config->extra_ies_length);
   if (ret < 0)
     {
       return ret;
@@ -349,8 +335,7 @@ int sv6621_ap_build_beacon_templates(
     {
       ret = sv6621_ap_beacon_append_ie(
           templates->probe_response, sizeof(templates->probe_response),
-          &templates->probe_response_length,
-          SV6621_AP_IE_EXTENDED_RATES,
+          &templates->probe_response_length, SV6621_AP_IE_EXTENDED_RATES,
           g_sv6621_ap_extended_rates_2ghz,
           sizeof(g_sv6621_ap_extended_rates_2ghz));
       if (ret < 0)
@@ -359,19 +344,19 @@ int sv6621_ap_build_beacon_templates(
         }
     }
 
-  return sv6621_ap_beacon_append(
-      templates->probe_response, sizeof(templates->probe_response),
-      &templates->probe_response_length, config->extra_ies,
-      config->extra_ies_length);
+  return sv6621_ap_beacon_append(templates->probe_response,
+                                 sizeof(templates->probe_response),
+                                 &templates->probe_response_length,
+                                 config->extra_ies, config->extra_ies_length);
 }
 
 /****************************************************************************
  * Name: sv6621_ap_build_rsn_ie
  ****************************************************************************/
 
-int sv6621_ap_build_rsn_ie(enum sv6621_security_e security,
-                           bool pmf_required, FAR uint8_t *ie,
-                           size_t capacity, FAR size_t *length)
+int sv6621_ap_build_rsn_ie(enum sv6621_security_e security, bool pmf_required,
+                           FAR uint8_t *ie, size_t capacity,
+                           FAR size_t *length)
 {
   uint8_t akm_count;
   uint8_t body_length;
@@ -387,15 +372,16 @@ int sv6621_ap_build_rsn_ie(enum sv6621_security_e security,
     }
 
   akm_count = security == SV6621_SECURITY_WPA2_WPA3_PSK ? 2 : 1;
-  capabilities = security == SV6621_SECURITY_WPA2_PSK ? 0 :
-                 SV6621_AP_RSN_CAP_MFPC;
+  capabilities =
+      security == SV6621_SECURITY_WPA2_PSK ? 0 : SV6621_AP_RSN_CAP_MFPC;
   if (pmf_required)
     {
       capabilities |= SV6621_AP_RSN_CAP_MFPR | SV6621_AP_RSN_CAP_MFPC;
     }
 
-  body_length = security == SV6621_SECURITY_WPA2_PSK ? 20 :
-                security == SV6621_SECURITY_WPA3_SAE ? 26 : 30;
+  body_length = security == SV6621_SECURITY_WPA2_PSK   ? 20
+                : security == SV6621_SECURITY_WPA3_SAE ? 26
+                                                       : 30;
   if (capacity < (size_t)body_length + 2)
     {
       return -ENOSPC;
@@ -421,8 +407,8 @@ int sv6621_ap_build_rsn_ie(enum sv6621_security_e security,
   ie[offset++] = SV6621_AP_RSN_OUI_0;
   ie[offset++] = SV6621_AP_RSN_OUI_1;
   ie[offset++] = SV6621_AP_RSN_OUI_2;
-  ie[offset++] = security == SV6621_SECURITY_WPA3_SAE ?
-                 SV6621_AP_RSN_AKM_SAE : SV6621_AP_RSN_AKM_PSK;
+  ie[offset++] = security == SV6621_SECURITY_WPA3_SAE ? SV6621_AP_RSN_AKM_SAE
+                                                      : SV6621_AP_RSN_AKM_PSK;
   if (security == SV6621_SECURITY_WPA2_WPA3_PSK)
     {
       ie[offset++] = SV6621_AP_RSN_OUI_0;
@@ -496,8 +482,7 @@ int sv6621_ap_validate_rsn_ie(enum sv6621_security_e security,
     }
 
   if (rsn == NULL || rsn_length < 18 || rsn[0] != 1 || rsn[1] != 0 ||
-      memcmp(rsn + 2, g_sv6621_ap_rsn_ccmp,
-             sizeof(g_sv6621_ap_rsn_ccmp)) != 0)
+      memcmp(rsn + 2, g_sv6621_ap_rsn_ccmp, sizeof(g_sv6621_ap_rsn_ccmp)) != 0)
     {
       return -EACCES;
     }
@@ -549,18 +534,14 @@ int sv6621_ap_validate_rsn_ie(enum sv6621_security_e security,
       capabilities = rsn[offset] | ((uint16_t)rsn[offset + 1] << 8);
     }
 
-  if (!pairwise_ccmp ||
-      (security == SV6621_SECURITY_WPA2_PSK && !psk_akm) ||
+  if (!pairwise_ccmp || (security == SV6621_SECURITY_WPA2_PSK && !psk_akm) ||
       (security == SV6621_SECURITY_WPA3_SAE && !sae_akm) ||
-      (security == SV6621_SECURITY_WPA2_WPA3_PSK &&
-       !psk_akm && !sae_akm) ||
-      (pmf_required &&
-       (capabilities & SV6621_AP_RSN_CAP_MFPC) == 0))
+      (security == SV6621_SECURITY_WPA2_WPA3_PSK && !psk_akm && !sae_akm) ||
+      (pmf_required && (capabilities & SV6621_AP_RSN_CAP_MFPC) == 0))
     {
       return -EACCES;
     }
 
-  *sae = sae_akm &&
-         (security == SV6621_SECURITY_WPA3_SAE || !psk_akm);
+  *sae = sae_akm && (security == SV6621_SECURITY_WPA3_SAE || !psk_akm);
   return 0;
 }

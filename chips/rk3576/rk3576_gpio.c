@@ -769,13 +769,11 @@ int rk3576_config_gpio(gpio_pinset_t pinset)
             }
           else if ((pinset & GPIO_PUPD_MASK) == GPIO_PULLDOWN)
             {
-              rk3576_pull_set(RK3576_IOC_ADDR, port, pin,
-                              RK3576_PULL_DOWN);
+              rk3576_pull_set(RK3576_IOC_ADDR, port, pin, RK3576_PULL_DOWN);
             }
           else
             {
-              rk3576_pull_set(RK3576_IOC_ADDR, port, pin,
-                              RK3576_PULL_DISABLE);
+              rk3576_pull_set(RK3576_IOC_ADDR, port, pin, RK3576_PULL_DISABLE);
             }
         }
         break;
@@ -814,8 +812,10 @@ int rk3576_config_gpio(gpio_pinset_t pinset)
                                (pinset & GPIO_INT_BOTHEDGE) != 0 ? 1 : 0);
 
       /* Clear any pending interrupt before leaving it disabled.  The
+       *
        * interrupt owner must explicitly enable delivery after installing
-       * its handler.
+
+       * * its handler.
        */
 
       RK3576_GPIO_V2_WRITE_BIT(RK3576_GPIO_PORTA_EOI(port), pin, 1);
@@ -929,11 +929,12 @@ static int rk3576_gpio_setmask(FAR struct gpio_dev_s *dev, bool enable);
 static int g_gpio_global_minor = 0; /* /dev/gpioN minor, globally unique */
 
 /* O(1) interrupt owner lookup.  Character and kernel clients are mutually
+ *
  * exclusive for each pin.
  */
 
-static struct rk3576_gpio_irq_entry_s
-    g_gpio_irq_map[RK3576_GPIO_NPORTS][RK3576_GPIO_NPINS];
+static struct rk3576_gpio_irq_entry_s g_gpio_irq_map[RK3576_GPIO_NPORTS]
+                                                    [RK3576_GPIO_NPINS];
 
 static const struct gpio_operations_s g_gpin_ops = {
   .go_read = rk3576_gpio_read_cb,
@@ -1156,9 +1157,12 @@ static int rk3576_gpio_setmask(FAR struct gpio_dev_s *dev, bool enable)
  *
  * Description:
  *   Per-bank GIC ISR.  With GPIO virtual mode disabled, the reset value of
- *   GPIO_REG_GROUP routes all 32 pins to interrupt flag 0.  Read the full
- *   GPIO INT_STATUS, dispatch each pending pin through the O(1) irq_map,
- *   then write PORTA_EOI to acknowledge the edge at the GPIO controller.
+ *
+ *GPIO_REG_GROUP routes all 32 pins to interrupt flag 0.  Read the full
+ * GPIO
+ *INT_STATUS, dispatch each pending pin through the O(1) irq_map,
+ *   then
+ *write PORTA_EOI to acknowledge the edge at the GPIO controller.
  *
  ****************************************************************************/
 
@@ -1178,8 +1182,9 @@ static int rk3576_gpio_isr(int irq, void *context, void *arg)
     }
 
   /* INT_STATUS is a single read-only 32-bit register, unlike the split
+   *
    * low/high write-mask registers used to configure and acknowledge pins.
-   */
+ */
 
   status = getreg32(RK3576_GPIO_INT_STATUS(port));
 
@@ -1224,11 +1229,12 @@ static int rk3576_gpio_isr(int irq, void *context, void *arg)
 }
 
 /****************************************************************************
- * Public Functions
- ****************************************************************************/
 
-int rk3576_gpio_irq_attach(gpio_pinset_t pinset, xcpt_t handler,
-                           FAR void *arg)
+ * * Public Functions
+
+ * ****************************************************************************/
+
+int rk3576_gpio_irq_attach(gpio_pinset_t pinset, xcpt_t handler, FAR void *arg)
 {
   FAR struct rk3576_gpio_irq_entry_s *entry;
   irqstate_t flags;
@@ -1392,9 +1398,8 @@ int rk3576_gpio_register(gpio_pinset_t pinset)
 
   /* Interrupt-specific: check for duplicate before allocating */
 
-  if (is_interrupt &&
-      (g_gpio_irq_map[port][pin].dev != NULL ||
-       g_gpio_irq_map[port][pin].handler != NULL))
+  if (is_interrupt && (g_gpio_irq_map[port][pin].dev != NULL ||
+                       g_gpio_irq_map[port][pin].handler != NULL))
     {
       gpioerr("ERROR: GPIO%u_P%u already registered for interrupts\n", port,
               pin);
@@ -1466,18 +1471,19 @@ int rk3576_gpio_register(gpio_pinset_t pinset)
 int rk3576_gpio_init(void)
 {
   /* Attach interrupt flag 0 for each bank.  GPIO_REG_GROUP_L/H reset to
+   *
    * all ones, which routes every pin to flag 0 while virtual mode is off.
+   *
    * The other three GIC outputs are OS/virtual groups, not fixed A/B/C/D
+   *
    * pin ranges, and remain unused unless software explicitly programs the
+   *
    * corresponding GPIO_REG_GROUP registers.
    */
 
   static const unsigned int g_gpio_irqs[RK3576_GPIO_NPORTS] = {
-    RK3576_IRQ_GPIO0_0,
-    RK3576_IRQ_GPIO1_0,
-    RK3576_IRQ_GPIO2_0,
-    RK3576_IRQ_GPIO3_0,
-    RK3576_IRQ_GPIO4_0,
+    RK3576_IRQ_GPIO0_0, RK3576_IRQ_GPIO1_0, RK3576_IRQ_GPIO2_0,
+    RK3576_IRQ_GPIO3_0, RK3576_IRQ_GPIO4_0,
   };
 
   unsigned int port;
@@ -1510,8 +1516,8 @@ int rk3576_gpio_init(void)
       ret = irq_attach(irq, rk3576_gpio_isr, (void *)(uintptr_t)port);
       if (ret < 0)
         {
-          gpioerr("ERROR: Failed to attach IRQ %u (GPIO%u flag 0): %d\n",
-                  irq, port, ret);
+          gpioerr("ERROR: Failed to attach IRQ %u (GPIO%u flag 0): %d\n", irq,
+                  port, ret);
           return ret;
         }
 

@@ -38,51 +38,51 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_SCAN_INSTANCE             0
-#define SV6621_SCAN_COMMAND_START        5
-#define SV6621_SCAN_COMMAND_STOP         6
-#define SV6621_SCAN_FIXED_SIZE           32
-#define SV6621_SCAN_CHANNEL_SIZE         3
-#define SV6621_SCAN_SSID_SIZE            (SV6621_SSID_MAX_LENGTH + 1)
-#define SV6621_SCAN_COMMAND_TIMEOUT_MS   5000
-#define SV6621_SCAN_STOP_TIMEOUT_MS      500
+#define SV6621_SCAN_INSTANCE               0
+#define SV6621_SCAN_COMMAND_START          5
+#define SV6621_SCAN_COMMAND_STOP           6
+#define SV6621_SCAN_FIXED_SIZE             32
+#define SV6621_SCAN_CHANNEL_SIZE           3
+#define SV6621_SCAN_SSID_SIZE              (SV6621_SSID_MAX_LENGTH + 1)
+#define SV6621_SCAN_COMMAND_TIMEOUT_MS     5000
+#define SV6621_SCAN_STOP_TIMEOUT_MS        500
 #define SV6621_SCAN_RECOVERY_GRACE_MS      500
 
-#define SV6621_SCAN_CHANNEL_COUNT_OFFSET 8
-#define SV6621_SCAN_CHANNEL_LIST_OFFSET  12
-#define SV6621_SCAN_SSID_COUNT_OFFSET    16
-#define SV6621_SCAN_SSID_LIST_OFFSET     20
-#define SV6621_SCAN_IE_LENGTH_OFFSET     24
-#define SV6621_SCAN_IE_OFFSET_OFFSET     28
+#define SV6621_SCAN_CHANNEL_COUNT_OFFSET   8
+#define SV6621_SCAN_CHANNEL_LIST_OFFSET    12
+#define SV6621_SCAN_SSID_COUNT_OFFSET      16
+#define SV6621_SCAN_SSID_LIST_OFFSET       20
+#define SV6621_SCAN_IE_LENGTH_OFFSET       24
+#define SV6621_SCAN_IE_OFFSET_OFFSET       28
 
-#define SV6621_SCAN_REPORT_HEADER_SIZE   8
-#define SV6621_SCAN_INFORMATION_OFFSET   36
+#define SV6621_SCAN_REPORT_HEADER_SIZE     8
+#define SV6621_SCAN_INFORMATION_OFFSET     36
 #define SV6621_SCAN_BEACON_INTERVAL_OFFSET 32
-#define SV6621_SCAN_BSSID_OFFSET         16
-#define SV6621_SCAN_CAPABILITY_OFFSET    34
-#define SV6621_SCAN_CAPABILITY_PRIVACY   (1 << 4)
-#define SV6621_SCAN_FRAME_SUBTYPE_MASK   0xfc
-#define SV6621_SCAN_FRAME_BEACON         0x80
-#define SV6621_SCAN_FRAME_PROBE_RESPONSE 0x50
-#define SV6621_SCAN_IE_SSID              0
-#define SV6621_SCAN_IE_RSN               48
-#define SV6621_SCAN_IE_HT_OPERATION      61
-#define SV6621_SCAN_IE_VHT_OPERATION     192
-#define SV6621_SCAN_IE_VENDOR            221
-#define SV6621_SCAN_HT_OPERATION_MIN_SIZE 2
-#define SV6621_SCAN_HT_SECONDARY_MASK     0x03
-#define SV6621_SCAN_HT_SECONDARY_NONE     0
-#define SV6621_SCAN_HT_SECONDARY_ABOVE    1
-#define SV6621_SCAN_HT_SECONDARY_BELOW    3
+#define SV6621_SCAN_BSSID_OFFSET           16
+#define SV6621_SCAN_CAPABILITY_OFFSET      34
+#define SV6621_SCAN_CAPABILITY_PRIVACY     (1 << 4)
+#define SV6621_SCAN_FRAME_SUBTYPE_MASK     0xfc
+#define SV6621_SCAN_FRAME_BEACON           0x80
+#define SV6621_SCAN_FRAME_PROBE_RESPONSE   0x50
+#define SV6621_SCAN_IE_SSID                0
+#define SV6621_SCAN_IE_RSN                 48
+#define SV6621_SCAN_IE_HT_OPERATION        61
+#define SV6621_SCAN_IE_VHT_OPERATION       192
+#define SV6621_SCAN_IE_VENDOR              221
+#define SV6621_SCAN_HT_OPERATION_MIN_SIZE  2
+#define SV6621_SCAN_HT_SECONDARY_MASK      0x03
+#define SV6621_SCAN_HT_SECONDARY_NONE      0
+#define SV6621_SCAN_HT_SECONDARY_ABOVE     1
+#define SV6621_SCAN_HT_SECONDARY_BELOW     3
 #define SV6621_SCAN_VHT_OPERATION_MIN_SIZE 3
 #define SV6621_SCAN_VHT_WIDTH_MAX          3
-#define SV6621_SCAN_RSN_SUITE_SIZE       4
-#define SV6621_SCAN_RSN_CIPHER_CCMP      4
-#define SV6621_SCAN_RSN_CIPHER_BIP_CMAC  6
-#define SV6621_SCAN_RSN_AKM_PSK          2
-#define SV6621_SCAN_RSN_AKM_SAE          8
-#define SV6621_SCAN_RSN_CAP_MFPR         (1 << 6)
-#define SV6621_SCAN_RSN_CAP_MFPC         (1 << 7)
+#define SV6621_SCAN_RSN_SUITE_SIZE         4
+#define SV6621_SCAN_RSN_CIPHER_CCMP        4
+#define SV6621_SCAN_RSN_CIPHER_BIP_CMAC    6
+#define SV6621_SCAN_RSN_AKM_PSK            2
+#define SV6621_SCAN_RSN_AKM_SAE            8
+#define SV6621_SCAN_RSN_CAP_MFPR           (1 << 6)
+#define SV6621_SCAN_RSN_CAP_MFPC           (1 << 7)
 
 /****************************************************************************
  * Private Function Prototypes
@@ -95,11 +95,11 @@ static int sv6621_scan_parse_rsn(FAR const uint8_t *data, size_t length,
                                  FAR bool *psk, FAR bool *sae);
 static bool sv6621_scan_is_rsn_suite(FAR const uint8_t *suite);
 static bool sv6621_scan_is_wpa_ie(FAR const uint8_t *data, size_t length);
-static bool sv6621_scan_security_matches(
-    enum sv6621_security_e requested, enum sv6621_security_e advertised);
-static bool sv6621_scan_connection_supported(
-    enum sv6621_security_e requested,
-    FAR const struct sv6621_scan_entry_s *entry);
+static bool sv6621_scan_security_matches(enum sv6621_security_e requested,
+                                         enum sv6621_security_e advertised);
+static bool
+sv6621_scan_connection_supported(enum sv6621_security_e requested,
+                                 FAR const struct sv6621_scan_entry_s *entry);
 static size_t
 sv6621_scan_cache_weakest(FAR const struct sv6621_scan_cache_s *cache);
 static void sv6621_scan_timeout_worker(FAR void *arg);
@@ -208,8 +208,7 @@ static int sv6621_scan_parse_rsn(FAR const uint8_t *data, size_t length,
       offset += 2;
       if ((entry->rsn_capabilities & SV6621_SCAN_RSN_CAP_MFPC) != 0)
         {
-          entry->rsn_group_management_cipher =
-              SV6621_SCAN_RSN_CIPHER_BIP_CMAC;
+          entry->rsn_group_management_cipher = SV6621_SCAN_RSN_CIPHER_BIP_CMAC;
         }
     }
 
@@ -264,8 +263,8 @@ static bool sv6621_scan_is_wpa_ie(FAR const uint8_t *data, size_t length)
  * Name: sv6621_scan_security_matches
  ****************************************************************************/
 
-static bool sv6621_scan_security_matches(
-    enum sv6621_security_e requested, enum sv6621_security_e advertised)
+static bool sv6621_scan_security_matches(enum sv6621_security_e requested,
+                                         enum sv6621_security_e advertised)
 {
   if (requested == SV6621_SECURITY_OPEN)
     {
@@ -288,9 +287,9 @@ static bool sv6621_scan_security_matches(
   return false;
 }
 
-static bool sv6621_scan_connection_supported(
-    enum sv6621_security_e requested,
-    FAR const struct sv6621_scan_entry_s *entry)
+static bool
+sv6621_scan_connection_supported(enum sv6621_security_e requested,
+                                 FAR const struct sv6621_scan_entry_s *entry)
 {
   if (requested == SV6621_SECURITY_OPEN)
     {
@@ -352,9 +351,8 @@ static void sv6621_scan_timeout_worker(FAR void *arg)
           scan->recovery_pending = true;
           nxmutex_unlock(&scan->lock);
           sv6621_rx_kick(scan->rx);
-          work_queue(LPWORK, &scan->timeout_work,
-                     sv6621_scan_timeout_worker, scan,
-                     MSEC2TICK(SV6621_SCAN_RECOVERY_GRACE_MS));
+          work_queue(LPWORK, &scan->timeout_work, sv6621_scan_timeout_worker,
+                     scan, MSEC2TICK(SV6621_SCAN_RECOVERY_GRACE_MS));
           return;
         }
 
@@ -374,9 +372,8 @@ static void sv6621_scan_timeout_worker(FAR void *arg)
 
 static int sv6621_scan_queue_timeout(FAR struct sv6621_scan_s *scan)
 {
-  return work_queue(LPWORK, &scan->timeout_work,
-                    sv6621_scan_timeout_worker, scan,
-                    MSEC2TICK(scan->timeout_ms));
+  return work_queue(LPWORK, &scan->timeout_work, sv6621_scan_timeout_worker,
+                    scan, MSEC2TICK(scan->timeout_ms));
 }
 
 /****************************************************************************
@@ -403,10 +400,10 @@ int sv6621_scan_start(FAR struct sv6621_command_engine_s *command,
       return -EINVAL;
     }
 
-  ssid_offset = SV6621_SCAN_FIXED_SIZE +
-                channel_count * SV6621_SCAN_CHANNEL_SIZE;
-  payload_length = ssid_offset +
-                   (ssid_length != 0 ? SV6621_SCAN_SSID_SIZE : 0);
+  ssid_offset =
+      SV6621_SCAN_FIXED_SIZE + channel_count * SV6621_SCAN_CHANNEL_SIZE;
+  payload_length =
+      ssid_offset + (ssid_length != 0 ? SV6621_SCAN_SSID_SIZE : 0);
   payload = kmm_zalloc(payload_length);
   if (payload == NULL)
     {
@@ -707,8 +704,7 @@ int sv6621_scan_cache_store(FAR struct sv6621_scan_cache_s *cache,
             {
               struct sv6621_scan_entry_s updated = *entry;
 
-              updated.bss.ssid_length =
-                  cache->entries[index].bss.ssid_length;
+              updated.bss.ssid_length = cache->entries[index].bss.ssid_length;
               memcpy(updated.bss.ssid, cache->entries[index].bss.ssid,
                      updated.bss.ssid_length);
               cache->entries[index] = updated;
@@ -833,13 +829,12 @@ int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
         }
 
       if (!sv6621_scan_connection_supported(request->security,
-                                             &cache->entries[index]))
+                                            &cache->entries[index]))
         {
           continue;
         }
 
-      if (ret == -ENOENT ||
-          bss->signal_dbm > entry->bss.signal_dbm)
+      if (ret == -ENOENT || bss->signal_dbm > entry->bss.signal_dbm)
         {
           *entry = cache->entries[index];
           ret = 0;
@@ -856,8 +851,10 @@ int sv6621_scan_cache_find(FAR struct sv6621_scan_cache_s *cache,
 }
 
 /****************************************************************************
- * Name: sv6621_scan_cache_find_roam_candidate
- ****************************************************************************/
+
+ * * Name: sv6621_scan_cache_find_roam_candidate
+
+ * ****************************************************************************/
 
 int sv6621_scan_cache_find_roam_candidate(
     FAR struct sv6621_scan_cache_s *cache,
@@ -886,8 +883,7 @@ int sv6621_scan_cache_find_roam_candidate(
   ret = -ENOENT;
   for (index = 0; index < cache->count; index++)
     {
-      FAR const struct sv6621_scan_entry_s *candidate =
-          &cache->entries[index];
+      FAR const struct sv6621_scan_entry_s *candidate = &cache->entries[index];
       FAR const struct sv6621_bss_s *bss = &candidate->bss;
 
       if (memcmp(bss->bssid, current_bssid, SV6621_MAC_LENGTH) == 0 ||
@@ -1005,8 +1001,7 @@ int sv6621_scan_controller_begin(
   scan->stats.started++;
   nxmutex_unlock(&scan->lock);
 
-  ret = sv6621_scan_start(scan->command, scan->channels,
-                          scan->channel_count,
+  ret = sv6621_scan_start(scan->command, scan->channels, scan->channel_count,
                           scan->ssid_length > 0 ? scan->ssid : NULL,
                           scan->ssid_length);
   if (ret == 0)

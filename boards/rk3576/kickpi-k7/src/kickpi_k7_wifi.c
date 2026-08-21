@@ -64,8 +64,8 @@
 
 #define WIFI_WL_REG_ON (GPIO_PORT1 | GPIO_PIN_C6 | GPIO_OUTPUT)
 #define WIFI_BT_RST    (GPIO_PORT1 | GPIO_PIN_C7 | GPIO_OUTPUT)
-#define WIFI_HOST_WAKE                                                        \
-  (GPIO_PORT1 | GPIO_PIN_D5 | GPIO_INPUT | GPIO_PULLDOWN | GPIO_EXTI |       \
+#define WIFI_HOST_WAKE                                                 \
+  (GPIO_PORT1 | GPIO_PIN_D5 | GPIO_INPUT | GPIO_PULLDOWN | GPIO_EXTI | \
    GPIO_INT_EDGE | GPIO_INT_HIGH_RISING)
 
 #define WIFI_HOST_WAKE_ACTIVITY 1
@@ -137,10 +137,11 @@ static const gpio_pinset_t g_wifi_sdio_pins[] = {
 static int kickpi_k7_wifi_enable_32k(void);
 static int kickpi_k7_wifi_power_on(FAR void *arg);
 static void kickpi_k7_wifi_power_off(FAR void *arg);
-static int kickpi_k7_wifi_load_address(
-    FAR void *arg, uint8_t address[SV6621_MAC_LENGTH]);
-static int kickpi_k7_wifi_store_address(
-    FAR void *arg, FAR const uint8_t address[SV6621_MAC_LENGTH]);
+static int kickpi_k7_wifi_load_address(FAR void *arg,
+                                       uint8_t address[SV6621_MAC_LENGTH]);
+static int
+kickpi_k7_wifi_store_address(FAR void *arg,
+                             FAR const uint8_t address[SV6621_MAC_LENGTH]);
 #ifdef CONFIG_SV6621_PM
 static int kickpi_k7_wifi_host_wake_isr(int irq, FAR void *context,
                                         FAR void *arg);
@@ -206,8 +207,7 @@ static int kickpi_k7_wifi_enable_32k(void)
       up_mdelay(3);
       pr = I2C_TRANSFER(i2c, &pmsg, 1);
       rd = I2C_TRANSFER(i2c, &dmsg, 1);
-      if (wr >= 0 && pr >= 0 && rd >= 0 &&
-          (rback & 0x83) == 0x80)
+      if (wr >= 0 && pr >= 0 && rd >= 0 && (rback & 0x83) == 0x80)
         {
           up_mdelay(150);
           return OK;
@@ -251,8 +251,8 @@ static void kickpi_k7_wifi_power_off(FAR void *arg)
  * Name: kickpi_k7_wifi_load_address
  ****************************************************************************/
 
-static int kickpi_k7_wifi_load_address(
-    FAR void *arg, uint8_t address[SV6621_MAC_LENGTH])
+static int kickpi_k7_wifi_load_address(FAR void *arg,
+                                       uint8_t address[SV6621_MAC_LENGTH])
 {
   FAR uint8_t *saved = arg;
 
@@ -269,8 +269,9 @@ static int kickpi_k7_wifi_load_address(
  * Name: kickpi_k7_wifi_store_address
  ****************************************************************************/
 
-static int kickpi_k7_wifi_store_address(
-    FAR void *arg, FAR const uint8_t address[SV6621_MAC_LENGTH])
+static int
+kickpi_k7_wifi_store_address(FAR void *arg,
+                             FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
   memcpy(arg, address, SV6621_MAC_LENGTH);
   return 0;
@@ -282,10 +283,14 @@ static int kickpi_k7_wifi_store_address(
  *
  * Description:
  *   Report activity when the combo asserts its dedicated active-high
- *   host-wake line.  The interrupt wakes the CPU from WFI; the platform PM
- *   path subsequently enters PM_RESTORE and resumes the Wi-Fi transport.
- *   No SDIO transaction or driver resume is permitted here.
- ****************************************************************************/
+ *
+ * host-wake line.  The interrupt wakes the CPU from WFI; the platform PM
+ *
+ * path subsequently enters PM_RESTORE and resumes the Wi-Fi transport.
+ *   No
+ * SDIO transaction or driver resume is permitted here.
+
+ * ****************************************************************************/
 
 static int kickpi_k7_wifi_host_wake_isr(int irq, FAR void *context,
                                         FAR void *arg)
@@ -305,8 +310,7 @@ static int kickpi_k7_wifi_host_wake_isr(int irq, FAR void *context,
 static uint8_t g_kickpi_k7_wifi_address[SV6621_MAC_LENGTH];
 static FAR struct sv6621_dev_s *g_kickpi_k7_wifi_dev;
 #ifdef CONFIG_SV6621_PM
-static const struct sv6621_suspend_s g_kickpi_k7_wifi_suspend =
-{
+static const struct sv6621_suspend_s g_kickpi_k7_wifi_suspend = {
   .wake_enabled = true,
   .wake_flags = SV6621_WAKE_DISCONNECT | SV6621_WAKE_MAGIC_PACKET |
                 SV6621_WAKE_GTK_REKEY_FAILURE,
@@ -474,8 +478,7 @@ int kickpi_k7_wifi_initialize(void)
   config.nvram.data = g_sv6621_nv_start;
   config.nvram.length = g_sv6621_nv_end - g_sv6621_nv_start;
   config.calibration.data = g_sv6621_calib_start;
-  config.calibration.length =
-      g_sv6621_calib_end - g_sv6621_calib_start;
+  config.calibration.length = g_sv6621_calib_end - g_sv6621_calib_start;
   config.regulatory = &g_kickpi_k7_wifi_regulatory_domains[0];
   config.regulatory_domains = g_kickpi_k7_wifi_regulatory_domains;
   config.regulatory_domain_count =
@@ -506,8 +509,7 @@ int kickpi_k7_wifi_initialize(void)
       goto stop_driver;
     }
 
-  ret = rk3576_gpio_irq_attach(WIFI_HOST_WAKE,
-                               kickpi_k7_wifi_host_wake_isr,
+  ret = rk3576_gpio_irq_attach(WIFI_HOST_WAKE, kickpi_k7_wifi_host_wake_isr,
                                NULL);
   if (ret < 0)
     {
@@ -548,8 +550,7 @@ int kickpi_k7_wifi_prepare_sleep(void)
       return -ENODEV;
     }
 
-  return sv6621_suspend(g_kickpi_k7_wifi_dev,
-                        &g_kickpi_k7_wifi_suspend);
+  return sv6621_suspend(g_kickpi_k7_wifi_dev, &g_kickpi_k7_wifi_suspend);
 }
 
 /****************************************************************************

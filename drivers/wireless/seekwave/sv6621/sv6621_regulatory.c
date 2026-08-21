@@ -42,7 +42,7 @@
 #define SV6621_REGULATORY_HEADER_SIZE        4
 #define SV6621_REGULATORY_RULE_SIZE          8
 #define SV6621_REGULATORY_PAYLOAD_SIZE \
-  (SV6621_REGULATORY_HEADER_SIZE +      \
+  (SV6621_REGULATORY_HEADER_SIZE +     \
    SV6621_REGULATORY_MAX_RULES * SV6621_REGULATORY_RULE_SIZE)
 
 /****************************************************************************
@@ -50,9 +50,8 @@
  ****************************************************************************/
 
 static const uint8_t g_sv6621_regulatory_channels_5ghz[] = {
-  36, 40, 44, 48, 149, 153, 157, 161, 165, 169, 173, 177,
-  52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136,
-  140, 144
+  36, 40, 44,  48,  149, 153, 157, 161, 165, 169, 173, 177, 52,  56,
+  60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144
 };
 
 /****************************************************************************
@@ -61,8 +60,8 @@ static const uint8_t g_sv6621_regulatory_channels_5ghz[] = {
 
 static void sv6621_regulatory_put_le32(FAR uint8_t *output, uint32_t value);
 static bool sv6621_regulatory_country_valid(FAR const char country[2]);
-static bool sv6621_regulatory_rule_valid(
-    FAR const struct sv6621_regulatory_rule_s *rule);
+static bool
+sv6621_regulatory_rule_valid(FAR const struct sv6621_regulatory_rule_s *rule);
 static bool sv6621_regulatory_channel_allowed(
     FAR const struct sv6621_regulatory_domain_s *domain, uint8_t channel,
     FAR uint8_t *scan_flags);
@@ -89,18 +88,17 @@ static void sv6621_regulatory_put_le32(FAR uint8_t *output, uint32_t value)
 
 static bool sv6621_regulatory_country_valid(FAR const char country[2])
 {
-  return country != NULL &&
-         ((country[0] == '0' && country[1] == '0') ||
-          (isalpha((unsigned char)country[0]) &&
-           isalpha((unsigned char)country[1])));
+  return country != NULL && ((country[0] == '0' && country[1] == '0') ||
+                             (isalpha((unsigned char)country[0]) &&
+                              isalpha((unsigned char)country[1])));
 }
 
 /****************************************************************************
  * Name: sv6621_regulatory_rule_valid
  ****************************************************************************/
 
-static bool sv6621_regulatory_rule_valid(
-    FAR const struct sv6621_regulatory_rule_s *rule)
+static bool
+sv6621_regulatory_rule_valid(FAR const struct sv6621_regulatory_rule_s *rule)
 {
   uint16_t last_channel;
 
@@ -125,17 +123,16 @@ static bool sv6621_regulatory_channel_allowed(
 
   for (index = 0; index < domain->rule_count; index++)
     {
-      FAR const struct sv6621_regulatory_rule_s *rule =
-          &domain->rules[index];
+      FAR const struct sv6621_regulatory_rule_s *rule = &domain->rules[index];
       uint16_t last_channel =
           (uint16_t)rule->start_channel + rule->channel_span - 1;
 
       if (channel >= rule->start_channel && channel <= last_channel)
         {
-          *scan_flags =
-              (rule->flags & (SV6621_REGULATORY_FLAG_DFS |
-                              SV6621_REGULATORY_FLAG_NO_IR)) != 0 ?
-              SV6621_SCAN_FLAG_PASSIVE : 0;
+          *scan_flags = (rule->flags & (SV6621_REGULATORY_FLAG_DFS |
+                                        SV6621_REGULATORY_FLAG_NO_IR)) != 0
+                            ? SV6621_SCAN_FLAG_PASSIVE
+                            : 0;
           return true;
         }
     }
@@ -174,11 +171,9 @@ int sv6621_regulatory_set_domain(
 
   for (index = 0; index < domain->rule_count; index++)
     {
-      FAR const struct sv6621_regulatory_rule_s *rule =
-          &domain->rules[index];
-      FAR uint8_t *encoded =
-          payload + SV6621_REGULATORY_HEADER_SIZE +
-          index * SV6621_REGULATORY_RULE_SIZE;
+      FAR const struct sv6621_regulatory_rule_s *rule = &domain->rules[index];
+      FAR uint8_t *encoded = payload + SV6621_REGULATORY_HEADER_SIZE +
+                             index * SV6621_REGULATORY_RULE_SIZE;
 
       if (!sv6621_regulatory_rule_valid(rule))
         {
@@ -192,10 +187,10 @@ int sv6621_regulatory_set_domain(
       sv6621_regulatory_put_le32(encoded + 4, rule->flags);
     }
 
-  ret = sv6621_command_execute(
-      command, SV6621_REGULATORY_INSTANCE,
-      SV6621_REGULATORY_COMMAND_SET_DOMAIN, payload, sizeof(payload), NULL,
-      NULL, SV6621_REGULATORY_COMMAND_TIMEOUT_MS);
+  ret = sv6621_command_execute(command, SV6621_REGULATORY_INSTANCE,
+                               SV6621_REGULATORY_COMMAND_SET_DOMAIN, payload,
+                               sizeof(payload), NULL, NULL,
+                               SV6621_REGULATORY_COMMAND_TIMEOUT_MS);
   return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);
 }
 
@@ -247,8 +242,7 @@ int sv6621_regulatory_scan_channels(
       output++;
     }
 
-  for (index = 0; index < sizeof(g_sv6621_regulatory_channels_5ghz);
-       index++)
+  for (index = 0; index < sizeof(g_sv6621_regulatory_channels_5ghz); index++)
     {
       channel = g_sv6621_regulatory_channels_5ghz[index];
       if (!sv6621_regulatory_channel_allowed(domain, channel, &flags))

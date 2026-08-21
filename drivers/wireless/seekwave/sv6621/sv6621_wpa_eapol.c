@@ -43,7 +43,7 @@
 #define SV6621_WPA_EAPOL_VERSION_MAX    2
 #define SV6621_WPA_EAPOL_TYPE_KEY       3
 #define SV6621_WPA_KEY_DESCRIPTOR_RSN   2
-#define SV6621_WPA_CCMP_KEY_SIZE       16
+#define SV6621_WPA_CCMP_KEY_SIZE        16
 #define SV6621_WPA_KEY_FIXED_SIZE       99
 #define SV6621_WPA_KEY_INFO_OFFSET      5
 #define SV6621_WPA_KEY_LENGTH_OFFSET    7
@@ -66,8 +66,8 @@
 #define SV6621_WPA_KEY_SECURE           0x0200
 #define SV6621_WPA_KEY_ENCRYPTED        0x1000
 #define SV6621_WPA_EAPOL_MAX_SIZE       512
-#define SV6621_WPA_IE_VENDOR             221
-#define SV6621_WPA_GTK_KDE_HEADER_SIZE   6
+#define SV6621_WPA_IE_VENDOR            221
+#define SV6621_WPA_GTK_KDE_HEADER_SIZE  6
 #define SV6621_WPA_IGTK_KDE_HEADER_SIZE 12
 
 /****************************************************************************
@@ -75,25 +75,19 @@
  ****************************************************************************/
 
 static const uint8_t g_sv6621_wpa_rsn_psk_ccmp[] = {
-  0x30, 0x14, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04,
-  0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00,
-  0x00, 0x0f, 0xac, 0x02, 0x00, 0x00
+  0x30, 0x14, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00, 0x00,
+  0x0f, 0xac, 0x04, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x02, 0x00, 0x00
 };
 
 static const uint8_t g_sv6621_wpa_rsn_sae_ccmp[] = {
-  0x30, 0x1a, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04,
-  0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00,
-  0x00, 0x0f, 0xac, 0x08, 0xc0, 0x00, 0x00, 0x00,
-  0x00, 0x0f, 0xac, 0x06
+  0x30, 0x1a, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00,
+  0x00, 0x0f, 0xac, 0x04, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x08,
+  0xc0, 0x00, 0x00, 0x00, 0x00, 0x0f, 0xac, 0x06
 };
 
-static const uint8_t g_sv6621_wpa_gtk_selector[] = {
-  0x00, 0x0f, 0xac, 0x01
-};
+static const uint8_t g_sv6621_wpa_gtk_selector[] = { 0x00, 0x0f, 0xac, 0x01 };
 
-static const uint8_t g_sv6621_wpa_igtk_selector[] = {
-  0x00, 0x0f, 0xac, 0x09
-};
+static const uint8_t g_sv6621_wpa_igtk_selector[] = { 0x00, 0x0f, 0xac, 0x09 };
 
 /****************************************************************************
  * Private Function Prototypes
@@ -101,11 +95,10 @@ static const uint8_t g_sv6621_wpa_igtk_selector[] = {
 
 static uint16_t sv6621_wpa_eapol_get_be16(FAR const uint8_t *value);
 static void sv6621_wpa_eapol_put_be16(FAR uint8_t *output, uint16_t value);
-static int sv6621_wpa_eapol_mic(
-    FAR const uint8_t *eapol, size_t length,
-    enum sv6621_wpa_key_mgmt_e key_mgmt,
-    FAR const uint8_t kck[SV6621_WPA_MIC_SIZE],
-    uint8_t mic[SV6621_WPA_MIC_SIZE]);
+static int sv6621_wpa_eapol_mic(FAR const uint8_t *eapol, size_t length,
+                                enum sv6621_wpa_key_mgmt_e key_mgmt,
+                                FAR const uint8_t kck[SV6621_WPA_MIC_SIZE],
+                                uint8_t mic[SV6621_WPA_MIC_SIZE]);
 
 /****************************************************************************
  * Private Functions
@@ -130,11 +123,10 @@ static void sv6621_wpa_eapol_put_be16(FAR uint8_t *output, uint16_t value)
  * Name: sv6621_wpa_eapol_mic
  ****************************************************************************/
 
-static int sv6621_wpa_eapol_mic(
-    FAR const uint8_t *eapol, size_t length,
-    enum sv6621_wpa_key_mgmt_e key_mgmt,
-    FAR const uint8_t kck[SV6621_WPA_MIC_SIZE],
-    uint8_t mic[SV6621_WPA_MIC_SIZE])
+static int sv6621_wpa_eapol_mic(FAR const uint8_t *eapol, size_t length,
+                                enum sv6621_wpa_key_mgmt_e key_mgmt,
+                                FAR const uint8_t kck[SV6621_WPA_MIC_SIZE],
+                                uint8_t mic[SV6621_WPA_MIC_SIZE])
 {
   uint8_t copy[SV6621_WPA_EAPOL_MAX_SIZE];
   uint8_t digest[SV6621_WPA_SHA1_SIZE];
@@ -154,8 +146,8 @@ static int sv6621_wpa_eapol_mic(
     }
   else
     {
-      ret = sv6621_wpa_hmac_sha1(kck, SV6621_WPA_MIC_SIZE, copy, length,
-                                  digest);
+      ret =
+          sv6621_wpa_hmac_sha1(kck, SV6621_WPA_MIC_SIZE, copy, length, digest);
       if (ret == 0)
         {
           memcpy(mic, digest, SV6621_WPA_MIC_SIZE);
@@ -175,20 +167,18 @@ static int sv6621_wpa_eapol_mic(
  * Name: sv6621_wpa_eapol_parse
  ****************************************************************************/
 
-int sv6621_wpa_eapol_parse(
-    FAR const uint8_t *frame, size_t frame_length,
-    enum sv6621_wpa_key_mgmt_e key_mgmt,
-    FAR struct sv6621_wpa_eapol_s *eapol)
+int sv6621_wpa_eapol_parse(FAR const uint8_t *frame, size_t frame_length,
+                           enum sv6621_wpa_key_mgmt_e key_mgmt,
+                           FAR struct sv6621_wpa_eapol_s *eapol)
 {
   FAR const uint8_t *packet;
   size_t packet_length;
   size_t key_data_length;
   uint16_t key_info;
 
-  if (frame == NULL || eapol == NULL ||
-      key_mgmt > SV6621_WPA_KEY_MGMT_SAE ||
-      frame_length < SV6621_WPA_ETHERNET_HEADER_SIZE +
-                         SV6621_WPA_KEY_FIXED_SIZE ||
+  if (frame == NULL || eapol == NULL || key_mgmt > SV6621_WPA_KEY_MGMT_SAE ||
+      frame_length <
+          SV6621_WPA_ETHERNET_HEADER_SIZE + SV6621_WPA_KEY_FIXED_SIZE ||
       sv6621_wpa_eapol_get_be16(frame + SV6621_WPA_ETHERTYPE_OFFSET) !=
           SV6621_WPA_ETHERTYPE_EAPOL)
     {
@@ -196,8 +186,8 @@ int sv6621_wpa_eapol_parse(
     }
 
   packet = frame + SV6621_WPA_ETHERNET_HEADER_SIZE;
-  packet_length = SV6621_WPA_EAPOL_HEADER_SIZE +
-                  sv6621_wpa_eapol_get_be16(packet + 2);
+  packet_length =
+      SV6621_WPA_EAPOL_HEADER_SIZE + sv6621_wpa_eapol_get_be16(packet + 2);
   if (packet_length < SV6621_WPA_KEY_FIXED_SIZE ||
       packet_length > frame_length - SV6621_WPA_ETHERNET_HEADER_SIZE ||
       packet[0] < SV6621_WPA_EAPOL_VERSION_MIN ||
@@ -208,19 +198,18 @@ int sv6621_wpa_eapol_parse(
       return -EPROTO;
     }
 
-  key_info = sv6621_wpa_eapol_get_be16(
-      packet + SV6621_WPA_KEY_INFO_OFFSET);
+  key_info = sv6621_wpa_eapol_get_be16(packet + SV6621_WPA_KEY_INFO_OFFSET);
   if ((key_info & SV6621_WPA_KEY_VERSION_MASK) !=
-          (key_mgmt == SV6621_WPA_KEY_MGMT_SAE ?
-               SV6621_WPA_KEY_VERSION_AKM :
-               SV6621_WPA_KEY_VERSION_SHA1) ||
+          (key_mgmt == SV6621_WPA_KEY_MGMT_SAE
+               ? SV6621_WPA_KEY_VERSION_AKM
+               : SV6621_WPA_KEY_VERSION_SHA1) ||
       (key_info & (SV6621_WPA_KEY_ERROR | SV6621_WPA_KEY_REQUEST)) != 0)
     {
       return -EOPNOTSUPP;
     }
 
-  key_data_length = sv6621_wpa_eapol_get_be16(
-      packet + SV6621_WPA_KEY_DATA_LEN_OFFSET);
+  key_data_length =
+      sv6621_wpa_eapol_get_be16(packet + SV6621_WPA_KEY_DATA_LEN_OFFSET);
   if (key_data_length != packet_length - SV6621_WPA_KEY_DATA_OFFSET)
     {
       return -EPROTO;
@@ -251,16 +240,15 @@ int sv6621_wpa_eapol_parse(
     }
   else if ((key_info & (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK |
                         SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_INSTALL)) ==
-           (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK |
-            SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_INSTALL))
+           (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK | SV6621_WPA_KEY_MIC |
+            SV6621_WPA_KEY_INSTALL))
     {
       eapol->message = SV6621_WPA_MESSAGE_3;
     }
   else if ((key_info & (SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK |
                         SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_INSTALL |
                         SV6621_WPA_KEY_SECURE)) ==
-           (SV6621_WPA_KEY_ACK | SV6621_WPA_KEY_MIC |
-            SV6621_WPA_KEY_SECURE))
+           (SV6621_WPA_KEY_ACK | SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_SECURE))
     {
       eapol->message = SV6621_WPA_MESSAGE_GROUP_1;
     }
@@ -276,8 +264,8 @@ int sv6621_wpa_eapol_parse(
   eapol->eapol_length = packet_length;
   eapol->version = packet[0];
   eapol->key_info = key_info;
-  eapol->key_length = sv6621_wpa_eapol_get_be16(
-      packet + SV6621_WPA_KEY_LENGTH_OFFSET);
+  eapol->key_length =
+      sv6621_wpa_eapol_get_be16(packet + SV6621_WPA_KEY_LENGTH_OFFSET);
   eapol->replay = packet + SV6621_WPA_KEY_REPLAY_OFFSET;
   eapol->nonce = packet + SV6621_WPA_KEY_NONCE_OFFSET;
   eapol->iv = packet + SV6621_WPA_KEY_IV_OFFSET;
@@ -292,13 +280,14 @@ int sv6621_wpa_eapol_parse(
  * Name: sv6621_wpa_eapol_build
  ****************************************************************************/
 
-int sv6621_wpa_eapol_build(
-    enum sv6621_wpa_response_e response,
-    enum sv6621_wpa_key_mgmt_e key_mgmt, uint8_t version,
-    FAR const uint8_t replay[SV6621_WPA_REPLAY_SIZE],
-    FAR const uint8_t snonce[SV6621_WPA_NONCE_SIZE],
-    FAR const uint8_t kck[SV6621_WPA_MIC_SIZE], FAR uint8_t *output,
-    size_t capacity, FAR size_t *written)
+int sv6621_wpa_eapol_build(enum sv6621_wpa_response_e response,
+                           enum sv6621_wpa_key_mgmt_e key_mgmt,
+                           uint8_t version,
+                           FAR const uint8_t replay[SV6621_WPA_REPLAY_SIZE],
+                           FAR const uint8_t snonce[SV6621_WPA_NONCE_SIZE],
+                           FAR const uint8_t kck[SV6621_WPA_MIC_SIZE],
+                           FAR uint8_t *output, size_t capacity,
+                           FAR size_t *written)
 {
   size_t key_data_length;
   size_t length;
@@ -317,10 +306,10 @@ int sv6621_wpa_eapol_build(
       return -EINVAL;
     }
 
-  key_data_length = response != SV6621_WPA_RESPONSE_2 ? 0 :
-                    key_mgmt == SV6621_WPA_KEY_MGMT_SAE ?
-                    sizeof(g_sv6621_wpa_rsn_sae_ccmp) :
-                    sizeof(g_sv6621_wpa_rsn_psk_ccmp);
+  key_data_length = response != SV6621_WPA_RESPONSE_2 ? 0
+                    : key_mgmt == SV6621_WPA_KEY_MGMT_SAE
+                        ? sizeof(g_sv6621_wpa_rsn_sae_ccmp)
+                        : sizeof(g_sv6621_wpa_rsn_psk_ccmp);
   length = SV6621_WPA_KEY_FIXED_SIZE + key_data_length;
   if (capacity < length)
     {
@@ -330,13 +319,12 @@ int sv6621_wpa_eapol_build(
   memset(output, 0, length);
   output[0] = version;
   output[1] = SV6621_WPA_EAPOL_TYPE_KEY;
-  sv6621_wpa_eapol_put_be16(output + 2,
-                             length - SV6621_WPA_EAPOL_HEADER_SIZE);
+  sv6621_wpa_eapol_put_be16(output + 2, length - SV6621_WPA_EAPOL_HEADER_SIZE);
   output[4] = SV6621_WPA_KEY_DESCRIPTOR_RSN;
-  key_info = (key_mgmt == SV6621_WPA_KEY_MGMT_SAE ?
-                  SV6621_WPA_KEY_VERSION_AKM :
-                  SV6621_WPA_KEY_VERSION_SHA1) |
-             SV6621_WPA_KEY_MIC;
+  key_info =
+      (key_mgmt == SV6621_WPA_KEY_MGMT_SAE ? SV6621_WPA_KEY_VERSION_AKM
+                                           : SV6621_WPA_KEY_VERSION_SHA1) |
+      SV6621_WPA_KEY_MIC;
   if (response == SV6621_WPA_RESPONSE_4 ||
       response == SV6621_WPA_RESPONSE_GROUP_2)
     {
@@ -359,16 +347,15 @@ int sv6621_wpa_eapol_build(
       memcpy(output + SV6621_WPA_KEY_NONCE_OFFSET, snonce,
              SV6621_WPA_NONCE_SIZE);
       sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_DATA_LEN_OFFSET,
-                                 key_data_length);
+                                key_data_length);
       memcpy(output + SV6621_WPA_KEY_DATA_OFFSET,
-             key_mgmt == SV6621_WPA_KEY_MGMT_SAE ?
-                 g_sv6621_wpa_rsn_sae_ccmp :
-                 g_sv6621_wpa_rsn_psk_ccmp,
+             key_mgmt == SV6621_WPA_KEY_MGMT_SAE ? g_sv6621_wpa_rsn_sae_ccmp
+                                                 : g_sv6621_wpa_rsn_psk_ccmp,
              key_data_length);
     }
 
   ret = sv6621_wpa_eapol_mic(output, length, key_mgmt, kck,
-                              output + SV6621_WPA_KEY_MIC_OFFSET);
+                             output + SV6621_WPA_KEY_MIC_OFFSET);
   if (ret < 0)
     {
       return ret;
@@ -382,10 +369,9 @@ int sv6621_wpa_eapol_build(
  * Name: sv6621_wpa_eapol_verify_mic
  ****************************************************************************/
 
-int sv6621_wpa_eapol_verify_mic(
-    FAR const struct sv6621_wpa_eapol_s *eapol,
-    enum sv6621_wpa_key_mgmt_e key_mgmt,
-    FAR const uint8_t kck[SV6621_WPA_MIC_SIZE])
+int sv6621_wpa_eapol_verify_mic(FAR const struct sv6621_wpa_eapol_s *eapol,
+                                enum sv6621_wpa_key_mgmt_e key_mgmt,
+                                FAR const uint8_t kck[SV6621_WPA_MIC_SIZE])
 {
   uint8_t expected[SV6621_WPA_MIC_SIZE];
   uint8_t difference = 0;
@@ -397,8 +383,8 @@ int sv6621_wpa_eapol_verify_mic(
       return -EINVAL;
     }
 
-  ret = sv6621_wpa_eapol_mic(eapol->eapol, eapol->eapol_length, key_mgmt,
-                              kck, expected);
+  ret = sv6621_wpa_eapol_mic(eapol->eapol, eapol->eapol_length, key_mgmt, kck,
+                             expected);
   if (ret < 0)
     {
       return ret;
@@ -417,10 +403,10 @@ int sv6621_wpa_eapol_verify_mic(
  * Name: sv6621_wpa_eapol_extract_gtk
  ****************************************************************************/
 
-int sv6621_wpa_eapol_extract_gtk(
-    FAR const uint8_t *key_data, size_t key_data_length,
-    FAR uint8_t *key_index, FAR uint8_t *gtk, size_t capacity,
-    FAR size_t *gtk_length)
+int sv6621_wpa_eapol_extract_gtk(FAR const uint8_t *key_data,
+                                 size_t key_data_length,
+                                 FAR uint8_t *key_index, FAR uint8_t *gtk,
+                                 size_t capacity, FAR size_t *gtk_length)
 {
   size_t offset = 0;
 
@@ -472,28 +458,28 @@ int sv6621_wpa_eapol_extract_gtk(
 }
 
 /****************************************************************************
- * Name: sv6621_wpa_eapol_build_authenticator
- ****************************************************************************/
+
+ * * Name: sv6621_wpa_eapol_build_authenticator
+
+ * ****************************************************************************/
 
 int sv6621_wpa_eapol_build_authenticator(
-    enum sv6621_wpa_message_e message,
-    enum sv6621_wpa_key_mgmt_e key_mgmt, uint8_t version,
-    FAR const uint8_t replay[SV6621_WPA_REPLAY_SIZE],
+    enum sv6621_wpa_message_e message, enum sv6621_wpa_key_mgmt_e key_mgmt,
+    uint8_t version, FAR const uint8_t replay[SV6621_WPA_REPLAY_SIZE],
     FAR const uint8_t anonce[SV6621_WPA_NONCE_SIZE],
     FAR const uint8_t kck[SV6621_WPA_MIC_SIZE],
-    FAR const uint8_t kek[SV6621_WPA_KEK_SIZE],
-    FAR const uint8_t *key_data, size_t key_data_length,
-    FAR uint8_t *output, size_t capacity, FAR size_t *written)
+    FAR const uint8_t kek[SV6621_WPA_KEK_SIZE], FAR const uint8_t *key_data,
+    size_t key_data_length, FAR uint8_t *output, size_t capacity,
+    FAR size_t *written)
 {
   size_t encoded_key_data_length = 0;
   size_t length;
   uint16_t key_info;
   int ret;
 
-  if (replay == NULL || anonce == NULL || output == NULL ||
-      written == NULL || key_mgmt > SV6621_WPA_KEY_MGMT_SAE ||
-      (message != SV6621_WPA_MESSAGE_1 &&
-       message != SV6621_WPA_MESSAGE_3 &&
+  if (replay == NULL || anonce == NULL || output == NULL || written == NULL ||
+      key_mgmt > SV6621_WPA_KEY_MGMT_SAE ||
+      (message != SV6621_WPA_MESSAGE_1 && message != SV6621_WPA_MESSAGE_3 &&
        message != SV6621_WPA_MESSAGE_GROUP_1) ||
       version < SV6621_WPA_EAPOL_VERSION_MIN ||
       version > SV6621_WPA_EAPOL_VERSION_MAX ||
@@ -506,8 +492,7 @@ int sv6621_wpa_eapol_build_authenticator(
       return -EINVAL;
     }
 
-  if (message == SV6621_WPA_MESSAGE_3 ||
-      message == SV6621_WPA_MESSAGE_GROUP_1)
+  if (message == SV6621_WPA_MESSAGE_3 || message == SV6621_WPA_MESSAGE_GROUP_1)
     {
       encoded_key_data_length = key_data_length + 8;
     }
@@ -521,15 +506,13 @@ int sv6621_wpa_eapol_build_authenticator(
   memset(output, 0, length);
   output[0] = version;
   output[1] = SV6621_WPA_EAPOL_TYPE_KEY;
-  sv6621_wpa_eapol_put_be16(output + 2,
-                             length - SV6621_WPA_EAPOL_HEADER_SIZE);
+  sv6621_wpa_eapol_put_be16(output + 2, length - SV6621_WPA_EAPOL_HEADER_SIZE);
   output[4] = SV6621_WPA_KEY_DESCRIPTOR_RSN;
-  key_info = (key_mgmt == SV6621_WPA_KEY_MGMT_SAE ?
-                  SV6621_WPA_KEY_VERSION_AKM :
-                  SV6621_WPA_KEY_VERSION_SHA1) |
-             SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK;
-  if (message == SV6621_WPA_MESSAGE_3 ||
-      message == SV6621_WPA_MESSAGE_GROUP_1)
+  key_info =
+      (key_mgmt == SV6621_WPA_KEY_MGMT_SAE ? SV6621_WPA_KEY_VERSION_AKM
+                                           : SV6621_WPA_KEY_VERSION_SHA1) |
+      SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK;
+  if (message == SV6621_WPA_MESSAGE_3 || message == SV6621_WPA_MESSAGE_GROUP_1)
     {
       key_info |= SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_SECURE |
                   SV6621_WPA_KEY_ENCRYPTED;
@@ -546,28 +529,24 @@ int sv6621_wpa_eapol_build_authenticator(
 
   sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_INFO_OFFSET, key_info);
   sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_LENGTH_OFFSET,
-                             SV6621_WPA_CCMP_KEY_SIZE);
+                            SV6621_WPA_CCMP_KEY_SIZE);
   memcpy(output + SV6621_WPA_KEY_REPLAY_OFFSET, replay,
          SV6621_WPA_REPLAY_SIZE);
-  memcpy(output + SV6621_WPA_KEY_NONCE_OFFSET, anonce,
-         SV6621_WPA_NONCE_SIZE);
-  if (message == SV6621_WPA_MESSAGE_3 ||
-      message == SV6621_WPA_MESSAGE_GROUP_1)
+  memcpy(output + SV6621_WPA_KEY_NONCE_OFFSET, anonce, SV6621_WPA_NONCE_SIZE);
+  if (message == SV6621_WPA_MESSAGE_3 || message == SV6621_WPA_MESSAGE_GROUP_1)
     {
       ret = sv6621_wpa_wrap_key(
-          kek, key_data, key_data_length,
-          output + SV6621_WPA_KEY_DATA_OFFSET, encoded_key_data_length,
-          &encoded_key_data_length);
+          kek, key_data, key_data_length, output + SV6621_WPA_KEY_DATA_OFFSET,
+          encoded_key_data_length, &encoded_key_data_length);
       if (ret < 0)
         {
           return ret;
         }
 
       sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_DATA_LEN_OFFSET,
-                                 encoded_key_data_length);
-      ret = sv6621_wpa_eapol_mic(
-          output, length, key_mgmt, kck,
-          output + SV6621_WPA_KEY_MIC_OFFSET);
+                                encoded_key_data_length);
+      ret = sv6621_wpa_eapol_mic(output, length, key_mgmt, kck,
+                                 output + SV6621_WPA_KEY_MIC_OFFSET);
       if (ret < 0)
         {
           return ret;
@@ -579,12 +558,14 @@ int sv6621_wpa_eapol_build_authenticator(
 }
 
 /****************************************************************************
- * Name: sv6621_wpa_eapol_build_gtk_kde
- ****************************************************************************/
 
-int sv6621_wpa_eapol_build_gtk_kde(
-    uint8_t key_index, FAR const uint8_t *gtk, size_t gtk_length,
-    FAR uint8_t *output, size_t capacity, FAR size_t *written)
+ * * Name: sv6621_wpa_eapol_build_gtk_kde
+
+ * ****************************************************************************/
+
+int sv6621_wpa_eapol_build_gtk_kde(uint8_t key_index, FAR const uint8_t *gtk,
+                                   size_t gtk_length, FAR uint8_t *output,
+                                   size_t capacity, FAR size_t *written)
 {
   size_t length = 2 + SV6621_WPA_GTK_KDE_HEADER_SIZE + gtk_length;
 
@@ -612,16 +593,18 @@ int sv6621_wpa_eapol_build_gtk_kde(
 }
 
 /****************************************************************************
- * Name: sv6621_wpa_eapol_build_igtk_kde
- ****************************************************************************/
+
+ * * Name: sv6621_wpa_eapol_build_igtk_kde
+
+ * ****************************************************************************/
 
 int sv6621_wpa_eapol_build_igtk_kde(
     uint8_t key_index, FAR const uint8_t ipn[SV6621_WPA_IPN_SIZE],
     FAR const uint8_t igtk[SV6621_WPA_IGTK_SIZE], FAR uint8_t *output,
     size_t capacity, FAR size_t *written)
 {
-  const size_t length = 2 + SV6621_WPA_IGTK_KDE_HEADER_SIZE +
-                        SV6621_WPA_IGTK_SIZE;
+  const size_t length =
+      2 + SV6621_WPA_IGTK_KDE_HEADER_SIZE + SV6621_WPA_IGTK_SIZE;
 
   if (key_index < 4 || key_index > 5 || ipn == NULL || igtk == NULL ||
       output == NULL || written == NULL)
@@ -647,13 +630,16 @@ int sv6621_wpa_eapol_build_igtk_kde(
 }
 
 /****************************************************************************
- * Name: sv6621_wpa_eapol_extract_igtk
- ****************************************************************************/
 
-int sv6621_wpa_eapol_extract_igtk(
-    FAR const uint8_t *key_data, size_t key_data_length,
-    FAR uint8_t *key_index, FAR uint8_t ipn[SV6621_WPA_IPN_SIZE],
-    FAR uint8_t igtk[SV6621_WPA_IGTK_SIZE])
+ * * Name: sv6621_wpa_eapol_extract_igtk
+
+ * ****************************************************************************/
+
+int sv6621_wpa_eapol_extract_igtk(FAR const uint8_t *key_data,
+                                  size_t key_data_length,
+                                  FAR uint8_t *key_index,
+                                  FAR uint8_t ipn[SV6621_WPA_IPN_SIZE],
+                                  FAR uint8_t igtk[SV6621_WPA_IGTK_SIZE])
 {
   size_t offset = 0;
 
@@ -682,8 +668,7 @@ int sv6621_wpa_eapol_extract_igtk(
 
       value = key_data + offset + 2;
       if (id == SV6621_WPA_IE_VENDOR &&
-          length == SV6621_WPA_IGTK_KDE_HEADER_SIZE +
-                        SV6621_WPA_IGTK_SIZE &&
+          length == SV6621_WPA_IGTK_KDE_HEADER_SIZE + SV6621_WPA_IGTK_SIZE &&
           memcmp(value, g_sv6621_wpa_igtk_selector,
                  sizeof(g_sv6621_wpa_igtk_selector)) == 0)
         {

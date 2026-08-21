@@ -82,21 +82,19 @@ int sv6621_sae_derive_keys(
   ret = mbedtls_ecp_group_load(&group, MBEDTLS_ECP_DP_SECP256R1);
   if (ret == 0)
     {
-      ret = mbedtls_mpi_read_binary(&own, own_scalar,
-                                    SV6621_SAE_SCALAR_SIZE);
+      ret = mbedtls_mpi_read_binary(&own, own_scalar, SV6621_SAE_SCALAR_SIZE);
     }
 
   if (ret == 0)
     {
-      ret = mbedtls_mpi_read_binary(&peer, peer_scalar,
-                                    SV6621_SAE_SCALAR_SIZE);
+      ret =
+          mbedtls_mpi_read_binary(&peer, peer_scalar, SV6621_SAE_SCALAR_SIZE);
     }
 
-  if (ret == 0 &&
-      (mbedtls_ecp_check_privkey(&group, &own) != 0 ||
-       mbedtls_ecp_check_privkey(&group, &peer) != 0 ||
-       mbedtls_mpi_cmp_int(&own, 1) <= 0 ||
-       mbedtls_mpi_cmp_int(&peer, 1) <= 0))
+  if (ret == 0 && (mbedtls_ecp_check_privkey(&group, &own) != 0 ||
+                   mbedtls_ecp_check_privkey(&group, &peer) != 0 ||
+                   mbedtls_mpi_cmp_int(&own, 1) <= 0 ||
+                   mbedtls_mpi_cmp_int(&peer, 1) <= 0))
     {
       ret = -EINVAL;
     }
@@ -113,29 +111,27 @@ int sv6621_sae_derive_keys(
 
   if (ret == 0)
     {
-      ret = mbedtls_mpi_write_binary(&sum, scalar_sum,
-                                     sizeof(scalar_sum));
+      ret = mbedtls_mpi_write_binary(&sum, scalar_sum, sizeof(scalar_sum));
     }
 
   if (ret == 0)
     {
       ret = sv6621_sae_hmac_sha256(zero_key, sizeof(zero_key), secret,
-                                    SV6621_SAE_SCALAR_SIZE, keyseed);
+                                   SV6621_SAE_SCALAR_SIZE, keyseed);
     }
 
   if (ret == 0)
     {
       ret = sv6621_sae_kdf_hash_length(
           keyseed, sizeof(keyseed), g_sv6621_sae_key_label,
-          sizeof(g_sv6621_sae_key_label) - 1, scalar_sum,
-          sizeof(scalar_sum), key_material, sizeof(key_material));
+          sizeof(g_sv6621_sae_key_label) - 1, scalar_sum, sizeof(scalar_sum),
+          key_material, sizeof(key_material));
     }
 
   if (ret == 0)
     {
       memcpy(kck, key_material, SV6621_SAE_KCK_SIZE);
-      memcpy(pmk, key_material + SV6621_SAE_KCK_SIZE,
-             SV6621_SAE_PMK_SIZE);
+      memcpy(pmk, key_material + SV6621_SAE_KCK_SIZE, SV6621_SAE_PMK_SIZE);
       memcpy(pmkid, scalar_sum, SV6621_SAE_PMKID_SIZE);
     }
   else
@@ -189,8 +185,8 @@ int sv6621_sae_compute_confirm(
   offset += SV6621_SAE_SCALAR_SIZE;
   memcpy(input + offset, second_element, SV6621_SAE_ELEMENT_SIZE);
 
-  ret = sv6621_sae_hmac_sha256(kck, SV6621_SAE_KCK_SIZE, input,
-                                sizeof(input), confirm);
+  ret = sv6621_sae_hmac_sha256(kck, SV6621_SAE_KCK_SIZE, input, sizeof(input),
+                               confirm);
   sv6621_sae_zeroize(input, sizeof(input));
   return ret;
 }
