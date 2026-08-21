@@ -620,6 +620,16 @@ void sv6621_ap_wpa_forget(
       if (peer != NULL)
         {
           sv6621_ap_wpa_clear(peer, sizeof(*peer));
+          if (wpa->group_rekey_active &&
+              sv6621_ap_wpa_rekey_complete(wpa))
+            {
+              wpa->group_rekey_active = false;
+              wpa->group_rekey_retries = 0;
+              work_cancel(LPWORK, &wpa->rekey_timeout_work);
+              sv6621_ap_wpa_clear(wpa->previous_gtk,
+                                  sizeof(wpa->previous_gtk));
+              wpa->previous_gtk_index = 0;
+            }
         }
 
       nxmutex_unlock(&wpa->lock);
