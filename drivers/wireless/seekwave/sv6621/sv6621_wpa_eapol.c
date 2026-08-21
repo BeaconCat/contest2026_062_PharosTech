@@ -612,6 +612,41 @@ int sv6621_wpa_eapol_build_gtk_kde(
 }
 
 /****************************************************************************
+ * Name: sv6621_wpa_eapol_build_igtk_kde
+ ****************************************************************************/
+
+int sv6621_wpa_eapol_build_igtk_kde(
+    uint8_t key_index, FAR const uint8_t ipn[SV6621_WPA_IPN_SIZE],
+    FAR const uint8_t igtk[SV6621_WPA_IGTK_SIZE], FAR uint8_t *output,
+    size_t capacity, FAR size_t *written)
+{
+  const size_t length = 2 + SV6621_WPA_IGTK_KDE_HEADER_SIZE +
+                        SV6621_WPA_IGTK_SIZE;
+
+  if (key_index < 4 || key_index > 5 || ipn == NULL || igtk == NULL ||
+      output == NULL || written == NULL)
+    {
+      return -EINVAL;
+    }
+
+  if (capacity < length)
+    {
+      return -ENOSPC;
+    }
+
+  output[0] = SV6621_WPA_IE_VENDOR;
+  output[1] = length - 2;
+  memcpy(output + 2, g_sv6621_wpa_igtk_selector,
+         sizeof(g_sv6621_wpa_igtk_selector));
+  output[6] = key_index;
+  output[7] = 0;
+  memcpy(output + 8, ipn, SV6621_WPA_IPN_SIZE);
+  memcpy(output + 14, igtk, SV6621_WPA_IGTK_SIZE);
+  *written = length;
+  return 0;
+}
+
+/****************************************************************************
  * Name: sv6621_wpa_eapol_extract_igtk
  ****************************************************************************/
 
