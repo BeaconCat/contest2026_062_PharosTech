@@ -61,6 +61,7 @@
 #define SV6621_AP_BLOB_TABLE_OFFSET           44
 #define SV6621_AP_BLOB_COUNT                   5
 #define SV6621_AP_PROBE_RESPONSE_IE_OFFSET     36 /* Header + fixed fields */
+#define SV6621_AP_EAPOL_HEADER_SIZE              3
 
 /****************************************************************************
  * Private Types
@@ -87,6 +88,9 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                                     FAR const uint8_t *payload,
                                     size_t length, FAR void *arg);
 static void sv6621_ap_dispatch_error(int error, FAR void *arg);
+static int sv6621_ap_handle_eapol(FAR struct sv6621_ap_s *ap,
+                                  FAR const uint8_t *payload,
+                                  size_t length);
 
 /****************************************************************************
  * Private Functions
@@ -150,6 +154,55 @@ static bool sv6621_ap_tx_client_event(
   return true;
 }
 
+static int sv6621_ap_handle_eapol(FAR struct sv6621_ap_s *ap,
+                                  FAR const uint8_t *payload,
+                                  size_t length)
+{
+  struct sv6621_ap_client_event_s event;
+  struct sv6621_ap_peer_s peer;
+  struct sv6621_data_rx_s rx;
+  bool authorized;
+  int ret;
+
+  if (length <= SV6621_AP_EAPOL_HEADER_SIZE)
+    {
+      return -EPROTO;
+    }
+
+  memset(&rx, 0, sizeof(rx));
+  rx.instance = ap->instance;
+  rx.lmac_id = payload[0];
+  rx.peer_index = payload[1];
+  rx.instance_valid = true;
+  rx.peer_valid = payload[2] != 0;
+  rx.eapol = true;
+  rx.frame = payload + SV6621_AP_EAPOL_HEADER_SIZE;
+  rx.frame_length = length - SV6621_AP_EAPOL_HEADER_SIZE;
+  ret = sv6621_ap_wpa_input(&ap->wpa, &rx, &authorized, event.address);
+  if (ret < 0 || !authorized)
+    {
+      return ret;
+    }
+
+  ret = sv6621_ap_peer_authorize(&ap->peers, event.address);
+  if (ret == 0)
+    {
+      ret = sv6621_ap_peer_lookup(&ap->peers, event.address, &peer);
+    }
+
+  if (ret == 0)
+    {
+      event.aid = peer.aid;
+      event.reason = 0;
+      if (ap->client != NULL)
+        {
+          ap->client(true, &event, ap->client_arg);
+        }
+    }
+
+  return ret;
+}
+
 static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                                     FAR const uint8_t *payload,
                                     size_t length, FAR void *arg)
@@ -176,7 +229,11 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
       return 0;
     }
 
-  if (id == SV6621_AP_EVENT_MGMT_TX_STATUS)
+  if (id == SV6621_AP_EVENT_EAPOL)
+    {
+      ret = sv6621_ap_handle_eapol(ap, payload, length);
+    }
+  else if (id == SV6621_AP_EVENT_MGMT_TX_STATUS)
     {
       ret = sv6621_ap_handle_tx_status(&ap->peers, ap->command,
                                        ap->instance, payload, length);
@@ -483,7 +540,8 @@ int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
       return ret;
     }
 
-  ret = sv6621_ap_wpa_init(&ap->wpa, command, address);
+  ret = sv6621_ap_wpa_init(&ap->wpa, command, address,
+                           sv6621_ap_dispatch_error, ap);
   if (ret < 0)
     {
       sv6621_ap_event_queue_deinit(&ap->events);
@@ -878,35 +936,30 @@ void sv6621_ap_eapol_input(FAR const struct sv6621_data_rx_s *rx,
                             FAR void *arg)
 {
   FAR struct sv6621_ap_s *ap = arg;
-  struct sv6621_ap_client_event_s event;
-  struct sv6621_ap_peer_s peer;
-  bool authorized;
-  int ret;
+  FAR uint8_t *payload;
+  size_t length;
 
-  if (ap == NULL || rx == NULL)
+  if (ap == NULL || rx == NULL || rx->frame == NULL ||
+      rx->frame_length > SV6621_AP_EVENT_MAX_PAYLOAD -
+                         SV6621_AP_EAPOL_HEADER_SIZE)
     {
       return;
     }
 
-  ret = sv6621_ap_wpa_input(&ap->wpa, rx, &authorized, event.address);
-  if (ret < 0 || !authorized)
+  length = SV6621_AP_EAPOL_HEADER_SIZE + rx->frame_length;
+  payload = kmm_malloc(length);
+  if (payload == NULL)
     {
       return;
     }
 
-  ret = sv6621_ap_peer_authorize(&ap->peers, event.address);
-  if (ret == 0)
-    {
-      ret = sv6621_ap_peer_lookup(&ap->peers, event.address, &peer);
-    }
-
-  if (ret == 0)
-    {
-      event.aid = peer.aid;
-      event.reason = 0;
-      if (ap->client != NULL)
-        {
-          ap->client(true, &event, ap->client_arg);
-        }
-    }
+  payload[0] = rx->lmac_id;
+  payload[1] = rx->peer_index;
+  payload[2] = rx->peer_valid;
+  memcpy(payload + SV6621_AP_EAPOL_HEADER_SIZE, rx->frame,
+         rx->frame_length);
+  (void)sv6621_ap_event_queue_submit(&ap->events, rx->instance,
+                                      SV6621_AP_EVENT_EAPOL, payload,
+                                      length);
+  kmm_free(payload);
 }

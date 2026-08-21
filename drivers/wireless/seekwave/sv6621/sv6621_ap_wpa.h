@@ -29,6 +29,7 @@
 
 #include <nuttx/config.h>
 #include <nuttx/mutex.h>
+#include <nuttx/wqueue.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -50,6 +51,8 @@
  * Public Types
  ****************************************************************************/
 
+typedef void (*sv6621_ap_wpa_error_t)(int error, FAR void *arg);
+
 enum sv6621_ap_wpa_state_e
 {
   SV6621_AP_WPA_IDLE = 0,
@@ -66,20 +69,28 @@ struct sv6621_ap_wpa_peer_s
   uint8_t replay[SV6621_WPA_REPLAY_SIZE];
   uint8_t peer_index;
   enum sv6621_ap_wpa_state_e state;
+  bool group_rekey_pending;
 };
 
 struct sv6621_ap_wpa_s
 {
   mutex_t lock;
+  struct work_s rekey_timeout_work;
   FAR struct sv6621_command_engine_s *command;
   struct sv6621_ap_wpa_peer_s peers[SV6621_AP_WPA_PEER_CAPACITY];
   uint8_t authenticator[SV6621_MAC_LENGTH];
   uint8_t pmk[SV6621_WPA_PMK_SIZE];
   uint8_t gtk[16];
+  uint8_t previous_gtk[16];
   uint8_t lmac_id;
   uint8_t instance;
   uint8_t multicast_index;
   uint8_t gtk_index;
+  uint8_t previous_gtk_index;
+  uint8_t group_rekey_retries;
+  sv6621_ap_wpa_error_t error;
+  FAR void *error_arg;
+  bool group_rekey_active;
   bool enabled;
 };
 
@@ -91,7 +102,8 @@ struct sv6621_ap_context_s;
 
 int sv6621_ap_wpa_init(FAR struct sv6621_ap_wpa_s *wpa,
                         FAR struct sv6621_command_engine_s *command,
-                        FAR const uint8_t address[SV6621_MAC_LENGTH]);
+                        FAR const uint8_t address[SV6621_MAC_LENGTH],
+                        sv6621_ap_wpa_error_t error, FAR void *error_arg);
 void sv6621_ap_wpa_deinit(FAR struct sv6621_ap_wpa_s *wpa);
 int sv6621_ap_wpa_enable(FAR struct sv6621_ap_wpa_s *wpa,
                           FAR const struct sv6621_ap_config_s *config,
@@ -99,6 +111,7 @@ int sv6621_ap_wpa_enable(FAR struct sv6621_ap_wpa_s *wpa,
 void sv6621_ap_wpa_disable(FAR struct sv6621_ap_wpa_s *wpa);
 int sv6621_ap_wpa_begin(FAR struct sv6621_ap_wpa_s *wpa,
                          FAR const struct sv6621_ap_peer_s *peer);
+int sv6621_ap_wpa_rekey(FAR struct sv6621_ap_wpa_s *wpa);
 void sv6621_ap_wpa_forget(
     FAR struct sv6621_ap_wpa_s *wpa,
     FAR const uint8_t address[SV6621_MAC_LENGTH]);

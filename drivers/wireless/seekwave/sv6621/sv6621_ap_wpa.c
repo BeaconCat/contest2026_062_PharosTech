@@ -32,6 +32,7 @@
 #include <string.h>
 
 #include "sv6621_ap.h"
+#include "sv6621_ap_beacon.h"
 #include "sv6621_ap_wpa.h"
 #include "sv6621_security.h"
 
@@ -47,6 +48,8 @@
 #define SV6621_AP_WPA_TK_OFFSET            32
 #define SV6621_AP_WPA_KEY_SIZE             16
 #define SV6621_AP_WPA_FRAME_CAPACITY       640
+#define SV6621_AP_WPA_REKEY_TIMEOUT_MS     1000
+#define SV6621_AP_WPA_REKEY_RETRY_LIMIT    3
 
 /****************************************************************************
  * Private Function Prototypes
@@ -59,6 +62,12 @@ static FAR struct sv6621_ap_wpa_peer_s *sv6621_ap_wpa_find(
     FAR const uint8_t address[SV6621_MAC_LENGTH]);
 static void sv6621_ap_wpa_increment_replay(
     FAR uint8_t replay[SV6621_WPA_REPLAY_SIZE]);
+static bool sv6621_ap_wpa_rekey_complete(
+    FAR const struct sv6621_ap_wpa_s *wpa);
+static int sv6621_ap_wpa_build_group_key_data(
+    FAR const struct sv6621_ap_wpa_s *wpa, FAR uint8_t *key_data,
+    size_t capacity, FAR size_t *length);
+static void sv6621_ap_wpa_rekey_timeout_worker(FAR void *arg);
 static int sv6621_ap_wpa_send(FAR struct sv6621_ap_wpa_s *wpa,
                               FAR struct sv6621_ap_wpa_peer_s *peer,
                               enum sv6621_wpa_message_e message,
@@ -159,9 +168,11 @@ static int sv6621_ap_wpa_send(FAR struct sv6621_ap_wpa_s *wpa,
   ret = sv6621_wpa_eapol_build_authenticator(
       message, SV6621_WPA_KEY_MGMT_PSK, SV6621_AP_WPA_EAPOL_VERSION,
       peer->replay, peer->anonce,
-      message == SV6621_WPA_MESSAGE_3 ?
+      (message == SV6621_WPA_MESSAGE_3 ||
+       message == SV6621_WPA_MESSAGE_GROUP_1) ?
           peer->ptk + SV6621_AP_WPA_KCK_OFFSET : NULL,
-      message == SV6621_WPA_MESSAGE_3 ?
+      (message == SV6621_WPA_MESSAGE_3 ||
+       message == SV6621_WPA_MESSAGE_GROUP_1) ?
           peer->ptk + SV6621_AP_WPA_KEK_OFFSET : NULL,
       key_data, key_data_length,
       frame + SV6621_AP_WPA_ETHERNET_HEADER_SIZE,
@@ -182,6 +193,125 @@ static int sv6621_ap_wpa_send(FAR struct sv6621_ap_wpa_s *wpa,
       SV6621_AP_WPA_ETHERNET_HEADER_SIZE + eapol_length);
 }
 
+static bool sv6621_ap_wpa_rekey_complete(
+    FAR const struct sv6621_ap_wpa_s *wpa)
+{
+  size_t index;
+
+  for (index = 0; index < SV6621_AP_WPA_PEER_CAPACITY; index++)
+    {
+      if (wpa->peers[index].state == SV6621_AP_WPA_COMPLETE &&
+          wpa->peers[index].group_rekey_pending)
+        {
+          return false;
+        }
+    }
+
+  return true;
+}
+
+/****************************************************************************
+ * Name: sv6621_ap_wpa_build_group_key_data
+ ****************************************************************************/
+
+static int sv6621_ap_wpa_build_group_key_data(
+    FAR const struct sv6621_ap_wpa_s *wpa, FAR uint8_t *key_data,
+    size_t capacity, FAR size_t *length)
+{
+  size_t gtk_kde_length;
+  int ret;
+
+  ret = sv6621_wpa_eapol_build_gtk_kde(
+      wpa->gtk_index, wpa->gtk, sizeof(wpa->gtk), key_data, capacity,
+      &gtk_kde_length);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  *length = gtk_kde_length;
+  while ((*length & 7) != 0)
+    {
+      if (*length >= capacity)
+        {
+          return -ENOSPC;
+        }
+
+      key_data[(*length)++] = 0;
+    }
+
+  return 0;
+}
+
+/****************************************************************************
+ * Name: sv6621_ap_wpa_rekey_timeout_worker
+ ****************************************************************************/
+
+static void sv6621_ap_wpa_rekey_timeout_worker(FAR void *arg)
+{
+  FAR struct sv6621_ap_wpa_s *wpa = arg;
+  uint8_t key_data[64];
+  size_t key_data_length;
+  size_t index;
+  bool failed = false;
+  int ret;
+
+  ret = nxmutex_lock(&wpa->lock);
+  if (ret < 0)
+    {
+      return;
+    }
+
+  if (!wpa->enabled || !wpa->group_rekey_active)
+    {
+      nxmutex_unlock(&wpa->lock);
+      return;
+    }
+
+  ret = sv6621_ap_wpa_build_group_key_data(
+      wpa, key_data, sizeof(key_data), &key_data_length);
+  for (index = 0; ret == 0 && index < SV6621_AP_WPA_PEER_CAPACITY; index++)
+    {
+      FAR struct sv6621_ap_wpa_peer_s *peer = &wpa->peers[index];
+
+      if (peer->state == SV6621_AP_WPA_COMPLETE &&
+          peer->group_rekey_pending)
+        {
+          sv6621_ap_wpa_increment_replay(peer->replay);
+          ret = sv6621_ap_wpa_send(wpa, peer,
+                                   SV6621_WPA_MESSAGE_GROUP_1,
+                                   key_data, key_data_length);
+        }
+    }
+
+  if (ret == 0 && ++wpa->group_rekey_retries <
+                      SV6621_AP_WPA_REKEY_RETRY_LIMIT)
+    {
+      ret = work_queue_next(LPWORK, &wpa->rekey_timeout_work,
+                            sv6621_ap_wpa_rekey_timeout_worker, wpa,
+                            MSEC2TICK(SV6621_AP_WPA_REKEY_TIMEOUT_MS));
+    }
+
+  if (ret < 0 || wpa->group_rekey_retries >=
+                     SV6621_AP_WPA_REKEY_RETRY_LIMIT)
+    {
+      wpa->group_rekey_active = false;
+      for (index = 0; index < SV6621_AP_WPA_PEER_CAPACITY; index++)
+        {
+          wpa->peers[index].group_rekey_pending = false;
+        }
+
+      failed = true;
+    }
+
+  sv6621_ap_wpa_clear(key_data, sizeof(key_data));
+  nxmutex_unlock(&wpa->lock);
+  if (failed && wpa->error != NULL)
+    {
+      wpa->error(ret < 0 ? ret : -ETIMEDOUT, wpa->error_arg);
+    }
+}
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -192,7 +322,8 @@ static int sv6621_ap_wpa_send(FAR struct sv6621_ap_wpa_s *wpa,
 
 int sv6621_ap_wpa_init(FAR struct sv6621_ap_wpa_s *wpa,
                         FAR struct sv6621_command_engine_s *command,
-                        FAR const uint8_t address[SV6621_MAC_LENGTH])
+                        FAR const uint8_t address[SV6621_MAC_LENGTH],
+                        sv6621_ap_wpa_error_t error, FAR void *error_arg)
 {
   int ret;
 
@@ -206,6 +337,8 @@ int sv6621_ap_wpa_init(FAR struct sv6621_ap_wpa_s *wpa,
   if (ret == 0)
     {
       wpa->command = command;
+      wpa->error = error;
+      wpa->error_arg = error_arg;
       memcpy(wpa->authenticator, address, SV6621_MAC_LENGTH);
     }
 
@@ -270,7 +403,9 @@ int sv6621_ap_wpa_enable(FAR struct sv6621_ap_wpa_s *wpa,
           memset(wpa->peers, 0, sizeof(wpa->peers));
           memcpy(wpa->pmk, pmk, sizeof(wpa->pmk));
           memcpy(wpa->gtk, gtk, sizeof(wpa->gtk));
-          wpa->gtk_index = 1;
+      wpa->gtk_index = 1;
+          wpa->previous_gtk_index = 0;
+          wpa->group_rekey_active = false;
           wpa->lmac_id = context->lmac_id;
           wpa->instance = context->instance;
           wpa->multicast_index = context->multicast_index;
@@ -284,12 +419,114 @@ int sv6621_ap_wpa_enable(FAR struct sv6621_ap_wpa_s *wpa,
   return ret;
 }
 
+int sv6621_ap_wpa_rekey(FAR struct sv6621_ap_wpa_s *wpa)
+{
+  static const uint8_t broadcast[SV6621_MAC_LENGTH] =
+    { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+  uint8_t key_data[64];
+  uint8_t gtk[sizeof(wpa->gtk)];
+  size_t key_data_length;
+  size_t index;
+  int ret;
+
+  if (wpa == NULL || nxmutex_lock(&wpa->lock) < 0)
+    {
+      return -EINVAL;
+    }
+
+  if (!wpa->enabled || wpa->group_rekey_active)
+    {
+      nxmutex_unlock(&wpa->lock);
+      return wpa->enabled ? -EBUSY : -ENETDOWN;
+    }
+
+  ret = sv6621_ap_wpa_random(gtk, sizeof(gtk));
+  if (ret < 0)
+    {
+      nxmutex_unlock(&wpa->lock);
+      return ret;
+    }
+
+  memcpy(wpa->previous_gtk, wpa->gtk, sizeof(wpa->gtk));
+  wpa->previous_gtk_index = wpa->gtk_index;
+  wpa->gtk_index = wpa->gtk_index >= 3 ? 1 : wpa->gtk_index + 1;
+  memcpy(wpa->gtk, gtk, sizeof(wpa->gtk));
+  ret = sv6621_security_add_key_instance(
+      wpa->command, wpa->instance, SV6621_SECURITY_KEY_GROUP,
+      SV6621_SECURITY_CIPHER_CCMP, broadcast, wpa->gtk_index,
+      wpa->gtk, sizeof(wpa->gtk), NULL);
+  if (ret < 0)
+    {
+      memcpy(wpa->gtk, wpa->previous_gtk, sizeof(wpa->gtk));
+      wpa->gtk_index = wpa->previous_gtk_index;
+      sv6621_ap_wpa_clear(gtk, sizeof(gtk));
+      nxmutex_unlock(&wpa->lock);
+      return ret;
+    }
+
+  ret = sv6621_ap_wpa_build_group_key_data(
+      wpa, key_data, sizeof(key_data), &key_data_length);
+  if (ret == 0)
+    {
+      wpa->group_rekey_active = true;
+      wpa->group_rekey_retries = 0;
+      for (index = 0; index < SV6621_AP_WPA_PEER_CAPACITY; index++)
+        {
+          FAR struct sv6621_ap_wpa_peer_s *peer = &wpa->peers[index];
+
+          if (peer->state == SV6621_AP_WPA_COMPLETE)
+            {
+              sv6621_ap_wpa_increment_replay(peer->replay);
+              ret = sv6621_ap_wpa_send(wpa, peer,
+                                       SV6621_WPA_MESSAGE_GROUP_1,
+                                       key_data, key_data_length);
+              if (ret < 0)
+                {
+                  break;
+                }
+
+              peer->group_rekey_pending = true;
+            }
+        }
+    }
+
+  if (ret < 0)
+    {
+      memcpy(wpa->gtk, wpa->previous_gtk, sizeof(wpa->gtk));
+      wpa->gtk_index = wpa->previous_gtk_index;
+      wpa->group_rekey_active = false;
+      for (index = 0; index < SV6621_AP_WPA_PEER_CAPACITY; index++)
+        {
+          wpa->peers[index].group_rekey_pending = false;
+        }
+    }
+  else if (sv6621_ap_wpa_rekey_complete(wpa))
+    {
+      wpa->group_rekey_active = false;
+    }
+  else
+    {
+      ret = work_queue(LPWORK, &wpa->rekey_timeout_work,
+                       sv6621_ap_wpa_rekey_timeout_worker, wpa,
+                       MSEC2TICK(SV6621_AP_WPA_REKEY_TIMEOUT_MS));
+    }
+
+  sv6621_ap_wpa_clear(gtk, sizeof(gtk));
+  nxmutex_unlock(&wpa->lock);
+  return ret;
+}
+
 /****************************************************************************
  * Name: sv6621_ap_wpa_disable
  ****************************************************************************/
 
 void sv6621_ap_wpa_disable(FAR struct sv6621_ap_wpa_s *wpa)
 {
+  if (wpa != NULL)
+    {
+      work_cancel_sync(LPWORK, &wpa->rekey_timeout_work);
+    }
+
   if (wpa != NULL && nxmutex_lock(&wpa->lock) == 0)
     {
       sv6621_ap_wpa_clear(wpa->peers, sizeof(wpa->peers));
@@ -383,6 +620,16 @@ void sv6621_ap_wpa_forget(
       if (peer != NULL)
         {
           sv6621_ap_wpa_clear(peer, sizeof(*peer));
+          if (wpa->group_rekey_active &&
+              sv6621_ap_wpa_rekey_complete(wpa))
+            {
+              wpa->group_rekey_active = false;
+              wpa->group_rekey_retries = 0;
+              work_cancel(LPWORK, &wpa->rekey_timeout_work);
+              sv6621_ap_wpa_clear(wpa->previous_gtk,
+                                  sizeof(wpa->previous_gtk));
+              wpa->previous_gtk_index = 0;
+            }
         }
 
       nxmutex_unlock(&wpa->lock);
@@ -400,7 +647,8 @@ int sv6621_ap_wpa_input(FAR struct sv6621_ap_wpa_s *wpa,
 {
   FAR struct sv6621_ap_wpa_peer_s *peer;
   struct sv6621_wpa_eapol_s eapol;
-  uint8_t key_data[32];
+  uint8_t key_data[64];
+  size_t gtk_kde_length;
   size_t key_data_length;
   int ret;
 
@@ -455,18 +703,30 @@ int sv6621_ap_wpa_input(FAR struct sv6621_ap_wpa_s *wpa,
 
       if (ret == 0)
         {
-          ret = sv6621_security_add_key_instance(
-              wpa->command, wpa->instance,
-              SV6621_SECURITY_KEY_PAIRWISE, SV6621_SECURITY_CIPHER_CCMP,
-              peer->address, 0, peer->ptk + SV6621_AP_WPA_TK_OFFSET,
-              SV6621_AP_WPA_KEY_SIZE, NULL);
+          ret = sv6621_ap_build_rsn_ie(
+              SV6621_SECURITY_WPA2_PSK, false, key_data,
+              sizeof(key_data), &key_data_length);
         }
 
       if (ret == 0)
         {
           ret = sv6621_wpa_eapol_build_gtk_kde(
-              wpa->gtk_index, wpa->gtk, sizeof(wpa->gtk), key_data,
-              sizeof(key_data), &key_data_length);
+              wpa->gtk_index, wpa->gtk, sizeof(wpa->gtk),
+              key_data + key_data_length,
+              sizeof(key_data) - key_data_length, &gtk_kde_length);
+          if (ret == 0)
+            {
+              key_data_length += gtk_kde_length;
+            }
+        }
+
+      if (ret == 0 && (key_data_length & 7) != 0)
+        {
+          key_data[key_data_length++] = 0xdd;
+          while ((key_data_length & 7) != 0)
+            {
+              key_data[key_data_length++] = 0;
+            }
         }
 
       if (ret == 0)
@@ -489,9 +749,40 @@ int sv6621_ap_wpa_input(FAR struct sv6621_ap_wpa_s *wpa,
           peer->ptk + SV6621_AP_WPA_KCK_OFFSET);
       if (ret == 0)
         {
+          ret = sv6621_security_add_key_instance(
+              wpa->command, wpa->instance,
+              SV6621_SECURITY_KEY_PAIRWISE, SV6621_SECURITY_CIPHER_CCMP,
+              peer->address, 0, peer->ptk + SV6621_AP_WPA_TK_OFFSET,
+              SV6621_AP_WPA_KEY_SIZE, NULL);
+        }
+
+      if (ret == 0)
+        {
           peer->state = SV6621_AP_WPA_COMPLETE;
           memcpy(address, peer->address, SV6621_MAC_LENGTH);
           *authorized = true;
+        }
+    }
+  else if (ret == 0 && wpa->group_rekey_active &&
+           peer->state == SV6621_AP_WPA_COMPLETE &&
+           peer->group_rekey_pending &&
+           eapol.message == SV6621_WPA_MESSAGE_GROUP_2)
+    {
+      ret = sv6621_wpa_eapol_verify_mic(
+          &eapol, SV6621_WPA_KEY_MGMT_PSK,
+          peer->ptk + SV6621_AP_WPA_KCK_OFFSET);
+      if (ret == 0)
+        {
+          peer->group_rekey_pending = false;
+          if (sv6621_ap_wpa_rekey_complete(wpa))
+            {
+              wpa->group_rekey_active = false;
+              wpa->group_rekey_retries = 0;
+              work_cancel(LPWORK, &wpa->rekey_timeout_work);
+              sv6621_ap_wpa_clear(wpa->previous_gtk,
+                                  sizeof(wpa->previous_gtk));
+              wpa->previous_gtk_index = 0;
+            }
         }
     }
   else if (ret == 0)
