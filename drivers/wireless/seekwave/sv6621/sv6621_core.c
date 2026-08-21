@@ -779,6 +779,7 @@ static int sv6621_core_roam_transaction(
     uint32_t generation)
 {
   struct sv6621_connect_s connection;
+  struct sv6621_connect_s policy_request;
   struct sv6621_connect_s rollback;
   struct sv6621_scan_entry_s previous;
   struct sv6621_roam_result_s event;
@@ -828,8 +829,9 @@ static int sv6621_core_roam_transaction(
       goto unlock_lifecycle;
     }
 
-  connection = dev->station.request;
-  rollback = dev->station.request;
+  policy_request = dev->station.request;
+  connection = policy_request;
+  rollback = policy_request;
   previous = dev->station.target;
   memcpy(event.old_bssid, previous.bss.bssid, SV6621_MAC_LENGTH);
   memcpy(event.new_bssid, candidate->bss.bssid, SV6621_MAC_LENGTH);
@@ -874,6 +876,15 @@ static int sv6621_core_roam_transaction(
 
       event.restored = true;
     }
+
+  ret = nxmutex_lock(&dev->station.lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  dev->station.request = policy_request;
+  nxmutex_unlock(&dev->station.lock);
 
 #ifdef CONFIG_NET
   ret = nxmutex_lock(&dev->station.lock);
