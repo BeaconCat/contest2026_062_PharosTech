@@ -1,0 +1,52 @@
+# drivers/drivers/sv6621/Kconfig
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config SV6621
+	bool "SeekWave SV6621 WiFi/BT SDIO"
+	default n
+	depends on NET
+	select CRYPTO
+	select CRYPTO_MBEDTLS
+	select MBEDTLS_CMAC_C
+	select CRYPTO_RANDOM_POOL
+	select DEV_URANDOM
+	select DRIVERS_WIRELESS
+	select NETDEV_WIRELESS_IOCTL
+	select SCHED_HPWORK
+	select SCHED_LPWORK
+	---help---
+		Enable the transport-independent firmware loader, FullMAC control
+		protocol, WPA2-PSK/WPA3-SAE authentication and NuttX network
+		interface for the SeekWave SV6621/SWT6621-S combo.  A platform
+		transport adapter must also be selected.
+
+config SV6621_PM
+	bool "SeekWave SV6621 system power management"
+	default n
+	depends on SV6621 && PM
+	---help---
+		Register the SV6621 core with the NuttX power manager.  System sleep
+		uses the wake policy supplied by the board configuration.  A platform
+		coordinator must suspend the firmware from thread context before deep
+		sleep; the PM callback only checks readiness and schedules resume work.
+
+config SV6621_RXPRIO
+	int "SeekWave receive thread priority"
+	default 100
+	depends on SV6621
+
+config SV6621_RXSTACK
+	int "SeekWave receive thread stack size"
+	default 4096
+	depends on SV6621
+
+config SV6621_RECOVERY_PRIO
+	int "SeekWave recovery thread priority"
+	default 90
+	depends on SV6621
+
+config SV6621_RECOVERY_STACK
+	int "SeekWave recovery thread stack size"
+	default 6144
+	depends on SV6621
