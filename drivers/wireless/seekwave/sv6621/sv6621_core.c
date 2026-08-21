@@ -779,6 +779,7 @@ static int sv6621_core_roam_transaction(
     uint32_t generation)
 {
   struct sv6621_connect_s connection;
+  struct sv6621_connect_s policy_request;
   struct sv6621_connect_s rollback;
   struct sv6621_scan_entry_s previous;
   struct sv6621_roam_result_s event;
@@ -828,8 +829,9 @@ static int sv6621_core_roam_transaction(
       goto unlock_lifecycle;
     }
 
-  connection = dev->station.request;
-  rollback = dev->station.request;
+  policy_request = dev->station.request;
+  connection = policy_request;
+  rollback = policy_request;
   previous = dev->station.target;
   memcpy(event.old_bssid, previous.bss.bssid, SV6621_MAC_LENGTH);
   memcpy(event.new_bssid, candidate->bss.bssid, SV6621_MAC_LENGTH);
@@ -874,6 +876,15 @@ static int sv6621_core_roam_transaction(
 
       event.restored = true;
     }
+
+  ret = nxmutex_lock(&dev->station.lock);
+  if (ret < 0)
+    {
+      goto unlock_lifecycle;
+    }
+
+  dev->station.request = policy_request;
+  nxmutex_unlock(&dev->station.lock);
 
 #ifdef CONFIG_NET
   ret = nxmutex_lock(&dev->station.lock);
@@ -1020,10 +1031,8 @@ static int sv6621_core_start_roam_scan(
     FAR struct sv6621_dev_s *dev,
     FAR const struct sv6621_signal_event_s *event)
 {
-  struct sv6621_scan_channel_s channel;
   uint8_t ssid[SV6621_SSID_MAX_LENGTH];
   size_t ssid_length;
-  size_t index;
   int ret;
 
   ret = nxmutex_lock(&dev->lifecycle_lock);
@@ -1067,30 +1076,13 @@ static int sv6621_core_start_roam_scan(
   memcpy(ssid, dev->station.request.ssid, ssid_length);
   nxmutex_unlock(&dev->station.lock);
 
-  for (index = 0; index < dev->scan_channel_count; index++)
-    {
-      if (dev->scan_channels[index].number == event->channel &&
-          dev->scan_channels[index].band ==
-              (enum sv6621_scan_band_e)event->band)
-        {
-          channel = dev->scan_channels[index];
-          break;
-        }
-    }
-
-  if (index == dev->scan_channel_count)
-    {
-      ret = -EINVAL;
-      nxmutex_unlock(&dev->status_lock);
-      goto unlock_lifecycle;
-    }
-
   dev->roam_scan_generation = dev->station_generation;
   dev->roam_scan_signal_dbm = event->signal_dbm;
   dev->roam_scan_pending = true;
   nxmutex_unlock(&dev->status_lock);
 
-  ret = sv6621_scan_controller_begin(&dev->scan, &channel, 1, ssid,
+  ret = sv6621_scan_controller_begin(&dev->scan, dev->scan_channels,
+                                     dev->scan_channel_count, ssid,
                                      ssid_length);
   if (ret < 0 && nxmutex_lock(&dev->status_lock) >= 0)
     {
@@ -3565,11 +3557,14 @@ static int sv6621_core_connect_locked(
       return ret;
     }
 
-  ret = sv6621_station_set_local_address(&dev->station,
-                                         dev->wifi_info.mac);
-  if (ret < 0)
+  if (!roaming)
     {
-      return ret;
+      ret = sv6621_station_set_local_address(&dev->station,
+                                             dev->wifi_info.mac);
+      if (ret < 0)
+        {
+          return ret;
+        }
     }
 
   if (connection->security == SV6621_SECURITY_WPA2_PSK ||
