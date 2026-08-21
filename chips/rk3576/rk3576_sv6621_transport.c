@@ -400,7 +400,7 @@ static int rk3576_sv6621_voltage_switch(void)
       return -ETIMEDOUT;
     }
 
-  modifyreg32(RK3576_SV6621_UHS, 0, 1);
+  putreg32(getreg32(RK3576_SV6621_UHS) | 1, RK3576_SV6621_UHS);
   up_mdelay(10);
   putreg32(1, RK3576_SV6621_CLKENA);
   if (rk3576_sv6621_ciu_update(RK3576_SV6621_CLK_UPD_VOLT) < 0)
@@ -438,7 +438,7 @@ static int rk3576_sv6621_execute_tuning(void)
   size_t received = 0;
   int index;
 
-  modifyreg32(RK3576_SV6621_CTRL, 0, 1u << 1);
+  putreg32(getreg32(RK3576_SV6621_CTRL) | (1u << 1), RK3576_SV6621_CTRL);
   for (index = 0;
        (getreg32(RK3576_SV6621_CTRL) & (1u << 1)) != 0 && index < 100000;
        index++)
@@ -656,7 +656,7 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
   putreg32(0x0ffe0002, RK3576_SV6621_TIMING0);
   putreg32((0x3fffu << 16) | 0x2f9d, RK3576_SV6621_CRU_SDIO_SEL);
   putreg32(0, RK3576_SV6621_INTMASK);
-  modifyreg32(RK3576_SV6621_CTRL, 0, 1u << 4);
+  putreg32(getreg32(RK3576_SV6621_CTRL) | (1u << 4), RK3576_SV6621_CTRL);
 
   priv->prepared = true;
   return 0;
