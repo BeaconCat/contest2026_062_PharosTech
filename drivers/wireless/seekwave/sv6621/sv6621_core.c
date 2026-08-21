@@ -3546,11 +3546,14 @@ static int sv6621_core_connect_locked(
       return ret;
     }
 
-  ret = sv6621_station_set_local_address(&dev->station,
-                                         dev->wifi_info.mac);
-  if (ret < 0)
+  if (!roaming)
     {
-      return ret;
+      ret = sv6621_station_set_local_address(&dev->station,
+                                             dev->wifi_info.mac);
+      if (ret < 0)
+        {
+          return ret;
+        }
     }
 
   if (connection->security == SV6621_SECURITY_WPA2_PSK ||
