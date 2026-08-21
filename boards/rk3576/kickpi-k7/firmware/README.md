@@ -5,6 +5,7 @@ SeekWave combo:
 
 - `SWT6621S_IRAM_SDIO.bin`: instruction RAM image.
 - `SWT6621S_DRAM_SDIO.bin`: data RAM image.
+- `sv6160lite.nvbin`: Bluetooth controller NVDS records.
 - `SWT6621S_NV_SDIO_ALONE.bin`: SDIO operating-mode configuration.
 - `SWT6621S_SEEKWAVE_R00001.bin`: board RF calibration data.
 
