@@ -35,12 +35,12 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_OFFLOAD_COMMAND_SET_IP    16
-#define SV6621_OFFLOAD_ENTRY_SIZE        17
-#define SV6621_OFFLOAD_TYPE_IPV4         0
-#define SV6621_OFFLOAD_TYPE_IPV6         1
+#define SV6621_OFFLOAD_COMMAND_SET_IP     16
+#define SV6621_OFFLOAD_ENTRY_SIZE         17
+#define SV6621_OFFLOAD_TYPE_IPV4          0
+#define SV6621_OFFLOAD_TYPE_IPV6          1
 #define SV6621_OFFLOAD_COMMAND_TIMEOUT_MS 2000
-#define SV6621_OFFLOAD_ENTRY_LIMIT       (SV6621_OFFLOAD_IPV6_LIMIT + 1)
+#define SV6621_OFFLOAD_ENTRY_LIMIT        (SV6621_OFFLOAD_IPV6_LIMIT + 1)
 
 /****************************************************************************
  * Public Functions

@@ -450,9 +450,9 @@ static void rk3576_sdmmc_configwaitints(struct rk3576_sdmmc_dev_s *priv,
    * interrupt: CMD53 DMA waits run for every packet and must not mask DAT1.
    */
 
-  managed = SDMMC_INT_CMD_DONE | SDMMC_RESPERR_INTS |
-            SDMMC_XFRDONE_INTS | SDMMC_DATAERR_INTS |
-            SDMMC_INT_TXDR | SDMMC_INT_RXDR | SDMMC_INT_CD;
+  managed = SDMMC_INT_CMD_DONE | SDMMC_RESPERR_INTS | SDMMC_XFRDONE_INTS |
+            SDMMC_DATAERR_INTS | SDMMC_INT_TXDR | SDMMC_INT_RXDR |
+            SDMMC_INT_CD;
   mask = rk3576_sdmmc_getreg(priv, RK3576_SDMMC_INTMASK);
   mask &= ~managed;
   mask |= priv->xfrints | waitints | SDMMC_INT_CD;
@@ -1927,9 +1927,9 @@ int rk3576_sdmmc_register_media_callback(
  * Name: rk3576_sdmmc_register_sdio_callback
  ****************************************************************************/
 
-int rk3576_sdmmc_register_sdio_callback(
-    FAR struct sdio_dev_s *dev, rk3576_sdmmc_sdio_callback_t callback,
-    FAR void *arg)
+int rk3576_sdmmc_register_sdio_callback(FAR struct sdio_dev_s *dev,
+                                        rk3576_sdmmc_sdio_callback_t callback,
+                                        FAR void *arg)
 {
   FAR struct rk3576_sdmmc_dev_s *priv;
   irqstate_t flags;
@@ -1956,8 +1956,7 @@ int rk3576_sdmmc_register_sdio_callback(
  * Name: rk3576_sdmmc_enable_sdio_interrupt
  ****************************************************************************/
 
-int rk3576_sdmmc_enable_sdio_interrupt(FAR struct sdio_dev_s *dev,
-                                       bool enable)
+int rk3576_sdmmc_enable_sdio_interrupt(FAR struct sdio_dev_s *dev, bool enable)
 {
   FAR struct rk3576_sdmmc_dev_s *priv;
   irqstate_t flags;
@@ -2016,8 +2015,7 @@ int rk3576_sdmmc_ack_sdio_interrupt(FAR struct sdio_dev_s *dev)
   flags = enter_critical_section();
   rk3576_sdmmc_putreg(priv, RK3576_SDMMC_RINTSTS, SDMMC_INT_SDIO);
   mask = rk3576_sdmmc_getreg(priv, RK3576_SDMMC_INTMASK);
-  rk3576_sdmmc_putreg(priv, RK3576_SDMMC_INTMASK,
-                      mask | SDMMC_INT_SDIO);
+  rk3576_sdmmc_putreg(priv, RK3576_SDMMC_INTMASK, mask | SDMMC_INT_SDIO);
   leave_critical_section(flags);
   return 0;
 }

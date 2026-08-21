@@ -46,27 +46,28 @@
  ****************************************************************************/
 
 static void sv6621_ap_sae_clear(FAR void *data, size_t length);
-static FAR struct sv6621_ap_sae_peer_s *sv6621_ap_sae_find(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const uint8_t address[SV6621_MAC_LENGTH]);
-static FAR struct sv6621_ap_sae_peer_s *sv6621_ap_sae_allocate(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const uint8_t address[SV6621_MAC_LENGTH]);
+static FAR struct sv6621_ap_sae_peer_s *
+sv6621_ap_sae_find(FAR struct sv6621_ap_sae_s *sae,
+                   FAR const uint8_t address[SV6621_MAC_LENGTH]);
+static FAR struct sv6621_ap_sae_peer_s *
+sv6621_ap_sae_allocate(FAR struct sv6621_ap_sae_s *sae,
+                       FAR const uint8_t address[SV6621_MAC_LENGTH]);
 static int sv6621_ap_sae_transmit(FAR struct sv6621_ap_sae_s *sae,
                                   FAR const uint8_t *frame,
                                   size_t frame_length);
-static int sv6621_ap_sae_send_commit(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const struct sv6621_ap_sae_peer_s *peer);
-static int sv6621_ap_sae_send_confirm(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const struct sv6621_ap_sae_peer_s *peer);
-static int sv6621_ap_sae_handle_commit(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const struct sv6621_sae_auth_frame_s *auth);
-static int sv6621_ap_sae_handle_confirm(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const struct sv6621_sae_auth_frame_s *auth, FAR bool *accepted);
+static int
+sv6621_ap_sae_send_commit(FAR struct sv6621_ap_sae_s *sae,
+                          FAR const struct sv6621_ap_sae_peer_s *peer);
+static int
+sv6621_ap_sae_send_confirm(FAR struct sv6621_ap_sae_s *sae,
+                           FAR const struct sv6621_ap_sae_peer_s *peer);
+static int
+sv6621_ap_sae_handle_commit(FAR struct sv6621_ap_sae_s *sae,
+                            FAR const struct sv6621_sae_auth_frame_s *auth);
+static int
+sv6621_ap_sae_handle_confirm(FAR struct sv6621_ap_sae_s *sae,
+                             FAR const struct sv6621_sae_auth_frame_s *auth,
+                             FAR bool *accepted);
 
 /****************************************************************************
  * Private Functions
@@ -82,17 +83,16 @@ static void sv6621_ap_sae_clear(FAR void *data, size_t length)
     }
 }
 
-static FAR struct sv6621_ap_sae_peer_s *sv6621_ap_sae_find(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const uint8_t address[SV6621_MAC_LENGTH])
+static FAR struct sv6621_ap_sae_peer_s *
+sv6621_ap_sae_find(FAR struct sv6621_ap_sae_s *sae,
+                   FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
   size_t index;
 
   for (index = 0; index < SV6621_AP_SAE_PEER_CAPACITY; index++)
     {
       if (sae->peers[index].state != SV6621_AP_SAE_IDLE &&
-          memcmp(sae->peers[index].address, address,
-                 SV6621_MAC_LENGTH) == 0)
+          memcmp(sae->peers[index].address, address, SV6621_MAC_LENGTH) == 0)
         {
           return &sae->peers[index];
         }
@@ -101,9 +101,9 @@ static FAR struct sv6621_ap_sae_peer_s *sv6621_ap_sae_find(
   return NULL;
 }
 
-static FAR struct sv6621_ap_sae_peer_s *sv6621_ap_sae_allocate(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const uint8_t address[SV6621_MAC_LENGTH])
+static FAR struct sv6621_ap_sae_peer_s *
+sv6621_ap_sae_allocate(FAR struct sv6621_ap_sae_s *sae,
+                       FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
   FAR struct sv6621_ap_sae_peer_s *peer;
   size_t index;
@@ -145,9 +145,9 @@ static int sv6621_ap_sae_transmit(FAR struct sv6621_ap_sae_s *sae,
                               frame_length, frame_length);
 }
 
-static int sv6621_ap_sae_send_commit(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const struct sv6621_ap_sae_peer_s *peer)
+static int
+sv6621_ap_sae_send_commit(FAR struct sv6621_ap_sae_s *sae,
+                          FAR const struct sv6621_ap_sae_peer_s *peer)
 {
   uint8_t body[SV6621_AP_SAE_BODY_CAPACITY];
   uint8_t frame[SV6621_AP_SAE_FRAME_CAPACITY];
@@ -155,14 +155,14 @@ static int sv6621_ap_sae_send_commit(
   size_t frame_length;
   int ret;
 
-  ret = sv6621_sae_commit_build(SV6621_SAE_GROUP_19, NULL, 0,
-                                 peer->scalar, peer->element, body,
-                                 sizeof(body), &body_length);
+  ret =
+      sv6621_sae_commit_build(SV6621_SAE_GROUP_19, NULL, 0, peer->scalar,
+                              peer->element, body, sizeof(body), &body_length);
   if (ret == 0)
     {
-      ret = sv6621_sae_auth_build(peer->address, sae->address, sae->address,
-                                  1, 0, body, body_length, frame,
-                                  sizeof(frame), &frame_length);
+      ret = sv6621_sae_auth_build(peer->address, sae->address, sae->address, 1,
+                                  0, body, body_length, frame, sizeof(frame),
+                                  &frame_length);
     }
 
   if (ret == 0)
@@ -175,9 +175,9 @@ static int sv6621_ap_sae_send_commit(
   return ret;
 }
 
-static int sv6621_ap_sae_send_confirm(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const struct sv6621_ap_sae_peer_s *peer)
+static int
+sv6621_ap_sae_send_confirm(FAR struct sv6621_ap_sae_s *sae,
+                           FAR const struct sv6621_ap_sae_peer_s *peer)
 {
   uint8_t body[2 + SV6621_SAE_CONFIRM_SIZE];
   uint8_t frame[SV6621_AP_SAE_FRAME_CAPACITY];
@@ -186,20 +186,20 @@ static int sv6621_ap_sae_send_confirm(
   size_t frame_length;
   int ret;
 
-  ret = sv6621_sae_compute_confirm(
-      peer->kck, 1, peer->scalar, peer->element, peer->peer_scalar,
-      peer->peer_element, confirm);
+  ret = sv6621_sae_compute_confirm(peer->kck, 1, peer->scalar, peer->element,
+                                   peer->peer_scalar, peer->peer_element,
+                                   confirm);
   if (ret == 0)
     {
       ret = sv6621_sae_confirm_build(1, confirm, body, sizeof(body),
-                                      &body_length);
+                                     &body_length);
     }
 
   if (ret == 0)
     {
-      ret = sv6621_sae_auth_build(peer->address, sae->address, sae->address,
-                                  2, 0, body, body_length, frame,
-                                  sizeof(frame), &frame_length);
+      ret = sv6621_sae_auth_build(peer->address, sae->address, sae->address, 2,
+                                  0, body, body_length, frame, sizeof(frame),
+                                  &frame_length);
     }
 
   if (ret == 0)
@@ -213,9 +213,9 @@ static int sv6621_ap_sae_send_confirm(
   return ret;
 }
 
-static int sv6621_ap_sae_handle_commit(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const struct sv6621_sae_auth_frame_s *auth)
+static int
+sv6621_ap_sae_handle_commit(FAR struct sv6621_ap_sae_s *sae,
+                            FAR const struct sv6621_sae_auth_frame_s *auth)
 {
   FAR struct sv6621_ap_sae_peer_s *peer;
   struct sv6621_sae_commit_s commit;
@@ -234,13 +234,12 @@ static int sv6621_ap_sae_handle_commit(
       return -ENOSPC;
     }
 
-  ret = sv6621_sae_group_derive_pwe(
-      sae->address, auth->source, sae->password, sae->password_length,
-      peer->pwe);
+  ret = sv6621_sae_group_derive_pwe(sae->address, auth->source, sae->password,
+                                    sae->password_length, peer->pwe);
   if (ret == 0)
     {
-      ret = sv6621_sae_group_generate_commit(
-          peer->pwe, peer->private_random, peer->scalar, peer->element);
+      ret = sv6621_sae_group_generate_commit(peer->pwe, peer->private_random,
+                                             peer->scalar, peer->element);
     }
 
   if (ret == 0 &&
@@ -254,16 +253,15 @@ static int sv6621_ap_sae_handle_commit(
     {
       memcpy(peer->peer_scalar, commit.scalar, sizeof(peer->peer_scalar));
       memcpy(peer->peer_element, commit.element, sizeof(peer->peer_element));
-      ret = sv6621_sae_group_derive_secret(
-          peer->pwe, peer->private_random, peer->scalar,
-          peer->peer_scalar, peer->peer_element, secret);
+      ret = sv6621_sae_group_derive_secret(peer->pwe, peer->private_random,
+                                           peer->scalar, peer->peer_scalar,
+                                           peer->peer_element, secret);
     }
 
   if (ret == 0)
     {
-      ret = sv6621_sae_derive_keys(
-          secret, peer->scalar, peer->peer_scalar, peer->kck, peer->pmk,
-          peer->pmkid);
+      ret = sv6621_sae_derive_keys(secret, peer->scalar, peer->peer_scalar,
+                                   peer->kck, peer->pmk, peer->pmkid);
     }
 
   if (ret == 0)
@@ -281,9 +279,10 @@ static int sv6621_ap_sae_handle_commit(
   return ret;
 }
 
-static int sv6621_ap_sae_handle_confirm(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const struct sv6621_sae_auth_frame_s *auth, FAR bool *accepted)
+static int
+sv6621_ap_sae_handle_confirm(FAR struct sv6621_ap_sae_s *sae,
+                             FAR const struct sv6621_sae_auth_frame_s *auth,
+                             FAR bool *accepted)
 {
   FAR struct sv6621_ap_sae_peer_s *peer;
   struct sv6621_sae_confirm_s received;
@@ -304,14 +303,13 @@ static int sv6621_ap_sae_handle_confirm(
 
   if (ret == 0)
     {
-      ret = sv6621_sae_compute_confirm(
-          peer->kck, received.counter, peer->peer_scalar,
-          peer->peer_element, peer->scalar, peer->element, expected);
+      ret = sv6621_sae_compute_confirm(peer->kck, received.counter,
+                                       peer->peer_scalar, peer->peer_element,
+                                       peer->scalar, peer->element, expected);
     }
 
   if (ret == 0 &&
-      !sv6621_sae_constant_equal(expected, received.value,
-                                  sizeof(expected)))
+      !sv6621_sae_constant_equal(expected, received.value, sizeof(expected)))
     {
       ret = -EKEYREJECTED;
     }
@@ -370,8 +368,7 @@ void sv6621_ap_sae_deinit(FAR struct sv6621_ap_sae_s *sae)
 
 int sv6621_ap_sae_enable(FAR struct sv6621_ap_sae_s *sae, uint8_t instance,
                          uint8_t channel, enum sv6621_band_e band,
-                         FAR const uint8_t *password,
-                         size_t password_length)
+                         FAR const uint8_t *password, size_t password_length)
 {
   int ret;
 
@@ -478,10 +475,9 @@ int sv6621_ap_sae_input(FAR struct sv6621_ap_sae_s *sae,
   return ret;
 }
 
-int sv6621_ap_sae_get_pmk(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const uint8_t address[SV6621_MAC_LENGTH],
-    uint8_t pmk[SV6621_SAE_PMK_SIZE])
+int sv6621_ap_sae_get_pmk(FAR struct sv6621_ap_sae_s *sae,
+                          FAR const uint8_t address[SV6621_MAC_LENGTH],
+                          uint8_t pmk[SV6621_SAE_PMK_SIZE])
 {
   FAR struct sv6621_ap_sae_peer_s *peer;
   int ret;
@@ -512,9 +508,8 @@ int sv6621_ap_sae_get_pmk(
   return ret;
 }
 
-void sv6621_ap_sae_forget(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const uint8_t address[SV6621_MAC_LENGTH])
+void sv6621_ap_sae_forget(FAR struct sv6621_ap_sae_s *sae,
+                          FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
   FAR struct sv6621_ap_sae_peer_s *peer;
 

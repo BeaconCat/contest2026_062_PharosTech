@@ -34,9 +34,9 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_SIGNAL_COMMAND_SET_CQM     34
-#define SV6621_SIGNAL_COMMAND_TIMEOUT_MS  2000
-#define SV6621_SIGNAL_PAYLOAD_SIZE        5
+#define SV6621_SIGNAL_COMMAND_SET_CQM    34
+#define SV6621_SIGNAL_COMMAND_TIMEOUT_MS 2000
+#define SV6621_SIGNAL_PAYLOAD_SIZE       5
 
 /****************************************************************************
  * Public Functions
@@ -65,8 +65,7 @@ int sv6621_signal_configure(FAR struct sv6621_command_engine_s *command,
   payload[2] = (threshold >> 16) & 0xff;
   payload[3] = threshold >> 24;
   payload[4] = hysteresis_db;
-  return sv6621_command_execute(command, instance,
-                                SV6621_SIGNAL_COMMAND_SET_CQM, payload,
-                                sizeof(payload), NULL, NULL,
-                                SV6621_SIGNAL_COMMAND_TIMEOUT_MS);
+  return sv6621_command_execute(
+      command, instance, SV6621_SIGNAL_COMMAND_SET_CQM, payload,
+      sizeof(payload), NULL, NULL, SV6621_SIGNAL_COMMAND_TIMEOUT_MS);
 }

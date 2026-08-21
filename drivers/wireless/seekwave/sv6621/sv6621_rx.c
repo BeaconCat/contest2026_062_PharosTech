@@ -56,8 +56,7 @@
 static uint32_t sv6621_rx_get_le32(FAR const uint8_t *data);
 static void sv6621_rx_interrupt(FAR void *arg);
 static void sv6621_rx_worker(FAR void *arg);
-static void sv6621_rx_schedule(FAR struct sv6621_rx_s *rx,
-                               bool acknowledge);
+static void sv6621_rx_schedule(FAR struct sv6621_rx_s *rx, bool acknowledge);
 static int sv6621_rx_drain(FAR struct sv6621_rx_s *rx);
 static void sv6621_rx_report_error(FAR struct sv6621_rx_s *rx, int error);
 
@@ -79,8 +78,7 @@ static uint32_t sv6621_rx_get_le32(FAR const uint8_t *data)
  * Name: sv6621_rx_interrupt
  ****************************************************************************/
 
-static void sv6621_rx_schedule(FAR struct sv6621_rx_s *rx,
-                               bool acknowledge)
+static void sv6621_rx_schedule(FAR struct sv6621_rx_s *rx, bool acknowledge)
 {
   irqstate_t flags;
   bool schedule = false;
@@ -265,9 +263,8 @@ static void sv6621_rx_worker(FAR void *arg)
           return;
         }
 
-      retry = ret == 0 &&
-              (rx->work_reschedule || rx->irq_ack_pending) && rx->running &&
-              !rx->suspended;
+      retry = ret == 0 && (rx->work_reschedule || rx->irq_ack_pending) &&
+              rx->running && !rx->suspended;
       if (!retry)
         {
           rx->work_scheduled = false;

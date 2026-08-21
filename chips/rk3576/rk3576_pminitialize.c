@@ -34,7 +34,4 @@
  * Name: arm64_pminitialize
  ****************************************************************************/
 
-void arm64_pminitialize(void)
-{
-  pm_initialize();
-}
+void arm64_pminitialize(void) { pm_initialize(); }

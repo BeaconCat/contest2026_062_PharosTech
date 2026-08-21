@@ -48,86 +48,84 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define RK3576_SV6621_MSHC_BASE    0x2a320000
-#define RK3576_SV6621_CTRL         (RK3576_SV6621_MSHC_BASE + 0x000)
-#define RK3576_SV6621_CLKDIV       (RK3576_SV6621_MSHC_BASE + 0x008)
-#define RK3576_SV6621_CLKENA       (RK3576_SV6621_MSHC_BASE + 0x010)
-#define RK3576_SV6621_CTYPE        (RK3576_SV6621_MSHC_BASE + 0x018)
-#define RK3576_SV6621_BLKSIZ       (RK3576_SV6621_MSHC_BASE + 0x01c)
-#define RK3576_SV6621_BYTCNT       (RK3576_SV6621_MSHC_BASE + 0x020)
-#define RK3576_SV6621_INTMASK      (RK3576_SV6621_MSHC_BASE + 0x024)
-#define RK3576_SV6621_CMDARG       (RK3576_SV6621_MSHC_BASE + 0x028)
-#define RK3576_SV6621_CMD          (RK3576_SV6621_MSHC_BASE + 0x02c)
-#define RK3576_SV6621_RESP0        (RK3576_SV6621_MSHC_BASE + 0x030)
-#define RK3576_SV6621_RINTSTS      (RK3576_SV6621_MSHC_BASE + 0x044)
-#define RK3576_SV6621_STATUS       (RK3576_SV6621_MSHC_BASE + 0x048)
-#define RK3576_SV6621_UHS          (RK3576_SV6621_MSHC_BASE + 0x074)
-#define RK3576_SV6621_TIMING0      (RK3576_SV6621_MSHC_BASE + 0x130)
-#define RK3576_SV6621_TIMING1      (RK3576_SV6621_MSHC_BASE + 0x134)
-#define RK3576_SV6621_FIFO         (RK3576_SV6621_MSHC_BASE + 0x200)
+#define RK3576_SV6621_MSHC_BASE      0x2a320000
+#define RK3576_SV6621_CTRL           (RK3576_SV6621_MSHC_BASE + 0x000)
+#define RK3576_SV6621_CLKDIV         (RK3576_SV6621_MSHC_BASE + 0x008)
+#define RK3576_SV6621_CLKENA         (RK3576_SV6621_MSHC_BASE + 0x010)
+#define RK3576_SV6621_CTYPE          (RK3576_SV6621_MSHC_BASE + 0x018)
+#define RK3576_SV6621_BLKSIZ         (RK3576_SV6621_MSHC_BASE + 0x01c)
+#define RK3576_SV6621_BYTCNT         (RK3576_SV6621_MSHC_BASE + 0x020)
+#define RK3576_SV6621_INTMASK        (RK3576_SV6621_MSHC_BASE + 0x024)
+#define RK3576_SV6621_CMDARG         (RK3576_SV6621_MSHC_BASE + 0x028)
+#define RK3576_SV6621_CMD            (RK3576_SV6621_MSHC_BASE + 0x02c)
+#define RK3576_SV6621_RESP0          (RK3576_SV6621_MSHC_BASE + 0x030)
+#define RK3576_SV6621_RINTSTS        (RK3576_SV6621_MSHC_BASE + 0x044)
+#define RK3576_SV6621_STATUS         (RK3576_SV6621_MSHC_BASE + 0x048)
+#define RK3576_SV6621_UHS            (RK3576_SV6621_MSHC_BASE + 0x074)
+#define RK3576_SV6621_TIMING0        (RK3576_SV6621_MSHC_BASE + 0x130)
+#define RK3576_SV6621_TIMING1        (RK3576_SV6621_MSHC_BASE + 0x134)
+#define RK3576_SV6621_FIFO           (RK3576_SV6621_MSHC_BASE + 0x200)
 
-#define RK3576_SV6621_CRU_SDIO_SEL 0x272004a0
+#define RK3576_SV6621_CRU_SDIO_SEL   0x272004a0
 
-#define RK3576_SV6621_CMD_START    (1u << 31)
+#define RK3576_SV6621_CMD_START      (1u << 31)
 #define RK3576_SV6621_CMD_STOP_ABORT (1u << 14)
-#define RK3576_SV6621_CMD3         0xa0000143
-#define RK3576_SV6621_CMD5         0xa0000045
-#define RK3576_SV6621_CMD7         0xa0000147
-#define RK3576_SV6621_CMD11        0xb000014b
-#define RK3576_SV6621_CMD19        0xa0002353
-#define RK3576_SV6621_CMD52        0xa0000174
-#define RK3576_SV6621_CMD53_READ   0xa0002375
-#define RK3576_SV6621_CMD53_WRITE  0xa0002775
+#define RK3576_SV6621_CMD3           0xa0000143
+#define RK3576_SV6621_CMD5           0xa0000045
+#define RK3576_SV6621_CMD7           0xa0000147
+#define RK3576_SV6621_CMD11          0xb000014b
+#define RK3576_SV6621_CMD19          0xa0002353
+#define RK3576_SV6621_CMD52          0xa0000174
+#define RK3576_SV6621_CMD53_READ     0xa0002375
+#define RK3576_SV6621_CMD53_WRITE    0xa0002775
 
-#define RK3576_SV6621_INT_CMDDONE  (1u << 2)
-#define RK3576_SV6621_INT_DTO      (1u << 3)
-#define RK3576_SV6621_INT_RTO      (1u << 8)
-#define RK3576_SV6621_INT_DRTO     (1u << 9)
-#define RK3576_SV6621_INT_HTO      (1u << 10)
-#define RK3576_SV6621_INT_VOLTSW   (1u << 10)
-#define RK3576_SV6621_INT_SDIO     (1u << 24)
-#define RK3576_SV6621_INT_SYNC_ALL \
-  (UINT32_MAX & ~RK3576_SV6621_INT_SDIO)
-#define RK3576_SV6621_INT_CMDERR   0x00001142
-#define RK3576_SV6621_INT_DATAERR  0x0000ae80
+#define RK3576_SV6621_INT_CMDDONE    (1u << 2)
+#define RK3576_SV6621_INT_DTO        (1u << 3)
+#define RK3576_SV6621_INT_RTO        (1u << 8)
+#define RK3576_SV6621_INT_DRTO       (1u << 9)
+#define RK3576_SV6621_INT_HTO        (1u << 10)
+#define RK3576_SV6621_INT_VOLTSW     (1u << 10)
+#define RK3576_SV6621_INT_SDIO       (1u << 24)
+#define RK3576_SV6621_INT_SYNC_ALL   (UINT32_MAX & ~RK3576_SV6621_INT_SDIO)
+#define RK3576_SV6621_INT_CMDERR     0x00001142
+#define RK3576_SV6621_INT_DATAERR    0x0000ae80
 #define RK3576_SV6621_INT_TIMEOUT \
-  (RK3576_SV6621_INT_RTO | RK3576_SV6621_INT_DRTO | \
-   RK3576_SV6621_INT_HTO)
+  (RK3576_SV6621_INT_RTO | RK3576_SV6621_INT_DRTO | RK3576_SV6621_INT_HTO)
 
 #define RK3576_SV6621_CLK_UPDATE   0x80202000
 #define RK3576_SV6621_CLK_UPD_VOLT 0x90202000
 #define RK3576_SV6621_SRC_396M     0x2f02
 #define RK3576_SV6621_TCON(raw) \
   (((uint32_t)0x7ff << 1 << 16) | ((uint32_t)(raw) << 1))
-#define RK3576_SV6621_TCON_180   RK3576_SV6621_TCON(0x2)
-#define RK3576_SV6621_PHASE_COUNT 4
-#define RK3576_SV6621_PHASE_STEP  90
-#define RK3576_SV6621_POLL_LIMIT 200000
-#define RK3576_SV6621_FUNCTION_MAX 7
-#define RK3576_SV6621_ADDRESS_MAX  0x1ffff
-#define RK3576_SV6621_BLOCK_SIZE   512
-#define RK3576_SV6621_BYTE_COUNT_MAX 512
-#define RK3576_SV6621_BLOCK_COUNT_MAX 512
+#define RK3576_SV6621_TCON_180          RK3576_SV6621_TCON(0x2)
+#define RK3576_SV6621_PHASE_COUNT       4
+#define RK3576_SV6621_PHASE_STEP        90
+#define RK3576_SV6621_POLL_LIMIT        200000
+#define RK3576_SV6621_FUNCTION_MAX      7
+#define RK3576_SV6621_ADDRESS_MAX       0x1ffff
+#define RK3576_SV6621_BLOCK_SIZE        512
+#define RK3576_SV6621_BYTE_COUNT_MAX    512
+#define RK3576_SV6621_BLOCK_COUNT_MAX   512
 #define RK3576_SV6621_TUNING_BLOCK_SIZE 64
-#define RK3576_SV6621_DMA_BOUNCE_SIZE (16 * 1024)
-#define RK3576_SV6621_CMD53_TIMEOUT_MS 1000
+#define RK3576_SV6621_DMA_BOUNCE_SIZE   (16 * 1024)
+#define RK3576_SV6621_CMD53_TIMEOUT_MS  1000
 
-#define RK3576_SV6621_R4_FUNCTIONS_MASK  (7u << 28)
-#define RK3576_SV6621_R6_ERROR_MASK      (7u << 13)
-#define RK3576_SV6621_R1_ERROR_MASK      0xfff9a088
+#define RK3576_SV6621_R4_FUNCTIONS_MASK (7u << 28)
+#define RK3576_SV6621_R6_ERROR_MASK     (7u << 13)
+#define RK3576_SV6621_R1_ERROR_MASK     0xfff9a088
 
-#define RK3576_SV6621_CCCR_IO_ENABLE  0x02
-#define RK3576_SV6621_CCCR_IO_READY   0x03
-#define RK3576_SV6621_CCCR_INTERRUPT  0x04
-#define RK3576_SV6621_CCCR_INT_PENDING 0x05
-#define RK3576_SV6621_CCCR_ABORT      0x06
-#define RK3576_SV6621_CCCR_BUS_IF      0x07
-#define RK3576_SV6621_CCCR_SPEED       0x13
-#define RK3576_SV6621_FBR1_BLOCK_LOW   0x110
-#define RK3576_SV6621_FBR1_BLOCK_HIGH  0x111
+#define RK3576_SV6621_CCCR_IO_ENABLE    0x02
+#define RK3576_SV6621_CCCR_IO_READY     0x03
+#define RK3576_SV6621_CCCR_INTERRUPT    0x04
+#define RK3576_SV6621_CCCR_INT_PENDING  0x05
+#define RK3576_SV6621_CCCR_ABORT        0x06
+#define RK3576_SV6621_CCCR_BUS_IF       0x07
+#define RK3576_SV6621_CCCR_SPEED        0x13
+#define RK3576_SV6621_FBR1_BLOCK_LOW    0x110
+#define RK3576_SV6621_FBR1_BLOCK_HIGH   0x111
 
-#define RK3576_SV6621_FUNCTION1_BIT    (1 << 1)
-#define RK3576_SV6621_INTERRUPT_MASTER (1 << 0)
+#define RK3576_SV6621_FUNCTION1_BIT     (1 << 1)
+#define RK3576_SV6621_INTERRUPT_MASTER  (1 << 0)
 
 /****************************************************************************
  * Private Types
@@ -147,16 +145,12 @@ struct rk3576_sv6621_transport_priv_s
   bool sample_phase_valid;
 };
 
-static const uint8_t g_rk3576_sv6621_tuning_pattern[] =
-{
-  0xff, 0x0f, 0xff, 0x00, 0xff, 0xcc, 0xc3, 0xcc,
-  0xc3, 0x3c, 0xcc, 0xff, 0xfe, 0xff, 0xfe, 0xef,
-  0xff, 0xdf, 0xff, 0xdd, 0xff, 0xfb, 0xff, 0xfb,
-  0xbf, 0xff, 0x7f, 0xff, 0x77, 0xf7, 0xbd, 0xef,
-  0xff, 0xf0, 0xff, 0xf0, 0x0f, 0xfc, 0xcc, 0x3c,
-  0xcc, 0x33, 0xcc, 0xcf, 0xff, 0xef, 0xff, 0xee,
-  0xff, 0xfd, 0xff, 0xfd, 0xdf, 0xff, 0xbf, 0xff,
-  0xbb, 0xff, 0xf7, 0xff, 0xf7, 0x7f, 0x7b, 0xde,
+static const uint8_t g_rk3576_sv6621_tuning_pattern[] = {
+  0xff, 0x0f, 0xff, 0x00, 0xff, 0xcc, 0xc3, 0xcc, 0xc3, 0x3c, 0xcc, 0xff, 0xfe,
+  0xff, 0xfe, 0xef, 0xff, 0xdf, 0xff, 0xdd, 0xff, 0xfb, 0xff, 0xfb, 0xbf, 0xff,
+  0x7f, 0xff, 0x77, 0xf7, 0xbd, 0xef, 0xff, 0xf0, 0xff, 0xf0, 0x0f, 0xfc, 0xcc,
+  0x3c, 0xcc, 0x33, 0xcc, 0xcf, 0xff, 0xef, 0xff, 0xee, 0xff, 0xfd, 0xff, 0xfd,
+  0xdf, 0xff, 0xbf, 0xff, 0xbb, 0xff, 0xf7, 0xff, 0xf7, 0x7f, 0x7b, 0xde,
 };
 
 /****************************************************************************
@@ -171,10 +165,11 @@ static int rk3576_sv6621_direct(bool write, uint8_t function, uint32_t address,
                                 uint8_t value, FAR uint8_t *result);
 static int rk3576_sv6621_voltage_switch(void);
 static int rk3576_sv6621_execute_tuning(void);
-static int rk3576_sv6621_tune_sdr104(
-    FAR struct rk3576_sv6621_transport_priv_s *priv);
-static int rk3576_sv6621_open_failed(
-    FAR struct rk3576_sv6621_transport_priv_s *priv, int error);
+static int
+rk3576_sv6621_tune_sdr104(FAR struct rk3576_sv6621_transport_priv_s *priv);
+static int
+rk3576_sv6621_open_failed(FAR struct rk3576_sv6621_transport_priv_s *priv,
+                          int error);
 static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport);
 static int rk3576_sv6621_enumerate(FAR struct sv6621_transport_s *transport);
 static void rk3576_sv6621_close(FAR struct sv6621_transport_s *transport);
@@ -184,10 +179,10 @@ static int rk3576_sv6621_read_byte(FAR struct sv6621_transport_s *transport,
 static int rk3576_sv6621_write_byte(FAR struct sv6621_transport_s *transport,
                                     uint8_t function, uint32_t address,
                                     uint8_t value);
-static int rk3576_sv6621_extended(
-    FAR struct rk3576_sv6621_transport_priv_s *priv, bool write,
-    uint8_t function, uint32_t address, bool increment, FAR void *buffer,
-    size_t length);
+static int
+rk3576_sv6621_extended(FAR struct rk3576_sv6621_transport_priv_s *priv,
+                       bool write, uint8_t function, uint32_t address,
+                       bool increment, FAR void *buffer, size_t length);
 static int rk3576_sv6621_read(FAR struct sv6621_transport_s *transport,
                               uint8_t function, uint32_t address,
                               bool increment, FAR void *buffer, size_t length);
@@ -277,8 +272,7 @@ static int rk3576_sv6621_set_clock(uint32_t source, uint32_t divider)
 static uint32_t rk3576_sv6621_command(uint32_t command, uint32_t argument,
                                       FAR uint32_t *response)
 {
-  uint32_t completion = RK3576_SV6621_INT_CMDDONE |
-                        RK3576_SV6621_INT_CMDERR;
+  uint32_t completion = RK3576_SV6621_INT_CMDDONE | RK3576_SV6621_INT_CMDERR;
   uint32_t status;
   int index;
 
@@ -458,19 +452,16 @@ static int rk3576_sv6621_execute_tuning(void)
   putreg32(RK3576_SV6621_TUNING_BLOCK_SIZE, RK3576_SV6621_BLKSIZ);
   putreg32(RK3576_SV6621_TUNING_BLOCK_SIZE, RK3576_SV6621_BYTCNT);
   status = rk3576_sv6621_command(RK3576_SV6621_CMD19, 0, &response);
-  if ((status & (RK3576_SV6621_INT_CMDERR |
-                 RK3576_SV6621_INT_DATAERR)) != 0)
+  if ((status & (RK3576_SV6621_INT_CMDERR | RK3576_SV6621_INT_DATAERR)) != 0)
     {
       return (status & RK3576_SV6621_INT_TIMEOUT) != 0 ? -ETIMEDOUT : -EIO;
     }
 
-  for (index = 0;
-       index < 200000 && received < RK3576_SV6621_TUNING_BLOCK_SIZE;
+  for (index = 0; index < 200000 && received < RK3576_SV6621_TUNING_BLOCK_SIZE;
        index++)
     {
       fifo_count = (getreg32(RK3576_SV6621_STATUS) >> 17) & 0x1fff;
-      while (fifo_count-- > 0 &&
-             received < RK3576_SV6621_TUNING_BLOCK_SIZE)
+      while (fifo_count-- > 0 && received < RK3576_SV6621_TUNING_BLOCK_SIZE)
         {
           word = getreg32(RK3576_SV6621_FIFO);
           tuning_block[received++] = word;
@@ -485,8 +476,7 @@ static int rk3576_sv6621_execute_tuning(void)
   for (index = 0; index < 200000; index++)
     {
       status = getreg32(RK3576_SV6621_RINTSTS);
-      if ((status & (RK3576_SV6621_INT_DTO |
-                     RK3576_SV6621_INT_DATAERR)) != 0)
+      if ((status & (RK3576_SV6621_INT_DTO | RK3576_SV6621_INT_DATAERR)) != 0)
         {
           break;
         }
@@ -513,13 +503,10 @@ static int rk3576_sv6621_execute_tuning(void)
   return 0;
 }
 
-static int rk3576_sv6621_tune_sdr104(
-    FAR struct rk3576_sv6621_transport_priv_s *priv)
+static int
+rk3576_sv6621_tune_sdr104(FAR struct rk3576_sv6621_transport_priv_s *priv)
 {
-  static const uint8_t phases[RK3576_SV6621_PHASE_COUNT] =
-  {
-    2, 3, 0, 1
-  };
+  static const uint8_t phases[RK3576_SV6621_PHASE_COUNT] = { 2, 3, 0, 1 };
 
   uint8_t value;
   uint8_t cached_phase = priv->sample_phase;
@@ -528,32 +515,28 @@ static int rk3576_sv6621_tune_sdr104(
   int index;
   int ret;
 
-  ret = rk3576_sv6621_direct(false, 0, RK3576_SV6621_CCCR_BUS_IF, 0,
-                             &value);
+  ret = rk3576_sv6621_direct(false, 0, RK3576_SV6621_CCCR_BUS_IF, 0, &value);
   if (ret < 0)
     {
       return ret;
     }
 
   value = (value & ~0x03) | 0x02;
-  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_BUS_IF, value,
-                             NULL);
+  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_BUS_IF, value, NULL);
   if (ret < 0)
     {
       return ret;
     }
 
   putreg32(1, RK3576_SV6621_CTYPE);
-  ret = rk3576_sv6621_direct(false, 0, RK3576_SV6621_CCCR_SPEED, 0,
-                             &value);
+  ret = rk3576_sv6621_direct(false, 0, RK3576_SV6621_CCCR_SPEED, 0, &value);
   if (ret < 0)
     {
       return ret;
     }
 
   value = (value & ~0x0e) | 0x07;
-  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_SPEED, value,
-                             NULL);
+  ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_SPEED, value, NULL);
   if (ret < 0)
     {
       return ret;
@@ -568,8 +551,7 @@ static int rk3576_sv6621_tune_sdr104(
   putreg32(RK3576_SV6621_TCON_180, RK3576_SV6621_TIMING0);
   if (cached)
     {
-      putreg32(RK3576_SV6621_TCON(cached_phase),
-               RK3576_SV6621_TIMING1);
+      putreg32(RK3576_SV6621_TCON(cached_phase), RK3576_SV6621_TIMING1);
       last_ret = rk3576_sv6621_execute_tuning();
       if (last_ret == 0)
         {
@@ -586,8 +568,7 @@ static int rk3576_sv6621_tune_sdr104(
           continue;
         }
 
-      putreg32(RK3576_SV6621_TCON(phases[index]),
-               RK3576_SV6621_TIMING1);
+      putreg32(RK3576_SV6621_TCON(phases[index]), RK3576_SV6621_TIMING1);
       last_ret = rk3576_sv6621_execute_tuning();
       if (last_ret == 0)
         {
@@ -607,8 +588,9 @@ static int rk3576_sv6621_tune_sdr104(
  * Name: rk3576_sv6621_open_failed
  ****************************************************************************/
 
-static int rk3576_sv6621_open_failed(
-    FAR struct rk3576_sv6621_transport_priv_s *priv, int error)
+static int
+rk3576_sv6621_open_failed(FAR struct rk3576_sv6621_transport_priv_s *priv,
+                          int error)
 {
   irqstate_t flags;
 
@@ -684,8 +666,7 @@ static int rk3576_sv6621_open(FAR struct sv6621_transport_s *transport)
  * Name: rk3576_sv6621_enumerate
  ****************************************************************************/
 
-static int rk3576_sv6621_enumerate(
-    FAR struct sv6621_transport_s *transport)
+static int rk3576_sv6621_enumerate(FAR struct sv6621_transport_s *transport)
 {
   FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
   uint32_t response = 0;
@@ -714,8 +695,8 @@ static int rk3576_sv6621_enumerate(
   up_mdelay(10);
   for (index = 0; index < 3; index++)
     {
-      status = rk3576_sv6621_command(RK3576_SV6621_CMD5, 0x01300000,
-                                     &response);
+      status =
+          rk3576_sv6621_command(RK3576_SV6621_CMD5, 0x01300000, &response);
       if ((status & RK3576_SV6621_INT_CMDERR) != 0)
         {
           if ((status & RK3576_SV6621_INT_RTO) != 0)
@@ -750,8 +731,8 @@ static int rk3576_sv6621_enumerate(
 
   if ((response & RK3576_SV6621_R4_FUNCTIONS_MASK) == 0)
     {
-      wlerr("ERROR: SV6621 reported no SDIO functions: 0x%08" PRIx32
-            "\n", response);
+      wlerr("ERROR: SV6621 reported no SDIO functions: 0x%08" PRIx32 "\n",
+            response);
       return rk3576_sv6621_open_failed(priv, -ENODEV);
     }
 
@@ -768,11 +749,10 @@ static int rk3576_sv6621_enumerate(
       return rk3576_sv6621_open_failed(priv, ret);
     }
 
-  if ((response & RK3576_SV6621_R6_ERROR_MASK) != 0 ||
-      (response >> 16) == 0)
+  if ((response & RK3576_SV6621_R6_ERROR_MASK) != 0 || (response >> 16) == 0)
     {
-      wlerr("ERROR: SV6621 CMD3 rejected RCA assignment: 0x%08" PRIx32
-            "\n", response);
+      wlerr("ERROR: SV6621 CMD3 rejected RCA assignment: 0x%08" PRIx32 "\n",
+            response);
       return rk3576_sv6621_open_failed(priv, -EIO);
     }
 
@@ -839,8 +819,8 @@ static int rk3576_sv6621_enumerate(
 
   for (index = 0; index < 100; index++)
     {
-      ret = rk3576_sv6621_direct(false, 0,
-                                 RK3576_SV6621_CCCR_IO_READY, 0, &value);
+      ret = rk3576_sv6621_direct(false, 0, RK3576_SV6621_CCCR_IO_READY, 0,
+                                 &value);
       if (ret < 0)
         {
           return rk3576_sv6621_open_failed(priv, ret);
@@ -860,8 +840,8 @@ static int rk3576_sv6621_enumerate(
 }
 
 static int rk3576_sv6621_read_byte(FAR struct sv6621_transport_s *transport,
-                                  uint8_t function, uint32_t address,
-                                  FAR uint8_t *value)
+                                   uint8_t function, uint32_t address,
+                                   FAR uint8_t *value)
 {
   FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
 
@@ -876,8 +856,8 @@ static int rk3576_sv6621_read_byte(FAR struct sv6621_transport_s *transport,
 }
 
 static int rk3576_sv6621_write_byte(FAR struct sv6621_transport_s *transport,
-                                   uint8_t function, uint32_t address,
-                                   uint8_t value)
+                                    uint8_t function, uint32_t address,
+                                    uint8_t value)
 {
   FAR struct rk3576_sv6621_transport_priv_s *priv = transport->priv;
 
@@ -890,10 +870,10 @@ static int rk3576_sv6621_write_byte(FAR struct sv6621_transport_s *transport,
   return rk3576_sv6621_direct(true, function, address, value, NULL);
 }
 
-static int rk3576_sv6621_extended(
-    FAR struct rk3576_sv6621_transport_priv_s *priv, bool write,
-    uint8_t function, uint32_t address, bool increment, FAR void *buffer,
-    size_t length)
+static int
+rk3576_sv6621_extended(FAR struct rk3576_sv6621_transport_priv_s *priv,
+                       bool write, uint8_t function, uint32_t address,
+                       bool increment, FAR void *buffer, size_t length)
 {
   FAR uint8_t *transfer = buffer;
   bool block = !increment && length >= RK3576_SV6621_BLOCK_SIZE &&
@@ -911,8 +891,8 @@ static int rk3576_sv6621_extended(
       address > RK3576_SV6621_ADDRESS_MAX ||
       (increment && length - 1 > RK3576_SV6621_ADDRESS_MAX - address) ||
       (!block && length > RK3576_SV6621_BYTE_COUNT_MAX) ||
-      (block && length / RK3576_SV6621_BLOCK_SIZE >
-                    RK3576_SV6621_BLOCK_COUNT_MAX))
+      (block &&
+       length / RK3576_SV6621_BLOCK_SIZE > RK3576_SV6621_BLOCK_COUNT_MAX))
     {
       return -EINVAL;
     }
@@ -934,12 +914,13 @@ static int rk3576_sv6621_extended(
 
   block_length = block ? RK3576_SV6621_BLOCK_SIZE : (unsigned int)length;
   block_count = block ? (unsigned int)(length / RK3576_SV6621_BLOCK_SIZE) : 0;
-  argument = (write ? (1u << 31) : 0) | ((function & 7) << 28) |
-             (block ? (1u << 27) : 0) | (increment ? (1u << 26) : 0) |
-             ((address & 0x1ffff) << 9) |
-             (block ? (block_count & 0x1ff) :
-                      (block_length == RK3576_SV6621_BYTE_COUNT_MAX ? 0 :
-                       block_length));
+  argument =
+      (write ? (1u << 31) : 0) | ((function & 7) << 28) |
+      (block ? (1u << 27) : 0) | (increment ? (1u << 26) : 0) |
+      ((address & 0x1ffff) << 9) |
+      (block ? (block_count & 0x1ff)
+             : (block_length == RK3576_SV6621_BYTE_COUNT_MAX ? 0
+                                                             : block_length));
   command = write ? SD_ACMD53WR : SD_ACMD53RD;
 
   ret = nxmutex_lock(&priv->sdio->mutex);
@@ -956,8 +937,7 @@ static int rk3576_sv6621_extended(
     }
 #endif
 
-  SDIO_BLOCKSETUP(priv->sdio, block_length,
-                  block ? block_count : 1);
+  SDIO_BLOCKSETUP(priv->sdio, block_length, block ? block_count : 1);
   SDIO_WAITENABLE(priv->sdio,
                   SDIOWAIT_TRANSFERDONE | SDIOWAIT_TIMEOUT | SDIOWAIT_ERROR,
                   RK3576_SV6621_CMD53_TIMEOUT_MS);
@@ -989,8 +969,8 @@ static int rk3576_sv6621_extended(
     {
       ret = -ETIMEDOUT;
     }
-  else if (ret >= 0 && ((event & SDIOWAIT_ERROR) != 0 ||
-                        ((response >> 8) & 0xcb) != 0))
+  else if (ret >= 0 &&
+           ((event & SDIOWAIT_ERROR) != 0 || ((response >> 8) & 0xcb) != 0))
     {
       ret = -EIO;
     }
@@ -1129,8 +1109,7 @@ static int rk3576_sv6621_enable_irq(FAR struct sv6621_transport_s *transport,
     {
       ret = rk3576_sv6621_direct(
           true, 0, RK3576_SV6621_CCCR_INTERRUPT,
-          RK3576_SV6621_INTERRUPT_MASTER | RK3576_SV6621_FUNCTION1_BIT,
-          NULL);
+          RK3576_SV6621_INTERRUPT_MASTER | RK3576_SV6621_FUNCTION1_BIT, NULL);
       if (ret < 0)
         {
           return ret;
@@ -1139,8 +1118,7 @@ static int rk3576_sv6621_enable_irq(FAR struct sv6621_transport_s *transport,
       ret = rk3576_sdmmc_enable_sdio_interrupt(priv->sdio, true);
       if (ret < 0)
         {
-          rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_INTERRUPT, 0,
-                               NULL);
+          rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_INTERRUPT, 0, NULL);
           return ret;
         }
     }
@@ -1154,15 +1132,14 @@ static int rk3576_sv6621_enable_irq(FAR struct sv6621_transport_s *transport,
           return ret;
         }
 
-      ret = rk3576_sv6621_direct(false, 0,
-                                 RK3576_SV6621_CCCR_INTERRUPT, 0, &value);
+      ret = rk3576_sv6621_direct(false, 0, RK3576_SV6621_CCCR_INTERRUPT, 0,
+                                 &value);
       if (ret >= 0)
         {
-          value &= ~(RK3576_SV6621_INTERRUPT_MASTER |
-                     RK3576_SV6621_FUNCTION1_BIT);
-          ret = rk3576_sv6621_direct(true, 0,
-                                     RK3576_SV6621_CCCR_INTERRUPT, value,
-                                     NULL);
+          value &=
+              ~(RK3576_SV6621_INTERRUPT_MASTER | RK3576_SV6621_FUNCTION1_BIT);
+          ret = rk3576_sv6621_direct(true, 0, RK3576_SV6621_CCCR_INTERRUPT,
+                                     value, NULL);
         }
 
       if (ret < 0)
@@ -1198,8 +1175,8 @@ static int rk3576_sv6621_ack_irq(FAR struct sv6621_transport_s *transport)
    * latch can then be rearmed without racing an asserted DAT1 level.
    */
 
-  ret = rk3576_sv6621_direct(false, 0,
-                             RK3576_SV6621_CCCR_INT_PENDING, 0, &pending);
+  ret = rk3576_sv6621_direct(false, 0, RK3576_SV6621_CCCR_INT_PENDING, 0,
+                             &pending);
   if (ret < 0)
     {
       return ret;

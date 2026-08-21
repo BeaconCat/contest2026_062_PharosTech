@@ -39,11 +39,11 @@
 
 int sv6621_sae_group_validate_element(
     FAR const uint8_t element[SV6621_SAE_ELEMENT_SIZE]);
-int sv6621_sae_group_derive_pwe(
-    FAR const uint8_t address1[SV6621_MAC_LENGTH],
-    FAR const uint8_t address2[SV6621_MAC_LENGTH],
-    FAR const uint8_t *password, size_t password_length,
-    uint8_t pwe[SV6621_SAE_ELEMENT_SIZE]);
+int sv6621_sae_group_derive_pwe(FAR const uint8_t address1[SV6621_MAC_LENGTH],
+                                FAR const uint8_t address2[SV6621_MAC_LENGTH],
+                                FAR const uint8_t *password,
+                                size_t password_length,
+                                uint8_t pwe[SV6621_SAE_ELEMENT_SIZE]);
 int sv6621_sae_group_generate_commit(
     FAR const uint8_t pwe[SV6621_SAE_ELEMENT_SIZE],
     uint8_t private_random[SV6621_SAE_SCALAR_SIZE],

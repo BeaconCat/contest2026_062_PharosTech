@@ -79,8 +79,7 @@ int sv6621_protocol_decode_header(FAR const uint8_t encoded[4],
   header->end_of_frame = (value & SV6621_HEADER_EOF) != 0;
   header->channel = (uint8_t)(value >> SV6621_HEADER_CHANNEL_SHIFT);
 
-  if (!header->end_of_frame &&
-      header->channel >= SV6621_PACKET_CHANNEL_COUNT)
+  if (!header->end_of_frame && header->channel >= SV6621_PACKET_CHANNEL_COUNT)
     {
       return -EPROTO;
     }

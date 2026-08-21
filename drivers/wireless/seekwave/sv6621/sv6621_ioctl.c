@@ -108,26 +108,37 @@ static int sv6621_ioctl_auth(FAR struct sv6621_ioctl_s *ioctl,
               return 0;
             }
 
+          if (value == IW_AUTH_WPA_VERSION_WPA3)
+            {
+              ioctl->access_point.security = SV6621_SECURITY_WPA3_SAE;
+              return 0;
+            }
+
+          if (value == (IW_AUTH_WPA_VERSION_WPA2 | IW_AUTH_WPA_VERSION_WPA3))
+            {
+              ioctl->access_point.security = SV6621_SECURITY_WPA2_WPA3_PSK;
+              return 0;
+            }
+
           return -EOPNOTSUPP;
         }
 
-      if (index == IW_AUTH_CIPHER_PAIRWISE ||
-          index == IW_AUTH_CIPHER_GROUP)
+      if (index == IW_AUTH_CIPHER_PAIRWISE || index == IW_AUTH_CIPHER_GROUP)
         {
-          return value == IW_AUTH_CIPHER_NONE ||
-                 value == IW_AUTH_CIPHER_CCMP ? 0 : -EOPNOTSUPP;
+          return value == IW_AUTH_CIPHER_NONE || value == IW_AUTH_CIPHER_CCMP
+                     ? 0
+                     : -EOPNOTSUPP;
         }
 
       if (index == IW_AUTH_KEY_MGMT)
         {
-          return value == 0 || value == IW_AUTH_KEY_MGMT_PSK ?
-                 0 : -EOPNOTSUPP;
+          return value == 0 || value == IW_AUTH_KEY_MGMT_PSK ? 0 : -EOPNOTSUPP;
         }
 
       if (index == IW_AUTH_WPA_ENABLED)
         {
-          ioctl->access_point.security = value ?
-              SV6621_SECURITY_WPA2_PSK : SV6621_SECURITY_OPEN;
+          ioctl->access_point.security =
+              value ? SV6621_SECURITY_WPA2_PSK : SV6621_SECURITY_OPEN;
           if (!value)
             {
               memset(ioctl->access_point.credential, 0,
@@ -139,7 +150,9 @@ static int sv6621_ioctl_auth(FAR struct sv6621_ioctl_s *ioctl,
         }
 
       return index == IW_AUTH_80211_AUTH_ALG &&
-             (value & IW_AUTH_ALG_OPEN_SYSTEM) != 0 ? 0 : -EOPNOTSUPP;
+                     (value & IW_AUTH_ALG_OPEN_SYSTEM) != 0
+                 ? 0
+                 : -EOPNOTSUPP;
     }
 
   switch (index)
@@ -170,19 +183,19 @@ static int sv6621_ioctl_auth(FAR struct sv6621_ioctl_s *ioctl,
 
       case IW_AUTH_CIPHER_PAIRWISE:
       case IW_AUTH_CIPHER_GROUP:
-        return value == IW_AUTH_CIPHER_NONE || value == IW_AUTH_CIPHER_CCMP ?
-               0 : -EOPNOTSUPP;
+        return value == IW_AUTH_CIPHER_NONE || value == IW_AUTH_CIPHER_CCMP
+                   ? 0
+                   : -EOPNOTSUPP;
 
       case IW_AUTH_KEY_MGMT:
-        return value == IW_AUTH_KEY_MGMT_PSK || value == 0 ?
-               0 : -EOPNOTSUPP;
+        return value == IW_AUTH_KEY_MGMT_PSK || value == 0 ? 0 : -EOPNOTSUPP;
 
       case IW_AUTH_80211_AUTH_ALG:
         return (value & IW_AUTH_ALG_OPEN_SYSTEM) != 0 ? 0 : -EOPNOTSUPP;
 
       case IW_AUTH_WPA_ENABLED:
-        ioctl->connection.security = value ? SV6621_SECURITY_WPA2_PSK :
-                                             SV6621_SECURITY_OPEN;
+        ioctl->connection.security =
+            value ? SV6621_SECURITY_WPA2_PSK : SV6621_SECURITY_OPEN;
         if (!value)
           {
             memset(ioctl->connection.credential, 0,
@@ -212,8 +225,7 @@ static int sv6621_ioctl_key(FAR struct sv6621_ioctl_s *ioctl,
           request->u.encoding.length < sizeof(*extension) ||
           extension->alg != IW_ENCODE_ALG_CCMP || extension->key_len < 8 ||
           extension->key_len > 63 ||
-          request->u.encoding.length < sizeof(*extension) +
-                                       extension->key_len)
+          request->u.encoding.length < sizeof(*extension) + extension->key_len)
         {
           return -EINVAL;
         }
@@ -223,12 +235,16 @@ static int sv6621_ioctl_key(FAR struct sv6621_ioctl_s *ioctl,
       memcpy(ioctl->access_point.credential, extension->key,
              extension->key_len);
       ioctl->access_point.credential_length = extension->key_len;
-      ioctl->access_point.security = SV6621_SECURITY_WPA2_PSK;
+      if (ioctl->access_point.security != SV6621_SECURITY_WPA3_SAE &&
+          ioctl->access_point.security != SV6621_SECURITY_WPA2_WPA3_PSK)
+        {
+          ioctl->access_point.security = SV6621_SECURITY_WPA2_PSK;
+        }
+
       return 0;
     }
 
-  if (extension == NULL ||
-      request->u.encoding.length < sizeof(*extension) ||
+  if (extension == NULL || request->u.encoding.length < sizeof(*extension) ||
       extension->alg != IW_ENCODE_ALG_CCMP ||
       (extension->key_len < 8 || extension->key_len > SV6621_KEY_MAX_LENGTH) ||
       request->u.encoding.length < sizeof(*extension) + extension->key_len)
@@ -325,9 +341,8 @@ static int sv6621_ioctl_essid(FAR struct sv6621_ioctl_s *ioctl,
 
   if (request->u.essid.flags == IW_ESSID_OFF)
     {
-      ret = ioctl->mode == IW_MODE_MASTER ?
-            sv6621_stop_ap(ioctl->owner) :
-            sv6621_disconnect(ioctl->owner, 3);
+      ret = ioctl->mode == IW_MODE_MASTER ? sv6621_stop_ap(ioctl->owner)
+                                          : sv6621_disconnect(ioctl->owner, 3);
       return ret == -ENOTCONN ? 0 : ret;
     }
 
@@ -356,8 +371,7 @@ static int sv6621_ioctl_essid(FAR struct sv6621_ioctl_s *ioctl,
           return -EINVAL;
         }
 
-      memset(ioctl->access_point.ssid, 0,
-             sizeof(ioctl->access_point.ssid));
+      memset(ioctl->access_point.ssid, 0, sizeof(ioctl->access_point.ssid));
       memcpy(ioctl->access_point.ssid, request->u.essid.pointer, length);
       ioctl->access_point.ssid_length = length;
       if (request->u.essid.flags == IW_ESSID_DELAY_ON)
@@ -399,8 +413,8 @@ static int sv6621_ioctl_frequency(FAR struct sv6621_ioctl_s *ioctl,
       request->u.freq.m = ioctl->access_point.channel;
       request->u.freq.e = 0;
       request->u.freq.i = ioctl->access_point.channel;
-      request->u.freq.flags = ioctl->access_point.channel == 0 ?
-                              IW_FREQ_AUTO : IW_FREQ_FIXED;
+      request->u.freq.flags =
+          ioctl->access_point.channel == 0 ? IW_FREQ_AUTO : IW_FREQ_FIXED;
       return 0;
     }
 
@@ -535,8 +549,8 @@ static int sv6621_ioctl_frequency_set(FAR struct sv6621_ioctl_s *ioctl,
       ioctl->access_point.channel = channel;
       ioctl->access_point.center_channel1 = channel;
       ioctl->access_point.center_channel2 = 0;
-      ioctl->access_point.band = channel <= 14 ?
-          SV6621_BAND_2GHZ : SV6621_BAND_5GHZ;
+      ioctl->access_point.band =
+          channel <= 14 ? SV6621_BAND_2GHZ : SV6621_BAND_5GHZ;
       return 0;
     }
 
@@ -545,8 +559,10 @@ static int sv6621_ioctl_frequency_set(FAR struct sv6621_ioctl_s *ioctl,
 }
 
 /****************************************************************************
- * Name: sv6621_ioctl_mode
- ****************************************************************************/
+
+ * * Name: sv6621_ioctl_mode
+
+ * ****************************************************************************/
 
 static int sv6621_ioctl_mode(FAR struct sv6621_ioctl_s *ioctl,
                              FAR struct iwreq *request, bool set)
@@ -560,8 +576,7 @@ static int sv6621_ioctl_mode(FAR struct sv6621_ioctl_s *ioctl,
       return 0;
     }
 
-  if (request->u.mode != IW_MODE_INFRA &&
-      request->u.mode != IW_MODE_AUTO &&
+  if (request->u.mode != IW_MODE_INFRA && request->u.mode != IW_MODE_AUTO &&
       request->u.mode != IW_MODE_MASTER)
     {
       return -EOPNOTSUPP;
@@ -659,22 +674,37 @@ static int sv6621_ioctl_auth_query(FAR struct sv6621_ioctl_s *ioctl,
       switch (request->u.param.flags & IW_AUTH_INDEX)
         {
           case IW_AUTH_WPA_VERSION:
-            request->u.param.value =
-                config->security == SV6621_SECURITY_OPEN ?
-                IW_AUTH_WPA_VERSION_DISABLED : IW_AUTH_WPA_VERSION_WPA2;
+            if (config->security == SV6621_SECURITY_OPEN)
+              {
+                request->u.param.value = IW_AUTH_WPA_VERSION_DISABLED;
+              }
+            else if (config->security == SV6621_SECURITY_WPA3_SAE)
+              {
+                request->u.param.value = IW_AUTH_WPA_VERSION_WPA3;
+              }
+            else if (config->security == SV6621_SECURITY_WPA2_WPA3_PSK)
+              {
+                request->u.param.value =
+                    IW_AUTH_WPA_VERSION_WPA2 | IW_AUTH_WPA_VERSION_WPA3;
+              }
+            else
+              {
+                request->u.param.value = IW_AUTH_WPA_VERSION_WPA2;
+              }
+
             return 0;
 
           case IW_AUTH_CIPHER_PAIRWISE:
           case IW_AUTH_CIPHER_GROUP:
-            request->u.param.value =
-                config->security == SV6621_SECURITY_OPEN ?
-                IW_AUTH_CIPHER_NONE : IW_AUTH_CIPHER_CCMP;
+            request->u.param.value = config->security == SV6621_SECURITY_OPEN
+                                         ? IW_AUTH_CIPHER_NONE
+                                         : IW_AUTH_CIPHER_CCMP;
             return 0;
 
           case IW_AUTH_KEY_MGMT:
-            request->u.param.value =
-                config->security == SV6621_SECURITY_OPEN ?
-                0 : IW_AUTH_KEY_MGMT_PSK;
+            request->u.param.value = config->security == SV6621_SECURITY_OPEN
+                                         ? 0
+                                         : IW_AUTH_KEY_MGMT_PSK;
             return 0;
 
           case IW_AUTH_WPA_ENABLED:
@@ -713,14 +743,16 @@ static int sv6621_ioctl_auth_query(FAR struct sv6621_ioctl_s *ioctl,
       case IW_AUTH_CIPHER_PAIRWISE:
       case IW_AUTH_CIPHER_GROUP:
         request->u.param.value =
-            ioctl->connection.security == SV6621_SECURITY_OPEN ?
-            IW_AUTH_CIPHER_NONE : IW_AUTH_CIPHER_CCMP;
+            ioctl->connection.security == SV6621_SECURITY_OPEN
+                ? IW_AUTH_CIPHER_NONE
+                : IW_AUTH_CIPHER_CCMP;
         return 0;
 
       case IW_AUTH_KEY_MGMT:
         request->u.param.value =
-            ioctl->connection.security == SV6621_SECURITY_OPEN ?
-            0 : IW_AUTH_KEY_MGMT_PSK;
+            ioctl->connection.security == SV6621_SECURITY_OPEN
+                ? 0
+                : IW_AUTH_KEY_MGMT_PSK;
         return 0;
 
       case IW_AUTH_80211_AUTH_ALG:
@@ -747,10 +779,11 @@ static int sv6621_ioctl_encoding_query(FAR struct sv6621_ioctl_s *ioctl,
 {
   request->u.encoding.length = 0;
   request->u.encoding.flags =
-      (ioctl->mode == IW_MODE_MASTER ?
-       ioctl->access_point.security : ioctl->connection.security) ==
-      SV6621_SECURITY_OPEN ?
-      IW_ENCODE_DISABLED : IW_ENCODE_ENABLED | IW_ENCODE_NOKEY;
+      (ioctl->mode == IW_MODE_MASTER
+           ? ioctl->access_point.security
+           : ioctl->connection.security) == SV6621_SECURITY_OPEN
+          ? IW_ENCODE_DISABLED
+          : IW_ENCODE_ENABLED | IW_ENCODE_NOKEY;
   return 0;
 }
 
@@ -854,7 +887,8 @@ static int sv6621_ioctl_scan_start(FAR struct sv6621_ioctl_s *ioctl,
                                    FAR const struct iwreq *request)
 {
   FAR const struct iw_scan_req *scan_request = request->u.data.pointer;
-  struct sv6621_scan_channel_s selected[SV6621_REGULATORY_SCAN_CHANNEL_CAPACITY];
+  struct sv6621_scan_channel_s
+      selected[SV6621_REGULATORY_SCAN_CHANNEL_CAPACITY];
   FAR const uint8_t *ssid = NULL;
   size_t selected_count = 0;
   size_t ssid_length = 0;
@@ -1014,8 +1048,7 @@ static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
       return -ENOMEM;
     }
 
-  ret = sv6621_scan_cache_snapshot(&ioctl->owner->scan.cache, results,
-                                    &count);
+  ret = sv6621_scan_cache_snapshot(&ioctl->owner->scan.cache, results, &count);
   if (ret < 0)
     {
       request->u.data.length = 0;
@@ -1025,9 +1058,8 @@ static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
   for (index = 0; index < count; index++)
     {
       required += IW_EV_LEN(ap_addr) + IW_EV_LEN(essid) +
-                  ((results[index].ssid_length + 3) & ~3) +
-                  IW_EV_LEN(mode) + IW_EV_LEN(qual) + IW_EV_LEN(freq) +
-                  IW_EV_LEN(data);
+                  ((results[index].ssid_length + 3) & ~3) + IW_EV_LEN(mode) +
+                  IW_EV_LEN(qual) + IW_EV_LEN(freq) + IW_EV_LEN(data);
     }
 
   if (request->u.data.pointer == NULL || request->u.data.length < required)
@@ -1101,9 +1133,9 @@ static int sv6621_ioctl_scan_results(FAR struct sv6621_ioctl_s *ioctl,
       event = (FAR struct iw_event *)cursor;
       memset(event, 0, IW_EV_LEN(data));
       event->cmd = SIOCGIWENCODE;
-      event->u.data.flags = bss->security == SV6621_SECURITY_OPEN ?
-                            IW_ENCODE_DISABLED :
-                            IW_ENCODE_ENABLED | IW_ENCODE_NOKEY;
+      event->u.data.flags = bss->security == SV6621_SECURITY_OPEN
+                                ? IW_ENCODE_DISABLED
+                                : IW_ENCODE_ENABLED | IW_ENCODE_NOKEY;
       event->len = IW_EV_LEN(data);
       cursor += event->len;
     }
@@ -1117,8 +1149,10 @@ free_results:
 }
 
 /****************************************************************************
- * Name: sv6621_ioctl_country
- ****************************************************************************/
+
+ * * Name: sv6621_ioctl_country
+
+ * ****************************************************************************/
 
 static int sv6621_ioctl_country(FAR struct sv6621_ioctl_s *ioctl,
                                 FAR struct iwreq *request, bool set)
@@ -1146,8 +1180,10 @@ static int sv6621_ioctl_country(FAR struct sv6621_ioctl_s *ioctl,
 }
 
 /****************************************************************************
- * Public Functions
- ****************************************************************************/
+
+ * * Public Functions
+
+ * ****************************************************************************/
 
 int sv6621_ioctl_init(FAR struct sv6621_ioctl_s *ioctl,
                       FAR struct sv6621_dev_s *owner)
@@ -1294,7 +1330,8 @@ int sv6621_ioctl_handle(FAR struct sv6621_ioctl_s *ioctl, int command,
 
       case SIOCSIWPWSAVE:
         /* Legacy station power save is selected autonomously by firmware,
-         * matching the vendor set_power_mgmt contract.
+
+         * * matching the vendor set_power_mgmt contract.
          */
 
         ret = 0;

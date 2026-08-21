@@ -39,7 +39,7 @@
  ****************************************************************************/
 
 #define SV6621_SAE_GROUP_COMMIT_ATTEMPTS 8
-#define SV6621_SAE_GROUP_PWE_ITERATIONS   40
+#define SV6621_SAE_GROUP_PWE_ITERATIONS  40
 #define SV6621_SAE_GROUP_PASSWORD_MAX    63
 
 /****************************************************************************
@@ -53,13 +53,13 @@ static const uint8_t g_sv6621_sae_pwe_label[] = "SAE Hunting and Pecking";
  ****************************************************************************/
 
 static int sv6621_sae_group_load(mbedtls_ecp_group *group);
-static int sv6621_sae_group_read_point(
-    FAR const mbedtls_ecp_group *group,
-    FAR const uint8_t encoded[SV6621_SAE_ELEMENT_SIZE],
-    FAR mbedtls_ecp_point *point);
-static int sv6621_sae_group_write_point(
-    FAR const mbedtls_ecp_point *point,
-    uint8_t encoded[SV6621_SAE_ELEMENT_SIZE]);
+static int
+sv6621_sae_group_read_point(FAR const mbedtls_ecp_group *group,
+                            FAR const uint8_t encoded[SV6621_SAE_ELEMENT_SIZE],
+                            FAR mbedtls_ecp_point *point);
+static int
+sv6621_sae_group_write_point(FAR const mbedtls_ecp_point *point,
+                             uint8_t encoded[SV6621_SAE_ELEMENT_SIZE]);
 static int sv6621_sae_group_test_seed(
     FAR const mbedtls_ecp_group *group, FAR const mbedtls_mpi *sqrt_exponent,
     FAR const uint8_t prime[SV6621_SAE_SCALAR_SIZE],
@@ -77,19 +77,18 @@ static int sv6621_sae_group_load(mbedtls_ecp_group *group)
   return ret == 0 ? 0 : -EIO;
 }
 
-static int sv6621_sae_group_read_point(
-    FAR const mbedtls_ecp_group *group,
-    FAR const uint8_t encoded[SV6621_SAE_ELEMENT_SIZE],
-    FAR mbedtls_ecp_point *point)
+static int
+sv6621_sae_group_read_point(FAR const mbedtls_ecp_group *group,
+                            FAR const uint8_t encoded[SV6621_SAE_ELEMENT_SIZE],
+                            FAR mbedtls_ecp_point *point)
 {
   int ret;
 
   ret = mbedtls_mpi_read_binary(&point->X, encoded, SV6621_SAE_SCALAR_SIZE);
   if (ret == 0)
     {
-      ret = mbedtls_mpi_read_binary(&point->Y,
-                                    encoded + SV6621_SAE_SCALAR_SIZE,
-                                    SV6621_SAE_SCALAR_SIZE);
+      ret = mbedtls_mpi_read_binary(
+          &point->Y, encoded + SV6621_SAE_SCALAR_SIZE, SV6621_SAE_SCALAR_SIZE);
     }
 
   if (ret == 0)
@@ -105,19 +104,17 @@ static int sv6621_sae_group_read_point(
   return ret == 0 ? 0 : -EINVAL;
 }
 
-static int sv6621_sae_group_write_point(
-    FAR const mbedtls_ecp_point *point,
-    uint8_t encoded[SV6621_SAE_ELEMENT_SIZE])
+static int
+sv6621_sae_group_write_point(FAR const mbedtls_ecp_point *point,
+                             uint8_t encoded[SV6621_SAE_ELEMENT_SIZE])
 {
   int ret;
 
-  ret = mbedtls_mpi_write_binary(&point->X, encoded,
-                                 SV6621_SAE_SCALAR_SIZE);
+  ret = mbedtls_mpi_write_binary(&point->X, encoded, SV6621_SAE_SCALAR_SIZE);
   if (ret == 0)
     {
-      ret = mbedtls_mpi_write_binary(&point->Y,
-                                     encoded + SV6621_SAE_SCALAR_SIZE,
-                                     SV6621_SAE_SCALAR_SIZE);
+      ret = mbedtls_mpi_write_binary(
+          &point->Y, encoded + SV6621_SAE_SCALAR_SIZE, SV6621_SAE_SCALAR_SIZE);
     }
 
   return ret == 0 ? 0 : -EIO;
@@ -211,8 +208,8 @@ static int sv6621_sae_group_test_seed(
 
   if (ret == 0)
     {
-      ret = mbedtls_mpi_exp_mod(&point.Y, &rhs, sqrt_exponent, &group->P,
-                                NULL);
+      ret =
+          mbedtls_mpi_exp_mod(&point.Y, &rhs, sqrt_exponent, &group->P, NULL);
     }
 
   if (ret == 0)
@@ -290,11 +287,11 @@ int sv6621_sae_group_validate_element(
   return ret;
 }
 
-int sv6621_sae_group_derive_pwe(
-    FAR const uint8_t address1[SV6621_MAC_LENGTH],
-    FAR const uint8_t address2[SV6621_MAC_LENGTH],
-    FAR const uint8_t *password, size_t password_length,
-    uint8_t pwe[SV6621_SAE_ELEMENT_SIZE])
+int sv6621_sae_group_derive_pwe(FAR const uint8_t address1[SV6621_MAC_LENGTH],
+                                FAR const uint8_t address2[SV6621_MAC_LENGTH],
+                                FAR const uint8_t *password,
+                                size_t password_length,
+                                uint8_t pwe[SV6621_SAE_ELEMENT_SIZE])
 {
   uint8_t address_key[SV6621_MAC_LENGTH * 2];
   uint8_t input[SV6621_SAE_GROUP_PASSWORD_MAX + 1];
@@ -346,8 +343,8 @@ int sv6621_sae_group_derive_pwe(
       ret = mbedtls_mpi_shift_r(&sqrt_exponent, 2);
     }
 
-  for (counter = 1;
-       ret == 0 && counter <= SV6621_SAE_GROUP_PWE_ITERATIONS; counter++)
+  for (counter = 1; ret == 0 && counter <= SV6621_SAE_GROUP_PWE_ITERATIONS;
+       counter++)
     {
       bool valid = false;
       uint8_t select;
@@ -355,14 +352,14 @@ int sv6621_sae_group_derive_pwe(
 
       input[password_length] = counter;
       ret = sv6621_sae_hmac_sha256(address_key, sizeof(address_key), input,
-                                    password_length + 1, seed);
+                                   password_length + 1, seed);
       if (ret == 0)
         {
-          ret = sv6621_sae_group_test_seed(&group, &sqrt_exponent, prime,
-                                           seed, candidate, &valid);
+          ret = sv6621_sae_group_test_seed(&group, &sqrt_exponent, prime, seed,
+                                           candidate, &valid);
         }
 
-      select = (uint8_t)-(int)(valid && !found);
+      select = (uint8_t) - (int)(valid && !found);
       for (index = 0; index < sizeof(candidate); index++)
         {
           pwe[index] = (pwe[index] & ~select) | (candidate[index] & select);
@@ -429,8 +426,8 @@ int sv6621_sae_group_generate_commit(
       ret = sv6621_sae_group_read_point(&group, pwe, &password_element);
     }
 
-  for (attempt = 0;
-       ret == 0 && attempt < SV6621_SAE_GROUP_COMMIT_ATTEMPTS; attempt++)
+  for (attempt = 0; ret == 0 && attempt < SV6621_SAE_GROUP_COMMIT_ATTEMPTS;
+       attempt++)
     {
       ret = mbedtls_ecp_gen_privkey(&group, &random,
                                     sv6621_sae_random_callback, NULL);
@@ -447,8 +444,7 @@ int sv6621_sae_group_generate_commit(
 
       if (ret == 0)
         {
-          ret = mbedtls_mpi_mod_mpi(&commit_scalar, &commit_scalar,
-                                    &group.N);
+          ret = mbedtls_mpi_mod_mpi(&commit_scalar, &commit_scalar, &group.N);
         }
 
       if (ret == 0 && mbedtls_mpi_cmp_int(&commit_scalar, 1) <= 0)
@@ -459,8 +455,8 @@ int sv6621_sae_group_generate_commit(
       if (ret == 0)
         {
           ret = mbedtls_ecp_mul(&group, &commit_element, &mask,
-                                &password_element,
-                                sv6621_sae_random_callback, NULL);
+                                &password_element, sv6621_sae_random_callback,
+                                NULL);
         }
 
       if (ret == 0)
@@ -574,23 +570,21 @@ int sv6621_sae_group_derive_secret(
 
   if (ret == 0)
     {
-      ret = mbedtls_mpi_read_binary(&own, own_scalar,
-                                    SV6621_SAE_SCALAR_SIZE);
+      ret = mbedtls_mpi_read_binary(&own, own_scalar, SV6621_SAE_SCALAR_SIZE);
     }
 
   if (ret == 0)
     {
-      ret = mbedtls_mpi_read_binary(&peer, peer_scalar,
-                                    SV6621_SAE_SCALAR_SIZE);
+      ret =
+          mbedtls_mpi_read_binary(&peer, peer_scalar, SV6621_SAE_SCALAR_SIZE);
     }
 
-  if (ret == 0 &&
-      (mbedtls_ecp_check_privkey(&group, &random) != 0 ||
-       mbedtls_ecp_check_privkey(&group, &own) != 0 ||
-       mbedtls_ecp_check_privkey(&group, &peer) != 0 ||
-       mbedtls_mpi_cmp_int(&own, 1) <= 0 ||
-       mbedtls_mpi_cmp_int(&peer, 1) <= 0 ||
-       mbedtls_mpi_cmp_mpi(&own, &peer) == 0))
+  if (ret == 0 && (mbedtls_ecp_check_privkey(&group, &random) != 0 ||
+                   mbedtls_ecp_check_privkey(&group, &own) != 0 ||
+                   mbedtls_ecp_check_privkey(&group, &peer) != 0 ||
+                   mbedtls_mpi_cmp_int(&own, 1) <= 0 ||
+                   mbedtls_mpi_cmp_int(&peer, 1) <= 0 ||
+                   mbedtls_mpi_cmp_mpi(&own, &peer) == 0))
     {
       ret = -EINVAL;
     }
@@ -602,8 +596,8 @@ int sv6621_sae_group_derive_secret(
 
   if (ret == 0)
     {
-      ret = mbedtls_ecp_muladd(&group, &sum, &peer, &password_element,
-                               &one, &element);
+      ret = mbedtls_ecp_muladd(&group, &sum, &peer, &password_element, &one,
+                               &element);
     }
 
   if (ret == 0 && mbedtls_ecp_is_zero(&sum))
@@ -624,8 +618,8 @@ int sv6621_sae_group_derive_secret(
 
   if (ret == 0)
     {
-      ret = mbedtls_mpi_write_binary(&shared.X, secret,
-                                     SV6621_SAE_SCALAR_SIZE);
+      ret =
+          mbedtls_mpi_write_binary(&shared.X, secret, SV6621_SAE_SCALAR_SIZE);
     }
 
   if (ret != 0 && ret != -EINVAL)
