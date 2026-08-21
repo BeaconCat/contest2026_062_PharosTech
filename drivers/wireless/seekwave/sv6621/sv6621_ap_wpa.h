@@ -69,6 +69,7 @@ struct sv6621_ap_wpa_peer_s
   uint8_t ptk[SV6621_WPA_PTK_SIZE];
   uint8_t replay[SV6621_WPA_REPLAY_SIZE];
   uint8_t peer_index;
+  enum sv6621_wpa_key_mgmt_e key_mgmt;
   enum sv6621_ap_wpa_state_e state;
   bool group_rekey_pending;
 };
@@ -89,6 +90,7 @@ struct sv6621_ap_wpa_s
   uint8_t gtk_index;
   uint8_t previous_gtk_index;
   uint8_t group_rekey_retries;
+  enum sv6621_security_e security;
   sv6621_ap_wpa_error_t error;
   FAR void *error_arg;
   bool group_rekey_active;
