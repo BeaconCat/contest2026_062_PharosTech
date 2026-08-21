@@ -27,8 +27,8 @@
  * Included Files
  ****************************************************************************/
 
-#include <nuttx/config.h>
 #include <nuttx/clock.h>
+#include <nuttx/config.h>
 #include <nuttx/mutex.h>
 #include <nuttx/semaphore.h>
 #ifdef CONFIG_SV6621_PM
@@ -123,8 +123,7 @@ struct sv6621_dev_s
   uint8_t security_head;
   uint8_t security_tail;
   bool security_work_scheduled;
-  struct sv6621_signal_event_s
-      signal_events[SV6621_CORE_SIGNAL_EVENT_DEPTH];
+  struct sv6621_signal_event_s signal_events[SV6621_CORE_SIGNAL_EVENT_DEPTH];
   uint8_t signal_head;
   uint8_t signal_tail;
   bool signal_work_scheduled;
@@ -158,9 +157,9 @@ struct sv6621_dev_s
  * Public Function Prototypes
  ****************************************************************************/
 
-int sv6621_scan_selected(
-    FAR struct sv6621_dev_s *dev,
-    FAR const struct sv6621_scan_channel_s *channels, size_t channel_count,
-    FAR const uint8_t *ssid, size_t ssid_length);
+int sv6621_scan_selected(FAR struct sv6621_dev_s *dev,
+                         FAR const struct sv6621_scan_channel_s *channels,
+                         size_t channel_count, FAR const uint8_t *ssid,
+                         size_t ssid_length);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_CORE_H */

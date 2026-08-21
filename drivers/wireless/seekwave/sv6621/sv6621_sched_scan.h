@@ -44,9 +44,9 @@
  ****************************************************************************/
 
 typedef void (*sv6621_sched_scan_complete_t)(uint32_t request_id,
-                                              FAR void *arg);
-typedef void (*sv6621_sched_scan_result_t)(
-    FAR const struct sv6621_bss_s *bss, FAR void *arg);
+                                             FAR void *arg);
+typedef void (*sv6621_sched_scan_result_t)(FAR const struct sv6621_bss_s *bss,
+                                           FAR void *arg);
 
 struct sv6621_sched_scan_s
 {
@@ -84,7 +84,7 @@ int sv6621_sched_scan_begin(
     FAR const struct sv6621_sched_scan_request_s *request);
 int sv6621_sched_scan_cancel(FAR struct sv6621_sched_scan_s *scan);
 void sv6621_sched_scan_command_event(uint8_t instance, uint8_t id,
-                                     FAR const uint8_t *payload,
-                                     size_t length, FAR void *arg);
+                                     FAR const uint8_t *payload, size_t length,
+                                     FAR void *arg);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_SCHED_SCAN_H */

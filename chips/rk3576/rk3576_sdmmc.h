@@ -89,9 +89,9 @@ int rk3576_sdmmc_register_media_callback(
  *   This callback is only supported by the non-removable SDIO host.
  ****************************************************************************/
 
-int rk3576_sdmmc_register_sdio_callback(
-    FAR struct sdio_dev_s *dev, rk3576_sdmmc_sdio_callback_t callback,
-    FAR void *arg);
+int rk3576_sdmmc_register_sdio_callback(FAR struct sdio_dev_s *dev,
+                                        rk3576_sdmmc_sdio_callback_t callback,
+                                        FAR void *arg);
 
 /****************************************************************************
  * Name: rk3576_sdmmc_enable_sdio_interrupt

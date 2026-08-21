@@ -132,9 +132,9 @@ int sv6621_ap_reset(FAR struct sv6621_ap_s *ap);
 int sv6621_ap_queue_event(FAR struct sv6621_ap_s *ap, uint8_t instance,
                           uint8_t id, FAR const uint8_t *payload,
                           size_t length);
-int sv6621_ap_resolve_tx(
-    FAR struct sv6621_ap_s *ap, FAR const uint8_t *frame, size_t length,
-    FAR struct sv6621_data_tx_context_s *context);
+int sv6621_ap_resolve_tx(FAR struct sv6621_ap_s *ap, FAR const uint8_t *frame,
+                         size_t length,
+                         FAR struct sv6621_data_tx_context_s *context);
 int sv6621_ap_validate_rx(FAR struct sv6621_ap_s *ap,
                           FAR const struct sv6621_data_rx_s *rx);
 int sv6621_ap_forward_policy(FAR struct sv6621_ap_s *ap,
@@ -142,6 +142,6 @@ int sv6621_ap_forward_policy(FAR struct sv6621_ap_s *ap,
                              FAR bool *forward, FAR bool *deliver_local);
 bool sv6621_ap_is_active(FAR struct sv6621_ap_s *ap);
 void sv6621_ap_eapol_input(FAR const struct sv6621_data_rx_s *rx,
-                            FAR void *arg);
+                           FAR void *arg);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_H */

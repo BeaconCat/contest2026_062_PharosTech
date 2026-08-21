@@ -44,10 +44,8 @@ static void sv6621_ap_event_worker(FAR void *arg);
 
 static bool sv6621_ap_event_supported(uint8_t id)
 {
-  return id == SV6621_AP_EVENT_RX_MGMT ||
-         id == SV6621_AP_EVENT_DEL_STA ||
-         id == SV6621_AP_EVENT_MGMT_TX_STATUS ||
-         id == SV6621_AP_EVENT_EAPOL;
+  return id == SV6621_AP_EVENT_RX_MGMT || id == SV6621_AP_EVENT_DEL_STA ||
+         id == SV6621_AP_EVENT_MGMT_TX_STATUS || id == SV6621_AP_EVENT_EAPOL;
 }
 
 static void sv6621_ap_event_worker(FAR void *arg)
@@ -110,8 +108,7 @@ static void sv6621_ap_event_worker(FAR void *arg)
 
 int sv6621_ap_event_queue_init(FAR struct sv6621_ap_event_queue_s *queue,
                                sv6621_ap_event_handler_t handler,
-                               sv6621_ap_event_error_t error,
-                               FAR void *arg)
+                               sv6621_ap_event_error_t error, FAR void *arg)
 {
   int ret;
 
@@ -194,8 +191,7 @@ int sv6621_ap_event_queue_submit(FAR struct sv6621_ap_event_queue_s *queue,
   int ret;
 
   if (queue == NULL || !sv6621_ap_event_supported(id) ||
-      (payload == NULL && length != 0) ||
-      length > SV6621_AP_EVENT_MAX_PAYLOAD)
+      (payload == NULL && length != 0) || length > SV6621_AP_EVENT_MAX_PAYLOAD)
     {
       return -EINVAL;
     }

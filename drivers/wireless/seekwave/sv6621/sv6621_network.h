@@ -42,20 +42,22 @@
 #include "include/sv6621.h"
 #include "sv6621_command.h"
 #include "sv6621_data.h"
-#include "sv6621_offload.h"
 #include "sv6621_ioctl.h"
+#include "sv6621_offload.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_NETWORK_RX_DEPTH 4
-#define SV6621_NETWORK_FORWARD_DEPTH 8
+#define SV6621_NETWORK_RX_DEPTH           4
+#define SV6621_NETWORK_FORWARD_DEPTH      8
 #define SV6621_NETWORK_MULTICAST_CAPACITY 32
 
 /****************************************************************************
- * Public Types
- ****************************************************************************/
+
+ * * Public Types
+
+ * ****************************************************************************/
 
 typedef int (*sv6621_network_tx_resolver_t)(
     FAR const uint8_t *frame, size_t length,
@@ -122,12 +124,12 @@ int sv6621_network_sync_link_addresses(
 void sv6621_network_set_link(
     FAR struct sv6621_network_s *network, bool link_up,
     FAR const struct sv6621_data_tx_context_s *context);
-void sv6621_network_set_tx_resolver(
-    FAR struct sv6621_network_s *network,
-    sv6621_network_tx_resolver_t resolver, FAR void *arg);
+void sv6621_network_set_tx_resolver(FAR struct sv6621_network_s *network,
+                                    sv6621_network_tx_resolver_t resolver,
+                                    FAR void *arg);
 void sv6621_network_credit_available(FAR struct sv6621_network_s *network);
 int sv6621_network_forward(FAR struct sv6621_network_s *network,
-                            FAR const uint8_t *frame, size_t length);
+                           FAR const uint8_t *frame, size_t length);
 void sv6621_network_input(FAR const struct sv6621_data_rx_s *rx,
                           FAR void *arg);
 

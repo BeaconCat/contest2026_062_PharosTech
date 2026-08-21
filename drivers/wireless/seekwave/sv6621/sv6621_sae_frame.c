@@ -40,13 +40,12 @@
 #define SV6621_SAE_AUTH_FIXED_SIZE    6
 #define SV6621_SAE_AUTH_FRAME_SIZE \
   (SV6621_SAE_FRAME_HEADER_SIZE + SV6621_SAE_AUTH_FIXED_SIZE)
-#define SV6621_SAE_AUTH_ALGORITHM     3
-#define SV6621_SAE_COMMIT_TRANSACTION 1
+#define SV6621_SAE_AUTH_ALGORITHM      3
+#define SV6621_SAE_COMMIT_TRANSACTION  1
 #define SV6621_SAE_CONFIRM_TRANSACTION 2
 #define SV6621_SAE_COMMIT_FIXED_SIZE \
   (2 + SV6621_SAE_SCALAR_SIZE + SV6621_SAE_ELEMENT_SIZE)
-#define SV6621_SAE_CONFIRM_BODY_SIZE \
-  (2 + SV6621_SAE_CONFIRM_SIZE)
+#define SV6621_SAE_CONFIRM_BODY_SIZE (2 + SV6621_SAE_CONFIRM_SIZE)
 
 /****************************************************************************
  * Private Function Prototypes
@@ -102,12 +101,13 @@ int sv6621_sae_auth_parse(FAR const uint8_t *frame, size_t frame_length,
   return 0;
 }
 
-int sv6621_sae_auth_build(
-    FAR const uint8_t destination[SV6621_MAC_LENGTH],
-    FAR const uint8_t source[SV6621_MAC_LENGTH],
-    FAR const uint8_t bssid[SV6621_MAC_LENGTH], uint16_t transaction,
-    uint16_t status, FAR const uint8_t *body, size_t body_length,
-    FAR uint8_t *frame, size_t capacity, FAR size_t *frame_length)
+int sv6621_sae_auth_build(FAR const uint8_t destination[SV6621_MAC_LENGTH],
+                          FAR const uint8_t source[SV6621_MAC_LENGTH],
+                          FAR const uint8_t bssid[SV6621_MAC_LENGTH],
+                          uint16_t transaction, uint16_t status,
+                          FAR const uint8_t *body, size_t body_length,
+                          FAR uint8_t *frame, size_t capacity,
+                          FAR size_t *frame_length)
 {
   size_t output_length;
 
@@ -169,18 +169,19 @@ int sv6621_sae_commit_parse(FAR const struct sv6621_sae_auth_frame_s *auth,
   return 0;
 }
 
-int sv6621_sae_commit_build(
-    uint16_t group, FAR const uint8_t *token, size_t token_length,
-    FAR const uint8_t scalar[SV6621_SAE_SCALAR_SIZE],
-    FAR const uint8_t element[SV6621_SAE_ELEMENT_SIZE], FAR uint8_t *body,
-    size_t capacity, FAR size_t *body_length)
+int sv6621_sae_commit_build(uint16_t group, FAR const uint8_t *token,
+                            size_t token_length,
+                            FAR const uint8_t scalar[SV6621_SAE_SCALAR_SIZE],
+                            FAR const uint8_t element[SV6621_SAE_ELEMENT_SIZE],
+                            FAR uint8_t *body, size_t capacity,
+                            FAR size_t *body_length)
 {
   size_t output_length;
   size_t offset;
 
-  if (group != SV6621_SAE_GROUP_19 ||
-      (token == NULL && token_length != 0) || scalar == NULL ||
-      element == NULL || body == NULL || body_length == NULL ||
+  if (group != SV6621_SAE_GROUP_19 || (token == NULL && token_length != 0) ||
+      scalar == NULL || element == NULL || body == NULL ||
+      body_length == NULL ||
       token_length > SIZE_MAX - SV6621_SAE_COMMIT_FIXED_SIZE)
     {
       return -EINVAL;
@@ -208,8 +209,7 @@ int sv6621_sae_commit_build(
 }
 
 int sv6621_sae_token_parse(FAR const struct sv6621_sae_auth_frame_s *auth,
-                           FAR const uint8_t **token,
-                           FAR size_t *token_length)
+                           FAR const uint8_t **token, FAR size_t *token_length)
 {
   if (auth == NULL || token == NULL || token_length == NULL ||
       auth->transaction != SV6621_SAE_COMMIT_TRANSACTION ||
@@ -244,9 +244,10 @@ int sv6621_sae_confirm_parse(FAR const struct sv6621_sae_auth_frame_s *auth,
   return 0;
 }
 
-int sv6621_sae_confirm_build(
-    uint16_t counter, FAR const uint8_t value[SV6621_SAE_CONFIRM_SIZE],
-    FAR uint8_t *body, size_t capacity, FAR size_t *body_length)
+int sv6621_sae_confirm_build(uint16_t counter,
+                             FAR const uint8_t value[SV6621_SAE_CONFIRM_SIZE],
+                             FAR uint8_t *body, size_t capacity,
+                             FAR size_t *body_length)
 {
   if (value == NULL || body == NULL || body_length == NULL)
     {

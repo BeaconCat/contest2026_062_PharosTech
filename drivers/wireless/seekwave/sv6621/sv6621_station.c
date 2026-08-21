@@ -40,42 +40,42 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_STATION_MGMT_HEADER_SIZE       8
-#define SV6621_STATION_FRAME_HEADER_SIZE      24
-#define SV6621_STATION_FRAME_BSSID_OFFSET     16
-#define SV6621_STATION_FRAME_SUBTYPE_MASK     0x00fc
-#define SV6621_STATION_FRAME_AUTH             0x00b0
-#define SV6621_STATION_FRAME_ASSOC_RESPONSE   0x0010
-#define SV6621_STATION_FRAME_REASSOC_RESPONSE 0x0030
-#define SV6621_STATION_FRAME_DEAUTH           0x00c0
-#define SV6621_STATION_FRAME_DISASSOC         0x00a0
-#define SV6621_STATION_AUTH_FRAME_SIZE        30
-#define SV6621_STATION_ASSOC_FRAME_SIZE       30
-#define SV6621_STATION_REASON_FRAME_SIZE      26
-#define SV6621_STATION_DISCONNECT_EVENT_SIZE  8
-#define SV6621_STATION_EVENT_DISCONNECT        2
-#define SV6621_STATION_EVENT_RX_MGMT           4
+#define SV6621_STATION_MGMT_HEADER_SIZE         8
+#define SV6621_STATION_FRAME_HEADER_SIZE        24
+#define SV6621_STATION_FRAME_BSSID_OFFSET       16
+#define SV6621_STATION_FRAME_SUBTYPE_MASK       0x00fc
+#define SV6621_STATION_FRAME_AUTH               0x00b0
+#define SV6621_STATION_FRAME_ASSOC_RESPONSE     0x0010
+#define SV6621_STATION_FRAME_REASSOC_RESPONSE   0x0030
+#define SV6621_STATION_FRAME_DEAUTH             0x00c0
+#define SV6621_STATION_FRAME_DISASSOC           0x00a0
+#define SV6621_STATION_AUTH_FRAME_SIZE          30
+#define SV6621_STATION_ASSOC_FRAME_SIZE         30
+#define SV6621_STATION_REASON_FRAME_SIZE        26
+#define SV6621_STATION_DISCONNECT_EVENT_SIZE    8
+#define SV6621_STATION_EVENT_DISCONNECT         2
+#define SV6621_STATION_EVENT_RX_MGMT            4
 #define SV6621_STATION_AUTH_SAE                 3
 #define SV6621_STATION_AUTH_SUCCESS_TRANSACTION 2
 #define SV6621_STATION_REASON_UNSPECIFIED       1
 #define SV6621_STATION_HT_CAPABILITY_OFFSET     0
 #define SV6621_STATION_HT_AMPDU_OFFSET          2
 #define SV6621_STATION_HT_RX_MCS_OFFSET         3
-#define SV6621_STATION_HT_TX_PARAMETERS_OFFSET 15
+#define SV6621_STATION_HT_TX_PARAMETERS_OFFSET  15
 #define SV6621_STATION_HT_EXT_CAPABILITY_OFFSET 19
 #define SV6621_STATION_HT_TX_DEFINED            (1 << 0)
-#define SV6621_STATION_HT_TX_RX_DIFFERENT        (1 << 1)
-#define SV6621_STATION_HT_TX_STREAMS_SHIFT       2
-#define SV6621_STATION_VHT_CAPABILITY_OFFSET      0
-#define SV6621_STATION_VHT_RX_MCS_OFFSET          4
-#define SV6621_STATION_VHT_TX_MCS_OFFSET          8
+#define SV6621_STATION_HT_TX_RX_DIFFERENT       (1 << 1)
+#define SV6621_STATION_HT_TX_STREAMS_SHIFT      2
+#define SV6621_STATION_VHT_CAPABILITY_OFFSET    0
+#define SV6621_STATION_VHT_RX_MCS_OFFSET        4
+#define SV6621_STATION_VHT_TX_MCS_OFFSET        8
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static const uint8_t g_sv6621_station_ht_capability
-    [SV6621_CONNECTION_HT_CAPABILITY_SIZE] = {
+static const uint8_t
+    g_sv6621_station_ht_capability[SV6621_CONNECTION_HT_CAPABILITY_SIZE] = {
       0x6e, 0x00, 0x17, 0xff
     };
 /****************************************************************************
@@ -176,9 +176,9 @@ static void sv6621_station_association_worker(FAR void *arg)
 
   nxmutex_unlock(&station->lock);
   ret = sv6621_connection_associate(
-      station->command, station->target.bss.bssid,
-      station->ht_capability, station->vht_capability,
-      station->association_ies, station->association_ie_length);
+      station->command, station->target.bss.bssid, station->ht_capability,
+      station->vht_capability, station->association_ies,
+      station->association_ie_length);
   if (ret < 0)
     {
       sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
@@ -243,8 +243,8 @@ int sv6621_station_parse_mgmt(FAR const uint8_t *payload, size_t length,
   uint16_t frame_length;
 
   if (payload == NULL || event == NULL ||
-      length < SV6621_STATION_MGMT_HEADER_SIZE +
-                   SV6621_STATION_FRAME_HEADER_SIZE ||
+      length <
+          SV6621_STATION_MGMT_HEADER_SIZE + SV6621_STATION_FRAME_HEADER_SIZE ||
       payload[0] == 0 || payload[1] > SV6621_BAND_5GHZ)
     {
       return -EINVAL;
@@ -258,8 +258,8 @@ int sv6621_station_parse_mgmt(FAR const uint8_t *payload, size_t length,
     }
 
   frame = payload + SV6621_STATION_MGMT_HEADER_SIZE;
-  frame_control = sv6621_station_get_le16(frame) &
-                  SV6621_STATION_FRAME_SUBTYPE_MASK;
+  frame_control =
+      sv6621_station_get_le16(frame) & SV6621_STATION_FRAME_SUBTYPE_MASK;
   memset(event, 0, sizeof(*event));
   event->channel = payload[0];
   event->band = payload[1] == 0 ? SV6621_BAND_2GHZ : SV6621_BAND_5GHZ;
@@ -318,9 +318,9 @@ int sv6621_station_parse_mgmt(FAR const uint8_t *payload, size_t length,
  * Name: sv6621_station_parse_disconnect
  ****************************************************************************/
 
-int sv6621_station_parse_disconnect(
-    FAR const uint8_t *payload, size_t length,
-    uint8_t bssid[SV6621_MAC_LENGTH], FAR uint16_t *reason)
+int sv6621_station_parse_disconnect(FAR const uint8_t *payload, size_t length,
+                                    uint8_t bssid[SV6621_MAC_LENGTH],
+                                    FAR uint16_t *reason)
 {
   if (payload == NULL || bssid == NULL || reason == NULL ||
       length != SV6621_STATION_DISCONNECT_EVENT_SIZE)
@@ -371,8 +371,8 @@ int sv6621_station_init(FAR struct sv6621_station_s *station,
       return ret;
     }
 
-  ret = sv6621_sae_init(&station->sae, command,
-                        sv6621_station_sae_complete, station);
+  ret = sv6621_sae_init(&station->sae, command, sv6621_station_sae_complete,
+                        station);
   if (ret < 0)
     {
       nxsem_destroy(&station->completion);
@@ -390,9 +390,9 @@ int sv6621_station_init(FAR struct sv6621_station_s *station,
   return 0;
 }
 
-int sv6621_station_set_local_address(
-    FAR struct sv6621_station_s *station,
-    FAR const uint8_t address[SV6621_MAC_LENGTH])
+int sv6621_station_set_local_address(FAR struct sv6621_station_s *station,
+                                     FAR const uint8_t
+                                         address[SV6621_MAC_LENGTH])
 {
   int ret;
 
@@ -426,8 +426,8 @@ int sv6621_station_set_local_address(
 int sv6621_station_configure_ht(FAR struct sv6621_station_s *station,
                                 uint16_t capabilities,
                                 uint16_t extended_capabilities,
-                                uint16_t ampdu_parameters,
-                                uint32_t tx_mcs, uint32_t rx_mcs)
+                                uint16_t ampdu_parameters, uint32_t tx_mcs,
+                                uint32_t rx_mcs)
 {
   uint8_t tx_streams = 0;
   uint8_t rx_streams = 0;
@@ -469,8 +469,7 @@ int sv6621_station_configure_ht(FAR struct sv6621_station_s *station,
       uint8_t rx_map = rx_mcs >> (index * 8);
       uint8_t tx_map = tx_mcs >> (index * 8);
 
-      station->ht_capability[SV6621_STATION_HT_RX_MCS_OFFSET + index] =
-          rx_map;
+      station->ht_capability[SV6621_STATION_HT_RX_MCS_OFFSET + index] = rx_map;
       rx_streams += rx_map != 0;
       tx_streams += tx_map != 0;
     }
@@ -481,8 +480,8 @@ int sv6621_station_configure_ht(FAR struct sv6621_station_s *station,
       if (tx_mcs != rx_mcs)
         {
           tx_parameters |= SV6621_STATION_HT_TX_RX_DIFFERENT;
-          tx_parameters |= (tx_streams - 1) <<
-                           SV6621_STATION_HT_TX_STREAMS_SHIFT;
+          tx_parameters |= (tx_streams - 1)
+                           << SV6621_STATION_HT_TX_STREAMS_SHIFT;
         }
     }
 
@@ -497,8 +496,8 @@ int sv6621_station_configure_ht(FAR struct sv6621_station_s *station,
  ****************************************************************************/
 
 int sv6621_station_configure_vht(FAR struct sv6621_station_s *station,
-                                 uint32_t capabilities,
-                                 uint16_t tx_mcs, uint16_t rx_mcs)
+                                 uint32_t capabilities, uint16_t tx_mcs,
+                                 uint16_t rx_mcs)
 {
   int ret;
 
@@ -671,9 +670,8 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
       goto free_target;
     }
 
-  if (roaming &&
-      memcmp(target->bss.bssid, station->target.bss.bssid,
-             SV6621_MAC_LENGTH) == 0)
+  if (roaming && memcmp(target->bss.bssid, station->target.bss.bssid,
+                        SV6621_MAC_LENGTH) == 0)
     {
       nxmutex_unlock(&station->lock);
       ret = -EALREADY;
@@ -708,9 +706,9 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
   kmm_free(target);
   target = NULL;
 
-  ret = sv6621_connection_join(
-      station->command, &station->target, station->bandwidth_capabilities,
-      roaming, &station->peer);
+  ret = sv6621_connection_join(station->command, &station->target,
+                               station->bandwidth_capabilities, roaming,
+                               &station->peer);
   if (ret < 0)
     {
       sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
@@ -745,10 +743,10 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
       else
         {
           ret = sv6621_sae_start(
-              &station->sae, station->local_address,
-              station->target.bss.bssid, station->peer.instance,
-              station->target.bss.channel, station->target.bss.band,
-              request->credential, request->credential_length);
+              &station->sae, station->local_address, station->target.bss.bssid,
+              station->peer.instance, station->target.bss.channel,
+              station->target.bss.band, request->credential,
+              request->credential_length);
         }
     }
   else
@@ -780,8 +778,7 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
       else if (station->state == SV6621_STATION_ASSOCIATING ||
                station->state == SV6621_STATION_ASSOCIATED)
         {
-          direct_association =
-              station->state == SV6621_STATION_ASSOCIATING;
+          direct_association = station->state == SV6621_STATION_ASSOCIATING;
           ret = 0;
         }
       else
@@ -828,9 +825,9 @@ int sv6621_station_connect(FAR struct sv6621_station_s *station,
       station->result = wait_result;
       nxmutex_unlock(&station->lock);
       sv6621_sae_cancel(&station->sae, wait_result);
-      sv6621_connection_disconnect(
-          station->command, SV6621_CONNECTION_DISCONNECT_ONLY, true,
-          SV6621_STATION_REASON_UNSPECIFIED, NULL, 0);
+      sv6621_connection_disconnect(station->command,
+                                   SV6621_CONNECTION_DISCONNECT_ONLY, true,
+                                   SV6621_STATION_REASON_UNSPECIFIED, NULL, 0);
       ret = wait_result;
       goto unlock_connect;
     }
@@ -889,9 +886,9 @@ int sv6621_station_disconnect(FAR struct sv6621_station_s *station,
 
   station->state = SV6621_STATION_DISCONNECTING;
   nxmutex_unlock(&station->lock);
-  ret = sv6621_connection_disconnect(
-      station->command, SV6621_CONNECTION_DISCONNECT_DEAUTH, false, reason,
-      NULL, 0);
+  ret = sv6621_connection_disconnect(station->command,
+                                     SV6621_CONNECTION_DISCONNECT_DEAUTH,
+                                     false, reason, NULL, 0);
   if (ret < 0)
     {
       if (nxmutex_lock(&station->lock) >= 0)
@@ -963,10 +960,9 @@ int sv6621_station_mark_connected(FAR struct sv6621_station_s *station)
   return 0;
 }
 
-int sv6621_station_get_sae_pmk(
-    FAR struct sv6621_station_s *station,
-    uint8_t pmk[SV6621_SAE_PMK_SIZE],
-    uint8_t pmkid[SV6621_SAE_PMKID_SIZE])
+int sv6621_station_get_sae_pmk(FAR struct sv6621_station_s *station,
+                               uint8_t pmk[SV6621_SAE_PMK_SIZE],
+                               uint8_t pmkid[SV6621_SAE_PMKID_SIZE])
 {
   int ret;
 
@@ -1097,8 +1093,8 @@ void sv6621_station_command_event(uint8_t instance, uint8_t id,
         }
 
       state = station->state;
-      if (memcmp(mgmt.bssid, station->target.bss.bssid,
-                 SV6621_MAC_LENGTH) != 0)
+      if (memcmp(mgmt.bssid, station->target.bss.bssid, SV6621_MAC_LENGTH) !=
+          0)
         {
           nxmutex_unlock(&station->lock);
           return;
@@ -1116,8 +1112,7 @@ void sv6621_station_command_event(uint8_t instance, uint8_t id,
                                          mgmt.frame_length);
                   if (ret < 0 && ret != -EBUSY && ret != -ENOTCONN)
                     {
-                      sv6621_station_finish(station, SV6621_STATION_IDLE,
-                                            ret);
+                      sv6621_station_finish(station, SV6621_STATION_IDLE, ret);
                     }
                 }
 
@@ -1141,12 +1136,11 @@ void sv6621_station_command_event(uint8_t instance, uint8_t id,
                state == SV6621_STATION_ASSOCIATING)
         {
           result = mgmt.status == 0 ? 0 : -ECONNREFUSED;
-          station->state = result == 0 ? SV6621_STATION_ASSOCIATED
-                                       : SV6621_STATION_IDLE;
+          station->state =
+              result == 0 ? SV6621_STATION_ASSOCIATED : SV6621_STATION_IDLE;
           station->result = result;
           complete = true;
-          if (result == 0 &&
-              station->request.security == SV6621_SECURITY_OPEN)
+          if (result == 0 && station->request.security == SV6621_SECURITY_OPEN)
             {
               station->state = SV6621_STATION_CONNECTED;
               notify = true;

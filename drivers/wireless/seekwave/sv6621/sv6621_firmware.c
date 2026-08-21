@@ -53,29 +53,23 @@
  * Private Data
  ****************************************************************************/
 
-static const uint8_t g_sv6621_firmware_head[SV6621_FIRMWARE_MARKER_SIZE] =
-{
+static const uint8_t g_sv6621_firmware_head[SV6621_FIRMWARE_MARKER_SIZE] = {
   'k', 'e', 'e', 's', '0', '6', '1', '6'
 };
 
-static const uint8_t g_sv6621_firmware_tail[SV6621_FIRMWARE_MARKER_SIZE] =
-{
+static const uint8_t g_sv6621_firmware_tail[SV6621_FIRMWARE_MARKER_SIZE] = {
   'e', 'v', 'a', 'w', '0', '6', '1', '6'
 };
 
-static const uint8_t g_sv6621_firmware_nv_start
-    [SV6621_FIRMWARE_NV_MARK_SIZE] =
-{
-  'T', 'S', 'V', 'N'
-};
+static const uint8_t
+    g_sv6621_firmware_nv_start[SV6621_FIRMWARE_NV_MARK_SIZE] = { 'T', 'S', 'V',
+                                                                 'N' };
 
-static const uint8_t g_sv6621_firmware_nv_end[SV6621_FIRMWARE_NV_MARK_SIZE] =
-{
+static const uint8_t g_sv6621_firmware_nv_end[SV6621_FIRMWARE_NV_MARK_SIZE] = {
   'D', 'E', 'V', 'N'
 };
 
-static const uint8_t g_sv6621_firmware_identity[] =
-{
+static const uint8_t g_sv6621_firmware_identity[] = {
   'S', 'V', '6', '1', '6', '0', 'L', 'I', 'T', 'E'
 };
 
@@ -192,8 +186,7 @@ int sv6621_firmware_parse_iram(FAR const uint8_t *image, size_t length,
   return 0;
 }
 
-int sv6621_firmware_verify_device(
-    FAR struct sv6621_transport_s *transport)
+int sv6621_firmware_verify_device(FAR struct sv6621_transport_s *transport)
 {
   uint8_t identity[SV6621_FIRMWARE_IDENTITY_SIZE];
   int ret;
@@ -248,40 +241,35 @@ int sv6621_firmware_download(FAR struct sv6621_transport_s *transport,
       return ret;
     }
 
-  ret = transport->ops->write_byte(transport,
-                                   SV6621_SDIO_FUNCTION_CONTROL,
+  ret = transport->ops->write_byte(transport, SV6621_SDIO_FUNCTION_CONTROL,
                                    SV6621_SDIO_DMA_TYPE, 0x01);
   if (ret < 0)
     {
       goto release_image;
     }
 
-  ret = transport->ops->write_byte(transport,
-                                   SV6621_SDIO_FUNCTION_CONTROL,
+  ret = transport->ops->write_byte(transport, SV6621_SDIO_FUNCTION_CONTROL,
                                    SV6621_SDIO_SLEEP_CONTROL, 0x01);
   if (ret < 0)
     {
       goto release_image;
     }
 
-  ret = transport->ops->write_byte(transport,
-                                   SV6621_SDIO_FUNCTION_CONTROL,
+  ret = transport->ops->write_byte(transport, SV6621_SDIO_FUNCTION_CONTROL,
                                    SV6621_SDIO_RX_FLOW_LOW, 0x00);
   if (ret < 0)
     {
       goto release_image;
     }
 
-  ret = transport->ops->write_byte(transport,
-                                   SV6621_SDIO_FUNCTION_CONTROL,
+  ret = transport->ops->write_byte(transport, SV6621_SDIO_FUNCTION_CONTROL,
                                    SV6621_SDIO_RX_FLOW_HIGH, 0x00);
   if (ret < 0)
     {
       goto release_image;
     }
 
-  ret = sv6621_memory_write(transport, layout.dram_address, dram,
-                            dram_length);
+  ret = sv6621_memory_write(transport, layout.dram_address, dram, dram_length);
   if (ret < 0)
     {
       goto release_image;
@@ -294,8 +282,7 @@ int sv6621_firmware_download(FAR struct sv6621_transport_s *transport,
       goto release_image;
     }
 
-  ret = transport->ops->write_byte(transport,
-                                   SV6621_SDIO_FUNCTION_CONTROL,
+  ret = transport->ops->write_byte(transport, SV6621_SDIO_FUNCTION_CONTROL,
                                    SV6621_SDIO_DOWNLOAD_STATUS, 0x01);
 
 release_image:
@@ -303,10 +290,8 @@ release_image:
   return ret;
 }
 
-int sv6621_firmware_prepare_iram(FAR const uint8_t *image,
-                                 size_t image_length,
-                                 FAR const uint8_t *nvram,
-                                 size_t nvram_length,
+int sv6621_firmware_prepare_iram(FAR const uint8_t *image, size_t image_length,
+                                 FAR const uint8_t *nvram, size_t nvram_length,
                                  FAR uint8_t **prepared_image)
 {
   struct sv6621_firmware_layout_s layout;
@@ -333,10 +318,8 @@ int sv6621_firmware_prepare_iram(FAR const uint8_t *image,
       return -ENOENT;
     }
 
-  source_offset =
-      sv6621_firmware_get_le32(nvram + SV6621_FIRMWARE_NV_OFFSET);
-  source_length =
-      sv6621_firmware_get_le32(nvram + SV6621_FIRMWARE_NV_LENGTH);
+  source_offset = sv6621_firmware_get_le32(nvram + SV6621_FIRMWARE_NV_OFFSET);
+  source_length = sv6621_firmware_get_le32(nvram + SV6621_FIRMWARE_NV_LENGTH);
   if (source_offset < SV6621_FIRMWARE_NV_HEADER_SIZE || source_length == 0 ||
       source_offset > nvram_length ||
       source_length > nvram_length - source_offset)
@@ -344,8 +327,7 @@ int sv6621_firmware_prepare_iram(FAR const uint8_t *image,
       return -EPROTO;
     }
 
-  if (source_length > layout.nv_capacity ||
-      layout.nv_offset > image_length ||
+  if (source_length > layout.nv_capacity || layout.nv_offset > image_length ||
       layout.nv_capacity > image_length - layout.nv_offset)
     {
       return -E2BIG;

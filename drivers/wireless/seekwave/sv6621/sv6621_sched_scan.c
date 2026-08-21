@@ -37,73 +37,69 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_SCHED_SCAN_FIXED_SIZE             75
-#define SV6621_SCHED_SCAN_SSID_SIZE               33
-#define SV6621_SCHED_SCAN_CHANNEL_SIZE             3
-#define SV6621_SCHED_SCAN_MATCH_SIZE              44
-#define SV6621_SCHED_SCAN_PLAN_SIZE                8
+#define SV6621_SCHED_SCAN_FIXED_SIZE         75
+#define SV6621_SCHED_SCAN_SSID_SIZE          33
+#define SV6621_SCHED_SCAN_CHANNEL_SIZE       3
+#define SV6621_SCHED_SCAN_MATCH_SIZE         44
+#define SV6621_SCHED_SCAN_PLAN_SIZE          8
 #define SV6621_SCHED_SCAN_PASSIVE_FLAG       (1 << 7)
-#define SV6621_SCHED_SCAN_INSTANCE                 0
-#define SV6621_SCHED_SCAN_COMMAND_START             7
-#define SV6621_SCHED_SCAN_COMMAND_STOP              8
-#define SV6621_SCHED_SCAN_EVENT_COMPLETE             1
-#define SV6621_SCHED_SCAN_EVENT_REPORT              11
-#define SV6621_SCHED_SCAN_COMMAND_TIMEOUT_MS     5000
-#define SV6621_SCHED_SCAN_STOP_PAYLOAD_SIZE         8
-#define SV6621_SCHED_SCAN_PAYLOAD_CAPACITY \
-  (SV6621_SCHED_SCAN_FIXED_SIZE + \
-   SV6621_SCHED_SCAN_MAX_SSIDS * SV6621_SCHED_SCAN_SSID_SIZE + \
-   UINT8_MAX * SV6621_SCHED_SCAN_CHANNEL_SIZE + \
+#define SV6621_SCHED_SCAN_INSTANCE           0
+#define SV6621_SCHED_SCAN_COMMAND_START      7
+#define SV6621_SCHED_SCAN_COMMAND_STOP       8
+#define SV6621_SCHED_SCAN_EVENT_COMPLETE     1
+#define SV6621_SCHED_SCAN_EVENT_REPORT       11
+#define SV6621_SCHED_SCAN_COMMAND_TIMEOUT_MS 5000
+#define SV6621_SCHED_SCAN_STOP_PAYLOAD_SIZE  8
+#define SV6621_SCHED_SCAN_PAYLOAD_CAPACITY                        \
+  (SV6621_SCHED_SCAN_FIXED_SIZE +                                 \
+   SV6621_SCHED_SCAN_MAX_SSIDS * SV6621_SCHED_SCAN_SSID_SIZE +    \
+   UINT8_MAX * SV6621_SCHED_SCAN_CHANNEL_SIZE +                   \
    SV6621_SCHED_SCAN_MAX_MATCHES * SV6621_SCHED_SCAN_MATCH_SIZE + \
-   SV6621_SCHED_SCAN_MAX_PLANS * SV6621_SCHED_SCAN_PLAN_SIZE + \
+   SV6621_SCHED_SCAN_MAX_PLANS * SV6621_SCHED_SCAN_PLAN_SIZE +    \
    SV6621_SCHED_SCAN_MAX_IE_LENGTH)
 
-#define SV6621_SCHED_SCAN_REQUEST_ID_OFFSET        0
-#define SV6621_SCHED_SCAN_FLAGS_OFFSET             4
-#define SV6621_SCHED_SCAN_MIN_RSSI_OFFSET          8
-#define SV6621_SCHED_SCAN_DELAY_OFFSET            12
-#define SV6621_SCHED_SCAN_ADDRESS_OFFSET          16
-#define SV6621_SCHED_SCAN_ADDRESS_MASK_OFFSET     22
-#define SV6621_SCHED_SCAN_RELATIVE_SET_OFFSET     28
-#define SV6621_SCHED_SCAN_RELATIVE_RSSI_OFFSET    29
-#define SV6621_SCHED_SCAN_WIDTH_OFFSET            30
-#define SV6621_SCHED_SCAN_SSID_COUNT_OFFSET       31
-#define SV6621_SCHED_SCAN_SSID_LENGTH_OFFSET      32
-#define SV6621_SCHED_SCAN_SSID_OFFSET_OFFSET      36
-#define SV6621_SCHED_SCAN_IE_LENGTH_OFFSET        40
-#define SV6621_SCHED_SCAN_IE_OFFSET_OFFSET        44
-#define SV6621_SCHED_SCAN_CHANNEL_COUNT_OFFSET    48
-#define SV6621_SCHED_SCAN_CHANNEL_LENGTH_OFFSET   49
-#define SV6621_SCHED_SCAN_CHANNEL_OFFSET_OFFSET   53
-#define SV6621_SCHED_SCAN_MATCH_COUNT_OFFSET      57
-#define SV6621_SCHED_SCAN_MATCH_LENGTH_OFFSET     58
-#define SV6621_SCHED_SCAN_MATCH_OFFSET_OFFSET     62
-#define SV6621_SCHED_SCAN_PLAN_COUNT_OFFSET       66
-#define SV6621_SCHED_SCAN_PLAN_LENGTH_OFFSET      67
-#define SV6621_SCHED_SCAN_PLAN_OFFSET_OFFSET      71
+#define SV6621_SCHED_SCAN_REQUEST_ID_OFFSET     0
+#define SV6621_SCHED_SCAN_FLAGS_OFFSET          4
+#define SV6621_SCHED_SCAN_MIN_RSSI_OFFSET       8
+#define SV6621_SCHED_SCAN_DELAY_OFFSET          12
+#define SV6621_SCHED_SCAN_ADDRESS_OFFSET        16
+#define SV6621_SCHED_SCAN_ADDRESS_MASK_OFFSET   22
+#define SV6621_SCHED_SCAN_RELATIVE_SET_OFFSET   28
+#define SV6621_SCHED_SCAN_RELATIVE_RSSI_OFFSET  29
+#define SV6621_SCHED_SCAN_WIDTH_OFFSET          30
+#define SV6621_SCHED_SCAN_SSID_COUNT_OFFSET     31
+#define SV6621_SCHED_SCAN_SSID_LENGTH_OFFSET    32
+#define SV6621_SCHED_SCAN_SSID_OFFSET_OFFSET    36
+#define SV6621_SCHED_SCAN_IE_LENGTH_OFFSET      40
+#define SV6621_SCHED_SCAN_IE_OFFSET_OFFSET      44
+#define SV6621_SCHED_SCAN_CHANNEL_COUNT_OFFSET  48
+#define SV6621_SCHED_SCAN_CHANNEL_LENGTH_OFFSET 49
+#define SV6621_SCHED_SCAN_CHANNEL_OFFSET_OFFSET 53
+#define SV6621_SCHED_SCAN_MATCH_COUNT_OFFSET    57
+#define SV6621_SCHED_SCAN_MATCH_LENGTH_OFFSET   58
+#define SV6621_SCHED_SCAN_MATCH_OFFSET_OFFSET   62
+#define SV6621_SCHED_SCAN_PLAN_COUNT_OFFSET     66
+#define SV6621_SCHED_SCAN_PLAN_LENGTH_OFFSET    67
+#define SV6621_SCHED_SCAN_PLAN_OFFSET_OFFSET    71
 
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
-static void sv6621_sched_scan_put_le16(FAR uint8_t *value,
-                                       uint16_t number);
-static void sv6621_sched_scan_put_le32(FAR uint8_t *value,
-                                       uint32_t number);
+static void sv6621_sched_scan_put_le16(FAR uint8_t *value, uint16_t number);
+static void sv6621_sched_scan_put_le32(FAR uint8_t *value, uint32_t number);
 
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
 
-static void sv6621_sched_scan_put_le16(FAR uint8_t *value,
-                                       uint16_t number)
+static void sv6621_sched_scan_put_le16(FAR uint8_t *value, uint16_t number)
 {
   value[0] = number & 0xff;
   value[1] = number >> 8;
 }
 
-static void sv6621_sched_scan_put_le32(FAR uint8_t *value,
-                                       uint32_t number)
+static void sv6621_sched_scan_put_le32(FAR uint8_t *value, uint32_t number)
 {
   value[0] = number & 0xff;
   value[1] = number >> 8;
@@ -129,12 +125,10 @@ int sv6621_sched_scan_encode(
 
   if (request == NULL || payload == NULL || written == NULL ||
       request->ssid_count > SV6621_SCHED_SCAN_MAX_SSIDS ||
-      request->channel_count == 0 ||
-      request->channel_count > UINT8_MAX ||
+      request->channel_count == 0 || request->channel_count > UINT8_MAX ||
       request->match_count > SV6621_SCHED_SCAN_MAX_MATCHES ||
       request->plan_count > SV6621_SCHED_SCAN_MAX_PLANS ||
-      request->information_element_length >
-          SV6621_SCHED_SCAN_MAX_IE_LENGTH ||
+      request->information_element_length > SV6621_SCHED_SCAN_MAX_IE_LENGTH ||
       (request->ssid_count != 0 && request->ssids == NULL) ||
       request->channels == NULL ||
       (request->match_count != 0 && request->matches == NULL) ||
@@ -190,19 +184,17 @@ int sv6621_sched_scan_encode(
                              (uint32_t)request->minimum_rssi_dbm);
   sv6621_sched_scan_put_le32(payload + SV6621_SCHED_SCAN_DELAY_OFFSET,
                              request->delay_seconds);
-  memcpy(payload + SV6621_SCHED_SCAN_ADDRESS_OFFSET,
-         request->random_address, SV6621_MAC_LENGTH);
+  memcpy(payload + SV6621_SCHED_SCAN_ADDRESS_OFFSET, request->random_address,
+         SV6621_MAC_LENGTH);
   memcpy(payload + SV6621_SCHED_SCAN_ADDRESS_MASK_OFFSET,
          request->random_address_mask, SV6621_MAC_LENGTH);
-  payload[SV6621_SCHED_SCAN_RELATIVE_SET_OFFSET] =
-      request->relative_rssi_set;
+  payload[SV6621_SCHED_SCAN_RELATIVE_SET_OFFSET] = request->relative_rssi_set;
   payload[SV6621_SCHED_SCAN_RELATIVE_RSSI_OFFSET] =
       (uint8_t)request->relative_rssi_db;
   payload[SV6621_SCHED_SCAN_WIDTH_OFFSET] = request->scan_width;
 
   offset = SV6621_SCHED_SCAN_FIXED_SIZE;
-  payload[SV6621_SCHED_SCAN_SSID_COUNT_OFFSET] =
-      (uint8_t)request->ssid_count;
+  payload[SV6621_SCHED_SCAN_SSID_COUNT_OFFSET] = (uint8_t)request->ssid_count;
   if (request->ssid_count != 0)
     {
       sv6621_sched_scan_put_le32(
@@ -215,8 +207,7 @@ int sv6621_sched_scan_encode(
     {
       memcpy(payload + offset, request->ssids[index].ssid,
              request->ssids[index].length);
-      payload[offset + SV6621_SSID_MAX_LENGTH] =
-          request->ssids[index].length;
+      payload[offset + SV6621_SSID_MAX_LENGTH] = request->ssids[index].length;
       offset += SV6621_SCHED_SCAN_SSID_SIZE;
     }
 
@@ -240,8 +231,7 @@ int sv6621_sched_scan_encode(
       offset += SV6621_SCHED_SCAN_MATCH_SIZE;
     }
 
-  payload[SV6621_SCHED_SCAN_PLAN_COUNT_OFFSET] =
-      (uint8_t)request->plan_count;
+  payload[SV6621_SCHED_SCAN_PLAN_COUNT_OFFSET] = (uint8_t)request->plan_count;
   if (request->plan_count != 0)
     {
       sv6621_sched_scan_put_le32(
@@ -261,11 +251,10 @@ int sv6621_sched_scan_encode(
 
   if (request->information_element_length != 0)
     {
-      sv6621_sched_scan_put_le32(
-          payload + SV6621_SCHED_SCAN_IE_LENGTH_OFFSET,
-          request->information_element_length);
-      sv6621_sched_scan_put_le32(
-          payload + SV6621_SCHED_SCAN_IE_OFFSET_OFFSET, offset);
+      sv6621_sched_scan_put_le32(payload + SV6621_SCHED_SCAN_IE_LENGTH_OFFSET,
+                                 request->information_element_length);
+      sv6621_sched_scan_put_le32(payload + SV6621_SCHED_SCAN_IE_OFFSET_OFFSET,
+                                 offset);
       memcpy(payload + offset, request->information_elements,
              request->information_element_length);
     }
@@ -274,16 +263,17 @@ int sv6621_sched_scan_encode(
 
   payload[SV6621_SCHED_SCAN_CHANNEL_COUNT_OFFSET] =
       (uint8_t)request->channel_count;
-  sv6621_sched_scan_put_le32(
-      payload + SV6621_SCHED_SCAN_CHANNEL_LENGTH_OFFSET, channel_length);
-  sv6621_sched_scan_put_le32(
-      payload + SV6621_SCHED_SCAN_CHANNEL_OFFSET_OFFSET, offset);
+  sv6621_sched_scan_put_le32(payload + SV6621_SCHED_SCAN_CHANNEL_LENGTH_OFFSET,
+                             channel_length);
+  sv6621_sched_scan_put_le32(payload + SV6621_SCHED_SCAN_CHANNEL_OFFSET_OFFSET,
+                             offset);
   for (index = 0; index < request->channel_count; index++)
     {
       payload[offset] = request->channels[index].number;
       payload[offset + 1] = request->channels[index].band;
-      payload[offset + 2] = request->channels[index].passive ?
-                            SV6621_SCHED_SCAN_PASSIVE_FLAG : 0;
+      payload[offset + 2] = request->channels[index].passive
+                                ? SV6621_SCHED_SCAN_PASSIVE_FLAG
+                                : 0;
       offset += SV6621_SCHED_SCAN_CHANNEL_SIZE;
     }
 
@@ -310,15 +300,14 @@ int sv6621_sched_scan_start(
       return -ENOMEM;
     }
 
-  ret = sv6621_sched_scan_encode(request, payload,
-                                 SV6621_SCHED_SCAN_PAYLOAD_CAPACITY,
-                                 &payload_length);
+  ret = sv6621_sched_scan_encode(
+      request, payload, SV6621_SCHED_SCAN_PAYLOAD_CAPACITY, &payload_length);
   if (ret == 0)
     {
-      ret = sv6621_command_execute(
-          command, SV6621_SCHED_SCAN_INSTANCE,
-          SV6621_SCHED_SCAN_COMMAND_START, payload, payload_length,
-          NULL, NULL, SV6621_SCHED_SCAN_COMMAND_TIMEOUT_MS);
+      ret = sv6621_command_execute(command, SV6621_SCHED_SCAN_INSTANCE,
+                                   SV6621_SCHED_SCAN_COMMAND_START, payload,
+                                   payload_length, NULL, NULL,
+                                   SV6621_SCHED_SCAN_COMMAND_TIMEOUT_MS);
     }
 
   kmm_free(payload);
@@ -327,17 +316,17 @@ int sv6621_sched_scan_start(
 
 int sv6621_sched_scan_stop(FAR struct sv6621_command_engine_s *command)
 {
-  uint8_t scan_id[SV6621_SCHED_SCAN_STOP_PAYLOAD_SIZE] = {0};
+  uint8_t scan_id[SV6621_SCHED_SCAN_STOP_PAYLOAD_SIZE] = { 0 };
 
   if (command == NULL)
     {
       return -EINVAL;
     }
 
-  return sv6621_command_execute(
-      command, SV6621_SCHED_SCAN_INSTANCE, SV6621_SCHED_SCAN_COMMAND_STOP,
-      scan_id, sizeof(scan_id), NULL, NULL,
-      SV6621_SCHED_SCAN_COMMAND_TIMEOUT_MS);
+  return sv6621_command_execute(command, SV6621_SCHED_SCAN_INSTANCE,
+                                SV6621_SCHED_SCAN_COMMAND_STOP, scan_id,
+                                sizeof(scan_id), NULL, NULL,
+                                SV6621_SCHED_SCAN_COMMAND_TIMEOUT_MS);
 }
 
 int sv6621_sched_scan_init(FAR struct sv6621_sched_scan_s *scan,
@@ -441,8 +430,8 @@ int sv6621_sched_scan_cancel(FAR struct sv6621_sched_scan_s *scan)
 }
 
 void sv6621_sched_scan_command_event(uint8_t instance, uint8_t id,
-                                     FAR const uint8_t *payload,
-                                     size_t length, FAR void *arg)
+                                     FAR const uint8_t *payload, size_t length,
+                                     FAR void *arg)
 {
   FAR struct sv6621_sched_scan_s *scan = arg;
   FAR struct sv6621_bss_s *entries;
@@ -501,8 +490,8 @@ void sv6621_sched_scan_command_event(uint8_t instance, uint8_t id,
           entries = kmm_malloc(sizeof(*entries) * count);
           if (entries != NULL)
             {
-              if (sv6621_scan_cache_snapshot(scan->cache, entries,
-                                             &count) == 0)
+              if (sv6621_scan_cache_snapshot(scan->cache, entries, &count) ==
+                  0)
                 {
                   for (index = 0; index < count; index++)
                     {

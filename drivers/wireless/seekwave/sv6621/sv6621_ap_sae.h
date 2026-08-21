@@ -97,19 +97,16 @@ int sv6621_ap_sae_init(FAR struct sv6621_ap_sae_s *sae,
 void sv6621_ap_sae_deinit(FAR struct sv6621_ap_sae_s *sae);
 int sv6621_ap_sae_enable(FAR struct sv6621_ap_sae_s *sae, uint8_t instance,
                          uint8_t channel, enum sv6621_band_e band,
-                         FAR const uint8_t *password,
-                         size_t password_length);
+                         FAR const uint8_t *password, size_t password_length);
 void sv6621_ap_sae_disable(FAR struct sv6621_ap_sae_s *sae);
 int sv6621_ap_sae_input(FAR struct sv6621_ap_sae_s *sae,
                         FAR const uint8_t *frame, size_t frame_length,
                         FAR bool *accepted,
                         FAR uint8_t address[SV6621_MAC_LENGTH]);
-int sv6621_ap_sae_get_pmk(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const uint8_t address[SV6621_MAC_LENGTH],
-    uint8_t pmk[SV6621_SAE_PMK_SIZE]);
-void sv6621_ap_sae_forget(
-    FAR struct sv6621_ap_sae_s *sae,
-    FAR const uint8_t address[SV6621_MAC_LENGTH]);
+int sv6621_ap_sae_get_pmk(FAR struct sv6621_ap_sae_s *sae,
+                          FAR const uint8_t address[SV6621_MAC_LENGTH],
+                          uint8_t pmk[SV6621_SAE_PMK_SIZE]);
+void sv6621_ap_sae_forget(FAR struct sv6621_ap_sae_s *sae,
+                          FAR const uint8_t address[SV6621_MAC_LENGTH]);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_SAE_H */

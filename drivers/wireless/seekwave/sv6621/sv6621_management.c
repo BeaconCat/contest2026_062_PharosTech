@@ -37,11 +37,11 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_MANAGEMENT_COMMAND_TX        14
-#define SV6621_MANAGEMENT_TX_HEADER_SIZE    17
-#define SV6621_MANAGEMENT_TX_STATUS_SIZE    12
+#define SV6621_MANAGEMENT_COMMAND_TX         14
+#define SV6621_MANAGEMENT_TX_HEADER_SIZE     17
+#define SV6621_MANAGEMENT_TX_STATUS_SIZE     12
 #define SV6621_MANAGEMENT_COMMAND_TIMEOUT_MS 1000
-#define SV6621_MANAGEMENT_MAX_FRAME_SIZE \
+#define SV6621_MANAGEMENT_MAX_FRAME_SIZE                          \
   (SV6621_COMMAND_MAX_MESSAGE_SIZE - SV6621_COMMAND_HEADER_SIZE - \
    SV6621_MANAGEMENT_TX_HEADER_SIZE)
 
@@ -107,9 +107,9 @@ static uint64_t sv6621_management_get_le64(FAR const uint8_t *value)
 
 int sv6621_management_tx(FAR struct sv6621_command_engine_s *command,
                          uint8_t instance, uint32_t wait_ms, uint64_t cookie,
-                         uint8_t channel, enum sv6621_band_e band,
-                         bool no_ack, FAR const uint8_t *frame,
-                         size_t frame_length, size_t total_frame_length)
+                         uint8_t channel, enum sv6621_band_e band, bool no_ack,
+                         FAR const uint8_t *frame, size_t frame_length,
+                         size_t total_frame_length)
 {
   FAR uint8_t *payload;
   size_t payload_length;
@@ -138,9 +138,8 @@ int sv6621_management_tx(FAR struct sv6621_command_engine_s *command,
   sv6621_management_put_le16(payload + 15, total_frame_length);
   memcpy(payload + SV6621_MANAGEMENT_TX_HEADER_SIZE, frame, frame_length);
 
-  ret = sv6621_command_execute(command, instance,
-                               SV6621_MANAGEMENT_COMMAND_TX, payload,
-                               payload_length, NULL, NULL,
+  ret = sv6621_command_execute(command, instance, SV6621_MANAGEMENT_COMMAND_TX,
+                               payload, payload_length, NULL, NULL,
                                SV6621_MANAGEMENT_COMMAND_TIMEOUT_MS);
   kmm_free(payload);
   return ret == 0 ? 0 : (ret < 0 ? ret : -EREMOTEIO);

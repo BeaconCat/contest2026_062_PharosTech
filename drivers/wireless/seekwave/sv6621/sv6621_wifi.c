@@ -118,34 +118,20 @@
  * Private Data
  ****************************************************************************/
 
-static const uint8_t g_sv6621_wifi_supported_commands[] =
-{
-  SV6621_WIFI_COMMAND_DOWNLOAD_INI,
-  SV6621_WIFI_COMMAND_GET_INFO,
-  SV6621_WIFI_COMMAND_SYNC_VERSION,
-  SV6621_WIFI_COMMAND_OPEN_DEVICE,
-  SV6621_WIFI_COMMAND_CLOSE_DEVICE,
-  SV6621_WIFI_COMMAND_START_SCAN,
-  SV6621_WIFI_COMMAND_STOP_SCAN,
-  SV6621_WIFI_COMMAND_JOIN,
-  SV6621_WIFI_COMMAND_AUTH,
-  SV6621_WIFI_COMMAND_ASSOC,
-  SV6621_WIFI_COMMAND_ADD_KEY,
-  SV6621_WIFI_COMMAND_DEL_KEY,
-  SV6621_WIFI_COMMAND_TX_DATA,
-  SV6621_WIFI_COMMAND_SET_IP,
-  SV6621_WIFI_COMMAND_DISCONNECT,
-  SV6621_WIFI_COMMAND_START_AP,
-  SV6621_WIFI_COMMAND_STOP_AP,
-  SV6621_WIFI_COMMAND_ADD_STA,
-  SV6621_WIFI_COMMAND_DEL_STA,
-  SV6621_WIFI_COMMAND_GET_STA,
-  SV6621_WIFI_COMMAND_SET_MC_ADDR,
-  SV6621_WIFI_COMMAND_RESUME,
-  SV6621_WIFI_COMMAND_SUSPEND,
-  SV6621_WIFI_COMMAND_SET_CQM,
-  SV6621_WIFI_COMMAND_SET_MIB,
-  SV6621_WIFI_COMMAND_PHY_BB_CONFIG,
+static const uint8_t g_sv6621_wifi_supported_commands[] = {
+  SV6621_WIFI_COMMAND_DOWNLOAD_INI, SV6621_WIFI_COMMAND_GET_INFO,
+  SV6621_WIFI_COMMAND_SYNC_VERSION, SV6621_WIFI_COMMAND_OPEN_DEVICE,
+  SV6621_WIFI_COMMAND_CLOSE_DEVICE, SV6621_WIFI_COMMAND_START_SCAN,
+  SV6621_WIFI_COMMAND_STOP_SCAN,    SV6621_WIFI_COMMAND_JOIN,
+  SV6621_WIFI_COMMAND_AUTH,         SV6621_WIFI_COMMAND_ASSOC,
+  SV6621_WIFI_COMMAND_ADD_KEY,      SV6621_WIFI_COMMAND_DEL_KEY,
+  SV6621_WIFI_COMMAND_TX_DATA,      SV6621_WIFI_COMMAND_SET_IP,
+  SV6621_WIFI_COMMAND_DISCONNECT,   SV6621_WIFI_COMMAND_START_AP,
+  SV6621_WIFI_COMMAND_STOP_AP,      SV6621_WIFI_COMMAND_ADD_STA,
+  SV6621_WIFI_COMMAND_DEL_STA,      SV6621_WIFI_COMMAND_GET_STA,
+  SV6621_WIFI_COMMAND_SET_MC_ADDR,  SV6621_WIFI_COMMAND_RESUME,
+  SV6621_WIFI_COMMAND_SUSPEND,      SV6621_WIFI_COMMAND_SET_CQM,
+  SV6621_WIFI_COMMAND_SET_MIB,      SV6621_WIFI_COMMAND_PHY_BB_CONFIG,
   SV6621_WIFI_COMMAND_SET_REGD
 };
 
@@ -162,10 +148,10 @@ static int sv6621_wifi_select_address(
     FAR const struct sv6621_board_ops_s *board_ops, FAR void *board_arg,
     FAR const uint8_t firmware_address[SV6621_MAC_LENGTH],
     uint8_t selected[SV6621_MAC_LENGTH]);
-static int sv6621_wifi_open_device(
-    FAR struct sv6621_command_engine_s *command, uint8_t instance,
-    uint8_t mode,
-    FAR const uint8_t address[SV6621_MAC_LENGTH]);
+static int
+sv6621_wifi_open_device(FAR struct sv6621_command_engine_s *command,
+                        uint8_t instance, uint8_t mode,
+                        FAR const uint8_t address[SV6621_MAC_LENGTH]);
 
 /****************************************************************************
  * Private Functions
@@ -251,9 +237,10 @@ static int sv6621_wifi_select_address(
   return ret < 0 ? ret : 0;
 }
 
-static int sv6621_wifi_open_device(
-    FAR struct sv6621_command_engine_s *command, uint8_t instance,
-    uint8_t mode, FAR const uint8_t address[SV6621_MAC_LENGTH])
+static int
+sv6621_wifi_open_device(FAR struct sv6621_command_engine_s *command,
+                        uint8_t instance, uint8_t mode,
+                        FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
   uint8_t payload[SV6621_WIFI_OPEN_PAYLOAD_SIZE];
   int ret;
@@ -478,17 +465,17 @@ int sv6621_wifi_open_station(FAR struct sv6621_command_engine_s *command,
                                  SV6621_WIFI_OPEN_MODE_STATION, address);
 }
 
-int sv6621_wifi_open_access_point(
-    FAR struct sv6621_command_engine_s *command,
-    uint8_t instance,
-    FAR const uint8_t address[SV6621_MAC_LENGTH])
+int sv6621_wifi_open_access_point(FAR struct sv6621_command_engine_s *command,
+                                  uint8_t instance,
+                                  FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
   return sv6621_wifi_open_device(command, instance,
                                  SV6621_WIFI_OPEN_MODE_ACCESS_POINT, address);
 }
 
-static int sv6621_wifi_close_device(
-    FAR struct sv6621_command_engine_s *command, uint8_t instance)
+static int
+sv6621_wifi_close_device(FAR struct sv6621_command_engine_s *command,
+                         uint8_t instance)
 {
   int ret;
 
@@ -508,8 +495,8 @@ int sv6621_wifi_close_station(FAR struct sv6621_command_engine_s *command)
   return sv6621_wifi_close_device(command, SV6621_WIFI_INSTANCE);
 }
 
-int sv6621_wifi_close_access_point(
-    FAR struct sv6621_command_engine_s *command, uint8_t instance)
+int sv6621_wifi_close_access_point(FAR struct sv6621_command_engine_s *command,
+                                   uint8_t instance)
 {
   return sv6621_wifi_close_device(command, instance);
 }

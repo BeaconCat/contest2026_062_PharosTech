@@ -41,12 +41,12 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_AP_EVENT_RX_MGMT          4
-#define SV6621_AP_EVENT_DEL_STA          9
-#define SV6621_AP_EVENT_MGMT_TX_STATUS  12
+#define SV6621_AP_EVENT_RX_MGMT        4
+#define SV6621_AP_EVENT_DEL_STA        9
+#define SV6621_AP_EVENT_MGMT_TX_STATUS 12
 #define SV6621_AP_EVENT_EAPOL          254
 
-#define SV6621_AP_EVENT_QUEUE_DEPTH      8
+#define SV6621_AP_EVENT_QUEUE_DEPTH    8
 #define SV6621_AP_EVENT_MAX_PAYLOAD \
   (SV6621_COMMAND_MAX_MESSAGE_SIZE - SV6621_COMMAND_HEADER_SIZE)
 
@@ -88,8 +88,7 @@ struct sv6621_ap_event_queue_s
 
 int sv6621_ap_event_queue_init(FAR struct sv6621_ap_event_queue_s *queue,
                                sv6621_ap_event_handler_t handler,
-                               sv6621_ap_event_error_t error,
-                               FAR void *arg);
+                               sv6621_ap_event_error_t error, FAR void *arg);
 void sv6621_ap_event_queue_deinit(FAR struct sv6621_ap_event_queue_s *queue);
 int sv6621_ap_event_queue_reset(FAR struct sv6621_ap_event_queue_s *queue);
 int sv6621_ap_event_queue_submit(FAR struct sv6621_ap_event_queue_s *queue,
