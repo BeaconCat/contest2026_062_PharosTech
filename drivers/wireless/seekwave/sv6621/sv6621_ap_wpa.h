@@ -84,16 +84,22 @@ struct sv6621_ap_wpa_s
   uint8_t pmk[SV6621_WPA_PMK_SIZE];
   uint8_t gtk[16];
   uint8_t previous_gtk[16];
+  uint8_t igtk[SV6621_WPA_IGTK_SIZE];
+  uint8_t previous_igtk[SV6621_WPA_IGTK_SIZE];
+  uint8_t igtk_ipn[SV6621_WPA_IPN_SIZE];
   uint8_t lmac_id;
   uint8_t instance;
   uint8_t multicast_index;
   uint8_t gtk_index;
   uint8_t previous_gtk_index;
+  uint8_t igtk_index;
+  uint8_t previous_igtk_index;
   uint8_t group_rekey_retries;
   enum sv6621_security_e security;
   sv6621_ap_wpa_error_t error;
   FAR void *error_arg;
   bool group_rekey_active;
+  bool pmf_enabled;
   bool enabled;
 };
 
