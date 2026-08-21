@@ -493,18 +493,21 @@ int sv6621_wpa_eapol_build_authenticator(
   if (replay == NULL || anonce == NULL || output == NULL ||
       written == NULL || key_mgmt > SV6621_WPA_KEY_MGMT_SAE ||
       (message != SV6621_WPA_MESSAGE_1 &&
-       message != SV6621_WPA_MESSAGE_3) ||
+       message != SV6621_WPA_MESSAGE_3 &&
+       message != SV6621_WPA_MESSAGE_GROUP_1) ||
       version < SV6621_WPA_EAPOL_VERSION_MIN ||
       version > SV6621_WPA_EAPOL_VERSION_MAX ||
       (message == SV6621_WPA_MESSAGE_1 && key_data_length != 0) ||
-      (message == SV6621_WPA_MESSAGE_3 &&
+      ((message == SV6621_WPA_MESSAGE_3 ||
+        message == SV6621_WPA_MESSAGE_GROUP_1) &&
        (kck == NULL || kek == NULL || key_data == NULL ||
         key_data_length < 16 || (key_data_length & 7) != 0)))
     {
       return -EINVAL;
     }
 
-  if (message == SV6621_WPA_MESSAGE_3)
+  if (message == SV6621_WPA_MESSAGE_3 ||
+      message == SV6621_WPA_MESSAGE_GROUP_1)
     {
       encoded_key_data_length = key_data_length + 8;
     }
@@ -525,10 +528,20 @@ int sv6621_wpa_eapol_build_authenticator(
                   SV6621_WPA_KEY_VERSION_AKM :
                   SV6621_WPA_KEY_VERSION_SHA1) |
              SV6621_WPA_KEY_PAIRWISE | SV6621_WPA_KEY_ACK;
-  if (message == SV6621_WPA_MESSAGE_3)
+  if (message == SV6621_WPA_MESSAGE_3 ||
+      message == SV6621_WPA_MESSAGE_GROUP_1)
     {
-      key_info |= SV6621_WPA_KEY_INSTALL | SV6621_WPA_KEY_MIC |
-                  SV6621_WPA_KEY_SECURE | SV6621_WPA_KEY_ENCRYPTED;
+      key_info |= SV6621_WPA_KEY_MIC | SV6621_WPA_KEY_SECURE |
+                  SV6621_WPA_KEY_ENCRYPTED;
+
+      if (message == SV6621_WPA_MESSAGE_3)
+        {
+          key_info |= SV6621_WPA_KEY_INSTALL;
+        }
+      else
+        {
+          key_info &= (uint16_t)~SV6621_WPA_KEY_PAIRWISE;
+        }
     }
 
   sv6621_wpa_eapol_put_be16(output + SV6621_WPA_KEY_INFO_OFFSET, key_info);
@@ -538,7 +551,8 @@ int sv6621_wpa_eapol_build_authenticator(
          SV6621_WPA_REPLAY_SIZE);
   memcpy(output + SV6621_WPA_KEY_NONCE_OFFSET, anonce,
          SV6621_WPA_NONCE_SIZE);
-  if (message == SV6621_WPA_MESSAGE_3)
+  if (message == SV6621_WPA_MESSAGE_3 ||
+      message == SV6621_WPA_MESSAGE_GROUP_1)
     {
       ret = sv6621_wpa_wrap_key(
           kek, key_data, key_data_length,
