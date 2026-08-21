@@ -540,7 +540,8 @@ int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
       return ret;
     }
 
-  ret = sv6621_ap_wpa_init(&ap->wpa, command, address);
+  ret = sv6621_ap_wpa_init(&ap->wpa, command, address,
+                           sv6621_ap_dispatch_error, ap);
   if (ret < 0)
     {
       sv6621_ap_event_queue_deinit(&ap->events);
