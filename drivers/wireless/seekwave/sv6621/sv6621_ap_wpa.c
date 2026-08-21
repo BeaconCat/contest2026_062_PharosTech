@@ -548,11 +548,28 @@ void sv6621_ap_wpa_disable(FAR struct sv6621_ap_wpa_s *wpa)
 int sv6621_ap_wpa_begin(FAR struct sv6621_ap_wpa_s *wpa,
                          FAR const struct sv6621_ap_peer_s *peer)
 {
+  if (wpa == NULL)
+    {
+      return -EINVAL;
+    }
+
+  return sv6621_ap_wpa_begin_pmk(wpa, peer, wpa->pmk);
+}
+
+/****************************************************************************
+ * Name: sv6621_ap_wpa_begin_pmk
+ ****************************************************************************/
+
+int sv6621_ap_wpa_begin_pmk(
+    FAR struct sv6621_ap_wpa_s *wpa,
+    FAR const struct sv6621_ap_peer_s *peer,
+    FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE])
+{
   FAR struct sv6621_ap_wpa_peer_s *entry = NULL;
   size_t index;
   int ret;
 
-  if (wpa == NULL || peer == NULL || !peer->bound)
+  if (wpa == NULL || peer == NULL || pmk == NULL || !peer->bound)
     {
       return -EINVAL;
     }
@@ -590,6 +607,7 @@ int sv6621_ap_wpa_begin(FAR struct sv6621_ap_wpa_s *wpa,
 
   sv6621_ap_wpa_clear(entry, sizeof(*entry));
   memcpy(entry->address, peer->address, SV6621_MAC_LENGTH);
+  memcpy(entry->pmk, pmk, sizeof(entry->pmk));
   entry->peer_index = peer->peer_index;
   entry->replay[SV6621_WPA_REPLAY_SIZE - 1] = 1;
   ret = sv6621_ap_wpa_random(entry->anonce, sizeof(entry->anonce));
@@ -692,7 +710,7 @@ int sv6621_ap_wpa_input(FAR struct sv6621_ap_wpa_s *wpa,
       eapol.message == SV6621_WPA_MESSAGE_2)
     {
       ret = sv6621_wpa_derive_ptk(
-          wpa->pmk, wpa->authenticator, peer->address, peer->anonce,
+          peer->pmk, wpa->authenticator, peer->address, peer->anonce,
           eapol.nonce, peer->ptk);
       if (ret == 0)
         {

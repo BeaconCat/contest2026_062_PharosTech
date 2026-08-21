@@ -64,6 +64,7 @@ enum sv6621_ap_wpa_state_e
 struct sv6621_ap_wpa_peer_s
 {
   uint8_t address[SV6621_MAC_LENGTH];
+  uint8_t pmk[SV6621_WPA_PMK_SIZE];
   uint8_t anonce[SV6621_WPA_NONCE_SIZE];
   uint8_t ptk[SV6621_WPA_PTK_SIZE];
   uint8_t replay[SV6621_WPA_REPLAY_SIZE];
@@ -111,6 +112,10 @@ int sv6621_ap_wpa_enable(FAR struct sv6621_ap_wpa_s *wpa,
 void sv6621_ap_wpa_disable(FAR struct sv6621_ap_wpa_s *wpa);
 int sv6621_ap_wpa_begin(FAR struct sv6621_ap_wpa_s *wpa,
                          FAR const struct sv6621_ap_peer_s *peer);
+int sv6621_ap_wpa_begin_pmk(
+    FAR struct sv6621_ap_wpa_s *wpa,
+    FAR const struct sv6621_ap_peer_s *peer,
+    FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE]);
 int sv6621_ap_wpa_rekey(FAR struct sv6621_ap_wpa_s *wpa);
 void sv6621_ap_wpa_forget(
     FAR struct sv6621_ap_wpa_s *wpa,
