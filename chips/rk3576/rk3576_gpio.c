@@ -1181,10 +1181,10 @@ static int rk3576_gpio_isr(int irq, void *context, void *arg)
       return -EINVAL;
     }
 
-  /* INT_STATUS is a single read-only 32-bit register, unlike the split
-   *
-   * low/high write-mask registers used to configure and acknowledge pins.
- */
+  /* INT_STATUS is one read-only register.  Configuration and acknowledgement
+
+   * * use separate low/high write-mask registers.
+   */
 
   status = getreg32(RK3576_GPIO_INT_STATUS(port));
 
