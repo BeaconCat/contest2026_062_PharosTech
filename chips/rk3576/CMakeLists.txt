@@ -19,54 +19,8 @@ endif()
 
 if(CONFIG_RK3576_SV6621_TRANSPORT)
   list(APPEND SRCS rk3576_sv6621_transport.c)
-endif()
-
-if(CONFIG_SV6621)
-  set(SV6621_DIR
-      ${CMAKE_CURRENT_LIST_DIR}/../../drivers/wireless/seekwave/sv6621)
-  target_include_directories(arch PRIVATE ${SV6621_DIR}/include)
-  list(APPEND SRCS
-       ${SV6621_DIR}/sv6621_command.c
-       ${SV6621_DIR}/sv6621_ap.c
-       ${SV6621_DIR}/sv6621_ap_beacon.c
-       ${SV6621_DIR}/sv6621_ap_event.c
-       ${SV6621_DIR}/sv6621_ap_mlme.c
-       ${SV6621_DIR}/sv6621_ap_peer.c
-       ${SV6621_DIR}/sv6621_ap_sae.c
-       ${SV6621_DIR}/sv6621_ap_wpa.c
-       ${SV6621_DIR}/sv6621_connection.c
-       ${SV6621_DIR}/sv6621_core.c
-       ${SV6621_DIR}/sv6621_data.c
-       ${SV6621_DIR}/sv6621_firmware.c
-       ${SV6621_DIR}/sv6621_filter.c
-       ${SV6621_DIR}/sv6621_ioctl.c
-       ${SV6621_DIR}/sv6621_management.c
-       ${SV6621_DIR}/sv6621_memory.c
-       ${SV6621_DIR}/sv6621_network.c
-       ${SV6621_DIR}/sv6621_offload.c
-       ${SV6621_DIR}/sv6621_packet.c
-       ${SV6621_DIR}/sv6621_power.c
-       ${SV6621_DIR}/sv6621_protocol.c
-       ${SV6621_DIR}/sv6621_regulatory.c
-       ${SV6621_DIR}/sv6621_rx.c
-       ${SV6621_DIR}/sv6621_sae.c
-       ${SV6621_DIR}/sv6621_sae_crypto.c
-       ${SV6621_DIR}/sv6621_sae_frame.c
-       ${SV6621_DIR}/sv6621_sae_group.c
-       ${SV6621_DIR}/sv6621_sae_keys.c
-       ${SV6621_DIR}/sv6621_scan.c
-       ${SV6621_DIR}/sv6621_sched_scan.c
-       ${SV6621_DIR}/sv6621_security.c
-       ${SV6621_DIR}/sv6621_signal.c
-       ${SV6621_DIR}/sv6621_service.c
-       ${SV6621_DIR}/sv6621_station.c
-       ${SV6621_DIR}/sv6621_stats.c
-       ${SV6621_DIR}/sv6621_transport.c
-       ${SV6621_DIR}/sv6621_tx.c
-       ${SV6621_DIR}/sv6621_wifi.c)
-  list(APPEND SRCS ${SV6621_DIR}/sv6621_wpa_crypto.c)
-  list(APPEND SRCS ${SV6621_DIR}/sv6621_wpa_eapol.c)
-  list(APPEND SRCS ${SV6621_DIR}/sv6621_wpa_handshake.c)
+  target_include_directories(
+    arch PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../boards/rk3576/drivers/include)
 endif()
 
 if(CONFIG_RK3576_I2C)
