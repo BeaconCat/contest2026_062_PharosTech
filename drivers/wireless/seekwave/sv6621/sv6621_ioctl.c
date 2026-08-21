@@ -108,6 +108,20 @@ static int sv6621_ioctl_auth(FAR struct sv6621_ioctl_s *ioctl,
               return 0;
             }
 
+          if (value == IW_AUTH_WPA_VERSION_WPA3)
+            {
+              ioctl->access_point.security = SV6621_SECURITY_WPA3_SAE;
+              return 0;
+            }
+
+          if (value == (IW_AUTH_WPA_VERSION_WPA2 |
+                        IW_AUTH_WPA_VERSION_WPA3))
+            {
+              ioctl->access_point.security =
+                  SV6621_SECURITY_WPA2_WPA3_PSK;
+              return 0;
+            }
+
           return -EOPNOTSUPP;
         }
 
@@ -223,7 +237,12 @@ static int sv6621_ioctl_key(FAR struct sv6621_ioctl_s *ioctl,
       memcpy(ioctl->access_point.credential, extension->key,
              extension->key_len);
       ioctl->access_point.credential_length = extension->key_len;
-      ioctl->access_point.security = SV6621_SECURITY_WPA2_PSK;
+      if (ioctl->access_point.security != SV6621_SECURITY_WPA3_SAE &&
+          ioctl->access_point.security != SV6621_SECURITY_WPA2_WPA3_PSK)
+        {
+          ioctl->access_point.security = SV6621_SECURITY_WPA2_PSK;
+        }
+
       return 0;
     }
 
@@ -659,9 +678,24 @@ static int sv6621_ioctl_auth_query(FAR struct sv6621_ioctl_s *ioctl,
       switch (request->u.param.flags & IW_AUTH_INDEX)
         {
           case IW_AUTH_WPA_VERSION:
-            request->u.param.value =
-                config->security == SV6621_SECURITY_OPEN ?
-                IW_AUTH_WPA_VERSION_DISABLED : IW_AUTH_WPA_VERSION_WPA2;
+            if (config->security == SV6621_SECURITY_OPEN)
+              {
+                request->u.param.value = IW_AUTH_WPA_VERSION_DISABLED;
+              }
+            else if (config->security == SV6621_SECURITY_WPA3_SAE)
+              {
+                request->u.param.value = IW_AUTH_WPA_VERSION_WPA3;
+              }
+            else if (config->security == SV6621_SECURITY_WPA2_WPA3_PSK)
+              {
+                request->u.param.value = IW_AUTH_WPA_VERSION_WPA2 |
+                                         IW_AUTH_WPA_VERSION_WPA3;
+              }
+            else
+              {
+                request->u.param.value = IW_AUTH_WPA_VERSION_WPA2;
+              }
+
             return 0;
 
           case IW_AUTH_CIPHER_PAIRWISE:
