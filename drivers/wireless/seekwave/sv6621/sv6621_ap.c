@@ -550,6 +550,16 @@ int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
       return ret;
     }
 
+  ret = sv6621_ap_sae_init(&ap->sae, command, address);
+  if (ret < 0)
+    {
+      sv6621_ap_wpa_deinit(&ap->wpa);
+      sv6621_ap_event_queue_deinit(&ap->events);
+      sv6621_ap_peer_table_deinit(&ap->peers);
+      nxmutex_destroy(&ap->lock);
+      return ret;
+    }
+
   ap->command = command;
   ap->next_cookie = 1;
   ap->error = error;
@@ -574,6 +584,7 @@ void sv6621_ap_deinit(FAR struct sv6621_ap_s *ap)
     }
 
   sv6621_ap_event_queue_deinit(&ap->events);
+  sv6621_ap_sae_deinit(&ap->sae);
   sv6621_ap_wpa_deinit(&ap->wpa);
   sv6621_ap_peer_table_deinit(&ap->peers);
   nxmutex_destroy(&ap->lock);
@@ -719,6 +730,7 @@ int sv6621_ap_disable(FAR struct sv6621_ap_s *ap)
   if (ret == 0)
     {
       sv6621_ap_wpa_disable(&ap->wpa);
+      sv6621_ap_sae_disable(&ap->sae);
       sv6621_ap_peer_table_reset(&ap->peers);
       memset(&ap->config, 0, sizeof(ap->config));
       memset(&ap->templates, 0, sizeof(ap->templates));
@@ -755,6 +767,7 @@ int sv6621_ap_reset(FAR struct sv6621_ap_s *ap)
 
   ret = sv6621_ap_peer_table_reset(&ap->peers);
   sv6621_ap_wpa_disable(&ap->wpa);
+  sv6621_ap_sae_disable(&ap->sae);
   memset(&ap->config, 0, sizeof(ap->config));
   memset(&ap->templates, 0, sizeof(ap->templates));
   memset(&ap->context, 0, sizeof(ap->context));
