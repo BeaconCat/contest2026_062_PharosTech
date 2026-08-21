@@ -46,7 +46,8 @@ static bool sv6621_ap_event_supported(uint8_t id)
 {
   return id == SV6621_AP_EVENT_RX_MGMT ||
          id == SV6621_AP_EVENT_DEL_STA ||
-         id == SV6621_AP_EVENT_MGMT_TX_STATUS;
+         id == SV6621_AP_EVENT_MGMT_TX_STATUS ||
+         id == SV6621_AP_EVENT_EAPOL;
 }
 
 static void sv6621_ap_event_worker(FAR void *arg)
