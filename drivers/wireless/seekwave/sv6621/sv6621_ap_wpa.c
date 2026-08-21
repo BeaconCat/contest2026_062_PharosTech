@@ -817,9 +817,13 @@ int sv6621_ap_wpa_input(FAR struct sv6621_ap_wpa_s *wpa,
   if (ret == 0 && peer->state == SV6621_AP_WPA_WAIT_MESSAGE_2 &&
       eapol.message == SV6621_WPA_MESSAGE_2)
     {
-      ret = sv6621_wpa_derive_ptk(
-          peer->pmk, wpa->authenticator, peer->address, peer->anonce,
-          eapol.nonce, peer->ptk);
+      ret = peer->key_mgmt == SV6621_WPA_KEY_MGMT_SAE ?
+          sv6621_wpa_derive_ptk_sha256(
+              peer->pmk, wpa->authenticator, peer->address, peer->anonce,
+              eapol.nonce, peer->ptk) :
+          sv6621_wpa_derive_ptk(
+              peer->pmk, wpa->authenticator, peer->address, peer->anonce,
+              eapol.nonce, peer->ptk);
       if (ret == 0)
         {
           ret = sv6621_wpa_eapol_verify_mic(
@@ -879,6 +883,7 @@ int sv6621_ap_wpa_input(FAR struct sv6621_ap_wpa_s *wpa,
         {
           peer->state = SV6621_AP_WPA_WAIT_MESSAGE_4;
         }
+
     }
   else if (ret == 0 && peer->state == SV6621_AP_WPA_WAIT_MESSAGE_4 &&
            eapol.message == SV6621_WPA_MESSAGE_4)
