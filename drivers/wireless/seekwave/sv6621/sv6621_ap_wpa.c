@@ -374,14 +374,24 @@ int sv6621_ap_wpa_enable(FAR struct sv6621_ap_wpa_s *wpa,
   int ret;
 
   if (wpa == NULL || config == NULL || context == NULL ||
-      config->security != SV6621_SECURITY_WPA2_PSK)
+      (config->security != SV6621_SECURITY_WPA2_PSK &&
+       config->security != SV6621_SECURITY_WPA3_SAE &&
+       config->security != SV6621_SECURITY_WPA2_WPA3_PSK))
     {
       return -EINVAL;
     }
 
-  ret = sv6621_wpa_derive_pmk(config->credential,
-                              config->credential_length, config->ssid,
-                              config->ssid_length, pmk);
+  memset(pmk, 0, sizeof(pmk));
+  if (config->security == SV6621_SECURITY_WPA3_SAE)
+    {
+      ret = 0;
+    }
+  else
+    {
+      ret = sv6621_wpa_derive_pmk(config->credential,
+                                  config->credential_length, config->ssid,
+                                  config->ssid_length, pmk);
+    }
   if (ret == 0)
     {
       ret = sv6621_ap_wpa_random(gtk, sizeof(gtk));
