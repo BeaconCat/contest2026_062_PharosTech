@@ -62,6 +62,9 @@
 #define SV6621_AP_BLOB_COUNT                   5
 #define SV6621_AP_PROBE_RESPONSE_IE_OFFSET     36 /* Header + fixed fields */
 #define SV6621_AP_EAPOL_HEADER_SIZE              3
+#define SV6621_AP_AUTH_OPEN                       0
+#define SV6621_AP_AUTH_SAE                        3
+#define SV6621_AP_REASON_LEAVING                   3
 
 /****************************************************************************
  * Private Types
@@ -125,7 +128,9 @@ static uint64_t sv6621_ap_next_cookie(FAR struct sv6621_ap_s *ap)
 static bool sv6621_ap_expected_event_error(int error)
 {
   return error == -EACCES || error == -ECONNREFUSED || error == -ENOENT ||
-         error == -ENOMSG || error == -EPROTO || error == -ESTALE;
+         error == -ENOMSG || error == -EPROTO || error == -ESTALE ||
+         error == -EALREADY || error == -EKEYREJECTED ||
+         error == -EOPNOTSUPP;
 }
 
 static bool sv6621_ap_tx_client_event(
@@ -252,17 +257,40 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
                 }
             }
           else if (notify_connected &&
-                   ap->config.security == SV6621_SECURITY_WPA2_PSK)
+                   ap->config.security != SV6621_SECURITY_OPEN)
             {
               struct sv6621_ap_peer_s peer;
+              uint8_t pmk[SV6621_SAE_PMK_SIZE];
 
               notify_connected = false;
               ret = sv6621_ap_peer_lookup(&ap->peers,
                                            client_event.address, &peer);
               if (ret == 0)
                 {
-                  ret = sv6621_ap_wpa_begin(&ap->wpa, &peer);
+                  if (ap->config.security == SV6621_SECURITY_WPA3_SAE)
+                    {
+                      ret = sv6621_ap_sae_get_pmk(
+                          &ap->sae, client_event.address, pmk);
+                      if (ret == 0)
+                        {
+                          ret = sv6621_ap_wpa_begin_pmk(&ap->wpa, &peer,
+                                                       pmk);
+                        }
+                    }
+                  else if (ap->config.security ==
+                           SV6621_SECURITY_WPA2_WPA3_PSK &&
+                           sv6621_ap_sae_get_pmk(
+                               &ap->sae, client_event.address, pmk) == 0)
+                    {
+                      ret = sv6621_ap_wpa_begin_pmk(&ap->wpa, &peer, pmk);
+                    }
+                  else
+                    {
+                      ret = sv6621_ap_wpa_begin(&ap->wpa, &peer);
+                    }
                 }
+
+              memset(pmk, 0, sizeof(pmk));
             }
         }
     }
@@ -280,6 +308,7 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
           if (notify_disconnected)
             {
               sv6621_ap_wpa_forget(&ap->wpa, address);
+              sv6621_ap_sae_forget(&ap->sae, address);
             }
         }
     }
@@ -288,10 +317,68 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
       ret = sv6621_ap_parse_mgmt(payload, length, &mgmt);
       if (ret == 0 && mgmt.type == SV6621_AP_MGMT_AUTH)
         {
-          ret = sv6621_ap_authenticate_open(
-              &ap->peers, ap->command, ap->instance, ap->config.channel,
-              ap->config.band, ap->address, &mgmt,
-              sv6621_ap_next_cookie(ap), &accepted);
+          if (mgmt.algorithm == SV6621_AP_AUTH_SAE &&
+              (ap->config.security == SV6621_SECURITY_WPA3_SAE ||
+               ap->config.security == SV6621_SECURITY_WPA2_WPA3_PSK))
+            {
+              if (mgmt.transaction == 1)
+                {
+                  struct sv6621_ap_peer_s peer;
+
+                  ret = sv6621_ap_peer_authenticate(&ap->peers,
+                                                     mgmt.source);
+                  if (ret == 0)
+                    {
+                      ret = sv6621_ap_peer_lookup(&ap->peers, mgmt.source,
+                                                  &peer);
+                    }
+
+                  if (ret == 0 && !peer.bound)
+                    {
+                      ret = sv6621_ap_add_peer(ap->command, ap->instance,
+                                               mgmt.source,
+                                               &peer.peer_index);
+                      if (ret == 0)
+                        {
+                          ret = sv6621_ap_peer_bind(&ap->peers, mgmt.source,
+                                                    peer.peer_index);
+                        }
+                    }
+                }
+
+              if (ret == 0)
+                {
+                  ret = sv6621_ap_sae_input(&ap->sae, mgmt.frame,
+                                             mgmt.frame_length, &accepted,
+                                             address);
+                }
+
+              if (ret == 0 && accepted)
+                {
+                  ret = sv6621_ap_peer_authenticate(&ap->peers, address);
+                }
+              else if (ret < 0 && mgmt.transaction == 1)
+                {
+                  (void)sv6621_ap_remove_peer(
+                      ap->command, ap->instance, mgmt.source,
+                      SV6621_AP_REASON_LEAVING, false);
+                  (void)sv6621_ap_peer_forget(&ap->peers, mgmt.source,
+                                              NULL);
+                  sv6621_ap_sae_forget(&ap->sae, mgmt.source);
+                }
+            }
+          else if (mgmt.algorithm == SV6621_AP_AUTH_OPEN &&
+                   ap->config.security != SV6621_SECURITY_WPA3_SAE)
+            {
+              ret = sv6621_ap_authenticate_open(
+                  &ap->peers, ap->command, ap->instance,
+                  ap->config.channel, ap->config.band, ap->address, &mgmt,
+                  sv6621_ap_next_cookie(ap), &accepted);
+            }
+          else
+            {
+              ret = -EACCES;
+            }
         }
       else if (ret == 0 &&
                (mgmt.type == SV6621_AP_MGMT_ASSOC_REQUEST ||
@@ -304,15 +391,29 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
             }
           else
             {
-              ret = sv6621_ap_respond_association(
-                  &ap->peers, ap->command, ap->instance,
-                  ap->config.channel, ap->config.band, ap->address,
-                  ap->config.ssid, ap->config.ssid_length,
-                  ap->templates.probe_response +
-                      SV6621_AP_PROBE_RESPONSE_IE_OFFSET,
-                  ap->templates.probe_response_length -
-                      SV6621_AP_PROBE_RESPONSE_IE_OFFSET,
-                  &mgmt, sv6621_ap_next_cookie(ap), &accepted);
+              bool sae;
+
+              if (ap->config.security != SV6621_SECURITY_OPEN)
+                {
+                  ret = sv6621_ap_validate_rsn_ie(
+                      ap->config.security,
+                      ap->config.security == SV6621_SECURITY_WPA3_SAE,
+                      mgmt.information_elements,
+                      mgmt.information_element_length, &sae);
+                }
+
+              if (ret == 0)
+                {
+                  ret = sv6621_ap_respond_association(
+                      &ap->peers, ap->command, ap->instance,
+                      ap->config.channel, ap->config.band, ap->address,
+                      ap->config.ssid, ap->config.ssid_length,
+                      ap->templates.probe_response +
+                          SV6621_AP_PROBE_RESPONSE_IE_OFFSET,
+                      ap->templates.probe_response_length -
+                          SV6621_AP_PROBE_RESPONSE_IE_OFFSET,
+                      &mgmt, sv6621_ap_next_cookie(ap), &accepted);
+                }
             }
         }
       else if (ret == 0 &&
@@ -328,6 +429,7 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
           if (notify_disconnected)
             {
               sv6621_ap_wpa_forget(&ap->wpa, mgmt.source);
+              sv6621_ap_sae_forget(&ap->sae, mgmt.source);
             }
         }
     }
@@ -550,6 +652,16 @@ int sv6621_ap_init(FAR struct sv6621_ap_s *ap,
       return ret;
     }
 
+  ret = sv6621_ap_sae_init(&ap->sae, command, address);
+  if (ret < 0)
+    {
+      sv6621_ap_wpa_deinit(&ap->wpa);
+      sv6621_ap_event_queue_deinit(&ap->events);
+      sv6621_ap_peer_table_deinit(&ap->peers);
+      nxmutex_destroy(&ap->lock);
+      return ret;
+    }
+
   ap->command = command;
   ap->next_cookie = 1;
   ap->error = error;
@@ -574,6 +686,7 @@ void sv6621_ap_deinit(FAR struct sv6621_ap_s *ap)
     }
 
   sv6621_ap_event_queue_deinit(&ap->events);
+  sv6621_ap_sae_deinit(&ap->sae);
   sv6621_ap_wpa_deinit(&ap->wpa);
   sv6621_ap_peer_table_deinit(&ap->peers);
   nxmutex_destroy(&ap->lock);
@@ -601,22 +714,26 @@ int sv6621_ap_enable(FAR struct sv6621_ap_s *ap, uint8_t instance,
     }
 
   if (config->security != SV6621_SECURITY_OPEN &&
-      config->security != SV6621_SECURITY_WPA2_PSK)
+      config->security != SV6621_SECURITY_WPA2_PSK &&
+      config->security != SV6621_SECURITY_WPA3_SAE &&
+      config->security != SV6621_SECURITY_WPA2_WPA3_PSK)
     {
       return -EOPNOTSUPP;
     }
 
   if ((config->security == SV6621_SECURITY_OPEN &&
        config->credential_length != 0) ||
-      (config->security == SV6621_SECURITY_WPA2_PSK &&
+      (config->security != SV6621_SECURITY_OPEN &&
        (config->credential_length < 8 || config->credential_length > 63)))
     {
       return -EINVAL;
     }
 
-  if (config->security == SV6621_SECURITY_WPA2_PSK)
+  if (config->security != SV6621_SECURITY_OPEN)
     {
-      ret = sv6621_ap_build_rsn_ie(config->security, false, rsn_ie,
+      ret = sv6621_ap_build_rsn_ie(
+          config->security,
+          config->security == SV6621_SECURITY_WPA3_SAE, rsn_ie,
                                    sizeof(rsn_ie), &rsn_ie_length);
       if (ret < 0)
         {
@@ -672,11 +789,25 @@ int sv6621_ap_enable(FAR struct sv6621_ap_s *ap, uint8_t instance,
   start.probe_response_ies.data = ap->templates.probe_response;
   start.probe_response_ies.length = ap->templates.probe_response_length;
   ret = sv6621_ap_start(ap->command, instance, &start, &context);
-  if (ret == 0 && config->security == SV6621_SECURITY_WPA2_PSK)
+  if (ret == 0 && config->security != SV6621_SECURITY_OPEN)
     {
       ret = sv6621_ap_wpa_enable(&ap->wpa, config, &context);
       if (ret < 0)
         {
+          (void)sv6621_ap_stop(ap->command, instance);
+        }
+    }
+
+  if (ret == 0 &&
+      (config->security == SV6621_SECURITY_WPA3_SAE ||
+       config->security == SV6621_SECURITY_WPA2_WPA3_PSK))
+    {
+      ret = sv6621_ap_sae_enable(
+          &ap->sae, context.instance, config->channel, config->band,
+          config->credential, config->credential_length);
+      if (ret < 0)
+        {
+          sv6621_ap_wpa_disable(&ap->wpa);
           (void)sv6621_ap_stop(ap->command, instance);
         }
     }
@@ -719,6 +850,7 @@ int sv6621_ap_disable(FAR struct sv6621_ap_s *ap)
   if (ret == 0)
     {
       sv6621_ap_wpa_disable(&ap->wpa);
+      sv6621_ap_sae_disable(&ap->sae);
       sv6621_ap_peer_table_reset(&ap->peers);
       memset(&ap->config, 0, sizeof(ap->config));
       memset(&ap->templates, 0, sizeof(ap->templates));
@@ -755,6 +887,7 @@ int sv6621_ap_reset(FAR struct sv6621_ap_s *ap)
 
   ret = sv6621_ap_peer_table_reset(&ap->peers);
   sv6621_ap_wpa_disable(&ap->wpa);
+  sv6621_ap_sae_disable(&ap->sae);
   memset(&ap->config, 0, sizeof(ap->config));
   memset(&ap->templates, 0, sizeof(ap->templates));
   memset(&ap->context, 0, sizeof(ap->context));

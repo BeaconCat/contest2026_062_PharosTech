@@ -226,14 +226,16 @@ static int sv6621_core_ap_ready(FAR struct sv6621_dev_s *dev,
     }
 
   if (config->security != SV6621_SECURITY_OPEN &&
-      config->security != SV6621_SECURITY_WPA2_PSK)
+      config->security != SV6621_SECURITY_WPA2_PSK &&
+      config->security != SV6621_SECURITY_WPA3_SAE &&
+      config->security != SV6621_SECURITY_WPA2_WPA3_PSK)
     {
       return -EOPNOTSUPP;
     }
 
   if ((config->security == SV6621_SECURITY_OPEN &&
        config->credential_length != 0) ||
-      (config->security == SV6621_SECURITY_WPA2_PSK &&
+      (config->security != SV6621_SECURITY_OPEN &&
        (config->credential_length < 8 || config->credential_length > 63)))
     {
       return -EINVAL;

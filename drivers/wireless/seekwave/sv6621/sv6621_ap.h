@@ -38,6 +38,7 @@
 #include "sv6621_ap_beacon.h"
 #include "sv6621_ap_event.h"
 #include "sv6621_ap_peer.h"
+#include "sv6621_ap_sae.h"
 #include "sv6621_ap_wpa.h"
 #include "sv6621_command.h"
 #include "sv6621_data.h"
@@ -89,6 +90,7 @@ struct sv6621_ap_s
   FAR struct sv6621_command_engine_s *command;
   struct sv6621_ap_event_queue_s events;
   struct sv6621_ap_peer_table_s peers;
+  struct sv6621_ap_sae_s sae;
   struct sv6621_ap_wpa_s wpa;
   struct sv6621_ap_beacon_templates_s templates;
   struct sv6621_ap_config_s config;
