@@ -25,6 +25,7 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include <nuttx/kmalloc.h>
 
 #include <errno.h>
 #include <string.h>
@@ -205,8 +206,7 @@ int sv6621_security_send_eapol_instance(
     FAR const struct sv6621_data_tx_context_s *context,
     FAR const uint8_t *frame, size_t frame_length)
 {
-  uint8_t payload[SV6621_DATA_TX_DESCRIPTOR_SIZE +
-                  SV6621_DATA_MAX_FRAME_SIZE];
+  FAR uint8_t *payload;
   size_t payload_length;
   int ret;
 
@@ -218,15 +218,23 @@ int sv6621_security_send_eapol_instance(
       return -EINVAL;
     }
 
-  ret = sv6621_data_encode_tx(context, frame, frame_length, payload,
-                              sizeof(payload), &payload_length);
-  if (ret < 0)
+  payload = kmm_malloc(SV6621_DATA_TX_DESCRIPTOR_SIZE + frame_length);
+  if (payload == NULL)
     {
-      return ret;
+      return -ENOMEM;
     }
 
-  return sv6621_command_execute(
-      command, instance, SV6621_SECURITY_COMMAND_TX_DATA,
-      payload, payload_length, NULL, NULL,
-      SV6621_SECURITY_COMMAND_TIMEOUT_MS);
+  ret = sv6621_data_encode_tx(context, frame, frame_length, payload,
+                              SV6621_DATA_TX_DESCRIPTOR_SIZE + frame_length,
+                              &payload_length);
+  if (ret == 0)
+    {
+      ret = sv6621_command_execute(
+          command, instance, SV6621_SECURITY_COMMAND_TX_DATA,
+          payload, payload_length, NULL, NULL,
+          SV6621_SECURITY_COMMAND_TIMEOUT_MS);
+    }
+
+  kmm_free(payload);
+  return ret;
 }

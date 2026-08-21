@@ -4183,6 +4183,49 @@ unlock_lifecycle:
 }
 
 /****************************************************************************
+ * Name: sv6621_rekey_ap
+ ****************************************************************************/
+
+int sv6621_rekey_ap(FAR struct sv6621_dev_s *dev)
+{
+  int ret;
+
+  if (dev == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = nxmutex_lock(&dev->lifecycle_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = nxmutex_lock(&dev->status_lock);
+  if (ret == 0)
+    {
+      if (dev->status.state != SV6621_STATE_WIFI_READY)
+        {
+          ret = -ENETDOWN;
+        }
+      else if (!dev->status.ap_active)
+        {
+          ret = -ENOTCONN;
+        }
+
+      nxmutex_unlock(&dev->status_lock);
+    }
+
+  if (ret == 0)
+    {
+      ret = sv6621_ap_wpa_rekey(&dev->ap.wpa);
+    }
+
+  nxmutex_unlock(&dev->lifecycle_lock);
+  return ret;
+}
+
+/****************************************************************************
  * Name: sv6621_suspend
  ****************************************************************************/
 
