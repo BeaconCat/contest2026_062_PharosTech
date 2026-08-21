@@ -25,3 +25,8 @@ include $(wildcard platform/drivers/*/Make.defs)
 ifeq ($(CONFIG_NYABULA_CUSTOM_DRIVERS),y)
   CFLAGS += ${INCDIR_PREFIX}$(TOPDIR)$(DELIM)drivers$(DELIM)platform$(DELIM)include
 endif
+
+ifeq ($(CONFIG_SV6621),y)
+  CFLAGS += ${INCDIR_PREFIX}$(TOPDIR)$(DELIM)..$(DELIM)apps$(DELIM)crypto$(DELIM)mbedtls$(DELIM)include
+  CFLAGS += ${INCDIR_PREFIX}$(TOPDIR)$(DELIM)..$(DELIM)apps$(DELIM)crypto$(DELIM)mbedtls$(DELIM)mbedtls$(DELIM)include
+endif
