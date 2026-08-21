@@ -110,27 +110,25 @@ struct sv6621_ap_context_s;
  ****************************************************************************/
 
 int sv6621_ap_wpa_init(FAR struct sv6621_ap_wpa_s *wpa,
-                        FAR struct sv6621_command_engine_s *command,
-                        FAR const uint8_t address[SV6621_MAC_LENGTH],
-                        sv6621_ap_wpa_error_t error, FAR void *error_arg);
+                       FAR struct sv6621_command_engine_s *command,
+                       FAR const uint8_t address[SV6621_MAC_LENGTH],
+                       sv6621_ap_wpa_error_t error, FAR void *error_arg);
 void sv6621_ap_wpa_deinit(FAR struct sv6621_ap_wpa_s *wpa);
 int sv6621_ap_wpa_enable(FAR struct sv6621_ap_wpa_s *wpa,
-                          FAR const struct sv6621_ap_config_s *config,
-                          FAR const struct sv6621_ap_context_s *context);
+                         FAR const struct sv6621_ap_config_s *config,
+                         FAR const struct sv6621_ap_context_s *context);
 void sv6621_ap_wpa_disable(FAR struct sv6621_ap_wpa_s *wpa);
 int sv6621_ap_wpa_begin(FAR struct sv6621_ap_wpa_s *wpa,
-                         FAR const struct sv6621_ap_peer_s *peer);
-int sv6621_ap_wpa_begin_pmk(
-    FAR struct sv6621_ap_wpa_s *wpa,
-    FAR const struct sv6621_ap_peer_s *peer,
-    FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE]);
+                        FAR const struct sv6621_ap_peer_s *peer);
+int sv6621_ap_wpa_begin_pmk(FAR struct sv6621_ap_wpa_s *wpa,
+                            FAR const struct sv6621_ap_peer_s *peer,
+                            FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE]);
 int sv6621_ap_wpa_rekey(FAR struct sv6621_ap_wpa_s *wpa);
-void sv6621_ap_wpa_forget(
-    FAR struct sv6621_ap_wpa_s *wpa,
-    FAR const uint8_t address[SV6621_MAC_LENGTH]);
+void sv6621_ap_wpa_forget(FAR struct sv6621_ap_wpa_s *wpa,
+                          FAR const uint8_t address[SV6621_MAC_LENGTH]);
 int sv6621_ap_wpa_input(FAR struct sv6621_ap_wpa_s *wpa,
-                         FAR const struct sv6621_data_rx_s *rx,
-                         FAR bool *authorized,
-                         FAR uint8_t address[SV6621_MAC_LENGTH]);
+                        FAR const struct sv6621_data_rx_s *rx,
+                        FAR bool *authorized,
+                        FAR uint8_t address[SV6621_MAC_LENGTH]);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_AP_WPA_H */

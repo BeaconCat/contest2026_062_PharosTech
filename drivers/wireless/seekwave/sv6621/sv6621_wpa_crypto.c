@@ -30,9 +30,9 @@
 #include <sched.h>
 #include <string.h>
 
-#include <mbedtls/md.h>
 #include <mbedtls/aes.h>
 #include <mbedtls/cmac.h>
+#include <mbedtls/md.h>
 
 #include "sv6621_wpa_crypto.h"
 
@@ -42,11 +42,11 @@
 
 #define SV6621_WPA_PASSPHRASE_MIN 8
 #define SV6621_WPA_PASSPHRASE_MAX 63
-#define SV6621_WPA_HEX_PSK_SIZE    64
-#define SV6621_WPA_SSID_MAX        32
-#define SV6621_WPA_PBKDF_ROUNDS    4096
-#define SV6621_WPA_PBKDF_SALT_MAX  (SV6621_WPA_SSID_MAX + 4)
-#define SV6621_WPA_MAC_SIZE         6
+#define SV6621_WPA_HEX_PSK_SIZE   64
+#define SV6621_WPA_SSID_MAX       32
+#define SV6621_WPA_PBKDF_ROUNDS   4096
+#define SV6621_WPA_PBKDF_SALT_MAX (SV6621_WPA_SSID_MAX + 4)
+#define SV6621_WPA_MAC_SIZE       6
 #define SV6621_WPA_PTK_SEED_SIZE \
   (SV6621_WPA_MAC_SIZE * 2 + SV6621_WPA_NONCE_SIZE * 2)
 
@@ -55,9 +55,8 @@
  ****************************************************************************/
 
 static const uint8_t g_sv6621_wpa_ptk_label[] = "Pairwise key expansion";
-static const uint8_t g_sv6621_wpa_wrap_iv[8] = {
-  0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6
-};
+static const uint8_t g_sv6621_wpa_wrap_iv[8] = { 0xa6, 0xa6, 0xa6, 0xa6,
+                                                 0xa6, 0xa6, 0xa6, 0xa6 };
 
 /****************************************************************************
  * Private Function Prototypes
@@ -102,8 +101,8 @@ static int sv6621_wpa_hex_value(uint8_t character)
  ****************************************************************************/
 
 int sv6621_wpa_hmac_sha1(FAR const uint8_t *key, size_t key_length,
-                          FAR const uint8_t *data, size_t data_length,
-                          uint8_t output[SV6621_WPA_SHA1_SIZE])
+                         FAR const uint8_t *data, size_t data_length,
+                         uint8_t output[SV6621_WPA_SHA1_SIZE])
 {
   FAR const mbedtls_md_info_t *info;
   mbedtls_md_context_t context;
@@ -146,8 +145,8 @@ int sv6621_wpa_hmac_sha1(FAR const uint8_t *key, size_t key_length,
  ****************************************************************************/
 
 int sv6621_wpa_hmac_sha256(FAR const uint8_t *key, size_t key_length,
-                            FAR const uint8_t *data, size_t data_length,
-                            uint8_t output[SV6621_WPA_SHA256_SIZE])
+                           FAR const uint8_t *data, size_t data_length,
+                           uint8_t output[SV6621_WPA_SHA256_SIZE])
 {
   FAR const mbedtls_md_info_t *info;
   mbedtls_md_context_t context;
@@ -189,9 +188,8 @@ int sv6621_wpa_hmac_sha256(FAR const uint8_t *key, size_t key_length,
  * Name: sv6621_wpa_aes_cmac
  ****************************************************************************/
 
-int sv6621_wpa_aes_cmac(FAR const uint8_t key[16],
-                         FAR const uint8_t *data, size_t data_length,
-                         uint8_t output[16])
+int sv6621_wpa_aes_cmac(FAR const uint8_t key[16], FAR const uint8_t *data,
+                        size_t data_length, uint8_t output[16])
 {
   FAR const mbedtls_cipher_info_t *info;
   int ret;
@@ -216,9 +214,8 @@ int sv6621_wpa_aes_cmac(FAR const uint8_t key[16],
  ****************************************************************************/
 
 int sv6621_wpa_derive_pmk(FAR const uint8_t *passphrase,
-                           size_t passphrase_length, FAR const uint8_t *ssid,
-                           size_t ssid_length,
-                           uint8_t pmk[SV6621_WPA_PMK_SIZE])
+                          size_t passphrase_length, FAR const uint8_t *ssid,
+                          size_t ssid_length, uint8_t pmk[SV6621_WPA_PMK_SIZE])
 {
   uint8_t salt[SV6621_WPA_PBKDF_SALT_MAX];
   uint8_t digest[SV6621_WPA_SHA1_SIZE];
@@ -270,7 +267,7 @@ int sv6621_wpa_derive_pmk(FAR const uint8_t *passphrase,
       salt[ssid_length + 2] = block >> 8;
       salt[ssid_length + 3] = block;
       ret = sv6621_wpa_hmac_sha1(passphrase, passphrase_length, salt,
-                                  ssid_length + 4, digest);
+                                 ssid_length + 4, digest);
       if (ret < 0)
         {
           return ret;
@@ -280,7 +277,7 @@ int sv6621_wpa_derive_pmk(FAR const uint8_t *passphrase,
       for (round = 1; round < SV6621_WPA_PBKDF_ROUNDS; round++)
         {
           ret = sv6621_wpa_hmac_sha1(passphrase, passphrase_length, digest,
-                                      sizeof(digest), digest);
+                                     sizeof(digest), digest);
           if (ret < 0)
             {
               return ret;
@@ -318,16 +315,14 @@ int sv6621_wpa_derive_pmk(FAR const uint8_t *passphrase,
  * Name: sv6621_wpa_derive_ptk
  ****************************************************************************/
 
-int sv6621_wpa_derive_ptk(
-    FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE],
-    FAR const uint8_t authenticator[SV6621_WPA_MAC_SIZE],
-    FAR const uint8_t supplicant[SV6621_WPA_MAC_SIZE],
-    FAR const uint8_t anonce[SV6621_WPA_NONCE_SIZE],
-    FAR const uint8_t snonce[SV6621_WPA_NONCE_SIZE],
-    uint8_t ptk[SV6621_WPA_PTK_SIZE])
+int sv6621_wpa_derive_ptk(FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE],
+                          FAR const uint8_t authenticator[SV6621_WPA_MAC_SIZE],
+                          FAR const uint8_t supplicant[SV6621_WPA_MAC_SIZE],
+                          FAR const uint8_t anonce[SV6621_WPA_NONCE_SIZE],
+                          FAR const uint8_t snonce[SV6621_WPA_NONCE_SIZE],
+                          uint8_t ptk[SV6621_WPA_PTK_SIZE])
 {
-  uint8_t input[sizeof(g_sv6621_wpa_ptk_label) +
-                SV6621_WPA_PTK_SEED_SIZE + 1];
+  uint8_t input[sizeof(g_sv6621_wpa_ptk_label) + SV6621_WPA_PTK_SEED_SIZE + 1];
   uint8_t digest[SV6621_WPA_SHA1_SIZE];
   FAR const uint8_t *first;
   FAR const uint8_t *second;
@@ -342,8 +337,7 @@ int sv6621_wpa_derive_ptk(
       return -EINVAL;
     }
 
-  memcpy(input, g_sv6621_wpa_ptk_label,
-         sizeof(g_sv6621_wpa_ptk_label) - 1);
+  memcpy(input, g_sv6621_wpa_ptk_label, sizeof(g_sv6621_wpa_ptk_label) - 1);
   offset = sizeof(g_sv6621_wpa_ptk_label) - 1;
   input[offset++] = 0;
 
@@ -384,8 +378,8 @@ int sv6621_wpa_derive_ptk(
       size_t copy_length = SV6621_WPA_PTK_SIZE - produced;
 
       input[offset] = counter++;
-      ret = sv6621_wpa_hmac_sha1(pmk, SV6621_WPA_PMK_SIZE, input,
-                                  offset + 1, digest);
+      ret = sv6621_wpa_hmac_sha1(pmk, SV6621_WPA_PMK_SIZE, input, offset + 1,
+                                 digest);
       if (ret < 0)
         {
           memset(input, 0, sizeof(input));
@@ -468,8 +462,7 @@ int sv6621_wpa_derive_ptk_sha256(
 
   memcpy(input + 2, g_sv6621_wpa_ptk_label,
          sizeof(g_sv6621_wpa_ptk_label) - 1);
-  memcpy(input + 2 + sizeof(g_sv6621_wpa_ptk_label) - 1, data,
-         sizeof(data));
+  memcpy(input + 2 + sizeof(g_sv6621_wpa_ptk_label) - 1, data, sizeof(data));
   input[sizeof(input) - 2] = (SV6621_WPA_PTK_SIZE * 8) & 0xff;
   input[sizeof(input) - 1] = (SV6621_WPA_PTK_SIZE * 8) >> 8;
 
@@ -480,7 +473,7 @@ int sv6621_wpa_derive_ptk_sha256(
       input[0] = counter & 0xff;
       input[1] = counter >> 8;
       ret = sv6621_wpa_hmac_sha256(pmk, SV6621_WPA_PMK_SIZE, input,
-                                    sizeof(input), digest);
+                                   sizeof(input), digest);
       if (ret < 0)
         {
           memset(data, 0, sizeof(data));
@@ -509,10 +502,10 @@ int sv6621_wpa_derive_ptk_sha256(
  * Name: sv6621_wpa_unwrap_key
  ****************************************************************************/
 
-int sv6621_wpa_unwrap_key(
-    FAR const uint8_t kek[SV6621_WPA_KEK_SIZE],
-    FAR const uint8_t *wrapped, size_t wrapped_length, FAR uint8_t *plain,
-    size_t capacity, FAR size_t *plain_length)
+int sv6621_wpa_unwrap_key(FAR const uint8_t kek[SV6621_WPA_KEK_SIZE],
+                          FAR const uint8_t *wrapped, size_t wrapped_length,
+                          FAR uint8_t *plain, size_t capacity,
+                          FAR size_t *plain_length)
 {
   mbedtls_aes_context aes;
   uint8_t block[16];
@@ -550,8 +543,7 @@ int sv6621_wpa_unwrap_key(
             }
 
           memcpy(block + sizeof(a), plain + (index - 1) * 8, 8);
-          ret = mbedtls_aes_crypt_ecb(&aes, MBEDTLS_AES_DECRYPT, block,
-                                      block);
+          ret = mbedtls_aes_crypt_ecb(&aes, MBEDTLS_AES_DECRYPT, block, block);
           if (ret != 0)
             {
               break;
@@ -580,13 +572,15 @@ int sv6621_wpa_unwrap_key(
 }
 
 /****************************************************************************
- * Name: sv6621_wpa_wrap_key
- ****************************************************************************/
 
-int sv6621_wpa_wrap_key(
-    FAR const uint8_t kek[SV6621_WPA_KEK_SIZE], FAR const uint8_t *plain,
-    size_t plain_length, FAR uint8_t *wrapped, size_t capacity,
-    FAR size_t *wrapped_length)
+ * * Name: sv6621_wpa_wrap_key
+
+ * ****************************************************************************/
+
+int sv6621_wpa_wrap_key(FAR const uint8_t kek[SV6621_WPA_KEK_SIZE],
+                        FAR const uint8_t *plain, size_t plain_length,
+                        FAR uint8_t *wrapped, size_t capacity,
+                        FAR size_t *wrapped_length)
 {
   mbedtls_aes_context aes;
   uint8_t block[16];
@@ -597,8 +591,8 @@ int sv6621_wpa_wrap_key(
   int ret;
 
   if (kek == NULL || plain == NULL || wrapped == NULL ||
-      wrapped_length == NULL || plain_length < 16 ||
-      (plain_length & 7) != 0 || capacity < plain_length + 8)
+      wrapped_length == NULL || plain_length < 16 || (plain_length & 7) != 0 ||
+      capacity < plain_length + 8)
     {
       return -EINVAL;
     }
@@ -617,8 +611,7 @@ int sv6621_wpa_wrap_key(
 
           memcpy(block, a, sizeof(a));
           memcpy(block + sizeof(a), wrapped + index * 8, 8);
-          ret = mbedtls_aes_crypt_ecb(&aes, MBEDTLS_AES_ENCRYPT, block,
-                                      block);
+          ret = mbedtls_aes_crypt_ecb(&aes, MBEDTLS_AES_ENCRYPT, block, block);
           if (ret != 0)
             {
               break;

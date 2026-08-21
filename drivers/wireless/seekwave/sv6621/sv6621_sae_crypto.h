@@ -44,20 +44,21 @@
  ****************************************************************************/
 
 int sv6621_sae_sha256(FAR const uint8_t *data, size_t data_length,
-                       uint8_t output[SV6621_SAE_SHA256_SIZE]);
-int sv6621_sae_hmac_sha256(
-    FAR const uint8_t *key, size_t key_length, FAR const uint8_t *data,
-    size_t data_length, uint8_t output[SV6621_SAE_SHA256_SIZE]);
-int sv6621_sae_hkdf_extract(
-    FAR const uint8_t *salt, size_t salt_length, FAR const uint8_t *input,
-    size_t input_length, uint8_t output[SV6621_SAE_SHA256_SIZE]);
-int sv6621_sae_hkdf_expand(
-    FAR const uint8_t key[SV6621_SAE_SHA256_SIZE], FAR const uint8_t *info,
-    size_t info_length, FAR uint8_t *output, size_t output_length);
-int sv6621_sae_kdf_hash_length(
-    FAR const uint8_t *key, size_t key_length, FAR const uint8_t *label,
-    size_t label_length, FAR const uint8_t *context, size_t context_length,
-    FAR uint8_t *output, size_t output_length);
+                      uint8_t output[SV6621_SAE_SHA256_SIZE]);
+int sv6621_sae_hmac_sha256(FAR const uint8_t *key, size_t key_length,
+                           FAR const uint8_t *data, size_t data_length,
+                           uint8_t output[SV6621_SAE_SHA256_SIZE]);
+int sv6621_sae_hkdf_extract(FAR const uint8_t *salt, size_t salt_length,
+                            FAR const uint8_t *input, size_t input_length,
+                            uint8_t output[SV6621_SAE_SHA256_SIZE]);
+int sv6621_sae_hkdf_expand(FAR const uint8_t key[SV6621_SAE_SHA256_SIZE],
+                           FAR const uint8_t *info, size_t info_length,
+                           FAR uint8_t *output, size_t output_length);
+int sv6621_sae_kdf_hash_length(FAR const uint8_t *key, size_t key_length,
+                               FAR const uint8_t *label, size_t label_length,
+                               FAR const uint8_t *context,
+                               size_t context_length, FAR uint8_t *output,
+                               size_t output_length);
 int sv6621_sae_random(FAR uint8_t *output, size_t output_length);
 int sv6621_sae_random_callback(FAR void *arg, FAR unsigned char *output,
                                size_t output_length);

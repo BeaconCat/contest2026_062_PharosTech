@@ -58,7 +58,7 @@ static FAR const mbedtls_md_info_t *sv6621_sae_sha256_info(void)
  ****************************************************************************/
 
 int sv6621_sae_sha256(FAR const uint8_t *data, size_t data_length,
-                       uint8_t output[SV6621_SAE_SHA256_SIZE])
+                      uint8_t output[SV6621_SAE_SHA256_SIZE])
 {
   FAR const mbedtls_md_info_t *info;
   int ret;
@@ -78,15 +78,15 @@ int sv6621_sae_sha256(FAR const uint8_t *data, size_t data_length,
   return ret == 0 ? 0 : -EIO;
 }
 
-int sv6621_sae_hmac_sha256(
-    FAR const uint8_t *key, size_t key_length, FAR const uint8_t *data,
-    size_t data_length, uint8_t output[SV6621_SAE_SHA256_SIZE])
+int sv6621_sae_hmac_sha256(FAR const uint8_t *key, size_t key_length,
+                           FAR const uint8_t *data, size_t data_length,
+                           uint8_t output[SV6621_SAE_SHA256_SIZE])
 {
   FAR const mbedtls_md_info_t *info;
   int ret;
 
-  if ((key == NULL && key_length != 0) ||
-      (data == NULL && data_length != 0) || output == NULL)
+  if ((key == NULL && key_length != 0) || (data == NULL && data_length != 0) ||
+      output == NULL)
     {
       return -EINVAL;
     }
@@ -101,9 +101,9 @@ int sv6621_sae_hmac_sha256(
   return ret == 0 ? 0 : -EIO;
 }
 
-int sv6621_sae_hkdf_extract(
-    FAR const uint8_t *salt, size_t salt_length, FAR const uint8_t *input,
-    size_t input_length, uint8_t output[SV6621_SAE_SHA256_SIZE])
+int sv6621_sae_hkdf_extract(FAR const uint8_t *salt, size_t salt_length,
+                            FAR const uint8_t *input, size_t input_length,
+                            uint8_t output[SV6621_SAE_SHA256_SIZE])
 {
   FAR const mbedtls_md_info_t *info;
   int ret;
@@ -125,9 +125,9 @@ int sv6621_sae_hkdf_extract(
   return ret == 0 ? 0 : -EIO;
 }
 
-int sv6621_sae_hkdf_expand(
-    FAR const uint8_t key[SV6621_SAE_SHA256_SIZE], FAR const uint8_t *info,
-    size_t info_length, FAR uint8_t *output, size_t output_length)
+int sv6621_sae_hkdf_expand(FAR const uint8_t key[SV6621_SAE_SHA256_SIZE],
+                           FAR const uint8_t *info, size_t info_length,
+                           FAR uint8_t *output, size_t output_length)
 {
   FAR const mbedtls_md_info_t *md_info;
   int ret;
@@ -149,10 +149,11 @@ int sv6621_sae_hkdf_expand(
   return ret == 0 ? 0 : -EIO;
 }
 
-int sv6621_sae_kdf_hash_length(
-    FAR const uint8_t *key, size_t key_length, FAR const uint8_t *label,
-    size_t label_length, FAR const uint8_t *context, size_t context_length,
-    FAR uint8_t *output, size_t output_length)
+int sv6621_sae_kdf_hash_length(FAR const uint8_t *key, size_t key_length,
+                               FAR const uint8_t *label, size_t label_length,
+                               FAR const uint8_t *context,
+                               size_t context_length, FAR uint8_t *output,
+                               size_t output_length)
 {
   uint8_t digest[SV6621_SAE_SHA256_SIZE];
   FAR uint8_t *input;
@@ -193,8 +194,8 @@ int sv6621_sae_kdf_hash_length(
 
       input[0] = counter;
       input[1] = counter >> 8;
-      ret = sv6621_sae_hmac_sha256(key, key_length, input, input_length,
-                                    digest);
+      ret =
+          sv6621_sae_hmac_sha256(key, key_length, input, input_length, digest);
       if (ret < 0)
         {
           break;

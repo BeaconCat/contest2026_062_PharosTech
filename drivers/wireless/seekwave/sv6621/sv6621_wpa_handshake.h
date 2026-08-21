@@ -103,22 +103,21 @@ struct sv6621_wpa_s
  ****************************************************************************/
 
 int sv6621_wpa_init(FAR struct sv6621_wpa_s *wpa,
-                     FAR struct sv6621_command_engine_s *command,
-                     FAR struct sv6621_station_s *station);
+                    FAR struct sv6621_command_engine_s *command,
+                    FAR struct sv6621_station_s *station);
 void sv6621_wpa_deinit(FAR struct sv6621_wpa_s *wpa);
 int sv6621_wpa_prepare(FAR struct sv6621_wpa_s *wpa,
-                        FAR const struct sv6621_connect_s *request,
-                        FAR const uint8_t supplicant[SV6621_MAC_LENGTH],
-                        FAR const uint8_t authenticator[SV6621_MAC_LENGTH]);
-int sv6621_wpa_prepare_pmk(
-    FAR struct sv6621_wpa_s *wpa,
-    FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE],
-    enum sv6621_wpa_key_mgmt_e key_mgmt,
-    FAR const uint8_t supplicant[SV6621_MAC_LENGTH],
-    FAR const uint8_t authenticator[SV6621_MAC_LENGTH]);
+                       FAR const struct sv6621_connect_s *request,
+                       FAR const uint8_t supplicant[SV6621_MAC_LENGTH],
+                       FAR const uint8_t authenticator[SV6621_MAC_LENGTH]);
+int sv6621_wpa_prepare_pmk(FAR struct sv6621_wpa_s *wpa,
+                           FAR const uint8_t pmk[SV6621_WPA_PMK_SIZE],
+                           enum sv6621_wpa_key_mgmt_e key_mgmt,
+                           FAR const uint8_t supplicant[SV6621_MAC_LENGTH],
+                           FAR const uint8_t authenticator[SV6621_MAC_LENGTH]);
 int sv6621_wpa_run(FAR struct sv6621_wpa_s *wpa,
-                    FAR const struct sv6621_connection_peer_s *peer,
-                    uint32_t timeout_ms);
+                   FAR const struct sv6621_connection_peer_s *peer,
+                   uint32_t timeout_ms);
 void sv6621_wpa_cancel(FAR struct sv6621_wpa_s *wpa, int result);
 void sv6621_wpa_disconnected(FAR struct sv6621_wpa_s *wpa, int result);
 void sv6621_wpa_input(FAR const struct sv6621_data_rx_s *rx, FAR void *arg);

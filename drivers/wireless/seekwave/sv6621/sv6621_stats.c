@@ -51,14 +51,14 @@
 #define SV6621_STATS_TX_PERCENT_OFFSET  170
 #define SV6621_STATS_RX_PERCENT_OFFSET  171
 
-#define SV6621_STATS_RATE_LEGACY 0
-#define SV6621_STATS_RATE_HT     1
-#define SV6621_STATS_RATE_VHT    2
-#define SV6621_STATS_RATE_HE     3
+#define SV6621_STATS_RATE_LEGACY        0
+#define SV6621_STATS_RATE_HT            1
+#define SV6621_STATS_RATE_VHT           2
+#define SV6621_STATS_RATE_HE            3
 
-#define SV6621_STATS_BW_20MHZ 0
-#define SV6621_STATS_BW_40MHZ 1
-#define SV6621_STATS_BW_80MHZ 2
+#define SV6621_STATS_BW_20MHZ           0
+#define SV6621_STATS_BW_40MHZ           1
+#define SV6621_STATS_BW_80MHZ           2
 
 /****************************************************************************
  * Private Function Prototypes
@@ -67,8 +67,8 @@
 static uint16_t sv6621_stats_get_le16(FAR const uint8_t *data);
 static uint32_t sv6621_stats_get_le32(FAR const uint8_t *data);
 static void sv6621_stats_put_le64(FAR uint8_t *data, uint64_t value);
-static uint32_t sv6621_stats_tx_bitrate(
-    FAR const struct sv6621_tx_rate_s *rate);
+static uint32_t
+sv6621_stats_tx_bitrate(FAR const struct sv6621_tx_rate_s *rate);
 
 /****************************************************************************
  * Private Functions
@@ -89,8 +89,8 @@ static uint16_t sv6621_stats_get_le16(FAR const uint8_t *data)
 
 static uint32_t sv6621_stats_get_le32(FAR const uint8_t *data)
 {
-  return data[0] | ((uint32_t)data[1] << 8) |
-         ((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 24);
+  return data[0] | ((uint32_t)data[1] << 8) | ((uint32_t)data[2] << 16) |
+         ((uint32_t)data[3] << 24);
 }
 
 /****************************************************************************
@@ -111,40 +111,27 @@ static void sv6621_stats_put_le64(FAR uint8_t *data, uint64_t value)
  * Name: sv6621_stats_tx_bitrate
  ****************************************************************************/
 
-static uint32_t sv6621_stats_tx_bitrate(
-    FAR const struct sv6621_tx_rate_s *rate)
+static uint32_t
+sv6621_stats_tx_bitrate(FAR const struct sv6621_tx_rate_s *rate)
 {
-  static const uint16_t ht[2][2][8] =
-  {
-    {
-      {65, 130, 195, 260, 390, 520, 585, 650},
-      {72, 144, 217, 289, 433, 578, 650, 722}
-    },
-    {
-      {135, 270, 405, 540, 810, 1080, 1215, 1350},
-      {150, 300, 450, 600, 900, 1200, 1350, 1500}
-    }
+  static const uint16_t ht[2][2][8] = {
+    { { 65, 130, 195, 260, 390, 520, 585, 650 },
+      { 72, 144, 217, 289, 433, 578, 650, 722 } },
+    { { 135, 270, 405, 540, 810, 1080, 1215, 1350 },
+      { 150, 300, 450, 600, 900, 1200, 1350, 1500 } }
   };
-  static const uint16_t vht[3][2][10] =
-  {
-    {
-      {65, 130, 195, 260, 390, 520, 585, 650, 780, 0},
-      {72, 144, 217, 289, 433, 578, 650, 722, 867, 963}
-    },
-    {
-      {135, 270, 405, 540, 810, 1080, 1215, 1350, 1620, 1800},
-      {150, 300, 450, 600, 900, 1200, 1350, 1500, 1800, 2000}
-    },
-    {
-      {293, 585, 878, 1170, 1755, 2340, 2633, 2925, 3510, 3900},
-      {325, 650, 975, 1300, 1950, 2600, 2925, 3250, 3900, 4333}
-    }
+  static const uint16_t vht[3][2][10] = {
+    { { 65, 130, 195, 260, 390, 520, 585, 650, 780, 0 },
+      { 72, 144, 217, 289, 433, 578, 650, 722, 867, 963 } },
+    { { 135, 270, 405, 540, 810, 1080, 1215, 1350, 1620, 1800 },
+      { 150, 300, 450, 600, 900, 1200, 1350, 1500, 1800, 2000 } },
+    { { 293, 585, 878, 1170, 1755, 2340, 2633, 2925, 3510, 3900 },
+      { 325, 650, 975, 1300, 1950, 2600, 2925, 3250, 3900, 4333 } }
   };
-  static const uint16_t he20[3][12] =
-  {
-    {73, 146, 219, 293, 439, 585, 658, 731, 878, 975, 1097, 1219},
-    {81, 163, 244, 325, 488, 650, 731, 813, 975, 1083, 1219, 1354},
-    {86, 172, 258, 344, 516, 688, 774, 860, 1032, 1147, 1290, 1434}
+  static const uint16_t he20[3][12] = {
+    { 73, 146, 219, 293, 439, 585, 658, 731, 878, 975, 1097, 1219 },
+    { 81, 163, 244, 325, 488, 650, 731, 813, 975, 1083, 1219, 1354 },
+    { 86, 172, 258, 344, 516, 688, 774, 860, 1032, 1147, 1290, 1434 }
   };
   uint8_t bandwidth = rate->bandwidth;
   uint8_t mcs = rate->mcs;
@@ -217,9 +204,9 @@ int sv6621_stats_query(FAR struct sv6621_command_engine_s *command,
   timestamp_ms = TICK2MSEC(clock_systime_ticks());
   sv6621_stats_put_le64(request + 8, timestamp_ms);
 
-  ret = sv6621_command_execute(command, instance,
-                               SV6621_STATS_COMMAND_GET_STA, request,
-                               sizeof(request), response, &response_length,
+  ret = sv6621_command_execute(command, instance, SV6621_STATS_COMMAND_GET_STA,
+                               request, sizeof(request), response,
+                               &response_length,
                                SV6621_STATS_COMMAND_TIMEOUT_MS);
   if (ret != 0)
     {

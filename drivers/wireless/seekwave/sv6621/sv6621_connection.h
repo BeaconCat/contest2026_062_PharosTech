@@ -36,16 +36,16 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_CONNECTION_HT_CAPABILITY_SIZE  26
-#define SV6621_CONNECTION_VHT_CAPABILITY_SIZE 12
-#define SV6621_CONNECTION_ASSOC_IE_CAPACITY   128
+#define SV6621_CONNECTION_HT_CAPABILITY_SIZE   26
+#define SV6621_CONNECTION_VHT_CAPABILITY_SIZE  12
+#define SV6621_CONNECTION_ASSOC_IE_CAPACITY    128
 
-#define SV6621_CONNECTION_BW_CAP_2GHZ_20MHZ (1 << 0)
-#define SV6621_CONNECTION_BW_CAP_2GHZ_40MHZ (1 << 1)
-#define SV6621_CONNECTION_BW_CAP_5GHZ_20MHZ (1 << 2)
-#define SV6621_CONNECTION_BW_CAP_5GHZ_40MHZ (1 << 3)
-#define SV6621_CONNECTION_BW_CAP_5GHZ_80MHZ (1 << 4)
-#define SV6621_CONNECTION_BW_CAP_5GHZ_160MHZ (1 << 5)
+#define SV6621_CONNECTION_BW_CAP_2GHZ_20MHZ    (1 << 0)
+#define SV6621_CONNECTION_BW_CAP_2GHZ_40MHZ    (1 << 1)
+#define SV6621_CONNECTION_BW_CAP_5GHZ_20MHZ    (1 << 2)
+#define SV6621_CONNECTION_BW_CAP_5GHZ_40MHZ    (1 << 3)
+#define SV6621_CONNECTION_BW_CAP_5GHZ_80MHZ    (1 << 4)
+#define SV6621_CONNECTION_BW_CAP_5GHZ_160MHZ   (1 << 5)
 #define SV6621_CONNECTION_BW_CAP_5GHZ_80P80MHZ (1 << 6)
 
 /****************************************************************************
@@ -94,10 +94,10 @@ int sv6621_connection_associate(
     FAR const uint8_t ht_capability[SV6621_CONNECTION_HT_CAPABILITY_SIZE],
     FAR const uint8_t vht_capability[SV6621_CONNECTION_VHT_CAPABILITY_SIZE],
     FAR const uint8_t *ies, size_t ies_length);
-int sv6621_connection_disconnect(
-    FAR struct sv6621_command_engine_s *command,
-    enum sv6621_connection_disconnect_mode_e mode, bool local_state_change,
-    uint16_t reason, FAR const uint8_t *ies, size_t ies_length);
+int sv6621_connection_disconnect(FAR struct sv6621_command_engine_s *command,
+                                 enum sv6621_connection_disconnect_mode_e mode,
+                                 bool local_state_change, uint16_t reason,
+                                 FAR const uint8_t *ies, size_t ies_length);
 int sv6621_connection_build_association_ies(
     FAR const struct sv6621_scan_entry_s *entry,
     enum sv6621_security_e security, FAR uint8_t *ies, size_t capacity,

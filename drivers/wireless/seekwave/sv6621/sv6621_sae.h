@@ -60,9 +60,8 @@ enum sv6621_sae_state_e
   SV6621_SAE_FAILED
 };
 
-typedef void (*sv6621_sae_complete_t)(
-    int result, FAR const uint8_t *pmk, FAR const uint8_t *pmkid,
-    FAR void *arg);
+typedef void (*sv6621_sae_complete_t)(int result, FAR const uint8_t *pmk,
+                                      FAR const uint8_t *pmkid, FAR void *arg);
 
 struct sv6621_sae_s
 {
@@ -107,14 +106,14 @@ int sv6621_sae_init(FAR struct sv6621_sae_s *sae,
                     FAR struct sv6621_command_engine_s *command,
                     sv6621_sae_complete_t complete, FAR void *complete_arg);
 void sv6621_sae_deinit(FAR struct sv6621_sae_s *sae);
-int sv6621_sae_start(
-    FAR struct sv6621_sae_s *sae,
-    FAR const uint8_t local[SV6621_MAC_LENGTH],
-    FAR const uint8_t peer[SV6621_MAC_LENGTH], uint8_t instance,
-    uint8_t channel, enum sv6621_band_e band, FAR const uint8_t *password,
-    size_t password_length);
-int sv6621_sae_input(FAR struct sv6621_sae_s *sae,
-                     FAR const uint8_t *frame, size_t frame_length);
+int sv6621_sae_start(FAR struct sv6621_sae_s *sae,
+                     FAR const uint8_t local[SV6621_MAC_LENGTH],
+                     FAR const uint8_t peer[SV6621_MAC_LENGTH],
+                     uint8_t instance, uint8_t channel,
+                     enum sv6621_band_e band, FAR const uint8_t *password,
+                     size_t password_length);
+int sv6621_sae_input(FAR struct sv6621_sae_s *sae, FAR const uint8_t *frame,
+                     size_t frame_length);
 void sv6621_sae_cancel(FAR struct sv6621_sae_s *sae, int result);
 
 #endif /* __DRIVERS_WIRELESS_SEEKWAVE_SV6621_SV6621_SAE_H */
