@@ -64,6 +64,7 @@
 #define SV6621_AP_EAPOL_HEADER_SIZE              3
 #define SV6621_AP_AUTH_OPEN                       0
 #define SV6621_AP_AUTH_SAE                        3
+#define SV6621_AP_REASON_LEAVING                   3
 
 /****************************************************************************
  * Private Types
@@ -320,12 +321,50 @@ static int sv6621_ap_dispatch_event(uint8_t instance, uint8_t id,
               (ap->config.security == SV6621_SECURITY_WPA3_SAE ||
                ap->config.security == SV6621_SECURITY_WPA2_WPA3_PSK))
             {
-              ret = sv6621_ap_sae_input(&ap->sae, mgmt.frame,
-                                         mgmt.frame_length, &accepted,
-                                         address);
+              if (mgmt.transaction == 1)
+                {
+                  struct sv6621_ap_peer_s peer;
+
+                  ret = sv6621_ap_peer_authenticate(&ap->peers,
+                                                     mgmt.source);
+                  if (ret == 0)
+                    {
+                      ret = sv6621_ap_peer_lookup(&ap->peers, mgmt.source,
+                                                  &peer);
+                    }
+
+                  if (ret == 0 && !peer.bound)
+                    {
+                      ret = sv6621_ap_add_peer(ap->command, ap->instance,
+                                               mgmt.source,
+                                               &peer.peer_index);
+                      if (ret == 0)
+                        {
+                          ret = sv6621_ap_peer_bind(&ap->peers, mgmt.source,
+                                                    peer.peer_index);
+                        }
+                    }
+                }
+
+              if (ret == 0)
+                {
+                  ret = sv6621_ap_sae_input(&ap->sae, mgmt.frame,
+                                             mgmt.frame_length, &accepted,
+                                             address);
+                }
+
               if (ret == 0 && accepted)
                 {
                   ret = sv6621_ap_peer_authenticate(&ap->peers, address);
+                }
+              else if (ret < 0 && mgmt.transaction == 1)
+                {
+                  (void)sv6621_ap_remove_peer(
+                      ap->command, ap->instance, mgmt.source,
+                      SV6621_AP_REASON_LEAVING, false);
+                  (void)sv6621_ap_peer_forget(&ap->peers, mgmt.source,
+                                              NULL);
+                  sv6621_ap_sae_forget(&ap->sae, mgmt.source);
                 }
             }
           else if (mgmt.algorithm == SV6621_AP_AUTH_OPEN &&
