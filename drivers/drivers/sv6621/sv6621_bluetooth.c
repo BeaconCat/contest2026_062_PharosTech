@@ -55,28 +55,28 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define SV6621_BT_LINK_HEADER_SIZE       12
-#define SV6621_BT_H4_COMMAND             0x01
-#define SV6621_BT_H4_ACL                 0x02
-#define SV6621_BT_H4_SCO                 0x03
-#define SV6621_BT_H4_EVENT               0x04
-#define SV6621_BT_H4_ISO                 0x05
-#define SV6621_BT_EVENT_COMMAND_COMPLETE 0x0e
+#define SV6621_BT_LINK_HEADER_SIZE          12
+#define SV6621_BT_H4_COMMAND                0x01
+#define SV6621_BT_H4_ACL                    0x02
+#define SV6621_BT_H4_SCO                    0x03
+#define SV6621_BT_H4_EVENT                  0x04
+#define SV6621_BT_H4_ISO                    0x05
+#define SV6621_BT_EVENT_COMMAND_COMPLETE    0x0e
 
 #define SV6621_BT_OPCODE_RESET              0x0c03
 #define SV6621_BT_OPCODE_READ_LOCAL_VERSION 0x1001
 #define SV6621_BT_OPCODE_DOWNLOAD_NV        0xfc80
 
-#define SV6621_BT_CONTROLLER_6160_LITE 0x5302
-#define SV6621_BT_NV_BLOCK_SIZE        252
-#define SV6621_BT_NV_HEADER_SIZE       4
-#define SV6621_BT_NV_RECORD_HEADER     3
-#define SV6621_BT_NV_LOG_TAG           0x05
-#define SV6621_BT_COMMAND_TIMEOUT_MS   1000
-#define SV6621_BT_READY_TIMEOUT_MS     3000
-#define SV6621_BT_STOP_GRACE_MS        250
-#define SV6621_BT_MAX_FRAME            2048
-#define SV6621_BT_TX_CAPACITY          2560
+#define SV6621_BT_CONTROLLER_6160_LITE      0x5302
+#define SV6621_BT_NV_BLOCK_SIZE             252
+#define SV6621_BT_NV_HEADER_SIZE            4
+#define SV6621_BT_NV_RECORD_HEADER          3
+#define SV6621_BT_NV_LOG_TAG                0x05
+#define SV6621_BT_COMMAND_TIMEOUT_MS        1000
+#define SV6621_BT_READY_TIMEOUT_MS          3000
+#define SV6621_BT_STOP_GRACE_MS             250
+#define SV6621_BT_MAX_FRAME                 2048
+#define SV6621_BT_TX_CAPACITY               2560
 
 /****************************************************************************
  * Private Types
@@ -117,8 +117,8 @@ static int sv6621_bluetooth_send(FAR struct bt_driver_s *driver,
 static void sv6621_bluetooth_close(FAR struct bt_driver_s *driver);
 static void sv6621_bluetooth_receive(uint8_t channel,
                                      FAR const uint8_t encoded[4],
-                                     FAR const uint8_t *payload,
-                                     size_t length, FAR void *arg);
+                                     FAR const uint8_t *payload, size_t length,
+                                     FAR void *arg);
 
 /****************************************************************************
  * Private Functions
@@ -196,8 +196,7 @@ static int sv6621_bluetooth_h4_length(FAR const uint8_t *frame,
 }
 
 static int sv6621_bluetooth_transmit(FAR struct sv6621_bluetooth_s *bluetooth,
-                                     uint8_t channel,
-                                     FAR const uint8_t *frame,
+                                     uint8_t channel, FAR const uint8_t *frame,
                                      size_t length)
 {
   uint8_t packet[SV6621_BT_TX_CAPACITY];
@@ -214,9 +213,10 @@ static int sv6621_bluetooth_transmit(FAR struct sv6621_bluetooth_s *bluetooth,
   return sv6621_tx_send(&bluetooth->dev->tx, packet, packet_length);
 }
 
-static int sv6621_bluetooth_send_command(
-    FAR struct sv6621_bluetooth_s *bluetooth, uint16_t opcode,
-    FAR const uint8_t *parameters, size_t parameter_length)
+static int
+sv6621_bluetooth_send_command(FAR struct sv6621_bluetooth_s *bluetooth,
+                              uint16_t opcode, FAR const uint8_t *parameters,
+                              size_t parameter_length)
 {
   uint8_t frame[4 + UINT8_MAX];
   int ret;
@@ -255,8 +255,8 @@ static int sv6621_bluetooth_send_command(
   bluetooth->command_pending = true;
   nxmutex_unlock(&bluetooth->state_lock);
 
-  ret = sv6621_bluetooth_transmit(bluetooth, SV6621_CHANNEL_BT_COMMAND,
-                                  frame, parameter_length + 4);
+  ret = sv6621_bluetooth_transmit(bluetooth, SV6621_CHANNEL_BT_COMMAND, frame,
+                                  parameter_length + 4);
   if (ret >= 0)
     {
       ret = nxsem_tickwait(&bluetooth->command_completion,
@@ -278,9 +278,9 @@ static int sv6621_bluetooth_send_command(
   return ret;
 }
 
-static int sv6621_bluetooth_download_nv(
-    FAR struct sv6621_bluetooth_s *bluetooth,
-    FAR const struct sv6621_firmware_s *nvram)
+static int
+sv6621_bluetooth_download_nv(FAR struct sv6621_bluetooth_s *bluetooth,
+                             FAR const struct sv6621_firmware_s *nvram)
 {
   uint8_t parameters[2 + SV6621_BT_NV_BLOCK_SIZE];
   size_t input;
@@ -307,8 +307,8 @@ static int sv6621_bluetooth_download_nv(
           return -EPROTO;
         }
 
-      record_length = (size_t)nvram->data[input + 2] +
-                      SV6621_BT_NV_RECORD_HEADER;
+      record_length =
+          (size_t)nvram->data[input + 2] + SV6621_BT_NV_RECORD_HEADER;
       if (record_length > nvram->length - input ||
           record_length > SV6621_BT_NV_BLOCK_SIZE)
         {
@@ -320,8 +320,7 @@ static int sv6621_bluetooth_download_nv(
           parameters[0] = page++;
           parameters[1] = (uint8_t)output;
           ret = sv6621_bluetooth_send_command(
-              bluetooth, SV6621_BT_OPCODE_DOWNLOAD_NV, parameters,
-              output + 2);
+              bluetooth, SV6621_BT_OPCODE_DOWNLOAD_NV, parameters, output + 2);
           if (ret < 0)
             {
               return ret;
@@ -348,14 +347,13 @@ static int sv6621_bluetooth_download_nv(
 
   parameters[0] = page;
   parameters[1] = (uint8_t)output;
-  return sv6621_bluetooth_send_command(bluetooth,
-                                       SV6621_BT_OPCODE_DOWNLOAD_NV,
+  return sv6621_bluetooth_send_command(bluetooth, SV6621_BT_OPCODE_DOWNLOAD_NV,
                                        parameters, output + 2);
 }
 
-static bool sv6621_bluetooth_complete_command(
-    FAR struct sv6621_bluetooth_s *bluetooth, FAR const uint8_t *frame,
-    size_t length)
+static bool
+sv6621_bluetooth_complete_command(FAR struct sv6621_bluetooth_s *bluetooth,
+                                  FAR const uint8_t *frame, size_t length)
 {
   uint16_t opcode;
   int result;
@@ -382,8 +380,7 @@ static bool sv6621_bluetooth_complete_command(
   if (result == 0 && opcode == SV6621_BT_OPCODE_READ_LOCAL_VERSION &&
       length >= 10)
     {
-      bluetooth->controller_revision =
-          sv6621_bluetooth_get_le16(frame + 8);
+      bluetooth->controller_revision = sv6621_bluetooth_get_le16(frame + 8);
     }
 
   bluetooth->command_result = result;
@@ -415,8 +412,8 @@ static enum bt_buf_type_e sv6621_bluetooth_buffer_type(uint8_t h4_type)
 
 static void sv6621_bluetooth_receive(uint8_t channel,
                                      FAR const uint8_t encoded[4],
-                                     FAR const uint8_t *payload,
-                                     size_t length, FAR void *arg)
+                                     FAR const uint8_t *payload, size_t length,
+                                     FAR void *arg)
 {
   FAR struct sv6621_bluetooth_s *bluetooth = arg;
   FAR const uint8_t *frame;
@@ -445,15 +442,15 @@ static void sv6621_bluetooth_receive(uint8_t channel,
         }
 
       if (!sv6621_bluetooth_complete_command(bluetooth, frame,
-                                              (size_t)frame_length))
+                                             (size_t)frame_length))
         {
           type = sv6621_bluetooth_buffer_type(frame[0]);
           if (bluetooth->registered && bluetooth->opened &&
               bluetooth->driver.receive != NULL)
             {
-              (void)bluetooth->driver.receive(
-                  &bluetooth->driver, type, (FAR uint8_t *)frame + 1,
-                  (size_t)frame_length - 1);
+              (void)bluetooth->driver.receive(&bluetooth->driver, type,
+                                              (FAR uint8_t *)frame + 1,
+                                              (size_t)frame_length - 1);
             }
         }
 
@@ -676,9 +673,9 @@ int sv6621_bluetooth_start(FAR struct sv6621_dev_s *dev,
       return 0;
     }
 
-  ret = sv6621_service_start_bluetooth(
-      &bluetooth->dev->service, bluetooth->dev->config.transport,
-      SV6621_BT_READY_TIMEOUT_MS);
+  ret = sv6621_service_start_bluetooth(&bluetooth->dev->service,
+                                       bluetooth->dev->config.transport,
+                                       SV6621_BT_READY_TIMEOUT_MS);
   if (ret < 0)
     {
       return ret;
@@ -698,8 +695,8 @@ int sv6621_bluetooth_start(FAR struct sv6621_dev_s *dev,
       return ret;
     }
 
-  ret = sv6621_bluetooth_send_command(bluetooth, SV6621_BT_OPCODE_RESET,
-                                      NULL, 0);
+  ret = sv6621_bluetooth_send_command(bluetooth, SV6621_BT_OPCODE_RESET, NULL,
+                                      0);
   if (ret < 0)
     {
       return ret;
@@ -809,8 +806,7 @@ void sv6621_bluetooth_offline(FAR struct sv6621_dev_s *dev, int error)
   if (notify)
     {
       (void)bluetooth->driver.receive(&bluetooth->driver, BT_EVT,
-                                      hardware_error,
-                                      sizeof(hardware_error));
+                                      hardware_error, sizeof(hardware_error));
     }
 }
 
