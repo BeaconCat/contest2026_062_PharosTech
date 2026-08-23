@@ -63,6 +63,10 @@ ifeq ($(CONFIG_BOARDCTL_IOCTL),y)
 CSRCS += kickpi_k7_boardctl.c
 endif
 
+ifeq ($(CONFIG_KICKPI_K7_USBHOST),y)
+CSRCS += kickpi_k7_usbhost.c
+endif
+
 ifeq ($(CONFIG_ETC_ROMFS),y)
   RCSRCS = etc/init.d/rc.sysinit etc/init.d/rcS
 endif
