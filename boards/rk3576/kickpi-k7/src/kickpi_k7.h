@@ -65,5 +65,9 @@ int kickpi_k7_rtc_initialize(void);
 int kickpi_k7_lcd_initialize(void);
 #endif
 
+#ifdef CONFIG_KICKPI_K7_USBHOST
+int kickpi_k7_usbhost_initialize(void);
+#endif
+
 #endif /* __ASSEMBLY__ */
 #endif /* __BOARDS_ARM64_RK3576_KICKPI_K7_SRC_KICKPI_K7_H */
