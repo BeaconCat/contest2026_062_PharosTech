@@ -221,8 +221,7 @@ void board_late_initialize(void)
     int ret = kickpi_k7_usbhost_initialize();
     if (ret < 0)
       {
-        syslog(LOG_ERR, "ERROR: USB-A host initialization failed: %d\n",
-               ret);
+        syslog(LOG_ERR, "ERROR: USB-A host initialization failed: %d\n", ret);
       }
   }
 #endif
