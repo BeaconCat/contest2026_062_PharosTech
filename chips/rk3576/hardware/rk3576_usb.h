@@ -35,9 +35,9 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* Synopsys DesignWare USB3 (DWC3) register offsets and bit fields for the
- * device-mode subset used by the RK3576 USB OTG0 controller driver.
- * Offsets are relative to the controller base (RK3576_USB0_ADDR).
+/* Synopsys DesignWare USB3 (DWC3) register offsets and bit fields shared by
+ * the RK3576 USB0 device controller and USB1 host controller.  Offsets are
+ * relative to the selected controller base.
  */
 
 /* Global register block (xHCI-relative offsets, device-mode subset) ******/
@@ -70,6 +70,7 @@
 #define GCTL_CORESOFTRESET      (1u << 11)
 #define GCTL_PRTCAPDIR_SHIFT    12
 #define GCTL_PRTCAPDIR_MASK     (3u << 12)
+#define GCTL_PRTCAP_HOST        (1u << 12)
 #define GCTL_PRTCAP_DEVICE      (2u << 12)
 #define GCTL_DSBLCLKGTNG        (1u << 0)
 
@@ -82,6 +83,7 @@
 #define GUSB2PHYCFG_U2FREECLK   (1u << 30)
 
 #define GUSB3PIPECTL_PHYSOFTRST (1u << 31)
+#define GUSB3PIPECTL_DISRXDETINP3 (1u << 28)
 #define GUSB3PIPECTL_SUSPEND    (1u << 17)
 
 #define DCFG_DEVSPD_MASK        (7u << 0)
