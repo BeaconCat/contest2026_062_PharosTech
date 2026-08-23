@@ -32,6 +32,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <stdint.h>
+#include <syslog.h>
 
 #include <nuttx/arch.h>
 #include <nuttx/irq.h>
@@ -242,7 +243,10 @@ static int rk3576_usbhost_combphy_initialize(void)
       up_udelay(10);
     }
 
-  uerr("ERROR: USB1 Combo PHY did not become ready\n");
+  regval = getreg32(RK3576_PIPE_PHY1_GRF_ADDR +
+                    RK3576_PIPE_PHY_STATUS0);
+  syslog(LOG_ERR, "ERROR: USB1 Combo PHY timeout: status=%08" PRIx32 "\n",
+         regval);
   return -ETIMEDOUT;
 }
 
@@ -280,6 +284,8 @@ static int rk3576_usbhost_core_initialize(void)
     {
       uerr("ERROR: USB1 DWC3 core unavailable: GSNPSID=%08" PRIx32 "\n",
            regval);
+      syslog(LOG_ERR, "ERROR: USB1 DWC3 unavailable: GSNPSID=%08" PRIx32
+                      "\n", regval);
       return -ENODEV;
     }
 
@@ -365,8 +371,18 @@ FAR struct usbhost_connection_s *rk3576_usbhost_initialize(void)
       return NULL;
     }
 
-  return xhci_initialize("rk3576-usb1", RK3576_USB1_ADDR,
-                         &g_rk3576_xhci_ops, NULL);
+  {
+    FAR struct usbhost_connection_s *conn;
+
+    conn = xhci_initialize("rk3576-usb1", RK3576_USB1_ADDR,
+                           &g_rk3576_xhci_ops, NULL);
+    if (conn == NULL)
+      {
+        syslog(LOG_ERR, "ERROR: USB1 xHCI initialization failed\n");
+      }
+
+    return conn;
+  }
 }
 
 #endif /* CONFIG_RK3576_USBHOST */
