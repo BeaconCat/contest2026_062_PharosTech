@@ -330,6 +330,7 @@ void ny_manifest_default_config(struct ny_plugin_config_s *config,
   strlcpy(config->version, "0", sizeof(config->version));
   strlcpy(config->entry, entry, sizeof(config->entry));
   config->permissions = NY_PERMISSION_CORE_LOG;
+  config->module = false;
   config->memory_limit = CONFIG_NYABULA_CORE_PLUGIN_MEMORY;
   config->stack_limit = CONFIG_NYABULA_CORE_PLUGIN_STACK;
   config->event_timeout_ms = CONFIG_NYABULA_CORE_EVENT_TIMEOUT_MS;
@@ -436,6 +437,7 @@ int ny_manifest_load(const char *package_path,
   config->memory_limit = CONFIG_NYABULA_CORE_PLUGIN_MEMORY;
   config->stack_limit = CONFIG_NYABULA_CORE_PLUGIN_STACK;
   config->event_timeout_ms = CONFIG_NYABULA_CORE_EVENT_TIMEOUT_MS;
+  config->module = true;
   ret = ny_manifest_parse_limits(root, config);
   if (ret < 0)
     {

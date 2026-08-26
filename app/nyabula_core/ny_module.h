@@ -1,5 +1,5 @@
 /****************************************************************************
- * packages/demos/contest2026_062_nyabula_core/ny_capability.h
+ * packages/demos/contest2026_062_nyabula_core/ny_module.h
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -19,8 +19,8 @@
  *
  ****************************************************************************/
 
-#ifndef __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_CAPABILITY_H
-#define __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_CAPABILITY_H
+#ifndef __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_MODULE_H
+#define __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_MODULE_H
 
 /****************************************************************************
  * Included Files
@@ -32,8 +32,8 @@
  * Public Function Prototypes
  ****************************************************************************/
 
-int ny_capability_register(struct ny_plugin_s *plugin);
-JSModuleDef *ny_capability_load_module(JSContext *context,
-                                       const char *module_name);
+void ny_module_configure(struct ny_plugin_s *plugin);
+JSValue ny_module_evaluate(struct ny_plugin_s *plugin, const char *source,
+                           size_t length);
 
-#endif /* __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_CAPABILITY_H */
+#endif /* __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_MODULE_H */

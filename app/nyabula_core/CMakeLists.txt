@@ -31,6 +31,7 @@ if(CONFIG_CONTEST2026_062_NYABULA_CORE)
     nycore_main.c
     ny_capability.c
     ny_manifest.c
+    ny_module.c
     ny_runtime.c
     ny_scheduler.c
     DEPENDS

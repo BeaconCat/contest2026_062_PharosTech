@@ -32,6 +32,7 @@
 #include <time.h>
 
 #include "ny_capability.h"
+#include "ny_module.h"
 #include "ny_runtime.h"
 
 /****************************************************************************
@@ -112,7 +113,14 @@ static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
   int ret = 0;
 
   global = JS_GetGlobalObject(plugin->context);
-  function = JS_GetPropertyStr(plugin->context, global, name);
+  if (plugin->module_entry)
+    {
+      function = JS_GetModuleExport(plugin->context, plugin->module, name);
+    }
+  else
+    {
+      function = JS_GetPropertyStr(plugin->context, global, name);
+    }
   if (JS_IsException(function))
     {
       ny_runtime_dump_exception(plugin, name);
@@ -134,12 +142,12 @@ static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
 
   ny_runtime_begin_event(plugin);
   result = JS_Call(plugin->context, function, global, argc, argv);
-  plugin->deadline_ns = 0;
   if (JS_IsException(result))
     {
       ny_runtime_dump_exception(plugin, name);
       ret = -EFAULT;
     }
+  plugin->deadline_ns = 0;
 
   JS_FreeValue(plugin->context, result);
 
@@ -237,6 +245,7 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
   plugin->memory_limit = config->memory_limit;
   plugin->stack_limit = config->stack_limit;
   plugin->event_timeout_ms = config->event_timeout_ms;
+  plugin->module_entry = config->module;
   strlcpy(plugin->id, config->id, sizeof(plugin->id));
   strlcpy(plugin->version, config->version, sizeof(plugin->version));
   strlcpy(plugin->root, config->root, sizeof(plugin->root));
@@ -276,13 +285,16 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
       return ret;
     }
 
+  ny_module_configure(plugin);
+
   ny_runtime_begin_event(plugin);
-  result = JS_Eval(plugin->context, source, length, plugin->path,
-                   JS_EVAL_TYPE_GLOBAL);
-  plugin->deadline_ns = 0;
+  result = plugin->module_entry ? ny_module_evaluate(plugin, source, length)
+                                : JS_Eval(plugin->context, source, length,
+                                          plugin->path, JS_EVAL_TYPE_GLOBAL);
   free(source);
   if (JS_IsException(result))
     {
+      plugin->deadline_ns = 0;
       ny_runtime_dump_exception(plugin, "load");
       JS_FreeValue(plugin->context, result);
       plugin->state = NY_PLUGIN_FAILED;
@@ -290,6 +302,7 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
     }
 
   JS_FreeValue(plugin->context, result);
+  plugin->deadline_ns = 0;
   plugin->state = NY_PLUGIN_LOADED;
   return 0;
 }

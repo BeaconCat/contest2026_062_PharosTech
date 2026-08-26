@@ -92,6 +92,36 @@ static int
 ny_capability_add_namespace(JSContext *context, JSValue root, const char *name,
                             const struct ny_capability_binding_s *bindings,
                             size_t count);
+static const struct ny_capability_binding_s *
+ny_capability_find_bindings(const char *module_name,
+                            const char **namespace_name, size_t *count);
+static int ny_capability_module_init(JSContext *context, JSModuleDef *module);
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+static const struct ny_capability_binding_s g_core_bindings[] = {
+  { "info", ny_capability_core_info, 0 },
+  { "log", ny_capability_core_log, 1 },
+};
+
+static const struct ny_capability_binding_s g_storage_bindings[] = {
+  { "get", ny_capability_storage_get, 1 },
+  { "put", ny_capability_storage_put, 2 },
+};
+
+static const struct ny_capability_binding_s g_network_bindings[] = {
+  { "request", ny_capability_network_request, 1 },
+};
+
+static const struct ny_capability_binding_s g_ui_bindings[] = {
+  { "notify", ny_capability_ui_notify, 1 },
+};
+
+static const struct ny_capability_binding_s g_ai_bindings[] = {
+  { "invoke", ny_capability_ai_invoke, 1 },
+};
 
 /****************************************************************************
  * Private Functions
@@ -478,29 +508,121 @@ ny_capability_add_namespace(JSContext *context, JSValue root, const char *name,
   return 0;
 }
 
+static const struct ny_capability_binding_s *
+ny_capability_find_bindings(const char *module_name,
+                            const char **namespace_name, size_t *count)
+{
+  if (strcmp(module_name, "@nyabula/core") == 0)
+    {
+      *namespace_name = "core";
+      *count = sizeof(g_core_bindings) / sizeof(g_core_bindings[0]);
+      return g_core_bindings;
+    }
+
+  if (strcmp(module_name, "@nyabula/storage") == 0)
+    {
+      *namespace_name = "storage";
+      *count = sizeof(g_storage_bindings) / sizeof(g_storage_bindings[0]);
+      return g_storage_bindings;
+    }
+
+  if (strcmp(module_name, "@nyabula/network") == 0)
+    {
+      *namespace_name = "network";
+      *count = sizeof(g_network_bindings) / sizeof(g_network_bindings[0]);
+      return g_network_bindings;
+    }
+
+  if (strcmp(module_name, "@nyabula/ui") == 0)
+    {
+      *namespace_name = "ui";
+      *count = sizeof(g_ui_bindings) / sizeof(g_ui_bindings[0]);
+      return g_ui_bindings;
+    }
+
+  if (strcmp(module_name, "@nyabula/ai") == 0)
+    {
+      *namespace_name = "ai";
+      *count = sizeof(g_ai_bindings) / sizeof(g_ai_bindings[0]);
+      return g_ai_bindings;
+    }
+
+  return NULL;
+}
+
+static int ny_capability_module_init(JSContext *context, JSModuleDef *module)
+{
+  const struct ny_capability_binding_s *bindings;
+  const char *namespace_name;
+  const char *module_name;
+  JSAtom atom;
+  JSValue global;
+  JSValue root;
+  JSValue object;
+  size_t count;
+  size_t index;
+  int ret = -1;
+
+  atom = JS_GetModuleName(context, module);
+  module_name = JS_AtomToCString(context, atom);
+  JS_FreeAtom(context, atom);
+  if (module_name == NULL)
+    {
+      return -1;
+    }
+
+  bindings = ny_capability_find_bindings(module_name, &namespace_name, &count);
+  JS_FreeCString(context, module_name);
+  if (bindings == NULL)
+    {
+      return -1;
+    }
+
+  global = JS_GetGlobalObject(context);
+  if (JS_IsException(global))
+    {
+      return -1;
+    }
+
+  root = JS_GetPropertyStr(context, global, "ny");
+  if (JS_IsException(root))
+    {
+      JS_FreeValue(context, global);
+      return -1;
+    }
+
+  object = JS_GetPropertyStr(context, root, namespace_name);
+  if (JS_IsException(object))
+    {
+      goto out;
+    }
+
+  for (index = 0; index < count; index++)
+    {
+      JSValue value = JS_GetPropertyStr(context, object, bindings[index].name);
+
+      if (JS_IsException(value) ||
+          JS_SetModuleExport(context, module, bindings[index].name, value) < 0)
+        {
+          goto out;
+        }
+    }
+
+  ret = 0;
+
+out:
+  JS_FreeValue(context, object);
+  JS_FreeValue(context, root);
+  JS_FreeValue(context, global);
+  return ret;
+}
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 int ny_capability_register(struct ny_plugin_s *plugin)
 {
-  static const struct ny_capability_binding_s core_bindings[] = {
-    { "info", ny_capability_core_info, 0 },
-    { "log", ny_capability_core_log, 1 },
-  };
-  static const struct ny_capability_binding_s storage_bindings[] = {
-    { "get", ny_capability_storage_get, 1 },
-    { "put", ny_capability_storage_put, 2 },
-  };
-  static const struct ny_capability_binding_s network_bindings[] = {
-    { "request", ny_capability_network_request, 1 },
-  };
-  static const struct ny_capability_binding_s ui_bindings[] = {
-    { "notify", ny_capability_ui_notify, 1 },
-  };
-  static const struct ny_capability_binding_s ai_bindings[] = {
-    { "invoke", ny_capability_ai_invoke, 1 },
-  };
   JSContext *context;
   JSValue global;
   JSValue root;
@@ -518,21 +640,21 @@ int ny_capability_register(struct ny_plugin_s *plugin)
       return -ENOMEM;
     }
 
-  if (ny_capability_add_namespace(context, root, "core", core_bindings,
-                                  sizeof(core_bindings) /
-                                      sizeof(core_bindings[0])) < 0 ||
-      ny_capability_add_namespace(context, root, "storage", storage_bindings,
-                                  sizeof(storage_bindings) /
-                                      sizeof(storage_bindings[0])) < 0 ||
-      ny_capability_add_namespace(context, root, "network", network_bindings,
-                                  sizeof(network_bindings) /
-                                      sizeof(network_bindings[0])) < 0 ||
-      ny_capability_add_namespace(context, root, "ui", ui_bindings,
-                                  sizeof(ui_bindings) /
-                                      sizeof(ui_bindings[0])) < 0 ||
-      ny_capability_add_namespace(context, root, "ai", ai_bindings,
-                                  sizeof(ai_bindings) /
-                                      sizeof(ai_bindings[0])) < 0)
+  if (ny_capability_add_namespace(context, root, "core", g_core_bindings,
+                                  sizeof(g_core_bindings) /
+                                      sizeof(g_core_bindings[0])) < 0 ||
+      ny_capability_add_namespace(context, root, "storage", g_storage_bindings,
+                                  sizeof(g_storage_bindings) /
+                                      sizeof(g_storage_bindings[0])) < 0 ||
+      ny_capability_add_namespace(context, root, "network", g_network_bindings,
+                                  sizeof(g_network_bindings) /
+                                      sizeof(g_network_bindings[0])) < 0 ||
+      ny_capability_add_namespace(context, root, "ui", g_ui_bindings,
+                                  sizeof(g_ui_bindings) /
+                                      sizeof(g_ui_bindings[0])) < 0 ||
+      ny_capability_add_namespace(context, root, "ai", g_ai_bindings,
+                                  sizeof(g_ai_bindings) /
+                                      sizeof(g_ai_bindings[0])) < 0)
     {
       JS_FreeValue(context, root);
       return -EFAULT;
@@ -563,4 +685,38 @@ int ny_capability_register(struct ny_plugin_s *plugin)
 
   JS_FreeValue(context, global);
   return 0;
+}
+
+JSModuleDef *ny_capability_load_module(JSContext *context,
+                                       const char *module_name)
+{
+  const struct ny_capability_binding_s *bindings;
+  const char *namespace_name;
+  JSModuleDef *module;
+  size_t count;
+  size_t index;
+
+  bindings = ny_capability_find_bindings(module_name, &namespace_name, &count);
+  if (bindings == NULL)
+    {
+      JS_ThrowReferenceError(context, "unknown capability module: %s",
+                             module_name);
+      return NULL;
+    }
+
+  module = JS_NewCModule(context, module_name, ny_capability_module_init);
+  if (module == NULL)
+    {
+      return NULL;
+    }
+
+  for (index = 0; index < count; index++)
+    {
+      if (JS_AddModuleExport(context, module, bindings[index].name) < 0)
+        {
+          return NULL;
+        }
+    }
+
+  return module;
 }

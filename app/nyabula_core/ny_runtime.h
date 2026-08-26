@@ -55,12 +55,14 @@ struct ny_plugin_s
 {
   JSRuntime *runtime;
   JSContext *context;
+  JSModuleDef *module;
   enum ny_plugin_state_e state;
   uint64_t deadline_ns;
   uint64_t permissions;
   size_t memory_limit;
   size_t stack_limit;
   uint32_t event_timeout_ms;
+  bool module_entry;
   atomic_bool cancelled;
   char id[NY_PLUGIN_ID_SIZE];
   char version[NY_PLUGIN_VERSION_SIZE];

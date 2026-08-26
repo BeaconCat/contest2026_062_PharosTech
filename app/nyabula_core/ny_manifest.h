@@ -29,6 +29,7 @@
 #include <nuttx/config.h>
 
 #include <limits.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -58,6 +59,7 @@ struct ny_plugin_config_s
   char root[PATH_MAX];
   char entry[PATH_MAX];
   uint64_t permissions;
+  bool module;
   size_t memory_limit;
   size_t stack_limit;
   uint32_t event_timeout_ms;
