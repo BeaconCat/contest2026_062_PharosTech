@@ -38,6 +38,7 @@
 #include "ny_permission.h"
 #include "ny_runtime.h"
 #include "ny_scheduler.h"
+#include "ny_wasm.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -82,6 +83,7 @@ struct ny_scheduler_slot_s
   size_t count;
   struct ny_scheduler_event_s events[CONFIG_NYABULA_CORE_EVENT_DEPTH];
   struct ny_plugin_s plugin;
+  struct ny_wasm_plugin_s wasm;
 };
 
 /****************************************************************************
@@ -218,15 +220,28 @@ static int ny_scheduler_worker(int argc, char *argv[])
     }
 
   slot = &g_scheduler_slots[index];
-  ret = ny_plugin_load_config(&slot->plugin, &slot->config);
-  if (ret >= 0)
+  if (slot->config.runtime == NY_PLUGIN_RUNTIME_WAMR)
     {
-      ret = ny_plugin_start(&slot->plugin);
+      ret = ny_wasm_load(&slot->wasm, &slot->config);
+      if (ret >= 0)
+        {
+          ret = ny_wasm_start(&slot->wasm);
+        }
+    }
+  else
+    {
+      ret = ny_plugin_load_config(&slot->plugin, &slot->config);
+      if (ret >= 0)
+        {
+          ret = ny_plugin_start(&slot->plugin);
+        }
     }
 
   nxmutex_lock(&g_scheduler_lock);
   slot->start_result = ret;
-  slot->state = slot->plugin.state;
+  slot->state = slot->config.runtime == NY_PLUGIN_RUNTIME_WAMR
+                    ? ret < 0 ? NY_PLUGIN_FAILED : NY_PLUGIN_RUNNING
+                    : slot->plugin.state;
   nxmutex_unlock(&g_scheduler_lock);
   sem_post(&slot->ready);
 
@@ -252,19 +267,25 @@ static int ny_scheduler_worker(int argc, char *argv[])
 
       if (event.type == NY_SCHEDULER_EVENT_STOP)
         {
-          ret = ny_plugin_stop(&slot->plugin);
+          ret = slot->config.runtime == NY_PLUGIN_RUNTIME_WAMR
+                    ? ny_wasm_stop(&slot->wasm)
+                    : ny_plugin_stop(&slot->plugin);
           break;
         }
 
-      ret = ny_plugin_dispatch(&slot->plugin, event.payload);
+      ret = slot->config.runtime == NY_PLUGIN_RUNTIME_WAMR
+                ? ny_wasm_dispatch(&slot->wasm, event.payload)
+                : ny_plugin_dispatch(&slot->plugin, event.payload);
       nxmutex_lock(&g_scheduler_lock);
-      slot->state = slot->plugin.state;
+      slot->state = slot->config.runtime == NY_PLUGIN_RUNTIME_WAMR
+                        ? ret < 0 ? NY_PLUGIN_FAILED : NY_PLUGIN_RUNNING
+                        : slot->plugin.state;
       nxmutex_unlock(&g_scheduler_lock);
     }
 
   nxmutex_lock(&g_scheduler_lock);
   slot->exit_result = ret;
-  slot->state = ret < 0 ? NY_PLUGIN_FAILED : slot->plugin.state;
+  slot->state = ret < 0 ? NY_PLUGIN_FAILED : NY_PLUGIN_STOPPED;
   nxmutex_unlock(&g_scheduler_lock);
 
   if (ret < 0)
@@ -276,7 +297,14 @@ static int ny_scheduler_worker(int argc, char *argv[])
       ny_health_record_success(&slot->config);
     }
 
-  ny_plugin_destroy(&slot->plugin);
+  if (slot->config.runtime == NY_PLUGIN_RUNTIME_WAMR)
+    {
+      ny_wasm_destroy(&slot->wasm);
+    }
+  else
+    {
+      ny_plugin_destroy(&slot->plugin);
+    }
 
   nxmutex_lock(&g_scheduler_lock);
   slot->task_stopped = true;
@@ -317,10 +345,7 @@ int ny_scheduler_start_package(const char *package_path)
   int ret;
 
   ret = ny_manifest_load(package_path, &config);
-  return ret < 0 ? ret
-         : config.runtime != NY_PLUGIN_RUNTIME_QUICKJS
-             ? -ENOTSUP
-             : ny_scheduler_start_config(&config);
+  return ret < 0 ? ret : ny_scheduler_start_config(&config);
 }
 
 int ny_scheduler_start_installed(const char *package_path,
@@ -336,11 +361,6 @@ int ny_scheduler_start_installed(const char *package_path,
     }
 
   ret = ny_manifest_load(package_path, &config);
-  if (ret >= 0 && config.runtime != NY_PLUGIN_RUNTIME_QUICKJS)
-    {
-      ret = -ENOTSUP;
-    }
-
   if (ret >= 0)
     {
       strlcpy(config.storage_root, storage_root, sizeof(config.storage_root));
@@ -385,7 +405,14 @@ int ny_scheduler_refresh_permissions(const char *id)
   if (slot != NULL && slot->pid == pid)
     {
       slot->config.permissions = config.permissions;
-      atomic_store(&slot->plugin.permissions, config.permissions);
+      if (slot->config.runtime == NY_PLUGIN_RUNTIME_WAMR)
+        {
+          ny_wasm_set_permissions(&slot->wasm, config.permissions);
+        }
+      else
+        {
+          atomic_store(&slot->plugin.permissions, config.permissions);
+        }
     }
 
   nxmutex_unlock(&g_scheduler_lock);

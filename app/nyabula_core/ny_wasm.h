@@ -26,12 +26,40 @@
  * Included Files
  ****************************************************************************/
 
+#include <stdatomic.h>
+#include <stdbool.h>
 #include <stdint.h>
+
+#include "ny_manifest.h"
+
+/****************************************************************************
+ * Public Types
+ ****************************************************************************/
+
+struct ny_wasm_plugin_s
+{
+  void *module;
+  void *instance;
+  void *environment;
+  uint8_t *binary;
+  uint32_t binary_size;
+  atomic_uint_fast64_t permissions;
+  bool thread_initialized;
+  char id[NY_PLUGIN_ID_SIZE];
+};
 
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
 int ny_wasm_run(const char *path, const char *id, uint64_t permissions);
+int ny_wasm_load(struct ny_wasm_plugin_s *plugin,
+                 const struct ny_plugin_config_s *config);
+int ny_wasm_start(struct ny_wasm_plugin_s *plugin);
+int ny_wasm_dispatch(struct ny_wasm_plugin_s *plugin, const char *event);
+int ny_wasm_stop(struct ny_wasm_plugin_s *plugin);
+void ny_wasm_set_permissions(struct ny_wasm_plugin_s *plugin,
+                             uint64_t permissions);
+void ny_wasm_destroy(struct ny_wasm_plugin_s *plugin);
 
 #endif /* __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_WASM_H */

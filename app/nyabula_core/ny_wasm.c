@@ -52,16 +52,6 @@
 #endif
 
 /****************************************************************************
- * Private Types
- ****************************************************************************/
-
-struct ny_wasm_context_s
-{
-  const char *id;
-  uint64_t permissions;
-};
-
-/****************************************************************************
  * Private Data
  ****************************************************************************/
 
@@ -79,6 +69,8 @@ static int ny_wasm_read(const char *path, uint8_t **binary, uint32_t *size);
 static int ny_wasm_call(wasm_module_inst_t instance,
                         wasm_exec_env_t environment, const char *name,
                         bool required);
+static int ny_wasm_call_event(struct ny_wasm_plugin_s *plugin,
+                              const char *event);
 
 /****************************************************************************
  * Private Data
@@ -95,13 +87,14 @@ static NativeSymbol g_wasm_symbols[] = {
 static int32_t ny_wasm_core_log(wasm_exec_env_t environment, int32_t offset,
                                 int32_t length)
 {
-  struct ny_wasm_context_s *context;
+  struct ny_wasm_plugin_s *plugin;
   wasm_module_inst_t instance;
   const char *message;
 
-  context = wasm_runtime_get_user_data(environment);
+  plugin = wasm_runtime_get_user_data(environment);
   instance = wasm_runtime_get_module_inst(environment);
-  if (context == NULL || (context->permissions & NY_PERMISSION_CORE_LOG) == 0)
+  if (plugin == NULL ||
+      (atomic_load(&plugin->permissions) & NY_PERMISSION_CORE_LOG) == 0)
     {
       return -EACCES;
     }
@@ -114,7 +107,66 @@ static int32_t ny_wasm_core_log(wasm_exec_env_t environment, int32_t offset,
     }
 
   message = wasm_runtime_addr_app_to_native(instance, (uint32_t)offset);
-  printf("nyplugin[%s]: %.*s\n", context->id, length, message);
+  printf("nyplugin[%s]: %.*s\n", plugin->id, length, message);
+  return 0;
+}
+
+static int ny_wasm_call_event(struct ny_wasm_plugin_s *plugin,
+                              const char *event)
+{
+  wasm_module_inst_t instance = plugin->instance;
+  wasm_exec_env_t environment = plugin->environment;
+  wasm_function_inst_t function;
+  wasm_valkind_t types[2];
+  const char *exception;
+  void *native;
+  uint64_t offset;
+  uint32_t arguments[2];
+  size_t length = strlen(event);
+
+  if (length >= CONFIG_NYABULA_CORE_EVENT_SIZE)
+    {
+      return -E2BIG;
+    }
+
+  function = wasm_runtime_lookup_function(instance, "ny_on_event");
+  if (function == NULL)
+    {
+      return 0;
+    }
+
+  if (wasm_func_get_param_count(function, instance) != 2 ||
+      wasm_func_get_result_count(function, instance) != 0)
+    {
+      return -EPROTO;
+    }
+
+  wasm_func_get_param_types(function, instance, types);
+  if (types[0] != WASM_I32 || types[1] != WASM_I32)
+    {
+      return -EPROTO;
+    }
+
+  offset =
+      wasm_runtime_module_malloc(instance, length == 0 ? 1 : length, &native);
+  if (offset == 0 || offset > UINT32_MAX || native == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  memcpy(native, event, length);
+  arguments[0] = (uint32_t)offset;
+  arguments[1] = (uint32_t)length;
+  if (!wasm_runtime_call_wasm(environment, function, 2, arguments))
+    {
+      exception = wasm_runtime_get_exception(instance);
+      fprintf(stderr, "nycore: wasm ny_on_event failed: %s\n",
+              exception == NULL ? "unknown exception" : exception);
+      wasm_runtime_module_free(instance, offset);
+      return -EFAULT;
+    }
+
+  wasm_runtime_module_free(instance, offset);
   return 0;
 }
 
@@ -230,14 +282,8 @@ static int ny_wasm_call(wasm_module_inst_t instance,
 
 int ny_wasm_run(const char *path, const char *id, uint64_t permissions)
 {
-  struct ny_wasm_context_s context;
-  wasm_module_inst_t instance = NULL;
-  wasm_exec_env_t environment = NULL;
-  wasm_module_t module = NULL;
-  uint8_t *binary = NULL;
-  uint32_t size;
-  char error[NY_WASM_ERROR_SIZE];
-  bool thread_initialized = false;
+  struct ny_plugin_config_s config;
+  struct ny_wasm_plugin_s plugin;
   int ret;
 
   if (path == NULL || id == NULL || id[0] == '\0')
@@ -245,8 +291,48 @@ int ny_wasm_run(const char *path, const char *id, uint64_t permissions)
       return -EINVAL;
     }
 
+  memset(&config, 0, sizeof(config));
+  strlcpy(config.id, id, sizeof(config.id));
+  strlcpy(config.entry, path, sizeof(config.entry));
+  config.permissions = permissions;
+  config.memory_limit = CONFIG_NYABULA_CORE_PLUGIN_MEMORY;
+  config.stack_limit = CONFIG_NYABULA_CORE_PLUGIN_STACK;
+  ret = ny_wasm_load(&plugin, &config);
+  if (ret >= 0)
+    {
+      ret = ny_wasm_start(&plugin);
+    }
+
+  if (ret >= 0)
+    {
+      ret = ny_wasm_stop(&plugin);
+    }
+
+  ny_wasm_destroy(&plugin);
+  return ret;
+}
+
+int ny_wasm_load(struct ny_wasm_plugin_s *plugin,
+                 const struct ny_plugin_config_s *config)
+{
+  InstantiationArgs arguments;
+  char error[NY_WASM_ERROR_SIZE];
+  int ret;
+
+  if (plugin == NULL || config == NULL || config->id[0] == '\0' ||
+      config->entry[0] == '\0' || config->stack_limit == 0 ||
+      config->stack_limit > UINT32_MAX || config->memory_limit < 65536)
+    {
+      return -EINVAL;
+    }
+
+  memset(plugin, 0, sizeof(*plugin));
+  strlcpy(plugin->id, config->id, sizeof(plugin->id));
+  atomic_init(&plugin->permissions, config->permissions);
+
   ret = ny_wasm_initialize();
-  if (ret < 0 || (ret = ny_wasm_read(path, &binary, &size)) < 0)
+  if (ret < 0 || (ret = ny_wasm_read(config->entry, &plugin->binary,
+                                     &plugin->binary_size)) < 0)
     {
       return ret;
     }
@@ -255,68 +341,106 @@ int ny_wasm_run(const char *path, const char *id, uint64_t permissions)
     {
       if (!wasm_runtime_init_thread_env())
         {
-          ret = -EIO;
-          goto out;
+          ny_wasm_destroy(plugin);
+          return -EIO;
         }
 
-      thread_initialized = true;
+      plugin->thread_initialized = true;
     }
 
-  module = wasm_runtime_load(binary, size, error, sizeof(error));
-  if (module == NULL)
+  plugin->module = wasm_runtime_load(plugin->binary, plugin->binary_size,
+                                     error, sizeof(error));
+  if (plugin->module == NULL)
     {
       fprintf(stderr, "nycore: wasm load failed: %s\n", error);
-      ret = -ENOEXEC;
-      goto out;
+      ny_wasm_destroy(plugin);
+      return -ENOEXEC;
     }
 
-  instance = wasm_runtime_instantiate(module, CONFIG_NYABULA_CORE_PLUGIN_STACK,
-                                      65536, error, sizeof(error));
-  if (instance == NULL)
+  memset(&arguments, 0, sizeof(arguments));
+  arguments.default_stack_size = (uint32_t)config->stack_limit;
+  arguments.host_managed_heap_size = 65536;
+  arguments.max_memory_pages = (uint32_t)(config->memory_limit / (64 * 1024));
+  plugin->instance = wasm_runtime_instantiate_ex(plugin->module, &arguments,
+                                                 error, sizeof(error));
+  if (plugin->instance == NULL)
     {
       fprintf(stderr, "nycore: wasm instantiate failed: %s\n", error);
-      ret = -ENOMEM;
-      goto out;
+      ny_wasm_destroy(plugin);
+      return -ENOMEM;
     }
 
-  environment =
-      wasm_runtime_create_exec_env(instance, CONFIG_NYABULA_CORE_PLUGIN_STACK);
-  if (environment == NULL)
+  plugin->environment = wasm_runtime_create_exec_env(
+      plugin->instance, (uint32_t)config->stack_limit);
+  if (plugin->environment == NULL)
     {
-      ret = -ENOMEM;
-      goto out;
+      ny_wasm_destroy(plugin);
+      return -ENOMEM;
     }
 
-  context.id = id;
-  context.permissions = permissions;
-  wasm_runtime_set_user_data(environment, &context);
-  ret = ny_wasm_call(instance, environment, "ny_on_start", true);
-  if (ret >= 0)
+  wasm_runtime_set_user_data(plugin->environment, plugin);
+  return 0;
+}
+
+int ny_wasm_start(struct ny_wasm_plugin_s *plugin)
+{
+  return plugin == NULL || plugin->environment == NULL
+             ? -EINVAL
+             : ny_wasm_call(plugin->instance, plugin->environment,
+                            "ny_on_start", true);
+}
+
+int ny_wasm_dispatch(struct ny_wasm_plugin_s *plugin, const char *event)
+{
+  return plugin == NULL || plugin->environment == NULL || event == NULL
+             ? -EINVAL
+             : ny_wasm_call_event(plugin, event);
+}
+
+int ny_wasm_stop(struct ny_wasm_plugin_s *plugin)
+{
+  return plugin == NULL || plugin->environment == NULL
+             ? -EINVAL
+             : ny_wasm_call(plugin->instance, plugin->environment,
+                            "ny_on_stop", false);
+}
+
+void ny_wasm_set_permissions(struct ny_wasm_plugin_s *plugin,
+                             uint64_t permissions)
+{
+  if (plugin != NULL)
     {
-      ret = ny_wasm_call(instance, environment, "ny_on_stop", false);
+      atomic_store(&plugin->permissions, permissions);
     }
+}
 
-out:
-  if (environment != NULL)
+void ny_wasm_destroy(struct ny_wasm_plugin_s *plugin)
+{
+  if (plugin == NULL)
     {
-      wasm_runtime_destroy_exec_env(environment);
+      return;
     }
 
-  if (instance != NULL)
+  if (plugin->environment != NULL)
     {
-      wasm_runtime_deinstantiate(instance);
+      wasm_runtime_destroy_exec_env(plugin->environment);
     }
 
-  if (module != NULL)
+  if (plugin->instance != NULL)
     {
-      wasm_runtime_unload(module);
+      wasm_runtime_deinstantiate(plugin->instance);
     }
 
-  if (thread_initialized)
+  if (plugin->module != NULL)
+    {
+      wasm_runtime_unload(plugin->module);
+    }
+
+  if (plugin->thread_initialized)
     {
       wasm_runtime_destroy_thread_env();
     }
 
-  free(binary);
-  return ret;
+  free(plugin->binary);
+  memset(plugin, 0, sizeof(*plugin));
 }
