@@ -43,6 +43,7 @@
 static void nycore_usage(void);
 static int nycore_run(const char *path, const char *event);
 static int nycore_run_package(const char *path, const char *event);
+static int nycore_start_installed(const char *id);
 
 /****************************************************************************
  * Private Functions
@@ -133,6 +134,32 @@ static int nycore_run_package(const char *path, const char *event)
 
   ny_plugin_destroy(&plugin);
   return ret;
+}
+
+static int nycore_start_installed(const char *id)
+{
+  char path[PATH_MAX];
+  int ret;
+
+  ret = ny_package_resolve(id, path, sizeof(path));
+  if (ret >= 0)
+    {
+      ret = ny_scheduler_start_package(path);
+    }
+
+  if (ret != -EACCES)
+    {
+      return ret;
+    }
+
+  fprintf(stderr, "nycore: current version rejected, rolling back\n");
+  ret = ny_package_rollback(id);
+  if (ret >= 0)
+    {
+      ret = ny_package_resolve(id, path, sizeof(path));
+    }
+
+  return ret < 0 ? ret : ny_scheduler_start_package(path);
 }
 
 /****************************************************************************
@@ -264,13 +291,7 @@ int main(int argc, char *argv[])
     }
   else if (strcmp(argv[1], "start-installed") == 0 && argc == 3)
     {
-      char path[PATH_MAX];
-
-      ret = ny_package_resolve(argv[2], path, sizeof(path));
-      if (ret >= 0)
-        {
-          ret = ny_scheduler_start_package(path);
-        }
+      ret = nycore_start_installed(argv[2]);
     }
   else if (strcmp(argv[1], "health") == 0 && argc == 4)
     {
