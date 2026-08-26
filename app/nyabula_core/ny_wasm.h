@@ -46,6 +46,7 @@ struct ny_wasm_plugin_s
   atomic_uint_fast64_t permissions;
   bool thread_initialized;
   char id[NY_PLUGIN_ID_SIZE];
+  char storage_root[PATH_MAX];
 };
 
 /****************************************************************************
@@ -53,6 +54,7 @@ struct ny_wasm_plugin_s
  ****************************************************************************/
 
 int ny_wasm_run(const char *path, const char *id, uint64_t permissions);
+int ny_wasm_run_config(const struct ny_plugin_config_s *config);
 int ny_wasm_load(struct ny_wasm_plugin_s *plugin,
                  const struct ny_plugin_config_s *config);
 int ny_wasm_start(struct ny_wasm_plugin_s *plugin);

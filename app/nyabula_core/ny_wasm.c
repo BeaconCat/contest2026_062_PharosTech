@@ -37,6 +37,7 @@
 
 #include <wasm_export.h>
 
+#include "ny_broker.h"
 #include "ny_manifest.h"
 #include "ny_wasm.h"
 
@@ -64,6 +65,17 @@ static bool g_wasm_initialized;
 
 static int32_t ny_wasm_core_log(wasm_exec_env_t environment, int32_t offset,
                                 int32_t length);
+static int32_t ny_wasm_storage_get(wasm_exec_env_t environment,
+                                   int32_t key_offset, int32_t key_length,
+                                   int32_t output_offset,
+                                   int32_t output_capacity);
+static int32_t ny_wasm_storage_put(wasm_exec_env_t environment,
+                                   int32_t key_offset, int32_t key_length,
+                                   int32_t value_offset, int32_t value_length);
+static int ny_wasm_memory(wasm_exec_env_t environment, int32_t offset,
+                          int32_t length, int32_t limit, void **pointer);
+static void ny_wasm_client(struct ny_wasm_plugin_s *plugin,
+                           struct ny_broker_client_s *client);
 static int ny_wasm_initialize(void);
 static int ny_wasm_read(const char *path, uint8_t **binary, uint32_t *size);
 static int ny_wasm_call(wasm_module_inst_t instance,
@@ -78,6 +90,8 @@ static int ny_wasm_call_event(struct ny_wasm_plugin_s *plugin,
 
 static NativeSymbol g_wasm_symbols[] = {
   { "core_log", (void *)ny_wasm_core_log, "(ii)i", NULL },
+  { "storage_get", (void *)ny_wasm_storage_get, "(iiii)i", NULL },
+  { "storage_put", (void *)ny_wasm_storage_put, "(iiii)i", NULL },
 };
 
 /****************************************************************************
@@ -109,6 +123,120 @@ static int32_t ny_wasm_core_log(wasm_exec_env_t environment, int32_t offset,
   message = wasm_runtime_addr_app_to_native(instance, (uint32_t)offset);
   printf("nyplugin[%s]: %.*s\n", plugin->id, length, message);
   return 0;
+}
+
+static int ny_wasm_memory(wasm_exec_env_t environment, int32_t offset,
+                          int32_t length, int32_t limit, void **pointer)
+{
+  wasm_module_inst_t instance = wasm_runtime_get_module_inst(environment);
+
+  if (offset < 0 || length < 0 || length > limit ||
+      !wasm_runtime_validate_app_addr(instance, (uint32_t)offset,
+                                      (uint32_t)length))
+    {
+      return -EINVAL;
+    }
+
+  *pointer = wasm_runtime_addr_app_to_native(instance, (uint32_t)offset);
+  return *pointer == NULL && length != 0 ? -EFAULT : 0;
+}
+
+static void ny_wasm_client(struct ny_wasm_plugin_s *plugin,
+                           struct ny_broker_client_s *client)
+{
+  client->id = plugin->id;
+  client->storage_root = plugin->storage_root;
+  client->permissions = atomic_load(&plugin->permissions);
+}
+
+static int32_t ny_wasm_storage_get(wasm_exec_env_t environment,
+                                   int32_t key_offset, int32_t key_length,
+                                   int32_t output_offset,
+                                   int32_t output_capacity)
+{
+  struct ny_wasm_plugin_s *plugin = wasm_runtime_get_user_data(environment);
+  struct ny_broker_client_s client;
+  char key[64];
+  char *value = NULL;
+  const void *key_memory;
+  void *output;
+  size_t length;
+  int ret;
+
+  if (plugin == NULL || key_length <= 0 || key_length >= sizeof(key))
+    {
+      return -EINVAL;
+    }
+
+  ret = ny_wasm_memory(environment, key_offset, key_length, sizeof(key) - 1,
+                       (void **)&key_memory);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  memcpy(key, key_memory, (size_t)key_length);
+  key[key_length] = '\0';
+  ny_wasm_client(plugin, &client);
+  ret = ny_broker_storage_get(&client, key, &value, &length);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (output_capacity < 0 || length > (size_t)output_capacity)
+    {
+      free(value);
+      return -ENOSPC;
+    }
+
+  ret = ny_wasm_memory(environment, output_offset, output_capacity,
+                       CONFIG_NYABULA_CORE_STORAGE_VALUE_LIMIT, &output);
+  if (ret >= 0)
+    {
+      memcpy(output, value, length);
+      ret = (int)length;
+    }
+
+  free(value);
+  return ret;
+}
+
+static int32_t ny_wasm_storage_put(wasm_exec_env_t environment,
+                                   int32_t key_offset, int32_t key_length,
+                                   int32_t value_offset, int32_t value_length)
+{
+  struct ny_wasm_plugin_s *plugin = wasm_runtime_get_user_data(environment);
+  struct ny_broker_client_s client;
+  char key[64];
+  const void *key_memory;
+  const void *value;
+  int ret;
+
+  if (plugin == NULL || key_length <= 0 || key_length >= sizeof(key))
+    {
+      return -EINVAL;
+    }
+
+  ret = ny_wasm_memory(environment, key_offset, key_length, sizeof(key) - 1,
+                       (void **)&key_memory);
+  if (ret < 0 || (ret = ny_wasm_memory(environment, value_offset, value_length,
+                                       CONFIG_NYABULA_CORE_STORAGE_VALUE_LIMIT,
+                                       (void **)&value)) < 0)
+    {
+      return ret;
+    }
+
+  memcpy(key, key_memory, (size_t)key_length);
+  key[key_length] = '\0';
+  ny_wasm_client(plugin, &client);
+  ret = ny_broker_storage_put(&client, key, value, (size_t)value_length);
+  if (ret < 0)
+    {
+      fprintf(stderr, "nycore: wasm storage_put rejected: %d\n", ret);
+    }
+
+  return ret;
 }
 
 static int ny_wasm_call_event(struct ny_wasm_plugin_s *plugin,
@@ -283,8 +411,6 @@ static int ny_wasm_call(wasm_module_inst_t instance,
 int ny_wasm_run(const char *path, const char *id, uint64_t permissions)
 {
   struct ny_plugin_config_s config;
-  struct ny_wasm_plugin_s plugin;
-  int ret;
 
   if (path == NULL || id == NULL || id[0] == '\0')
     {
@@ -297,7 +423,20 @@ int ny_wasm_run(const char *path, const char *id, uint64_t permissions)
   config.permissions = permissions;
   config.memory_limit = CONFIG_NYABULA_CORE_PLUGIN_MEMORY;
   config.stack_limit = CONFIG_NYABULA_CORE_PLUGIN_STACK;
-  ret = ny_wasm_load(&plugin, &config);
+  return ny_wasm_run_config(&config);
+}
+
+int ny_wasm_run_config(const struct ny_plugin_config_s *config)
+{
+  struct ny_wasm_plugin_s plugin;
+  int ret;
+
+  if (config == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = ny_wasm_load(&plugin, config);
   if (ret >= 0)
     {
       ret = ny_wasm_start(&plugin);
@@ -328,6 +467,8 @@ int ny_wasm_load(struct ny_wasm_plugin_s *plugin,
 
   memset(plugin, 0, sizeof(*plugin));
   strlcpy(plugin->id, config->id, sizeof(plugin->id));
+  strlcpy(plugin->storage_root, config->storage_root,
+          sizeof(plugin->storage_root));
   atomic_init(&plugin->permissions, config->permissions);
 
   ret = ny_wasm_initialize();
