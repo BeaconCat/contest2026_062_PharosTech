@@ -58,6 +58,7 @@ static mutex_t g_package_lock = NXMUTEX_INITIALIZER;
  ****************************************************************************/
 
 static bool ny_package_valid_version(const char *version);
+static bool ny_package_valid_id(const char *id);
 static bool ny_package_mutable_name(const char *name);
 static int ny_package_join(char *path, size_t size, const char *left,
                            const char *right);
@@ -69,6 +70,14 @@ static int ny_package_copy_tree(const char *source, const char *destination,
                                 bool root);
 static int ny_package_remove_tree(const char *path);
 static int ny_package_sync_directory(const char *path);
+static int ny_package_read_marker(const char *plugin_root, const char *name,
+                                  char *version, size_t size);
+static int ny_package_write_marker(const char *plugin_root, const char *name,
+                                   const char *version);
+static int ny_package_version_path(const char *id, const char *version,
+                                   char *plugin_root, size_t root_size,
+                                   char *path, size_t path_size);
+static int ny_package_activate_locked(const char *id, const char *version);
 
 /****************************************************************************
  * Private Functions
@@ -93,6 +102,31 @@ static bool ny_package_valid_version(const char *version)
       if (!((value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') ||
             (value >= '0' && value <= '9') || value == '.' || value == '_' ||
             value == '-'))
+        {
+          return false;
+        }
+    }
+
+  return true;
+}
+
+static bool ny_package_valid_id(const char *id)
+{
+  size_t index;
+  size_t length;
+
+  if (id == NULL || (length = strlen(id)) == 0 ||
+      length >= NY_PLUGIN_ID_SIZE || id[0] == '.' || id[length - 1] == '.')
+    {
+      return false;
+    }
+
+  for (index = 0; index < length; index++)
+    {
+      char value = id[index];
+
+      if (!((value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') ||
+            value == '.' || value == '_' || value == '-'))
         {
           return false;
         }
@@ -381,6 +415,183 @@ static int ny_package_sync_directory(const char *path)
   return ret;
 }
 
+static int ny_package_read_marker(const char *plugin_root, const char *name,
+                                  char *version, size_t size)
+{
+  char path[PATH_MAX];
+  size_t offset = 0;
+  int fd;
+  int ret;
+
+  ret = ny_package_join(path, sizeof(path), plugin_root, name);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  fd = open(path, O_RDONLY | O_NOFOLLOW);
+  if (fd < 0)
+    {
+      return -errno;
+    }
+
+  while (offset + 1 < size)
+    {
+      ssize_t count = read(fd, version + offset, size - offset - 1);
+
+      if (count < 0)
+        {
+          if (errno == EINTR)
+            {
+              continue;
+            }
+
+          ret = -errno;
+          close(fd);
+          return ret;
+        }
+
+      if (count == 0)
+        {
+          break;
+        }
+
+      offset += (size_t)count;
+    }
+
+  version[offset] = '\0';
+  if (offset == 0 ||
+      (offset + 1 == size && read(fd, version + offset, 1) != 0))
+    {
+      close(fd);
+      return -EINVAL;
+    }
+
+  close(fd);
+  if (version[offset - 1] == '\n')
+    {
+      version[offset - 1] = '\0';
+    }
+
+  return ny_package_valid_version(version) ? 0 : -EINVAL;
+}
+
+static int ny_package_write_marker(const char *plugin_root, const char *name,
+                                   const char *version)
+{
+  char temporary[PATH_MAX];
+  char path[PATH_MAX];
+  char content[NY_PLUGIN_VERSION_SIZE + 1];
+  int length;
+  int fd;
+  int ret;
+
+  ret = ny_package_join(path, sizeof(path), plugin_root, name);
+  if (ret < 0 || snprintf(temporary, sizeof(temporary), "%s.tmp", path) >=
+                     (int)sizeof(temporary))
+    {
+      return ret < 0 ? ret : -ENAMETOOLONG;
+    }
+
+  length = snprintf(content, sizeof(content), "%s\n", version);
+  if (length <= 0 || length >= (int)sizeof(content))
+    {
+      return -EINVAL;
+    }
+
+  fd = open(temporary, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0600);
+  if (fd < 0)
+    {
+      return -errno;
+    }
+
+  ret = ny_package_write_all(fd, content, (size_t)length);
+  if (ret >= 0 && fsync(fd) < 0)
+    {
+      ret = -errno;
+    }
+
+  close(fd);
+  if (ret < 0 || rename(temporary, path) < 0)
+    {
+      if (ret >= 0)
+        {
+          ret = -errno;
+        }
+
+      unlink(temporary);
+      return ret;
+    }
+
+  return ny_package_sync_directory(plugin_root);
+}
+
+static int ny_package_version_path(const char *id, const char *version,
+                                   char *plugin_root, size_t root_size,
+                                   char *path, size_t path_size)
+{
+  char versions[PATH_MAX];
+  int ret;
+
+  if (!ny_package_valid_id(id) || !ny_package_valid_version(version))
+    {
+      return -EINVAL;
+    }
+
+  ret = ny_package_join(plugin_root, root_size,
+                        CONFIG_NYABULA_CORE_PACKAGE_STORE, id);
+  if (ret < 0 || (ret = ny_package_join(versions, sizeof(versions),
+                                        plugin_root, "versions")) < 0)
+    {
+      return ret;
+    }
+
+  return ny_package_join(path, path_size, versions, version);
+}
+
+static int ny_package_activate_locked(const char *id, const char *version)
+{
+  struct ny_plugin_config_s config;
+  char plugin_root[PATH_MAX];
+  char destination[PATH_MAX];
+  char current[NY_PLUGIN_VERSION_SIZE + 1];
+  int ret;
+
+  ret = ny_package_version_path(id, version, plugin_root, sizeof(plugin_root),
+                                destination, sizeof(destination));
+  if (ret < 0 || (ret = ny_manifest_load(destination, &config)) < 0)
+    {
+      return ret;
+    }
+
+  if (strcmp(config.id, id) != 0 || strcmp(config.version, version) != 0)
+    {
+      return -EINVAL;
+    }
+
+  ret =
+      ny_package_read_marker(plugin_root, "current", current, sizeof(current));
+  if (ret >= 0 && strcmp(current, version) == 0)
+    {
+      return 0;
+    }
+
+  if (ret >= 0)
+    {
+      ret = ny_package_write_marker(plugin_root, "last-good", current);
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+  else if (ret != -ENOENT)
+    {
+      return ret;
+    }
+
+  return ny_package_write_marker(plugin_root, "current", version);
+}
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -448,6 +659,71 @@ int ny_package_install(const char *source)
   ret = ny_package_sync_directory(versions);
 
 out:
+  nxmutex_unlock(&g_package_lock);
+  return ret;
+}
+
+int ny_package_activate(const char *id, const char *version)
+{
+  int ret;
+
+  nxmutex_lock(&g_package_lock);
+  ret = ny_package_activate_locked(id, version);
+  nxmutex_unlock(&g_package_lock);
+  return ret;
+}
+
+int ny_package_rollback(const char *id)
+{
+  char plugin_root[PATH_MAX];
+  char unused[PATH_MAX];
+  char version[NY_PLUGIN_VERSION_SIZE + 1];
+  int ret;
+
+  nxmutex_lock(&g_package_lock);
+  ret = ny_package_version_path(id, "0", plugin_root, sizeof(plugin_root),
+                                unused, sizeof(unused));
+  if (ret >= 0)
+    {
+      ret = ny_package_read_marker(plugin_root, "last-good", version,
+                                   sizeof(version));
+    }
+
+  if (ret >= 0)
+    {
+      ret = ny_package_activate_locked(id, version);
+    }
+
+  nxmutex_unlock(&g_package_lock);
+  return ret;
+}
+
+int ny_package_resolve(const char *id, char *path, size_t size)
+{
+  char plugin_root[PATH_MAX];
+  char version[NY_PLUGIN_VERSION_SIZE + 1];
+  int ret;
+
+  if (path == NULL || size == 0 || !ny_package_valid_id(id))
+    {
+      return -EINVAL;
+    }
+
+  nxmutex_lock(&g_package_lock);
+  ret = ny_package_join(plugin_root, sizeof(plugin_root),
+                        CONFIG_NYABULA_CORE_PACKAGE_STORE, id);
+  if (ret >= 0)
+    {
+      ret = ny_package_read_marker(plugin_root, "current", version,
+                                   sizeof(version));
+    }
+
+  if (ret >= 0)
+    {
+      ret = ny_package_version_path(id, version, plugin_root,
+                                    sizeof(plugin_root), path, size);
+    }
+
   nxmutex_unlock(&g_package_lock);
   return ret;
 }

@@ -23,9 +23,18 @@
 #define __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_PACKAGE_H
 
 /****************************************************************************
+ * Included Files
+ ****************************************************************************/
+
+#include <stddef.h>
+
+/****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
 int ny_package_install(const char *source);
+int ny_package_activate(const char *id, const char *version);
+int ny_package_rollback(const char *id);
+int ny_package_resolve(const char *id, char *path, size_t size);
 
 #endif /* __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_PACKAGE_H */

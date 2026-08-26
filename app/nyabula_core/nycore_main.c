@@ -61,6 +61,9 @@ static void nycore_usage(void)
                   "  nycore revoke <id> <permission>\n"
                   "  nycore permissions <id>\n"
                   "  nycore install <package-dir>\n"
+                  "  nycore activate <id> <version>\n"
+                  "  nycore rollback <id>\n"
+                  "  nycore start-installed <id>\n"
                   "  nycore list\n");
 }
 
@@ -231,6 +234,24 @@ int main(int argc, char *argv[])
   else if (strcmp(argv[1], "install") == 0 && argc == 3)
     {
       ret = ny_package_install(argv[2]);
+    }
+  else if (strcmp(argv[1], "activate") == 0 && argc == 4)
+    {
+      ret = ny_package_activate(argv[2], argv[3]);
+    }
+  else if (strcmp(argv[1], "rollback") == 0 && argc == 3)
+    {
+      ret = ny_package_rollback(argv[2]);
+    }
+  else if (strcmp(argv[1], "start-installed") == 0 && argc == 3)
+    {
+      char path[PATH_MAX];
+
+      ret = ny_package_resolve(argv[2], path, sizeof(path));
+      if (ret >= 0)
+        {
+          ret = ny_scheduler_start_package(path);
+        }
     }
   else if (strcmp(argv[1], "list") == 0 && argc == 2)
     {
