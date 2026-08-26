@@ -58,6 +58,7 @@ struct ny_plugin_config_s
   char version[NY_PLUGIN_VERSION_SIZE];
   char root[PATH_MAX];
   char entry[PATH_MAX];
+  uint64_t requested_permissions;
   uint64_t permissions;
   bool module;
   size_t memory_limit;
@@ -73,5 +74,7 @@ void ny_manifest_default_config(struct ny_plugin_config_s *config,
                                 const char *entry);
 int ny_manifest_load(const char *package_path,
                      struct ny_plugin_config_s *config);
+int ny_manifest_permission_value(const char *name, uint64_t *value);
+const char *ny_manifest_permission_name(uint64_t value);
 
 #endif /* __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_MANIFEST_H */

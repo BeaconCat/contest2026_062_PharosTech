@@ -71,6 +71,10 @@ config NYABULA_CORE_TRUST_STORE
 	default "/data/nyabula/trusted-keys.json"
 	depends on NYABULA_CORE_REQUIRE_SIGNATURE
 
+config NYABULA_CORE_GRANT_STORE
+	string "Plugin permission grant store"
+	default "/data/nyabula/grants.json"
+
 config NYABULA_CORE_PACKAGE_FILE_LIMIT
 	int "Maximum files per plugin package"
 	default 128

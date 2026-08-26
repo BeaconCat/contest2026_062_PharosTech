@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ny_permission.h"
 #include "ny_runtime.h"
 #include "ny_scheduler.h"
 
@@ -55,6 +56,9 @@ static void nycore_usage(void)
                   "  nycore event <id> <event>\n"
                   "  nycore stop <id>\n"
                   "  nycore stop-all\n"
+                  "  nycore grant <id> <permission>\n"
+                  "  nycore revoke <id> <permission>\n"
+                  "  nycore permissions <id>\n"
                   "  nycore list\n");
 }
 
@@ -201,6 +205,18 @@ int main(int argc, char *argv[])
   else if (strcmp(argv[1], "stop-all") == 0 && argc == 2)
     {
       ret = ny_scheduler_stop_all();
+    }
+  else if (strcmp(argv[1], "grant") == 0 && argc == 4)
+    {
+      ret = ny_permission_grant(argv[2], argv[3]);
+    }
+  else if (strcmp(argv[1], "revoke") == 0 && argc == 4)
+    {
+      ret = ny_permission_revoke(argv[2], argv[3]);
+    }
+  else if (strcmp(argv[1], "permissions") == 0 && argc == 3)
+    {
+      ret = ny_permission_show(argv[2]);
     }
   else if (strcmp(argv[1], "list") == 0 && argc == 2)
     {

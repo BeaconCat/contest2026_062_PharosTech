@@ -35,6 +35,7 @@
 #include <netutils/cJSON.h>
 
 #include "ny_manifest.h"
+#include "ny_permission.h"
 #include "ny_signature.h"
 
 /****************************************************************************
@@ -213,30 +214,19 @@ static int ny_manifest_parse_permissions(const cJSON *root,
   *permissions = 0;
   cJSON_ArrayForEach(item, array)
   {
-    size_t index;
-    bool found = false;
+    uint64_t value;
 
     if (!cJSON_IsString(item) || item->valuestring == NULL)
       {
         return -EINVAL;
       }
 
-    for (index = 0;
-         index < sizeof(g_permission_names) / sizeof(g_permission_names[0]);
-         index++)
-      {
-        if (strcmp(item->valuestring, g_permission_names[index].name) == 0)
-          {
-            *permissions |= g_permission_names[index].value;
-            found = true;
-            break;
-          }
-      }
-
-    if (!found)
+    if (ny_manifest_permission_value(item->valuestring, &value) < 0)
       {
         return -ENOTSUP;
       }
+
+    *permissions |= value;
   }
 
   return 0;
@@ -331,6 +321,7 @@ void ny_manifest_default_config(struct ny_plugin_config_s *config,
   strlcpy(config->version, "0", sizeof(config->version));
   strlcpy(config->entry, entry, sizeof(config->entry));
   config->permissions = NY_PERMISSION_CORE_LOG;
+  config->requested_permissions = NY_PERMISSION_CORE_LOG;
   config->module = false;
   config->memory_limit = CONFIG_NYABULA_CORE_PLUGIN_MEMORY;
   config->stack_limit = CONFIG_NYABULA_CORE_PLUGIN_STACK;
@@ -437,7 +428,7 @@ int ny_manifest_load(const char *package_path,
       goto out;
     }
 
-  ret = ny_manifest_parse_permissions(root, &config->permissions);
+  ret = ny_manifest_parse_permissions(root, &config->requested_permissions);
   if (ret < 0)
     {
       goto out;
@@ -462,9 +453,49 @@ int ny_manifest_load(const char *package_path,
     }
 
   strlcpy(config->entry, path, sizeof(config->entry));
-  ret = 0;
+  ret = ny_permission_apply(config);
 
 out:
   cJSON_Delete(root);
   return ret;
+}
+
+int ny_manifest_permission_value(const char *name, uint64_t *value)
+{
+  size_t index;
+
+  if (name == NULL || value == NULL)
+    {
+      return -EINVAL;
+    }
+
+  for (index = 0;
+       index < sizeof(g_permission_names) / sizeof(g_permission_names[0]);
+       index++)
+    {
+      if (strcmp(name, g_permission_names[index].name) == 0)
+        {
+          *value = g_permission_names[index].value;
+          return 0;
+        }
+    }
+
+  return -ENOENT;
+}
+
+const char *ny_manifest_permission_name(uint64_t value)
+{
+  size_t index;
+
+  for (index = 0;
+       index < sizeof(g_permission_names) / sizeof(g_permission_names[0]);
+       index++)
+    {
+      if (value == g_permission_names[index].value)
+        {
+          return g_permission_names[index].name;
+        }
+    }
+
+  return NULL;
 }
