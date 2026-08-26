@@ -192,8 +192,8 @@ static JSModuleDef *ny_module_load(JSContext *context, const char *module_name,
   struct ny_plugin_s *plugin = opaque;
   JSModuleDef *module;
   JSValue compiled;
-  char *source;
-  size_t length;
+  char *source = NULL;
+  size_t length = 0;
   int ret;
 
   if (ny_module_is_capability(module_name))

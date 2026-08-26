@@ -466,6 +466,7 @@ int ny_manifest_load(const char *package_path,
     }
   else if (strcmp(item->valuestring, "wamr") == 0)
     {
+#ifdef CONFIG_NYABULA_CORE_WAMR
       config->runtime = NY_PLUGIN_RUNTIME_WAMR;
       if (strlen(config->entry) < 5 ||
           strcmp(config->entry + strlen(config->entry) - 5, ".wasm") != 0)
@@ -473,6 +474,10 @@ int ny_manifest_load(const char *package_path,
           ret = -EINVAL;
           goto out;
         }
+#else
+      ret = -ENOTSUP;
+      goto out;
+#endif
     }
   else
     {

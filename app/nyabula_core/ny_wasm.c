@@ -38,11 +38,14 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "ny_manifest.h"
+#include "ny_wasm.h"
+
+#ifdef CONFIG_NYABULA_CORE_WAMR
+
 #include <wasm_export.h>
 
 #include "ny_broker.h"
-#include "ny_manifest.h"
-#include "ny_wasm.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -761,3 +764,45 @@ void ny_wasm_destroy(struct ny_wasm_plugin_s *plugin)
   free(plugin->binary);
   memset(plugin, 0, sizeof(*plugin));
 }
+
+#else
+
+int ny_wasm_run(const char *path, const char *id, uint64_t permissions)
+{
+  return -ENOTSUP;
+}
+
+int ny_wasm_run_config(const struct ny_plugin_config_s *config)
+{
+  return -ENOTSUP;
+}
+
+int ny_wasm_load(struct ny_wasm_plugin_s *plugin,
+                 const struct ny_plugin_config_s *config)
+{
+  return -ENOTSUP;
+}
+
+int ny_wasm_start(struct ny_wasm_plugin_s *plugin) { return -ENOTSUP; }
+
+int ny_wasm_dispatch(struct ny_wasm_plugin_s *plugin, const char *event)
+{
+  return -ENOTSUP;
+}
+
+int ny_wasm_stop(struct ny_wasm_plugin_s *plugin) { return -ENOTSUP; }
+
+void ny_wasm_set_permissions(struct ny_wasm_plugin_s *plugin,
+                             uint64_t permissions)
+{
+}
+
+void ny_wasm_destroy(struct ny_wasm_plugin_s *plugin)
+{
+  if (plugin != NULL)
+    {
+      memset(plugin, 0, sizeof(*plugin));
+    }
+}
+
+#endif

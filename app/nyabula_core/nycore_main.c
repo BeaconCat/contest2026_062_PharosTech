@@ -46,6 +46,7 @@ static void nycore_usage(void);
 static int nycore_run(const char *path, const char *event);
 static int nycore_run_package(const char *path, const char *event);
 static int nycore_start_installed(const char *id);
+static int nycore_isolation(void);
 
 /****************************************************************************
  * Private Functions
@@ -78,7 +79,35 @@ static void nycore_usage(void)
                   "  nycore allow-package <id> <version>\n"
                   "  nycore revocations\n"
                   "  nycore packages\n"
+                  "  nycore isolation\n"
                   "  nycore list\n");
+}
+
+static int nycore_isolation(void)
+{
+  int local;
+
+#ifdef __aarch64__
+  unsigned long current_el;
+
+  __asm__ volatile("mrs %0, CurrentEL" : "=r"(current_el));
+  printf("build=%s current_el=%lu stack=%p\n",
+#ifdef CONFIG_BUILD_KERNEL
+         "kernel",
+#else
+         "flat",
+#endif
+         (current_el >> 2) & 3, &local);
+#else
+  printf("build=%s current_el=host stack=%p\n",
+#ifdef CONFIG_BUILD_KERNEL
+         "kernel",
+#else
+         "flat",
+#endif
+         &local);
+#endif
+  return 0;
 }
 
 static int nycore_run(const char *path, const char *event)
@@ -348,6 +377,10 @@ int main(int argc, char *argv[])
   else if (strcmp(argv[1], "packages") == 0 && argc == 2)
     {
       ret = ny_package_list();
+    }
+  else if (strcmp(argv[1], "isolation") == 0 && argc == 2)
+    {
+      ret = nycore_isolation();
     }
   else if (strcmp(argv[1], "list") == 0 && argc == 2)
     {

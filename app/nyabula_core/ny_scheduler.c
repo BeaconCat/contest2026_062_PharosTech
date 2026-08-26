@@ -27,6 +27,7 @@
 #include <nuttx/mutex.h>
 
 #include <errno.h>
+#include <pthread.h>
 #include <sched.h>
 #include <semaphore.h>
 #include <stdbool.h>
@@ -70,6 +71,9 @@ struct ny_scheduler_slot_s
   bool stopping;
   bool task_stopped;
   pid_t pid;
+#ifdef CONFIG_BUILD_KERNEL
+  pthread_t thread;
+#endif
   int start_result;
   int exit_result;
   enum ny_plugin_state_e state;
@@ -112,6 +116,9 @@ static int ny_scheduler_enqueue_locked(struct ny_scheduler_slot_s *slot,
                                        enum ny_scheduler_event_type_e type,
                                        const char *payload);
 static int ny_scheduler_worker(int argc, char *argv[]);
+#ifdef CONFIG_BUILD_KERNEL
+static void *ny_scheduler_pthread(void *argument);
+#endif
 static void ny_scheduler_clear_locked(struct ny_scheduler_slot_s *slot);
 static int ny_scheduler_start_config(const struct ny_plugin_config_s *config);
 
@@ -344,6 +351,20 @@ static int ny_scheduler_worker(int argc, char *argv[])
   return ret < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
+#ifdef CONFIG_BUILD_KERNEL
+static void *ny_scheduler_pthread(void *argument)
+{
+  char *argv[3];
+  int ret;
+
+  argv[0] = "nycore-worker";
+  argv[1] = argument;
+  argv[2] = NULL;
+  ret = ny_scheduler_worker(2, argv);
+  return (void *)(intptr_t)ret;
+}
+#endif
+
 static void ny_scheduler_clear_locked(struct ny_scheduler_slot_s *slot)
 {
   sem_destroy(&slot->ready);
@@ -459,7 +480,12 @@ int ny_scheduler_refresh_permissions(const char *id)
 static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
 {
   struct ny_scheduler_slot_s *slot;
+#ifdef CONFIG_BUILD_KERNEL
+  struct sched_param parameters;
+  pthread_attr_t attributes;
+#else
   char *worker_argv[2];
+#endif
   int index;
   int ret;
 
@@ -533,6 +559,29 @@ static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
       return ret;
     }
 
+#ifdef CONFIG_BUILD_KERNEL
+  pthread_attr_init(&attributes);
+  pthread_attr_setstacksize(&attributes, CONFIG_NYABULA_CORE_STACKSIZE);
+  pthread_attr_setinheritsched(&attributes, PTHREAD_EXPLICIT_SCHED);
+  pthread_attr_setschedpolicy(&attributes, SCHED_FIFO);
+  memset(&parameters, 0, sizeof(parameters));
+  parameters.sched_priority = config->background
+                                  ? CONFIG_NYABULA_CORE_BACKGROUND_PRIORITY
+                                  : CONFIG_NYABULA_CORE_PRIORITY;
+  pthread_attr_setschedparam(&attributes, &parameters);
+  ret = pthread_create(&slot->thread, &attributes, ny_scheduler_pthread,
+                       slot->index_arg);
+  pthread_attr_destroy(&attributes);
+  if (ret != 0)
+    {
+      ret = -ret;
+      ny_scheduler_clear_locked(slot);
+      nxmutex_unlock(&g_scheduler_lock);
+      return ret;
+    }
+
+  slot->pid = (pid_t)slot->thread;
+#else
   worker_argv[0] = slot->index_arg;
   worker_argv[1] = NULL;
   slot->pid = task_create(
@@ -547,6 +596,7 @@ static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
       nxmutex_unlock(&g_scheduler_lock);
       return ret;
     }
+#endif
 
   nxmutex_unlock(&g_scheduler_lock);
   ret = ny_scheduler_wait(&slot->ready);
@@ -561,6 +611,9 @@ static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
   if (ret < 0)
     {
       ny_scheduler_wait(&slot->stopped);
+#ifdef CONFIG_BUILD_KERNEL
+      pthread_join(slot->thread, NULL);
+#endif
       nxmutex_lock(&g_scheduler_lock);
       ny_scheduler_clear_locked(slot);
       nxmutex_unlock(&g_scheduler_lock);
@@ -674,6 +727,10 @@ int ny_scheduler_stop(const char *id)
           return ret;
         }
     }
+
+#ifdef CONFIG_BUILD_KERNEL
+  pthread_join(slot->thread, NULL);
+#endif
 
   nxmutex_lock(&g_scheduler_lock);
   ny_scheduler_clear_locked(slot);

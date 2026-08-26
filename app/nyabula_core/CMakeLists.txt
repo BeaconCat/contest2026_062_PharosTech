@@ -20,6 +20,30 @@
 # ##############################################################################
 
 if(CONFIG_CONTEST2026_062_NYABULA_CORE)
+  set(NYABULA_CORE_SRCS
+      nycore_main.c
+      ny_broker.c
+      ny_capability.c
+      ny_health.c
+      ny_manifest.c
+      ny_module.c
+      ny_package.c
+      ny_permission.c
+      ny_runtime.c
+      ny_revocation.c
+      ny_scheduler.c
+      ny_wasm.c)
+  set(NYABULA_CORE_DEPENDS libqjs)
+
+  if(CONFIG_NYABULA_CORE_WAMR)
+    list(APPEND NYABULA_CORE_DEPENDS wamr)
+  endif()
+
+  if(CONFIG_NYABULA_CORE_REQUIRE_SIGNATURE)
+    list(APPEND NYABULA_CORE_SRCS ny_signature.c)
+    list(APPEND NYABULA_CORE_DEPENDS libsodium)
+  endif()
+
   nuttx_add_application(
     NAME
     nycore
@@ -28,24 +52,10 @@ if(CONFIG_CONTEST2026_062_NYABULA_CORE)
     STACKSIZE
     ${CONFIG_NYABULA_CORE_STACKSIZE}
     SRCS
-    nycore_main.c
-    ny_broker.c
-    ny_capability.c
-    ny_health.c
-    ny_manifest.c
-    ny_module.c
-    ny_package.c
-    ny_permission.c
-    ny_runtime.c
-    ny_revocation.c
-    ny_scheduler.c
-    ny_signature.c
-    ny_wasm.c
+    ${NYABULA_CORE_SRCS}
     INCLUDE_DIRECTORIES
     ${NUTTX_APPS_DIR}/crypto/libsodium/libsodium/src/libsodium/include
     ${NUTTX_APPS_DIR}/interpreters/wamr/wamr/core/iwasm/include
     DEPENDS
-    libqjs
-    libsodium
-    wamr)
+    ${NYABULA_CORE_DEPENDS})
 endif()

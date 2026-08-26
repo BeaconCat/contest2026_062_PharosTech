@@ -292,8 +292,8 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
                           const struct ny_plugin_config_s *config)
 {
   JSValue result;
-  char *source;
-  size_t length;
+  char *source = NULL;
+  size_t length = 0;
   int ret;
 
   if (plugin == NULL || config == NULL || config->entry[0] == '\0' ||

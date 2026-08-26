@@ -25,15 +25,18 @@ config CONTEST2026_062_NYABULA_CORE
 	default n
 	select ALLOW_ICS_COMPONENTS
 	select INTERPRETERS_QUICKJS
-	select INTERPRETERS_WAMR
-	select INTERPRETERS_WAMR_THREAD_MGR
-	select LIBSODIUM
 	select NETUTILS_CJSON
 	---help---
 		Enable the Nyabula Core plugin launcher and its isolated QuickJS
 		runtime.
 
 if CONTEST2026_062_NYABULA_CORE
+
+config NYABULA_CORE_WAMR
+	bool "Enable WAMR plugin runtime"
+	default y
+	select INTERPRETERS_WAMR
+	select INTERPRETERS_WAMR_THREAD_MGR
 
 config NYABULA_CORE_PRIORITY
 	int "Nyabula Core task priority"
@@ -82,6 +85,7 @@ config NYABULA_CORE_MANIFEST_LIMIT
 config NYABULA_CORE_REQUIRE_SIGNATURE
 	bool "Require signed plugin packages"
 	default y
+	select LIBSODIUM
 
 config NYABULA_CORE_TRUST_STORE
 	string "Trusted plugin public key store"
