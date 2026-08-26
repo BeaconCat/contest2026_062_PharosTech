@@ -23,8 +23,11 @@
  * Included Files
  ****************************************************************************/
 
+#include <nuttx/clock.h>
 #include <nuttx/config.h>
 #include <nuttx/mutex.h>
+#include <nuttx/wdog.h>
+#include <nuttx/wqueue.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -61,6 +64,18 @@ static mutex_t g_wasm_lock = NXMUTEX_INITIALIZER;
 static bool g_wasm_initialized;
 
 /****************************************************************************
+ * Private Types
+ ****************************************************************************/
+
+struct ny_wasm_watchdog_s
+{
+  wasm_module_inst_t instance;
+  struct wdog_s timer;
+  struct work_s work;
+  atomic_bool timed_out;
+};
+
+/****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
@@ -90,8 +105,12 @@ static void ny_wasm_client(struct ny_wasm_plugin_s *plugin,
                            struct ny_broker_client_s *client);
 static int ny_wasm_initialize(void);
 static int ny_wasm_read(const char *path, uint8_t **binary, uint32_t *size);
-static int ny_wasm_call(wasm_module_inst_t instance,
-                        wasm_exec_env_t environment, const char *name,
+static void ny_wasm_watchdog(wdparm_t argument);
+static void ny_wasm_terminate_work(void *argument);
+static int ny_wasm_execute(struct ny_wasm_plugin_s *plugin,
+                           wasm_function_inst_t function, uint32_t argc,
+                           uint32_t *argv);
+static int ny_wasm_call(struct ny_wasm_plugin_s *plugin, const char *name,
                         bool required);
 static int ny_wasm_call_event(struct ny_wasm_plugin_s *plugin,
                               const char *event);
@@ -355,7 +374,6 @@ static int ny_wasm_call_event(struct ny_wasm_plugin_s *plugin,
                               const char *event)
 {
   wasm_module_inst_t instance = plugin->instance;
-  wasm_exec_env_t environment = plugin->environment;
   wasm_function_inst_t function;
   wasm_valkind_t types[2];
   const char *exception;
@@ -363,6 +381,7 @@ static int ny_wasm_call_event(struct ny_wasm_plugin_s *plugin,
   uint64_t offset;
   uint32_t arguments[2];
   size_t length = strlen(event);
+  int ret;
 
   if (length >= CONFIG_NYABULA_CORE_EVENT_SIZE)
     {
@@ -397,13 +416,14 @@ static int ny_wasm_call_event(struct ny_wasm_plugin_s *plugin,
   memcpy(native, event, length);
   arguments[0] = (uint32_t)offset;
   arguments[1] = (uint32_t)length;
-  if (!wasm_runtime_call_wasm(environment, function, 2, arguments))
+  ret = ny_wasm_execute(plugin, function, 2, arguments);
+  if (ret < 0)
     {
       exception = wasm_runtime_get_exception(instance);
       fprintf(stderr, "nycore: wasm ny_on_event failed: %s\n",
               exception == NULL ? "unknown exception" : exception);
       wasm_runtime_module_free(instance, offset);
-      return -EFAULT;
+      return ret;
     }
 
   wasm_runtime_module_free(instance, offset);
@@ -486,31 +506,74 @@ static int ny_wasm_read(const char *path, uint8_t **binary, uint32_t *size)
   return 0;
 }
 
-static int ny_wasm_call(wasm_module_inst_t instance,
-                        wasm_exec_env_t environment, const char *name,
+static void ny_wasm_watchdog(wdparm_t argument)
+{
+  struct ny_wasm_watchdog_s *watchdog =
+      (struct ny_wasm_watchdog_s *)(uintptr_t)argument;
+
+  work_queue(HPWORK, &watchdog->work, ny_wasm_terminate_work, watchdog, 0);
+}
+
+static void ny_wasm_terminate_work(void *argument)
+{
+  struct ny_wasm_watchdog_s *watchdog = argument;
+
+  atomic_store(&watchdog->timed_out, true);
+  wasm_runtime_terminate(watchdog->instance);
+}
+
+static int ny_wasm_execute(struct ny_wasm_plugin_s *plugin,
+                           wasm_function_inst_t function, uint32_t argc,
+                           uint32_t *argv)
+{
+  struct ny_wasm_watchdog_s watchdog;
+  bool called;
+  int ret;
+
+  memset(&watchdog, 0, sizeof(watchdog));
+  watchdog.instance = plugin->instance;
+  atomic_init(&watchdog.timed_out, false);
+  ret = wd_start(&watchdog.timer, MSEC2TICK(plugin->event_timeout_ms),
+                 ny_wasm_watchdog, (wdparm_t)(uintptr_t)&watchdog);
+  if (ret < 0)
+    {
+      return -errno;
+    }
+
+  wasm_runtime_clear_exception(plugin->instance);
+  called = wasm_runtime_call_wasm(plugin->environment, function, argc, argv);
+  wd_cancel(&watchdog.timer);
+  work_cancel_sync(HPWORK, &watchdog.work);
+  ret = atomic_load(&watchdog.timed_out) ? -ETIMEDOUT : called ? 0 : -EFAULT;
+  return ret;
+}
+
+static int ny_wasm_call(struct ny_wasm_plugin_s *plugin, const char *name,
                         bool required)
 {
   wasm_function_inst_t function;
   const char *exception;
+  int ret;
 
-  function = wasm_runtime_lookup_function(instance, name);
+  function = wasm_runtime_lookup_function(plugin->instance, name);
   if (function == NULL)
     {
       return required ? -ENOEXEC : 0;
     }
 
-  if (wasm_func_get_param_count(function, instance) != 0 ||
-      wasm_func_get_result_count(function, instance) != 0)
+  if (wasm_func_get_param_count(function, plugin->instance) != 0 ||
+      wasm_func_get_result_count(function, plugin->instance) != 0)
     {
       return -EPROTO;
     }
 
-  if (!wasm_runtime_call_wasm(environment, function, 0, NULL))
+  ret = ny_wasm_execute(plugin, function, 0, NULL);
+  if (ret < 0)
     {
-      exception = wasm_runtime_get_exception(instance);
+      exception = wasm_runtime_get_exception(plugin->instance);
       fprintf(stderr, "nycore: wasm %s failed: %s\n", name,
               exception == NULL ? "unknown exception" : exception);
-      return -EFAULT;
+      return ret;
     }
 
   return 0;
@@ -535,6 +598,7 @@ int ny_wasm_run(const char *path, const char *id, uint64_t permissions)
   config.permissions = permissions;
   config.memory_limit = CONFIG_NYABULA_CORE_PLUGIN_MEMORY;
   config.stack_limit = CONFIG_NYABULA_CORE_PLUGIN_STACK;
+  config.event_timeout_ms = CONFIG_NYABULA_CORE_EVENT_TIMEOUT_MS;
   return ny_wasm_run_config(&config);
 }
 
@@ -572,7 +636,8 @@ int ny_wasm_load(struct ny_wasm_plugin_s *plugin,
 
   if (plugin == NULL || config == NULL || config->id[0] == '\0' ||
       config->entry[0] == '\0' || config->stack_limit == 0 ||
-      config->stack_limit > UINT32_MAX || config->memory_limit < 65536)
+      config->stack_limit > UINT32_MAX || config->memory_limit < 65536 ||
+      config->event_timeout_ms == 0)
     {
       return -EINVAL;
     }
@@ -632,6 +697,7 @@ int ny_wasm_load(struct ny_wasm_plugin_s *plugin,
     }
 
   wasm_runtime_set_user_data(plugin->environment, plugin);
+  plugin->event_timeout_ms = config->event_timeout_ms;
   return 0;
 }
 
@@ -639,8 +705,7 @@ int ny_wasm_start(struct ny_wasm_plugin_s *plugin)
 {
   return plugin == NULL || plugin->environment == NULL
              ? -EINVAL
-             : ny_wasm_call(plugin->instance, plugin->environment,
-                            "ny_on_start", true);
+             : ny_wasm_call(plugin, "ny_on_start", true);
 }
 
 int ny_wasm_dispatch(struct ny_wasm_plugin_s *plugin, const char *event)
@@ -654,8 +719,7 @@ int ny_wasm_stop(struct ny_wasm_plugin_s *plugin)
 {
   return plugin == NULL || plugin->environment == NULL
              ? -EINVAL
-             : ny_wasm_call(plugin->instance, plugin->environment,
-                            "ny_on_stop", false);
+             : ny_wasm_call(plugin, "ny_on_stop", false);
 }
 
 void ny_wasm_set_permissions(struct ny_wasm_plugin_s *plugin,

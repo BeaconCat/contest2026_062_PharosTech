@@ -43,6 +43,7 @@ struct ny_wasm_plugin_s
   void *environment;
   uint8_t *binary;
   uint32_t binary_size;
+  uint32_t event_timeout_ms;
   atomic_uint_fast64_t permissions;
   bool thread_initialized;
   char id[NY_PLUGIN_ID_SIZE];
