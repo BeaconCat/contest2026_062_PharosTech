@@ -192,6 +192,8 @@ def validate_manifest(path: Path) -> dict[str, object]:
         raise PluginError("version must be a non-empty string shorter than 32 bytes")
     if isinstance(manifest["apiVersion"], bool) or manifest["apiVersion"] != API_VERSION:
         raise PluginError(f"unsupported apiVersion: {manifest['apiVersion']!r}")
+    if not isinstance(manifest.get("background", False), bool):
+        raise PluginError("background must be a boolean")
     runtime = manifest["runtime"]
     if runtime not in ("quickjs", "wamr"):
         raise PluginError(f"unsupported runtime: {runtime!r}")

@@ -102,6 +102,7 @@ static int ny_scheduler_wait(sem_t *sem);
 static const char *ny_scheduler_state_name(enum ny_plugin_state_e state);
 static struct ny_scheduler_slot_s *ny_scheduler_find_locked(const char *id);
 static struct ny_scheduler_slot_s *ny_scheduler_empty_locked(void);
+static int ny_scheduler_background_count_locked(void);
 static int ny_scheduler_enqueue_locked(struct ny_scheduler_slot_s *slot,
                                        enum ny_scheduler_event_type_e type,
                                        const char *payload);
@@ -174,6 +175,23 @@ static struct ny_scheduler_slot_s *ny_scheduler_empty_locked(void)
     }
 
   return NULL;
+}
+
+static int ny_scheduler_background_count_locked(void)
+{
+  int count = 0;
+  int index;
+
+  for (index = 0; index < CONFIG_NYABULA_CORE_MAX_PLUGINS; index++)
+    {
+      if (g_scheduler_slots[index].occupied &&
+          g_scheduler_slots[index].config.background)
+        {
+          count++;
+        }
+    }
+
+  return count;
 }
 
 static int ny_scheduler_enqueue_locked(struct ny_scheduler_slot_s *slot,
@@ -452,6 +470,13 @@ static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
       return -EEXIST;
     }
 
+  if (config->background && ny_scheduler_background_count_locked() >=
+                                CONFIG_NYABULA_CORE_MAX_BACKGROUND_PLUGINS)
+    {
+      nxmutex_unlock(&g_scheduler_lock);
+      return -EDQUOT;
+    }
+
   slot = ny_scheduler_empty_locked();
   if (slot == NULL)
     {
@@ -497,9 +522,11 @@ static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
 
   worker_argv[0] = slot->index_arg;
   worker_argv[1] = NULL;
-  slot->pid = task_create(config->id, CONFIG_NYABULA_CORE_PRIORITY,
-                          CONFIG_NYABULA_CORE_STACKSIZE, ny_scheduler_worker,
-                          worker_argv);
+  slot->pid = task_create(
+      config->id,
+      config->background ? CONFIG_NYABULA_CORE_BACKGROUND_PRIORITY
+                         : CONFIG_NYABULA_CORE_PRIORITY,
+      CONFIG_NYABULA_CORE_STACKSIZE, ny_scheduler_worker, worker_argv);
   if (slot->pid < 0)
     {
       ret = -errno;
@@ -656,16 +683,17 @@ void ny_scheduler_list(void)
   int index;
 
   nxmutex_lock(&g_scheduler_lock);
-  printf("ID\tSTATE\tPID\tQUEUED\tPATH\n");
+  printf("ID\tSTATE\tCLASS\tPID\tQUEUED\tPATH\n");
   for (index = 0; index < CONFIG_NYABULA_CORE_MAX_PLUGINS; index++)
     {
       struct ny_scheduler_slot_s *slot = &g_scheduler_slots[index];
 
       if (slot->occupied)
         {
-          printf("%s\t%s\t%d\t%zu\t%s\n", slot->id,
-                 ny_scheduler_state_name(slot->state), slot->pid, slot->count,
-                 slot->path);
+          printf("%s\t%s\t%s\t%d\t%zu\t%s\n", slot->id,
+                 ny_scheduler_state_name(slot->state),
+                 slot->config.background ? "background" : "foreground",
+                 slot->pid, slot->count, slot->path);
         }
     }
 

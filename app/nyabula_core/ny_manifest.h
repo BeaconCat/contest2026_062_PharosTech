@@ -69,6 +69,7 @@ struct ny_plugin_config_s
   uint64_t permissions;
   enum ny_plugin_runtime_e runtime;
   bool module;
+  bool background;
   size_t memory_limit;
   size_t stack_limit;
   uint32_t event_timeout_ms;

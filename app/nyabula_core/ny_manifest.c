@@ -380,6 +380,7 @@ int ny_manifest_load(const char *package_path,
       ny_manifest_member_count(root, "entry") != 1 ||
       ny_manifest_member_count(root, "runtime") != 1 ||
       ny_manifest_member_count(root, "apiVersion") != 1 ||
+      ny_manifest_member_count(root, "background") > 1 ||
       ny_manifest_member_count(root, "permissions") > 1 ||
       ny_manifest_member_count(root, "limits") > 1)
     {
@@ -454,6 +455,15 @@ int ny_manifest_load(const char *package_path,
       ret = -EPROTONOSUPPORT;
       goto out;
     }
+
+  item = cJSON_GetObjectItemCaseSensitive(root, "background");
+  if (item != NULL && !cJSON_IsBool(item))
+    {
+      ret = -EINVAL;
+      goto out;
+    }
+
+  config->background = cJSON_IsTrue(item);
 
   ret = ny_manifest_parse_permissions(root, &config->requested_permissions);
   if (ret < 0)

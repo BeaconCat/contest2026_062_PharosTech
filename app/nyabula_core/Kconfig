@@ -39,6 +39,11 @@ config NYABULA_CORE_PRIORITY
 	int "Nyabula Core task priority"
 	default 100
 
+config NYABULA_CORE_BACKGROUND_PRIORITY
+	int "Nyabula background plugin priority"
+	default 80
+	range 1 254
+
 config NYABULA_CORE_STACKSIZE
 	int "Nyabula Core task stack size"
 	default 32768
@@ -108,6 +113,11 @@ config NYABULA_CORE_MAX_PLUGINS
 	int "Maximum concurrently scheduled plugins"
 	default 4
 	range 1 16
+
+config NYABULA_CORE_MAX_BACKGROUND_PLUGINS
+	int "Maximum concurrently scheduled background plugins"
+	default 2
+	range 1 8
 
 config NYABULA_CORE_EVENT_DEPTH
 	int "Queued events per plugin"
