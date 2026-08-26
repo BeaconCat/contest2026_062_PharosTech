@@ -8,7 +8,9 @@ endif()
 if(CONFIG_KICKPI_K7_WIFI)
   list(APPEND SRCS kickpi_k7_wifi.c)
   target_compile_options(
-    board PRIVATE "-Wa,-I${NUTTX_BOARD_DIR}/firmware")
+    board
+    PRIVATE
+      "-Wa,-I${NUTTX_BOARD_DIR}/../../../drivers/drivers/sv6621/firmware")
 endif()
 
 if(CONFIG_KICKPI_K7_STORAGE_AUTOMOUNT)
