@@ -315,22 +315,24 @@ static JSValue ny_capability_network_request(JSContext *context,
                                              JSValueConst *argv)
 {
   struct ny_plugin_s *plugin = ny_capability_plugin(context);
+  struct ny_broker_client_s client;
+  int ret;
 
   if (!ny_capability_has(plugin, NY_PERMISSION_NETWORK_REQUEST))
     {
       return ny_capability_denied(context, "network.request");
     }
 
-#ifdef CONFIG_NYABULA_CORE_MOCK_CAPABILITIES
   if (argc == 1)
     {
-      return ny_capability_resolved_promise(context, argv[0]);
+      ny_capability_client(plugin, &client);
+      ret = ny_broker_network_request(&client);
+      return ret >= 0 ? ny_capability_resolved_promise(context, argv[0])
+                      : JS_ThrowInternalError(context,
+                                              "network broker unavailable");
     }
 
   return JS_ThrowTypeError(context, "network.request requires one request");
-#else
-  return JS_ThrowInternalError(context, "network broker unavailable");
-#endif
 }
 
 static JSValue ny_capability_ui_notify(JSContext *context,
@@ -338,25 +340,25 @@ static JSValue ny_capability_ui_notify(JSContext *context,
                                        JSValueConst *argv)
 {
   struct ny_plugin_s *plugin = ny_capability_plugin(context);
+  struct ny_broker_client_s client;
   const char *message;
+  int ret;
 
   if (!ny_capability_has(plugin, NY_PERMISSION_UI_NOTIFY))
     {
       return ny_capability_denied(context, "ui.notify");
     }
 
-#ifdef CONFIG_NYABULA_CORE_MOCK_CAPABILITIES
   if (argc != 1 || (message = JS_ToCString(context, argv[0])) == NULL)
     {
       return JS_ThrowTypeError(context, "ui.notify requires one message");
     }
 
-  printf("nymock-ui[%s]: %s\n", plugin->id, message);
+  ny_capability_client(plugin, &client);
+  ret = ny_broker_ui_notify(&client, message, strlen(message));
   JS_FreeCString(context, message);
-  return ny_capability_resolved_promise(context, JS_UNDEFINED);
-#else
-  return JS_ThrowInternalError(context, "UI broker unavailable");
-#endif
+  return ret >= 0 ? ny_capability_resolved_promise(context, JS_UNDEFINED)
+                  : JS_ThrowInternalError(context, "UI broker unavailable");
 }
 
 static JSValue ny_capability_ai_invoke(JSContext *context,
@@ -364,22 +366,24 @@ static JSValue ny_capability_ai_invoke(JSContext *context,
                                        JSValueConst *argv)
 {
   struct ny_plugin_s *plugin = ny_capability_plugin(context);
+  struct ny_broker_client_s client;
+  int ret;
 
   if (!ny_capability_has(plugin, NY_PERMISSION_AI_INVOKE))
     {
       return ny_capability_denied(context, "ai.invoke");
     }
 
-#ifdef CONFIG_NYABULA_CORE_MOCK_CAPABILITIES
   if (argc == 1)
     {
-      return ny_capability_resolved_promise(context, argv[0]);
+      ny_capability_client(plugin, &client);
+      ret = ny_broker_ai_invoke(&client);
+      return ret >= 0
+                 ? ny_capability_resolved_promise(context, argv[0])
+                 : JS_ThrowInternalError(context, "AI broker unavailable");
     }
 
   return JS_ThrowTypeError(context, "ai.invoke requires one prompt");
-#else
-  return JS_ThrowInternalError(context, "AI broker unavailable");
-#endif
 }
 
 static int

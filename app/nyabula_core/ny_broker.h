@@ -48,5 +48,9 @@ int ny_broker_storage_get(const struct ny_broker_client_s *client,
                           const char *key, char **value, size_t *length);
 int ny_broker_storage_put(const struct ny_broker_client_s *client,
                           const char *key, const char *value, size_t length);
+int ny_broker_network_request(const struct ny_broker_client_s *client);
+int ny_broker_ui_notify(const struct ny_broker_client_s *client,
+                        const char *message, size_t length);
+int ny_broker_ai_invoke(const struct ny_broker_client_s *client);
 
 #endif /* __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_BROKER_H */

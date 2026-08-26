@@ -228,3 +228,49 @@ int ny_broker_storage_put(const struct ny_broker_client_s *client,
   close(fd);
   return ret;
 }
+
+int ny_broker_network_request(const struct ny_broker_client_s *client)
+{
+  if (client == NULL ||
+      (client->permissions & NY_PERMISSION_NETWORK_REQUEST) == 0)
+    {
+      return -EACCES;
+    }
+
+#ifdef CONFIG_NYABULA_CORE_MOCK_CAPABILITIES
+  return 0;
+#else
+  return -ENOSYS;
+#endif
+}
+
+int ny_broker_ui_notify(const struct ny_broker_client_s *client,
+                        const char *message, size_t length)
+{
+  if (client == NULL || client->id == NULL || message == NULL ||
+      length > INT_MAX || (client->permissions & NY_PERMISSION_UI_NOTIFY) == 0)
+    {
+      return -EACCES;
+    }
+
+#ifdef CONFIG_NYABULA_CORE_MOCK_CAPABILITIES
+  printf("nymock-ui[%s]: %.*s\n", client->id, (int)length, message);
+  return 0;
+#else
+  return -ENOSYS;
+#endif
+}
+
+int ny_broker_ai_invoke(const struct ny_broker_client_s *client)
+{
+  if (client == NULL || (client->permissions & NY_PERMISSION_AI_INVOKE) == 0)
+    {
+      return -EACCES;
+    }
+
+#ifdef CONFIG_NYABULA_CORE_MOCK_CAPABILITIES
+  return 0;
+#else
+  return -ENOSYS;
+#endif
+}
