@@ -41,9 +41,10 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define KICKPI_K7_USBHOST_VBUS +  (GPIO_PORT3 | GPIO_PIN_D6 | GPIO_OUTPUT | GPIO_OUTPUT_SET)
+#define KICKPI_K7_USBHOST_VBUS           (GPIO_PORT3 | GPIO_PIN_D6 | GPIO_OUTPUT)
 
-#define KICKPI_K7_USBHOST_POWER_DELAY_MS 100
+#define KICKPI_K7_USBHOST_POWER_DELAY_MS 600
+#define KICKPI_K7_USBHOST_POWER_OFF_MS   100
 
 /****************************************************************************
  * Private Data
@@ -69,6 +70,9 @@ int kickpi_k7_usbhost_initialize(void)
     {
       return ret;
     }
+
+  up_mdelay(KICKPI_K7_USBHOST_POWER_OFF_MS);
+  rk3576_gpio_write(KICKPI_K7_USBHOST_VBUS, true);
 
   /* GPIO3_D6 enables both load switches supplying VBUS to the three
    * external downstream ports.  Allow the GL3510 crystal and regulators
