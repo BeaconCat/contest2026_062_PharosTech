@@ -1,5 +1,5 @@
 /****************************************************************************
- * chips/rk3576/rk3576_sv6621_transport.h
+ * boards/rk3576/kickpi-k7/src/kickpi_k7_sv6621_transport.h
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -20,8 +20,8 @@
  *
  ****************************************************************************/
 
-#ifndef __VENDOR_ROCKCHIP_CHIPS_RK3576_RK3576_SV6621_TRANSPORT_H
-#define __VENDOR_ROCKCHIP_CHIPS_RK3576_RK3576_SV6621_TRANSPORT_H
+#ifndef __BOARDS_RK3576_KICKPI_K7_SRC_KICKPI_K7_SV6621_TRANSPORT_H
+#define __BOARDS_RK3576_KICKPI_K7_SRC_KICKPI_K7_SV6621_TRANSPORT_H
 
 /****************************************************************************
  * Included Files
@@ -37,7 +37,7 @@
 
 #ifndef __ASSEMBLY__
 
-FAR struct sv6621_transport_s *rk3576_sv6621_transport(void);
+FAR struct sv6621_transport_s *kickpi_k7_sv6621_transport(void);
 
 #endif /* __ASSEMBLY__ */
-#endif /* __VENDOR_ROCKCHIP_CHIPS_RK3576_RK3576_SV6621_TRANSPORT_H */
+#endif /* __BOARDS_RK3576_KICKPI_K7_SRC_KICKPI_K7_SV6621_TRANSPORT_H */
