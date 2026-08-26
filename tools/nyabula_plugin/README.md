@@ -22,11 +22,19 @@ The build command generates the runtime lifecycle exports and leaves
 ```sh
 python nyabula_plugin.py build PLUGIN --esbuild /path/to/esbuild
 python nyabula_plugin.py test PLUGIN
-python nyabula_plugin.py pack PLUGIN --output plugin.nya
-python nyabula_plugin.py install plugin.nya --root SIM_PLUGIN_ROOT
+python nyabula_plugin.py keygen --id developer --private-key developer.pem \
+  --trust-store trusted-keys.json
+python nyabula_plugin.py pack PLUGIN --output plugin.nya \
+  --private-key developer.pem --key-id developer
+python nyabula_plugin.py verify plugin.nya --trust-store trusted-keys.json \
+  --require-signature
+python nyabula_plugin.py install plugin.nya --root SIM_PLUGIN_ROOT \
+  --trust-store trusted-keys.json --require-signature
 ```
 
 `pack` creates a deterministic ZIP-compatible `.nya` archive with a complete
-SHA-256 `hashes.json`. `install` verifies the archive and atomically extracts a
-new plugin ID under the selected root. Signed upgrades and last-known-good
-activation belong to the M3 package manager.
+SHA-256 `hashes.json`. Signed packages add a `signer.json` covered by that hash
+manifest and a raw 64-byte Ed25519 signature over the exact `hashes.json`
+bytes. `install` verifies the archive and atomically extracts a new plugin ID
+under the selected root. Version upgrades and last-known-good activation belong
+to the device package manager.
