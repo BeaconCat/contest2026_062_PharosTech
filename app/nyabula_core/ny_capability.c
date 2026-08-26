@@ -67,6 +67,8 @@ static bool ny_capability_valid_key(const char *key);
 static int ny_capability_data_path(struct ny_plugin_s *plugin, const char *key,
                                    char *path, size_t size);
 static int ny_capability_write_all(int fd, const char *buffer, size_t length);
+static JSValue ny_capability_resolved_promise(JSContext *context,
+                                              JSValueConst value);
 static JSValue ny_capability_core_info(JSContext *context,
                                        JSValueConst this_value, int argc,
                                        JSValueConst *argv);
@@ -227,6 +229,32 @@ static int ny_capability_write_all(int fd, const char *buffer, size_t length)
     }
 
   return 0;
+}
+
+static JSValue ny_capability_resolved_promise(JSContext *context,
+                                              JSValueConst value)
+{
+  JSValue resolving[2];
+  JSValue promise;
+  JSValue result;
+
+  promise = JS_NewPromiseCapability(context, resolving);
+  if (JS_IsException(promise))
+    {
+      return promise;
+    }
+
+  result = JS_Call(context, resolving[0], JS_UNDEFINED, 1, &value);
+  JS_FreeValue(context, resolving[0]);
+  JS_FreeValue(context, resolving[1]);
+  if (JS_IsException(result))
+    {
+      JS_FreeValue(context, promise);
+      return result;
+    }
+
+  JS_FreeValue(context, result);
+  return promise;
 }
 
 static JSValue ny_capability_core_info(JSContext *context,
@@ -409,7 +437,7 @@ static JSValue ny_capability_network_request(JSContext *context,
 #ifdef CONFIG_NYABULA_CORE_MOCK_CAPABILITIES
   if (argc == 1)
     {
-      return JS_DupValue(context, argv[0]);
+      return ny_capability_resolved_promise(context, argv[0]);
     }
 
   return JS_ThrowTypeError(context, "network.request requires one request");
@@ -438,7 +466,7 @@ static JSValue ny_capability_ui_notify(JSContext *context,
 
   printf("nymock-ui[%s]: %s\n", plugin->id, message);
   JS_FreeCString(context, message);
-  return JS_UNDEFINED;
+  return ny_capability_resolved_promise(context, JS_UNDEFINED);
 #else
   return JS_ThrowInternalError(context, "UI broker unavailable");
 #endif
@@ -458,7 +486,7 @@ static JSValue ny_capability_ai_invoke(JSContext *context,
 #ifdef CONFIG_NYABULA_CORE_MOCK_CAPABILITIES
   if (argc == 1)
     {
-      return JS_DupValue(context, argv[0]);
+      return ny_capability_resolved_promise(context, argv[0]);
     }
 
   return JS_ThrowTypeError(context, "ai.invoke requires one prompt");

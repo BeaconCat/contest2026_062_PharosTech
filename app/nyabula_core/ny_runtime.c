@@ -44,6 +44,11 @@ static void ny_runtime_begin_event(struct ny_plugin_s *plugin);
 static int ny_runtime_interrupt(JSRuntime *runtime, void *opaque);
 static void ny_runtime_dump_exception(struct ny_plugin_s *plugin,
                                       const char *operation);
+static void ny_runtime_rejection_tracker(JSContext *context,
+                                         JSValueConst promise,
+                                         JSValueConst reason,
+                                         JS_BOOL is_handled, void *opaque);
+static int ny_runtime_drain_jobs(struct ny_plugin_s *plugin);
 static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
                            int argc, JSValueConst *argv);
 static int ny_runtime_read_source(const char *path, char **source,
@@ -104,6 +109,60 @@ static void ny_runtime_dump_exception(struct ny_plugin_s *plugin,
   JS_FreeValue(plugin->context, exception);
 }
 
+static void ny_runtime_rejection_tracker(JSContext *context,
+                                         JSValueConst promise,
+                                         JSValueConst reason,
+                                         JS_BOOL is_handled, void *opaque)
+{
+  struct ny_plugin_s *plugin = opaque;
+  const char *message;
+
+  if (is_handled)
+    {
+      if (plugin->unhandled_rejections > 0)
+        {
+          plugin->unhandled_rejections--;
+        }
+
+      return;
+    }
+
+  plugin->unhandled_rejections++;
+  message = JS_ToCString(context, reason);
+  fprintf(stderr, "nycore: unhandled rejection: %s\n",
+          message == NULL ? "unknown reason" : message);
+  if (message != NULL)
+    {
+      JS_FreeCString(context, message);
+    }
+}
+
+static int ny_runtime_drain_jobs(struct ny_plugin_s *plugin)
+{
+  JSContext *context;
+  int count = 0;
+
+  while (JS_IsJobPending(plugin->runtime))
+    {
+      int ret;
+
+      if (count++ >= CONFIG_NYABULA_CORE_JOB_LIMIT)
+        {
+          fprintf(stderr, "nycore: microtask limit exceeded\n");
+          return -ELOOP;
+        }
+
+      ret = JS_ExecutePendingJob(plugin->runtime, &context);
+      if (ret < 0)
+        {
+          ny_runtime_dump_exception(plugin, "microtask");
+          return -EFAULT;
+        }
+    }
+
+  return plugin->unhandled_rejections == 0 ? 0 : -EFAULT;
+}
+
 static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
                            int argc, JSValueConst *argv)
 {
@@ -141,12 +200,18 @@ static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
     }
 
   ny_runtime_begin_event(plugin);
+  plugin->unhandled_rejections = 0;
   result = JS_Call(plugin->context, function, global, argc, argv);
   if (JS_IsException(result))
     {
       ny_runtime_dump_exception(plugin, name);
       ret = -EFAULT;
     }
+  else
+    {
+      ret = ny_runtime_drain_jobs(plugin);
+    }
+
   plugin->deadline_ns = 0;
 
   JS_FreeValue(plugin->context, result);
@@ -267,6 +332,8 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
   JS_SetMemoryLimit(plugin->runtime, plugin->memory_limit);
   JS_SetMaxStackSize(plugin->runtime, plugin->stack_limit);
   JS_SetInterruptHandler(plugin->runtime, ny_runtime_interrupt, plugin);
+  JS_SetHostPromiseRejectionTracker(plugin->runtime,
+                                    ny_runtime_rejection_tracker, plugin);
 
   plugin->context = JS_NewContext(plugin->runtime);
   if (plugin->context == NULL)
@@ -288,6 +355,7 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
   ny_module_configure(plugin);
 
   ny_runtime_begin_event(plugin);
+  plugin->unhandled_rejections = 0;
   result = plugin->module_entry ? ny_module_evaluate(plugin, source, length)
                                 : JS_Eval(plugin->context, source, length,
                                           plugin->path, JS_EVAL_TYPE_GLOBAL);
@@ -302,7 +370,14 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
     }
 
   JS_FreeValue(plugin->context, result);
+  ret = ny_runtime_drain_jobs(plugin);
   plugin->deadline_ns = 0;
+  if (ret < 0)
+    {
+      plugin->state = NY_PLUGIN_FAILED;
+      return ret;
+    }
+
   plugin->state = NY_PLUGIN_LOADED;
   return 0;
 }

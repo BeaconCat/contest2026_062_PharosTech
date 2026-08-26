@@ -62,6 +62,7 @@ struct ny_plugin_s
   size_t memory_limit;
   size_t stack_limit;
   uint32_t event_timeout_ms;
+  uint32_t unhandled_rejections;
   bool module_entry;
   atomic_bool cancelled;
   char id[NY_PLUGIN_ID_SIZE];

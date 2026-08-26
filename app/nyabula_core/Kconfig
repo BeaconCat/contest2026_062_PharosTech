@@ -80,6 +80,11 @@ config NYABULA_CORE_STORAGE_VALUE_LIMIT
 	default 4096
 	range 128 65536
 
+config NYABULA_CORE_JOB_LIMIT
+	int "Maximum microtasks per plugin event"
+	default 256
+	range 8 4096
+
 config NYABULA_CORE_MOCK_CAPABILITIES
 	bool "Mock external capabilities"
 	default y if ARCH_SIM
