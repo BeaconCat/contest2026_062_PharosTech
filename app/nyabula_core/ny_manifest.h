@@ -73,6 +73,7 @@ struct ny_plugin_config_s
   size_t memory_limit;
   size_t stack_limit;
   uint32_t event_timeout_ms;
+  uint32_t events_per_minute;
 };
 
 /****************************************************************************

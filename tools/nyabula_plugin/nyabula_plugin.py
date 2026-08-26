@@ -217,6 +217,7 @@ def validate_manifest(path: Path) -> dict[str, object]:
         "memoryKiB": (64, 8192),
         "stackKiB": (16, 256),
         "cpuMsPerEvent": (1, 100),
+        "eventsPerMinute": (1, 600),
     }
     for name, value in limits.items():
         if name not in ranges:

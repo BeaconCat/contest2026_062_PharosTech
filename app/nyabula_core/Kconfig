@@ -60,6 +60,16 @@ config NYABULA_CORE_EVENT_TIMEOUT_MS
 	int "Maximum execution time per plugin event"
 	default 100
 
+config NYABULA_CORE_EVENTS_PER_MINUTE
+	int "Default events allowed per plugin per minute"
+	default 120
+	range 1 600
+
+config NYABULA_CORE_MAX_EVENTS_PER_MINUTE
+	int "Maximum events a plugin may request per minute"
+	default 600
+	range 1 3600
+
 config NYABULA_CORE_SOURCE_LIMIT
 	int "Maximum plugin source size"
 	default 1048576

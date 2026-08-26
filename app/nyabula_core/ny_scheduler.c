@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "ny_health.h"
 #include "ny_permission.h"
@@ -45,6 +46,7 @@
  ****************************************************************************/
 
 #define NY_PLUGIN_ID_SIZE 64
+#define NY_MINUTE_NS      60000000000ull
 
 /****************************************************************************
  * Private Types
@@ -81,6 +83,8 @@ struct ny_scheduler_slot_s
   size_t head;
   size_t tail;
   size_t count;
+  uint64_t event_window_ns;
+  uint32_t event_count;
   struct ny_scheduler_event_s events[CONFIG_NYABULA_CORE_EVENT_DEPTH];
   struct ny_plugin_s plugin;
   struct ny_wasm_plugin_s wasm;
@@ -99,6 +103,7 @@ static struct ny_scheduler_slot_s
  ****************************************************************************/
 
 static int ny_scheduler_wait(sem_t *sem);
+static uint64_t ny_scheduler_now_ns(void);
 static const char *ny_scheduler_state_name(enum ny_plugin_state_e state);
 static struct ny_scheduler_slot_s *ny_scheduler_find_locked(const char *id);
 static struct ny_scheduler_slot_s *ny_scheduler_empty_locked(void);
@@ -125,6 +130,14 @@ static int ny_scheduler_wait(sem_t *sem)
   while (ret < 0 && errno == EINTR);
 
   return ret < 0 ? -errno : 0;
+}
+
+static uint64_t ny_scheduler_now_ns(void)
+{
+  struct timespec now;
+
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  return (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
 }
 
 static const char *ny_scheduler_state_name(enum ny_plugin_state_e state)
@@ -452,7 +465,7 @@ static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
 
   if (config == NULL || config->id[0] == '\0' || config->entry[0] == '\0' ||
       strlen(config->id) >= NY_PLUGIN_ID_SIZE ||
-      strlen(config->entry) >= PATH_MAX)
+      strlen(config->entry) >= PATH_MAX || config->events_per_minute == 0)
     {
       return -EINVAL;
     }
@@ -565,6 +578,7 @@ static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
 int ny_scheduler_dispatch(const char *id, const char *event)
 {
   struct ny_scheduler_slot_s *slot;
+  uint64_t now;
   int ret;
 
   if (id == NULL || event == NULL ||
@@ -585,7 +599,27 @@ int ny_scheduler_dispatch(const char *id, const char *event)
     }
   else
     {
-      ret = ny_scheduler_enqueue_locked(slot, NY_SCHEDULER_EVENT_USER, event);
+      now = ny_scheduler_now_ns();
+      if (slot->event_window_ns == 0 ||
+          now - slot->event_window_ns >= NY_MINUTE_NS)
+        {
+          slot->event_window_ns = now;
+          slot->event_count = 0;
+        }
+
+      if (slot->event_count >= slot->config.events_per_minute)
+        {
+          ret = -EDQUOT;
+        }
+      else
+        {
+          ret = ny_scheduler_enqueue_locked(slot, NY_SCHEDULER_EVENT_USER,
+                                            event);
+          if (ret >= 0)
+            {
+              slot->event_count++;
+            }
+        }
     }
 
   nxmutex_unlock(&g_scheduler_lock);

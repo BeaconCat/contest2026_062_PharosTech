@@ -250,6 +250,17 @@ static int ny_manifest_parse_limits(const cJSON *root,
       return -EINVAL;
     }
 
+  cJSON_ArrayForEach(item, limits)
+  {
+    if (item->string == NULL || (strcmp(item->string, "memoryKiB") != 0 &&
+                                 strcmp(item->string, "stackKiB") != 0 &&
+                                 strcmp(item->string, "cpuMsPerEvent") != 0 &&
+                                 strcmp(item->string, "eventsPerMinute") != 0))
+      {
+        return -EINVAL;
+      }
+  }
+
   item = cJSON_GetObjectItemCaseSensitive(limits, "memoryKiB");
   if (item != NULL)
     {
@@ -307,6 +318,25 @@ static int ny_manifest_parse_limits(const cJSON *root,
       config->event_timeout_ms = (uint32_t)value;
     }
 
+  item = cJSON_GetObjectItemCaseSensitive(limits, "eventsPerMinute");
+  if (item != NULL)
+    {
+      if (ny_manifest_member_count(limits, "eventsPerMinute") != 1 ||
+          !cJSON_IsNumber(item))
+        {
+          return -EINVAL;
+        }
+
+      value = cJSON_GetNumberValue(item);
+      if (value < 1 || value > CONFIG_NYABULA_CORE_MAX_EVENTS_PER_MINUTE ||
+          value != (double)(uint32_t)value)
+        {
+          return -ERANGE;
+        }
+
+      config->events_per_minute = (uint32_t)value;
+    }
+
   return 0;
 }
 
@@ -328,6 +358,7 @@ void ny_manifest_default_config(struct ny_plugin_config_s *config,
   config->memory_limit = CONFIG_NYABULA_CORE_PLUGIN_MEMORY;
   config->stack_limit = CONFIG_NYABULA_CORE_PLUGIN_STACK;
   config->event_timeout_ms = CONFIG_NYABULA_CORE_EVENT_TIMEOUT_MS;
+  config->events_per_minute = CONFIG_NYABULA_CORE_EVENTS_PER_MINUTE;
 }
 
 int ny_manifest_load(const char *package_path,
@@ -474,6 +505,7 @@ int ny_manifest_load(const char *package_path,
   config->memory_limit = CONFIG_NYABULA_CORE_PLUGIN_MEMORY;
   config->stack_limit = CONFIG_NYABULA_CORE_PLUGIN_STACK;
   config->event_timeout_ms = CONFIG_NYABULA_CORE_EVENT_TIMEOUT_MS;
+  config->events_per_minute = CONFIG_NYABULA_CORE_EVENTS_PER_MINUTE;
   config->module = true;
   ret = ny_manifest_parse_limits(root, config);
   if (ret < 0)
