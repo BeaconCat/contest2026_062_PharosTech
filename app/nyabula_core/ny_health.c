@@ -444,6 +444,7 @@ int ny_health_show(const char *id, const char *version)
 int ny_health_reset(const char *id, const char *version)
 {
   char path[PATH_MAX];
+  bool removed = false;
   int ret;
 
   ret = ny_health_path(id, version, path, sizeof(path));
@@ -453,8 +454,17 @@ int ny_health_reset(const char *id, const char *version)
     }
 
   nxmutex_lock(&g_health_lock);
-  ret = unlink(path) < 0 && errno != ENOENT ? -errno : 0;
-  if (ret >= 0 && access(CONFIG_NYABULA_CORE_HEALTH_STORE, F_OK) == 0)
+  if (unlink(path) == 0)
+    {
+      removed = true;
+      ret = 0;
+    }
+  else
+    {
+      ret = errno == ENOENT ? 0 : -errno;
+    }
+
+  if (ret >= 0 && removed)
     {
       ret = ny_health_sync_parent(path);
     }
