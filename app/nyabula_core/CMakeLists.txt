@@ -30,6 +30,7 @@ if(CONFIG_CONTEST2026_062_NYABULA_CORE)
     SRCS
     nycore_main.c
     ny_runtime.c
+    ny_scheduler.c
     DEPENDS
     libqjs)
 endif()

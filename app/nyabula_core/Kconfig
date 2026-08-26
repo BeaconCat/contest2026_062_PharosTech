@@ -54,4 +54,19 @@ config NYABULA_CORE_SOURCE_LIMIT
 	int "Maximum plugin source size"
 	default 1048576
 
+config NYABULA_CORE_MAX_PLUGINS
+	int "Maximum concurrently scheduled plugins"
+	default 4
+	range 1 16
+
+config NYABULA_CORE_EVENT_DEPTH
+	int "Queued events per plugin"
+	default 8
+	range 1 64
+
+config NYABULA_CORE_EVENT_SIZE
+	int "Maximum event payload size"
+	default 256
+	range 32 4096
+
 endif
