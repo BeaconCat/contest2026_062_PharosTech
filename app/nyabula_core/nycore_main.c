@@ -139,12 +139,18 @@ static int nycore_run_package(const char *path, const char *event)
 static int nycore_start_installed(const char *id)
 {
   char path[PATH_MAX];
+  char storage_root[PATH_MAX];
   int ret;
 
-  ret = ny_package_resolve(id, path, sizeof(path));
+  ret = ny_package_storage_root(id, storage_root, sizeof(storage_root));
   if (ret >= 0)
     {
-      ret = ny_scheduler_start_package(path);
+      ret = ny_package_resolve(id, path, sizeof(path));
+    }
+
+  if (ret >= 0)
+    {
+      ret = ny_scheduler_start_installed(path, storage_root);
     }
 
   if (ret != -EACCES)
@@ -159,7 +165,7 @@ static int nycore_start_installed(const char *id)
       ret = ny_package_resolve(id, path, sizeof(path));
     }
 
-  return ret < 0 ? ret : ny_scheduler_start_package(path);
+  return ret < 0 ? ret : ny_scheduler_start_installed(path, storage_root);
 }
 
 /****************************************************************************

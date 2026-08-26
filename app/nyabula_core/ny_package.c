@@ -757,3 +757,18 @@ int ny_package_resolve_version(const char *id, const char *version, char *path,
   nxmutex_unlock(&g_package_lock);
   return ret;
 }
+
+int ny_package_storage_root(const char *id, char *path, size_t size)
+{
+  int ret;
+
+  if (path == NULL || size == 0 || !ny_package_valid_id(id))
+    {
+      return -EINVAL;
+    }
+
+  nxmutex_lock(&g_package_lock);
+  ret = ny_package_join(path, size, CONFIG_NYABULA_CORE_PACKAGE_STORE, id);
+  nxmutex_unlock(&g_package_lock);
+  return ret;
+}

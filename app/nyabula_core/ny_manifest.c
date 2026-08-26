@@ -445,6 +445,7 @@ int ny_manifest_load(const char *package_path,
     }
 
   strlcpy(config->root, package_path, sizeof(config->root));
+  strlcpy(config->storage_root, package_path, sizeof(config->storage_root));
   ret = snprintf(path, sizeof(path), "%s/%s", package_path, config->entry);
   if (ret < 0 || ret >= (int)sizeof(path))
     {

@@ -28,6 +28,8 @@
 
 int ny_scheduler_start(const char *id, const char *path);
 int ny_scheduler_start_package(const char *package_path);
+int ny_scheduler_start_installed(const char *package_path,
+                                 const char *storage_root);
 int ny_scheduler_dispatch(const char *id, const char *event);
 int ny_scheduler_stop(const char *id);
 int ny_scheduler_stop_all(void);

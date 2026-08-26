@@ -69,6 +69,7 @@ struct ny_plugin_s
   char id[NY_PLUGIN_ID_SIZE];
   char version[NY_PLUGIN_VERSION_SIZE];
   char root[PATH_MAX];
+  char storage_root[PATH_MAX];
   char path[PATH_MAX];
 };
 

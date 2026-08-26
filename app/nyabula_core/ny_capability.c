@@ -178,12 +178,13 @@ static int ny_capability_data_path(struct ny_plugin_s *plugin, const char *key,
   char directory[PATH_MAX];
   int ret;
 
-  if (plugin->root[0] == '\0' || !ny_capability_valid_key(key))
+  if (plugin->storage_root[0] == '\0' || !ny_capability_valid_key(key))
     {
       return -EINVAL;
     }
 
-  ret = snprintf(directory, sizeof(directory), "%s/data", plugin->root);
+  ret =
+      snprintf(directory, sizeof(directory), "%s/data", plugin->storage_root);
   if (ret < 0 || ret >= (int)sizeof(directory))
     {
       return -ENAMETOOLONG;

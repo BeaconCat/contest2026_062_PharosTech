@@ -320,6 +320,28 @@ int ny_scheduler_start_package(const char *package_path)
   return ret < 0 ? ret : ny_scheduler_start_config(&config);
 }
 
+int ny_scheduler_start_installed(const char *package_path,
+                                 const char *storage_root)
+{
+  struct ny_plugin_config_s config;
+  int ret;
+
+  if (storage_root == NULL || storage_root[0] == '\0' ||
+      strlen(storage_root) >= sizeof(config.storage_root))
+    {
+      return -EINVAL;
+    }
+
+  ret = ny_manifest_load(package_path, &config);
+  if (ret >= 0)
+    {
+      strlcpy(config.storage_root, storage_root, sizeof(config.storage_root));
+      ret = ny_scheduler_start_config(&config);
+    }
+
+  return ret;
+}
+
 int ny_scheduler_refresh_permissions(const char *id)
 {
   struct ny_scheduler_slot_s *slot;

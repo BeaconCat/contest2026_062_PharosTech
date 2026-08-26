@@ -57,6 +57,7 @@ struct ny_plugin_config_s
   char id[NY_PLUGIN_ID_SIZE];
   char version[NY_PLUGIN_VERSION_SIZE];
   char root[PATH_MAX];
+  char storage_root[PATH_MAX];
   char entry[PATH_MAX];
   uint64_t requested_permissions;
   uint64_t permissions;

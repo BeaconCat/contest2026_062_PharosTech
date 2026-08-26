@@ -315,6 +315,8 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
   strlcpy(plugin->id, config->id, sizeof(plugin->id));
   strlcpy(plugin->version, config->version, sizeof(plugin->version));
   strlcpy(plugin->root, config->root, sizeof(plugin->root));
+  strlcpy(plugin->storage_root, config->storage_root,
+          sizeof(plugin->storage_root));
   strlcpy(plugin->path, config->entry, sizeof(plugin->path));
 
   ret = ny_runtime_read_source(plugin->path, &source, &length);
