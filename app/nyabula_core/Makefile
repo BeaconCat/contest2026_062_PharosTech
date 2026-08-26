@@ -28,7 +28,8 @@ STACKSIZE = $(CONFIG_NYABULA_CORE_STACKSIZE)
 MODULE    = $(CONFIG_CONTEST2026_062_NYABULA_CORE)
 
 MAINSRC = nycore_main.c
-CSRCS   = ny_capability.c ny_health.c ny_manifest.c ny_module.c ny_package.c
+CSRCS   = ny_broker.c ny_capability.c ny_health.c ny_manifest.c ny_module.c
+CSRCS  += ny_package.c
 CSRCS  += ny_permission.c
 CSRCS  += ny_runtime.c ny_scheduler.c
 CSRCS  += ny_signature.c

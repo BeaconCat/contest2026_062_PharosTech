@@ -26,23 +26,17 @@
 #include <nuttx/config.h>
 
 #include <errno.h>
-#include <fcntl.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
+#include "ny_broker.h"
 #include "ny_capability.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-
-#ifndef O_NOFOLLOW
-#define O_NOFOLLOW 0
-#endif
 
 /****************************************************************************
  * Private Types
@@ -60,13 +54,11 @@ struct ny_capability_binding_s
  ****************************************************************************/
 
 static struct ny_plugin_s *ny_capability_plugin(JSContext *context);
+static void ny_capability_client(struct ny_plugin_s *plugin,
+                                 struct ny_broker_client_s *client);
 static bool ny_capability_has(struct ny_plugin_s *plugin, uint64_t permission);
 static JSValue ny_capability_denied(JSContext *context,
                                     const char *permission);
-static bool ny_capability_valid_key(const char *key);
-static int ny_capability_data_path(struct ny_plugin_s *plugin, const char *key,
-                                   char *path, size_t size);
-static int ny_capability_write_all(int fd, const char *buffer, size_t length);
 static JSValue ny_capability_resolved_promise(JSContext *context,
                                               JSValueConst value);
 static JSValue ny_capability_core_info(JSContext *context,
@@ -134,6 +126,14 @@ static struct ny_plugin_s *ny_capability_plugin(JSContext *context)
   return JS_GetContextOpaque(context);
 }
 
+static void ny_capability_client(struct ny_plugin_s *plugin,
+                                 struct ny_broker_client_s *client)
+{
+  client->id = plugin->id;
+  client->storage_root = plugin->storage_root;
+  client->permissions = atomic_load(&plugin->permissions);
+}
+
 static bool ny_capability_has(struct ny_plugin_s *plugin, uint64_t permission)
 {
   return plugin != NULL &&
@@ -143,94 +143,6 @@ static bool ny_capability_has(struct ny_plugin_s *plugin, uint64_t permission)
 static JSValue ny_capability_denied(JSContext *context, const char *permission)
 {
   return JS_ThrowTypeError(context, "permission denied: %s", permission);
-}
-
-static bool ny_capability_valid_key(const char *key)
-{
-  size_t index;
-  size_t length = strlen(key);
-
-  if (length == 0 || length >= 64 || strcmp(key, ".") == 0 ||
-      strcmp(key, "..") == 0)
-    {
-      return false;
-    }
-
-  for (index = 0; index < length; index++)
-    {
-      char value = key[index];
-
-      if (!((value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') ||
-            (value >= '0' && value <= '9') || value == '.' || value == '_' ||
-            value == '-'))
-        {
-          return false;
-        }
-    }
-
-  return true;
-}
-
-static int ny_capability_data_path(struct ny_plugin_s *plugin, const char *key,
-                                   char *path, size_t size)
-{
-  struct stat status;
-  char directory[PATH_MAX];
-  int ret;
-
-  if (plugin->storage_root[0] == '\0' || !ny_capability_valid_key(key))
-    {
-      return -EINVAL;
-    }
-
-  ret =
-      snprintf(directory, sizeof(directory), "%s/data", plugin->storage_root);
-  if (ret < 0 || ret >= (int)sizeof(directory))
-    {
-      return -ENAMETOOLONG;
-    }
-
-  if (mkdir(directory, 0770) < 0 && errno != EEXIST)
-    {
-      return -errno;
-    }
-
-  if (lstat(directory, &status) < 0 || !S_ISDIR(status.st_mode))
-    {
-      return -ENOTDIR;
-    }
-
-  ret = snprintf(path, size, "%s/%s", directory, key);
-  return ret < 0 || ret >= (int)size ? -ENAMETOOLONG : 0;
-}
-
-static int ny_capability_write_all(int fd, const char *buffer, size_t length)
-{
-  size_t offset = 0;
-
-  while (offset < length)
-    {
-      ssize_t count = write(fd, buffer + offset, length - offset);
-
-      if (count < 0)
-        {
-          if (errno == EINTR)
-            {
-              continue;
-            }
-
-          return -errno;
-        }
-
-      if (count == 0)
-        {
-          return -EIO;
-        }
-
-      offset += (size_t)count;
-    }
-
-  return 0;
 }
 
 static JSValue ny_capability_resolved_promise(JSContext *context,
@@ -314,12 +226,11 @@ static JSValue ny_capability_storage_get(JSContext *context,
                                          JSValueConst *argv)
 {
   struct ny_plugin_s *plugin = ny_capability_plugin(context);
-  char path[PATH_MAX];
+  struct ny_broker_client_s client;
   char *buffer;
   const char *key;
+  size_t length;
   JSValue result;
-  ssize_t count;
-  int fd;
   int ret;
 
   if (!ny_capability_has(plugin, NY_PERMISSION_STORAGE_READ))
@@ -332,38 +243,23 @@ static JSValue ny_capability_storage_get(JSContext *context,
       return JS_ThrowTypeError(context, "storage.get requires one key");
     }
 
-  ret = ny_capability_data_path(plugin, key, path, sizeof(path));
+  ny_capability_client(plugin, &client);
+  ret = ny_broker_storage_get(&client, key, &buffer, &length);
   JS_FreeCString(context, key);
-  if (ret < 0)
+  if (ret == -ENOENT)
     {
-      return JS_ThrowTypeError(context, "invalid storage key");
+      return JS_NULL;
     }
 
-  fd = open(path, O_RDONLY | O_NOFOLLOW);
-  if (fd < 0)
+  if (ret < 0)
     {
-      return errno == ENOENT
-                 ? JS_NULL
+      return ret == -EINVAL ? JS_ThrowTypeError(context, "invalid storage key")
+             : ret == -ENOMEM
+                 ? JS_ThrowOutOfMemory(context)
                  : JS_ThrowInternalError(context, "storage read failed");
     }
 
-  buffer = malloc(CONFIG_NYABULA_CORE_STORAGE_VALUE_LIMIT + 1);
-  if (buffer == NULL)
-    {
-      close(fd);
-      return JS_ThrowOutOfMemory(context);
-    }
-
-  count = read(fd, buffer, CONFIG_NYABULA_CORE_STORAGE_VALUE_LIMIT + 1);
-  close(fd);
-  if (count < 0 || count > CONFIG_NYABULA_CORE_STORAGE_VALUE_LIMIT)
-    {
-      free(buffer);
-      return JS_ThrowInternalError(context, "storage value invalid");
-    }
-
-  buffer[count] = '\0';
-  result = JS_NewStringLen(context, buffer, (size_t)count);
+  result = JS_NewStringLen(context, buffer, length);
   free(buffer);
   return result;
 }
@@ -373,11 +269,10 @@ static JSValue ny_capability_storage_put(JSContext *context,
                                          JSValueConst *argv)
 {
   struct ny_plugin_s *plugin = ny_capability_plugin(context);
-  char path[PATH_MAX];
+  struct ny_broker_client_s client;
   const char *key;
   const char *value;
   size_t length;
-  int fd;
   int ret;
 
   if (!ny_capability_has(plugin, NY_PERMISSION_STORAGE_WRITE))
@@ -397,30 +292,20 @@ static JSValue ny_capability_storage_put(JSContext *context,
       return JS_EXCEPTION;
     }
 
-  ret = ny_capability_data_path(plugin, key, path, sizeof(path));
+  ny_capability_client(plugin, &client);
+  ret = ny_broker_storage_put(&client, key, value, length);
   JS_FreeCString(context, key);
-  if (ret < 0)
+  JS_FreeCString(context, value);
+  if (ret == -EINVAL)
     {
-      JS_FreeCString(context, value);
       return JS_ThrowTypeError(context, "invalid storage key");
     }
 
-  if (length > CONFIG_NYABULA_CORE_STORAGE_VALUE_LIMIT)
+  if (ret == -EFBIG)
     {
-      JS_FreeCString(context, value);
       return JS_ThrowRangeError(context, "storage value too large");
     }
 
-  fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0660);
-  if (fd < 0)
-    {
-      JS_FreeCString(context, value);
-      return JS_ThrowInternalError(context, "storage write failed");
-    }
-
-  ret = ny_capability_write_all(fd, value, length);
-  close(fd);
-  JS_FreeCString(context, value);
   return ret < 0 ? JS_ThrowInternalError(context, "storage write failed")
                  : JS_UNDEFINED;
 }
