@@ -39,6 +39,7 @@
 
 static void nycore_usage(void);
 static int nycore_run(const char *path, const char *event);
+static int nycore_run_package(const char *path, const char *event);
 
 /****************************************************************************
  * Private Functions
@@ -48,6 +49,7 @@ static void nycore_usage(void)
 {
   fprintf(stderr, "Usage:\n"
                   "  nycore run <plugin.js> [-e <event>]\n"
+                  "  nycore run-package <package-dir> [-e <event>]\n"
                   "  nycore start <id> <plugin.js>\n"
                   "  nycore event <id> <event>\n"
                   "  nycore stop <id>\n"
@@ -64,6 +66,42 @@ static int nycore_run(const char *path, const char *event)
   if (ret < 0)
     {
       fprintf(stderr, "nycore: load failed: %d\n", ret);
+      ny_plugin_destroy(&plugin);
+      return ret;
+    }
+
+  ret = ny_plugin_start(&plugin);
+  if (ret >= 0 && event != NULL)
+    {
+      ret = ny_plugin_dispatch(&plugin, event);
+    }
+
+  if (ret >= 0)
+    {
+      ret = ny_plugin_stop(&plugin);
+    }
+
+  ny_plugin_destroy(&plugin);
+  return ret;
+}
+
+static int nycore_run_package(const char *path, const char *event)
+{
+  struct ny_plugin_config_s config;
+  struct ny_plugin_s plugin;
+  int ret;
+
+  ret = ny_manifest_load(path, &config);
+  if (ret < 0)
+    {
+      fprintf(stderr, "nycore: manifest rejected: %d\n", ret);
+      return ret;
+    }
+
+  ret = ny_plugin_load_config(&plugin, &config);
+  if (ret < 0)
+    {
+      fprintf(stderr, "nycore: package load failed: %d\n", ret);
       ny_plugin_destroy(&plugin);
       return ret;
     }
@@ -119,6 +157,29 @@ int main(int argc, char *argv[])
         }
 
       ret = nycore_run(argv[2], event);
+    }
+  else if (strcmp(argv[1], "run-package") == 0)
+    {
+      const char *event = NULL;
+
+      if (argc != 3 && argc != 5)
+        {
+          nycore_usage();
+          return EXIT_FAILURE;
+        }
+
+      if (argc == 5)
+        {
+          if (strcmp(argv[3], "-e") != 0)
+            {
+              nycore_usage();
+              return EXIT_FAILURE;
+            }
+
+          event = argv[4];
+        }
+
+      ret = nycore_run_package(argv[2], event);
     }
   else if (strcmp(argv[1], "start") == 0 && argc == 4)
     {

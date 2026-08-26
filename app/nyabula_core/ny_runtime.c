@@ -69,8 +69,7 @@ static void ny_runtime_begin_event(struct ny_plugin_s *plugin)
 {
   atomic_store(&plugin->cancelled, false);
   plugin->deadline_ns =
-      ny_runtime_now_ns() +
-      (uint64_t)CONFIG_NYABULA_CORE_EVENT_TIMEOUT_MS * 1000000ull;
+      ny_runtime_now_ns() + (uint64_t)plugin->event_timeout_ms * 1000000ull;
 }
 
 static int ny_runtime_interrupt(JSRuntime *runtime, void *opaque)
@@ -228,6 +227,20 @@ static int ny_runtime_read_source(const char *path, char **source,
 
 int ny_plugin_load(struct ny_plugin_s *plugin, const char *path)
 {
+  struct ny_plugin_config_s config;
+
+  if (path == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ny_manifest_default_config(&config, path);
+  return ny_plugin_load_config(plugin, &config);
+}
+
+int ny_plugin_load_config(struct ny_plugin_s *plugin,
+                          const struct ny_plugin_config_s *config)
+{
   JSValue global;
   JSValue result;
   JSValue log_function;
@@ -235,7 +248,9 @@ int ny_plugin_load(struct ny_plugin_s *plugin, const char *path)
   size_t length;
   int ret;
 
-  if (plugin == NULL || path == NULL || path[0] == '\0')
+  if (plugin == NULL || config == NULL || config->entry[0] == '\0' ||
+      config->memory_limit == 0 || config->stack_limit == 0 ||
+      config->event_timeout_ms == 0)
     {
       return -EINVAL;
     }
@@ -243,9 +258,15 @@ int ny_plugin_load(struct ny_plugin_s *plugin, const char *path)
   memset(plugin, 0, sizeof(*plugin));
   plugin->state = NY_PLUGIN_EMPTY;
   atomic_init(&plugin->cancelled, false);
-  strlcpy(plugin->path, path, sizeof(plugin->path));
+  plugin->permissions = config->permissions;
+  plugin->memory_limit = config->memory_limit;
+  plugin->stack_limit = config->stack_limit;
+  plugin->event_timeout_ms = config->event_timeout_ms;
+  strlcpy(plugin->id, config->id, sizeof(plugin->id));
+  strlcpy(plugin->root, config->root, sizeof(plugin->root));
+  strlcpy(plugin->path, config->entry, sizeof(plugin->path));
 
-  ret = ny_runtime_read_source(path, &source, &length);
+  ret = ny_runtime_read_source(plugin->path, &source, &length);
   if (ret < 0)
     {
       return ret;
@@ -258,8 +279,8 @@ int ny_plugin_load(struct ny_plugin_s *plugin, const char *path)
       return -ENOMEM;
     }
 
-  JS_SetMemoryLimit(plugin->runtime, CONFIG_NYABULA_CORE_PLUGIN_MEMORY);
-  JS_SetMaxStackSize(plugin->runtime, CONFIG_NYABULA_CORE_PLUGIN_STACK);
+  JS_SetMemoryLimit(plugin->runtime, plugin->memory_limit);
+  JS_SetMaxStackSize(plugin->runtime, plugin->stack_limit);
   JS_SetInterruptHandler(plugin->runtime, ny_runtime_interrupt, plugin);
 
   plugin->context = JS_NewContext(plugin->runtime);
@@ -277,7 +298,8 @@ int ny_plugin_load(struct ny_plugin_s *plugin, const char *path)
   JS_FreeValue(plugin->context, global);
 
   ny_runtime_begin_event(plugin);
-  result = JS_Eval(plugin->context, source, length, path, JS_EVAL_TYPE_GLOBAL);
+  result = JS_Eval(plugin->context, source, length, plugin->path,
+                   JS_EVAL_TYPE_GLOBAL);
   plugin->deadline_ns = 0;
   free(source);
   if (JS_IsException(result))

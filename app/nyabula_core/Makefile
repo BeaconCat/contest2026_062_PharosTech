@@ -28,6 +28,6 @@ STACKSIZE = $(CONFIG_NYABULA_CORE_STACKSIZE)
 MODULE    = $(CONFIG_CONTEST2026_062_NYABULA_CORE)
 
 MAINSRC = nycore_main.c
-CSRCS   = ny_runtime.c ny_scheduler.c
+CSRCS   = ny_manifest.c ny_runtime.c ny_scheduler.c
 
 include $(APPDIR)/Application.mk

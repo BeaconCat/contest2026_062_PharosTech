@@ -24,6 +24,7 @@ config CONTEST2026_062_NYABULA_CORE
 	bool "Nyabula Core plugin launcher"
 	default n
 	select INTERPRETERS_QUICKJS
+	select NETUTILS_CJSON
 	---help---
 		Enable the Nyabula Core plugin launcher and its isolated QuickJS
 		runtime.
@@ -53,6 +54,11 @@ config NYABULA_CORE_EVENT_TIMEOUT_MS
 config NYABULA_CORE_SOURCE_LIMIT
 	int "Maximum plugin source size"
 	default 1048576
+
+config NYABULA_CORE_MANIFEST_LIMIT
+	int "Maximum plugin manifest size"
+	default 16384
+	range 1024 65536
 
 config NYABULA_CORE_MAX_PLUGINS
 	int "Maximum concurrently scheduled plugins"

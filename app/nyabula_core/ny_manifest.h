@@ -1,5 +1,5 @@
 /****************************************************************************
- * packages/demos/contest2026_062_nyabula_core/ny_runtime.h
+ * packages/demos/contest2026_062_nyabula_core/ny_manifest.h
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -19,8 +19,8 @@
  *
  ****************************************************************************/
 
-#ifndef __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_RUNTIME_H
-#define __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_RUNTIME_H
+#ifndef __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_MANIFEST_H
+#define __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_MANIFEST_H
 
 /****************************************************************************
  * Included Files
@@ -29,54 +29,47 @@
 #include <nuttx/config.h>
 
 #include <limits.h>
-#include <stdatomic.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#include <quickjs/quickjs.h>
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
-#include "ny_manifest.h"
+#define NY_PLUGIN_ID_SIZE             64
+#define NY_PLUGIN_VERSION_SIZE        32
+#define NY_PLUGIN_API_VERSION         1
+
+#define NY_PERMISSION_CORE_LOG        (1ull << 0)
+#define NY_PERMISSION_STORAGE_READ    (1ull << 1)
+#define NY_PERMISSION_STORAGE_WRITE   (1ull << 2)
+#define NY_PERMISSION_NETWORK_REQUEST (1ull << 3)
+#define NY_PERMISSION_UI_NOTIFY       (1ull << 4)
+#define NY_PERMISSION_AI_INVOKE       (1ull << 5)
 
 /****************************************************************************
  * Public Types
  ****************************************************************************/
 
-enum ny_plugin_state_e
+struct ny_plugin_config_s
 {
-  NY_PLUGIN_EMPTY = 0,
-  NY_PLUGIN_LOADED,
-  NY_PLUGIN_RUNNING,
-  NY_PLUGIN_STOPPED,
-  NY_PLUGIN_FAILED
-};
-
-struct ny_plugin_s
-{
-  JSRuntime *runtime;
-  JSContext *context;
-  enum ny_plugin_state_e state;
-  uint64_t deadline_ns;
+  char id[NY_PLUGIN_ID_SIZE];
+  char version[NY_PLUGIN_VERSION_SIZE];
+  char root[PATH_MAX];
+  char entry[PATH_MAX];
   uint64_t permissions;
   size_t memory_limit;
   size_t stack_limit;
   uint32_t event_timeout_ms;
-  atomic_bool cancelled;
-  char id[NY_PLUGIN_ID_SIZE];
-  char root[PATH_MAX];
-  char path[PATH_MAX];
 };
 
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
-int ny_plugin_load(struct ny_plugin_s *plugin, const char *path);
-int ny_plugin_load_config(struct ny_plugin_s *plugin,
-                          const struct ny_plugin_config_s *config);
-int ny_plugin_start(struct ny_plugin_s *plugin);
-int ny_plugin_dispatch(struct ny_plugin_s *plugin, const char *event);
-int ny_plugin_stop(struct ny_plugin_s *plugin);
-void ny_plugin_destroy(struct ny_plugin_s *plugin);
+void ny_manifest_default_config(struct ny_plugin_config_s *config,
+                                const char *entry);
+int ny_manifest_load(const char *package_path,
+                     struct ny_plugin_config_s *config);
 
-#endif /* __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_RUNTIME_H */
+#endif /* __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_MANIFEST_H */
