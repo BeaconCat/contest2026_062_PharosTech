@@ -1007,7 +1007,8 @@ int rk3576_config_gpio(gpio_pinset_t pinset)
 
           /* Set the initial output value before changing direction */
 
-          rk3576_gpio_write(pinset, (pinset & GPIO_OUTPUT_SET) != 0);
+          RK3576_GPIO_V2_WRITE_BIT(RK3576_GPIO_SWPORTA_DR(port), pin,
+                                   (pinset & GPIO_OUTPUT_SET) != 0);
 
           /* Configure as output */
 
@@ -1078,13 +1079,11 @@ int rk3576_config_gpio(gpio_pinset_t pinset)
             }
           else if ((pinset & GPIO_PUPD_MASK) == GPIO_PULLDOWN)
             {
-              rk3576_pull_set(RK3576_IOC_ADDR, port, pin,
-                              RK3576_PULL_DOWN);
+              rk3576_pull_set(RK3576_IOC_ADDR, port, pin, RK3576_PULL_DOWN);
             }
           else
             {
-              rk3576_pull_set(RK3576_IOC_ADDR, port, pin,
-                              RK3576_PULL_DISABLE);
+              rk3576_pull_set(RK3576_IOC_ADDR, port, pin, RK3576_PULL_DISABLE);
             }
         }
         break;
