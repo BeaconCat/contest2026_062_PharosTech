@@ -59,12 +59,11 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define WIFI_SDIO_PIN(pin) \
-  (GPIO_PORT1 | (pin) | GPIO_ALT | GPIO_AF2 | GPIO_PULLUP)
+#define WIFI_SDIO_PIN(pin)      (GPIO_PORT1 | (pin))
 
-#define WIFI_WL_REG_ON (GPIO_PORT1 | GPIO_PIN_C6 | GPIO_OUTPUT)
-#define WIFI_BT_RST    (GPIO_PORT1 | GPIO_PIN_C7 | GPIO_OUTPUT)
-#define WIFI_HOST_WAKE (GPIO_PORT1 | GPIO_PIN_D5)
+#define WIFI_WL_REG_ON          (GPIO_PORT1 | GPIO_PIN_C6)
+#define WIFI_BT_RST             (GPIO_PORT1 | GPIO_PIN_C7)
+#define WIFI_HOST_WAKE          (GPIO_PORT1 | GPIO_PIN_D5)
 
 #define WIFI_HOST_WAKE_ACTIVITY 1
 
@@ -128,17 +127,38 @@ static const gpio_pinset_t g_wifi_sdio_pins[] = {
   WIFI_SDIO_PIN(GPIO_PIN_C1), /* CLK */
 };
 
+static const gpio_pinset_t g_wifi_companion_pins[] = {
+  WIFI_BT_RST,
+  GPIO_PORT1 | GPIO_PIN_D4,
+  GPIO_PORT1 | GPIO_PIN_C2,
+  GPIO_PORT1 | GPIO_PIN_C3,
+  GPIO_PORT1 | GPIO_PIN_C4,
+  GPIO_PORT1 | GPIO_PIN_C5,
+};
+
+static FAR struct gpio_dev_s *g_wifi_sdio_handles[nitems(g_wifi_sdio_pins)];
+static FAR struct gpio_dev_s
+    *g_wifi_companion_handles[nitems(g_wifi_companion_pins)];
+static FAR struct gpio_dev_s *g_wifi_i2c_handles[2];
+static FAR struct gpio_dev_s *g_wifi_wl_reg_on;
+
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
 static int kickpi_k7_wifi_enable_32k(void);
+static int kickpi_k7_wifi_config_alt(gpio_pinset_t pinset, unsigned int af,
+                                     enum rk3576_gpio_pull_e pull,
+                                     FAR struct gpio_dev_s **handle);
+static int kickpi_k7_wifi_config_output(gpio_pinset_t pinset, bool value,
+                                        FAR struct gpio_dev_s **handle);
 static int kickpi_k7_wifi_power_on(FAR void *arg);
 static void kickpi_k7_wifi_power_off(FAR void *arg);
-static int kickpi_k7_wifi_load_address(
-    FAR void *arg, uint8_t address[SV6621_MAC_LENGTH]);
-static int kickpi_k7_wifi_store_address(
-    FAR void *arg, FAR const uint8_t address[SV6621_MAC_LENGTH]);
+static int kickpi_k7_wifi_load_address(FAR void *arg,
+                                       uint8_t address[SV6621_MAC_LENGTH]);
+static int
+kickpi_k7_wifi_store_address(FAR void *arg,
+                             FAR const uint8_t address[SV6621_MAC_LENGTH]);
 #ifdef CONFIG_SV6621_PM
 static int kickpi_k7_wifi_host_wake_isr(FAR struct gpio_dev_s *dev,
                                         uint8_t pin);
@@ -147,6 +167,47 @@ static int kickpi_k7_wifi_host_wake_isr(FAR struct gpio_dev_s *dev,
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
+
+static int kickpi_k7_wifi_config_alt(gpio_pinset_t pinset, unsigned int af,
+                                     enum rk3576_gpio_pull_e pull,
+                                     FAR struct gpio_dev_s **handle)
+{
+  int ret;
+
+  if (*handle == NULL)
+    {
+      ret = rk3576_gpio_get(pinset, handle);
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+
+  rk3576_gpio_set_pull(*handle, pull);
+  rk3576_gpio_set_schmitt(*handle, true);
+  rk3576_gpio_set_af(*handle, af);
+  return OK;
+}
+
+static int kickpi_k7_wifi_config_output(gpio_pinset_t pinset, bool value,
+                                        FAR struct gpio_dev_s **handle)
+{
+  int ret;
+
+  if (*handle == NULL)
+    {
+      ret = rk3576_gpio_get(pinset, handle);
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+
+  rk3576_gpio_set_af(*handle, 0);
+  rk3576_gpio_write_bit(*handle, value);
+  rk3576_gpio_set_mode(*handle, RK3576_GPIO_OUTPUT);
+  return OK;
+}
 
 /****************************************************************************
  * Name: kickpi_k7_wifi_enable_32k
@@ -179,10 +240,15 @@ static int kickpi_k7_wifi_enable_32k(void)
                             .buffer = &rback,
                             .length = 1 };
 
-  rk3576_config_gpio(GPIO_PORT0 | GPIO_PIN_B7 | GPIO_ALT | GPIO_AF9 |
-                     GPIO_PULLUP); /* I2C2 SCL */
-  rk3576_config_gpio(GPIO_PORT0 | GPIO_PIN_C0 | GPIO_ALT | GPIO_AF9 |
-                     GPIO_PULLUP); /* I2C2 SDA */
+  if (kickpi_k7_wifi_config_alt(GPIO_PORT0 | GPIO_PIN_B7, 9,
+                                RK3576_GPIO_PULLUP,
+                                &g_wifi_i2c_handles[0]) < 0 ||
+      kickpi_k7_wifi_config_alt(GPIO_PORT0 | GPIO_PIN_C0, 9,
+                                RK3576_GPIO_PULLUP,
+                                &g_wifi_i2c_handles[1]) < 0)
+    {
+      return -EBUSY;
+    }
 
   /* rk3576_i2c_initialize ungates the controller clock via the CRU
    * driver, so no explicit gate call is needed here.
@@ -204,8 +270,7 @@ static int kickpi_k7_wifi_enable_32k(void)
       up_mdelay(3);
       pr = I2C_TRANSFER(i2c, &pmsg, 1);
       rd = I2C_TRANSFER(i2c, &dmsg, 1);
-      if (wr >= 0 && pr >= 0 && rd >= 0 &&
-          (rback & 0x83) == 0x80)
+      if (wr >= 0 && pr >= 0 && rd >= 0 && (rback & 0x83) == 0x80)
         {
           up_mdelay(150);
           return OK;
@@ -228,9 +293,9 @@ static int kickpi_k7_wifi_enable_32k(void)
 static int kickpi_k7_wifi_power_on(FAR void *arg)
 {
   (void)arg;
-  rk3576_gpio_write(WIFI_WL_REG_ON, false);
+  rk3576_gpio_write_bit(g_wifi_wl_reg_on, false);
   up_mdelay(1000);
-  rk3576_gpio_write(WIFI_WL_REG_ON, true);
+  rk3576_gpio_write_bit(g_wifi_wl_reg_on, true);
   up_mdelay(200);
   return 0;
 }
@@ -242,15 +307,15 @@ static int kickpi_k7_wifi_power_on(FAR void *arg)
 static void kickpi_k7_wifi_power_off(FAR void *arg)
 {
   (void)arg;
-  rk3576_gpio_write(WIFI_WL_REG_ON, false);
+  rk3576_gpio_write_bit(g_wifi_wl_reg_on, false);
 }
 
 /****************************************************************************
  * Name: kickpi_k7_wifi_load_address
  ****************************************************************************/
 
-static int kickpi_k7_wifi_load_address(
-    FAR void *arg, uint8_t address[SV6621_MAC_LENGTH])
+static int kickpi_k7_wifi_load_address(FAR void *arg,
+                                       uint8_t address[SV6621_MAC_LENGTH])
 {
   FAR uint8_t *saved = arg;
 
@@ -267,8 +332,9 @@ static int kickpi_k7_wifi_load_address(
  * Name: kickpi_k7_wifi_store_address
  ****************************************************************************/
 
-static int kickpi_k7_wifi_store_address(
-    FAR void *arg, FAR const uint8_t address[SV6621_MAC_LENGTH])
+static int
+kickpi_k7_wifi_store_address(FAR void *arg,
+                             FAR const uint8_t address[SV6621_MAC_LENGTH])
 {
   memcpy(arg, address, SV6621_MAC_LENGTH);
   return 0;
@@ -303,8 +369,7 @@ static uint8_t g_kickpi_k7_wifi_address[SV6621_MAC_LENGTH];
 static FAR struct sv6621_dev_s *g_kickpi_k7_wifi_dev;
 #ifdef CONFIG_SV6621_PM
 static FAR struct gpio_dev_s *g_kickpi_k7_wifi_host_wake;
-static const struct sv6621_suspend_s g_kickpi_k7_wifi_suspend =
-{
+static const struct sv6621_suspend_s g_kickpi_k7_wifi_suspend = {
   .wake_enabled = true,
   .wake_flags = SV6621_WAKE_DISCONNECT | SV6621_WAKE_MAGIC_PACKET |
                 SV6621_WAKE_GTK_REKEY_FAILURE,
@@ -428,7 +493,12 @@ int kickpi_k7_wifi_initialize(void)
   for (i = 0;
        i < (int)(sizeof(g_wifi_sdio_pins) / sizeof(g_wifi_sdio_pins[0])); i++)
     {
-      rk3576_config_gpio(g_wifi_sdio_pins[i]);
+      ret = kickpi_k7_wifi_config_alt(
+          g_wifi_sdio_pins[i], 2, RK3576_GPIO_PULLUP, &g_wifi_sdio_handles[i]);
+      if (ret < 0)
+        {
+          return ret;
+        }
     }
 
   putreg32((0xffu << 16) | 0xffu, WIFI_IOC_DRV0);
@@ -441,19 +511,21 @@ int kickpi_k7_wifi_initialize(void)
    * networking build; BT wake and the UART4 lines remain idle-high.
    */
 
-  rk3576_config_gpio(WIFI_BT_RST);
-  rk3576_gpio_write(WIFI_BT_RST, false);
-  rk3576_config_gpio(GPIO_PORT1 | GPIO_PIN_D4 | GPIO_OUTPUT);
-  rk3576_gpio_write(GPIO_PORT1 | GPIO_PIN_D4 | GPIO_OUTPUT, true);
-  rk3576_config_gpio(GPIO_PORT1 | GPIO_PIN_C2 | GPIO_OUTPUT);
-  rk3576_gpio_write(GPIO_PORT1 | GPIO_PIN_C2 | GPIO_OUTPUT, true);
-  rk3576_config_gpio(GPIO_PORT1 | GPIO_PIN_C3 | GPIO_OUTPUT);
-  rk3576_gpio_write(GPIO_PORT1 | GPIO_PIN_C3 | GPIO_OUTPUT, true);
-  rk3576_config_gpio(GPIO_PORT1 | GPIO_PIN_C4 | GPIO_OUTPUT);
-  rk3576_gpio_write(GPIO_PORT1 | GPIO_PIN_C4 | GPIO_OUTPUT, true);
-  rk3576_config_gpio(GPIO_PORT1 | GPIO_PIN_C5 | GPIO_OUTPUT);
-  rk3576_gpio_write(GPIO_PORT1 | GPIO_PIN_C5 | GPIO_OUTPUT, true);
-  rk3576_config_gpio(WIFI_WL_REG_ON);
+  for (i = 0; i < (int)nitems(g_wifi_companion_pins); i++)
+    {
+      ret = kickpi_k7_wifi_config_output(g_wifi_companion_pins[i], i != 0,
+                                         &g_wifi_companion_handles[i]);
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+
+  ret = kickpi_k7_wifi_config_output(WIFI_WL_REG_ON, false, &g_wifi_wl_reg_on);
+  if (ret < 0)
+    {
+      return ret;
+    }
 
   ret = kickpi_k7_wifi_enable_32k();
   if (ret < 0)
@@ -472,8 +544,7 @@ int kickpi_k7_wifi_initialize(void)
   config.nvram.data = g_sv6621_nv_start;
   config.nvram.length = g_sv6621_nv_end - g_sv6621_nv_start;
   config.calibration.data = g_sv6621_calib_start;
-  config.calibration.length =
-      g_sv6621_calib_end - g_sv6621_calib_start;
+  config.calibration.length = g_sv6621_calib_end - g_sv6621_calib_start;
   config.regulatory = &g_kickpi_k7_wifi_regulatory_domains[0];
   config.regulatory_domains = g_kickpi_k7_wifi_regulatory_domains;
   config.regulatory_domain_count =
@@ -507,8 +578,7 @@ int kickpi_k7_wifi_initialize(void)
   rk3576_gpio_set_mode(g_kickpi_k7_wifi_host_wake, RK3576_GPIO_INPUT);
   rk3576_gpio_set_pull(g_kickpi_k7_wifi_host_wake, RK3576_GPIO_PULLDOWN);
   rk3576_gpio_set_schmitt(g_kickpi_k7_wifi_host_wake, true);
-  rk3576_gpio_set_int_type(g_kickpi_k7_wifi_host_wake,
-                           RK3576_GPIO_INT_EDGE);
+  rk3576_gpio_set_int_type(g_kickpi_k7_wifi_host_wake, RK3576_GPIO_INT_EDGE);
   rk3576_gpio_set_int_pol(g_kickpi_k7_wifi_host_wake,
                           RK3576_GPIO_INT_HIGH_RISING);
 
@@ -556,8 +626,7 @@ int kickpi_k7_wifi_prepare_sleep(void)
       return -ENODEV;
     }
 
-  return sv6621_suspend(g_kickpi_k7_wifi_dev,
-                        &g_kickpi_k7_wifi_suspend);
+  return sv6621_suspend(g_kickpi_k7_wifi_dev, &g_kickpi_k7_wifi_suspend);
 }
 
 /****************************************************************************
