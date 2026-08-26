@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ny_health.h"
 #include "ny_package.h"
 #include "ny_permission.h"
 #include "ny_runtime.h"
@@ -65,6 +66,8 @@ static void nycore_usage(void)
                   "  nycore promote <id> <version>\n"
                   "  nycore rollback <id>\n"
                   "  nycore start-installed <id>\n"
+                  "  nycore health <id> <version>\n"
+                  "  nycore unquarantine <id> <version>\n"
                   "  nycore list\n");
 }
 
@@ -268,6 +271,14 @@ int main(int argc, char *argv[])
         {
           ret = ny_scheduler_start_package(path);
         }
+    }
+  else if (strcmp(argv[1], "health") == 0 && argc == 4)
+    {
+      ret = ny_health_show(argv[2], argv[3]);
+    }
+  else if (strcmp(argv[1], "unquarantine") == 0 && argc == 4)
+    {
+      ret = ny_health_reset(argv[2], argv[3]);
     }
   else if (strcmp(argv[1], "list") == 0 && argc == 2)
     {

@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ny_health.h"
 #include "ny_permission.h"
 #include "ny_runtime.h"
 #include "ny_scheduler.h"
@@ -266,6 +267,15 @@ static int ny_scheduler_worker(int argc, char *argv[])
   slot->state = ret < 0 ? NY_PLUGIN_FAILED : slot->plugin.state;
   nxmutex_unlock(&g_scheduler_lock);
 
+  if (ret < 0)
+    {
+      ny_health_record_failure(&slot->config);
+    }
+  else
+    {
+      ny_health_record_success(&slot->config);
+    }
+
   ny_plugin_destroy(&slot->plugin);
 
   nxmutex_lock(&g_scheduler_lock);
@@ -370,6 +380,12 @@ static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
       strlen(config->entry) >= PATH_MAX)
     {
       return -EINVAL;
+    }
+
+  ret = ny_health_check(config);
+  if (ret < 0)
+    {
+      return ret;
     }
 
   nxmutex_lock(&g_scheduler_lock);

@@ -30,6 +30,7 @@ if(CONFIG_CONTEST2026_062_NYABULA_CORE)
     SRCS
     nycore_main.c
     ny_capability.c
+    ny_health.c
     ny_manifest.c
     ny_module.c
     ny_package.c

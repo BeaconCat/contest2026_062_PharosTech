@@ -79,6 +79,15 @@ config NYABULA_CORE_PACKAGE_STORE
 	string "Installed plugin package store"
 	default "/data/nyabula/apps"
 
+config NYABULA_CORE_HEALTH_STORE
+	string "Plugin crash health store"
+	default "/data/nyabula/health"
+
+config NYABULA_CORE_QUARANTINE_FAILURES
+	int "Failures before a plugin version is quarantined"
+	default 3
+	range 1 100
+
 config NYABULA_CORE_PACKAGE_FILE_LIMIT
 	int "Maximum files per plugin package"
 	default 128
