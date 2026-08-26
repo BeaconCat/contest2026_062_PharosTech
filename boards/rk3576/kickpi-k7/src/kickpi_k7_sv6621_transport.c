@@ -1,5 +1,5 @@
 /****************************************************************************
- * chips/rk3576/rk3576_sv6621_transport.c
+ * boards/rk3576/kickpi-k7/src/kickpi_k7_sv6621_transport.c
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -41,8 +41,8 @@
 #include <nuttx/spinlock.h>
 
 #include "arm64_internal.h"
+#include "kickpi_k7_sv6621_transport.h"
 #include "rk3576_sdmmc.h"
-#include "rk3576_sv6621_transport.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -1189,7 +1189,7 @@ static int rk3576_sv6621_ack_irq(FAR struct sv6621_transport_s *transport)
  * Public Functions
  ****************************************************************************/
 
-FAR struct sv6621_transport_s *rk3576_sv6621_transport(void)
+FAR struct sv6621_transport_s *kickpi_k7_sv6621_transport(void)
 {
   return &g_rk3576_sv6621_transport;
 }

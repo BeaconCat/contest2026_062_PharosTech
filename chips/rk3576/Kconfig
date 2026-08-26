@@ -92,15 +92,6 @@ config RK3576_SDIO
 		on-board WiFi/BT combo.  The SD-card and SDIO instances share the
 		same host implementation but retain independent state and IRQs.
 
-config RK3576_SV6621_TRANSPORT
-	bool
-	default n
-	depends on RK3576_SDIO
-	---help---
-		Provide the RK3576 DW-MSHC transport operations used by the generic
-		SV6621 core.  Board logic selects this adapter for the on-board
-		module; the core itself contains no RK3576 register knowledge.
-
 config RK3576_PWM
 	bool "PWM (Rockchip PWM v4)"
 	default n
