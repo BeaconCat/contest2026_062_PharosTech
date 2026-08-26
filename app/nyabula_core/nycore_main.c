@@ -51,6 +51,7 @@ static void nycore_usage(void)
                   "  nycore run <plugin.js> [-e <event>]\n"
                   "  nycore run-package <package-dir> [-e <event>]\n"
                   "  nycore start <id> <plugin.js>\n"
+                  "  nycore start-package <package-dir>\n"
                   "  nycore event <id> <event>\n"
                   "  nycore stop <id>\n"
                   "  nycore stop-all\n"
@@ -184,6 +185,10 @@ int main(int argc, char *argv[])
   else if (strcmp(argv[1], "start") == 0 && argc == 4)
     {
       ret = ny_scheduler_start(argv[2], argv[3]);
+    }
+  else if (strcmp(argv[1], "start-package") == 0 && argc == 3)
+    {
+      ret = ny_scheduler_start_package(argv[2]);
     }
   else if (strcmp(argv[1], "event") == 0 && argc == 4)
     {

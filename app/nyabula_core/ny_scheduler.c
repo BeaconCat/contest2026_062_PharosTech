@@ -68,6 +68,7 @@ struct ny_scheduler_slot_s
   int start_result;
   int exit_result;
   enum ny_plugin_state_e state;
+  struct ny_plugin_config_s config;
   char id[NY_PLUGIN_ID_SIZE];
   char path[PATH_MAX];
   char index_arg[12];
@@ -102,6 +103,7 @@ static int ny_scheduler_enqueue_locked(struct ny_scheduler_slot_s *slot,
                                        const char *payload);
 static int ny_scheduler_worker(int argc, char *argv[]);
 static void ny_scheduler_clear_locked(struct ny_scheduler_slot_s *slot);
+static int ny_scheduler_start_config(const struct ny_plugin_config_s *config);
 
 /****************************************************************************
  * Private Functions
@@ -214,7 +216,7 @@ static int ny_scheduler_worker(int argc, char *argv[])
     }
 
   slot = &g_scheduler_slots[index];
-  ret = ny_plugin_load(&slot->plugin, slot->path);
+  ret = ny_plugin_load_config(&slot->plugin, &slot->config);
   if (ret >= 0)
     {
       ret = ny_plugin_start(&slot->plugin);
@@ -286,19 +288,49 @@ static void ny_scheduler_clear_locked(struct ny_scheduler_slot_s *slot)
 
 int ny_scheduler_start(const char *id, const char *path)
 {
+  struct ny_plugin_config_s config;
+
+  if (id == NULL || path == NULL || strlen(id) >= sizeof(config.id))
+    {
+      return -EINVAL;
+    }
+
+  ny_manifest_default_config(&config, path);
+  strlcpy(config.id, id, sizeof(config.id));
+  return ny_scheduler_start_config(&config);
+}
+
+int ny_scheduler_start_package(const char *package_path)
+{
+  struct ny_plugin_config_s config;
+  int ret;
+
+  ret = ny_manifest_load(package_path, &config);
+  return ret < 0 ? ret : ny_scheduler_start_config(&config);
+}
+
+/****************************************************************************
+
+ * * Private Functions
+
+ * ****************************************************************************/
+
+static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
+{
   struct ny_scheduler_slot_s *slot;
   char *worker_argv[2];
   int index;
   int ret;
 
-  if (id == NULL || path == NULL || id[0] == '\0' || path[0] == '\0' ||
-      strlen(id) >= NY_PLUGIN_ID_SIZE || strlen(path) >= PATH_MAX)
+  if (config == NULL || config->id[0] == '\0' || config->entry[0] == '\0' ||
+      strlen(config->id) >= NY_PLUGIN_ID_SIZE ||
+      strlen(config->entry) >= PATH_MAX)
     {
       return -EINVAL;
     }
 
   nxmutex_lock(&g_scheduler_lock);
-  if (ny_scheduler_find_locked(id) != NULL)
+  if (ny_scheduler_find_locked(config->id) != NULL)
     {
       nxmutex_unlock(&g_scheduler_lock);
       return -EEXIST;
@@ -315,8 +347,9 @@ int ny_scheduler_start(const char *id, const char *path)
   memset(slot, 0, sizeof(*slot));
   slot->occupied = true;
   slot->state = NY_PLUGIN_EMPTY;
-  strlcpy(slot->id, id, sizeof(slot->id));
-  strlcpy(slot->path, path, sizeof(slot->path));
+  slot->config = *config;
+  strlcpy(slot->id, config->id, sizeof(slot->id));
+  strlcpy(slot->path, config->entry, sizeof(slot->path));
   snprintf(slot->index_arg, sizeof(slot->index_arg), "%d", index);
 
   if (sem_init(&slot->ready, 0, 0) < 0)
@@ -348,7 +381,7 @@ int ny_scheduler_start(const char *id, const char *path)
 
   worker_argv[0] = slot->index_arg;
   worker_argv[1] = NULL;
-  slot->pid = task_create(id, CONFIG_NYABULA_CORE_PRIORITY,
+  slot->pid = task_create(config->id, CONFIG_NYABULA_CORE_PRIORITY,
                           CONFIG_NYABULA_CORE_STACKSIZE, ny_scheduler_worker,
                           worker_argv);
   if (slot->pid < 0)
@@ -379,6 +412,12 @@ int ny_scheduler_start(const char *id, const char *path)
 
   return ret;
 }
+
+/****************************************************************************
+
+ * * Public Functions
+
+ * ****************************************************************************/
 
 int ny_scheduler_dispatch(const char *id, const char *event)
 {
