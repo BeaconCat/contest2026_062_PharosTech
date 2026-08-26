@@ -38,9 +38,12 @@ if(CONFIG_CONTEST2026_062_NYABULA_CORE)
     ny_runtime.c
     ny_scheduler.c
     ny_signature.c
+    ny_wasm.c
     INCLUDE_DIRECTORIES
     ${NUTTX_APPS_DIR}/crypto/libsodium/libsodium/src/libsodium/include
+    ${NUTTX_APPS_DIR}/interpreters/wamr/wamr/core/iwasm/include
     DEPENDS
     libqjs
-    libsodium)
+    libsodium
+    wamr)
 endif()

@@ -32,5 +32,6 @@ CSRCS   = ny_capability.c ny_health.c ny_manifest.c ny_module.c ny_package.c
 CSRCS  += ny_permission.c
 CSRCS  += ny_runtime.c ny_scheduler.c
 CSRCS  += ny_signature.c
+CSRCS  += ny_wasm.c
 
 include $(APPDIR)/Application.mk

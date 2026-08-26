@@ -35,6 +35,7 @@
 #include "ny_permission.h"
 #include "ny_runtime.h"
 #include "ny_scheduler.h"
+#include "ny_wasm.h"
 
 /****************************************************************************
  * Private Function Prototypes
@@ -54,6 +55,7 @@ static void nycore_usage(void)
   fprintf(stderr, "Usage:\n"
                   "  nycore run <plugin.js> [-e <event>]\n"
                   "  nycore run-package <package-dir> [-e <event>]\n"
+                  "  nycore run-wasm <module.wasm>\n"
                   "  nycore start <id> <plugin.js>\n"
                   "  nycore start-package <package-dir>\n"
                   "  nycore event <id> <event>\n"
@@ -204,6 +206,10 @@ int main(int argc, char *argv[])
         }
 
       ret = nycore_run(argv[2], event);
+    }
+  else if (strcmp(argv[1], "run-wasm") == 0 && argc == 3)
+    {
+      ret = ny_wasm_run(argv[2], "local.wasm", NY_PERMISSION_CORE_LOG);
     }
   else if (strcmp(argv[1], "run-package") == 0)
     {
