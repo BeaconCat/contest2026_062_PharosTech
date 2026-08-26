@@ -45,8 +45,9 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define NY_WASM_ERROR_SIZE 192
-#define NY_WASM_LOG_LIMIT  1024
+#define NY_WASM_ERROR_SIZE           192
+#define NY_WASM_LOG_LIMIT            1024
+#define NY_WASM_BROKER_PAYLOAD_LIMIT 4096
 
 #ifndef O_NOFOLLOW
 #define O_NOFOLLOW 0
@@ -72,6 +73,17 @@ static int32_t ny_wasm_storage_get(wasm_exec_env_t environment,
 static int32_t ny_wasm_storage_put(wasm_exec_env_t environment,
                                    int32_t key_offset, int32_t key_length,
                                    int32_t value_offset, int32_t value_length);
+static int32_t ny_wasm_network_request(wasm_exec_env_t environment,
+                                       int32_t input_offset,
+                                       int32_t input_length,
+                                       int32_t output_offset,
+                                       int32_t output_capacity);
+static int32_t ny_wasm_ui_notify(wasm_exec_env_t environment, int32_t offset,
+                                 int32_t length);
+static int32_t ny_wasm_ai_invoke(wasm_exec_env_t environment,
+                                 int32_t input_offset, int32_t input_length,
+                                 int32_t output_offset,
+                                 int32_t output_capacity);
 static int ny_wasm_memory(wasm_exec_env_t environment, int32_t offset,
                           int32_t length, int32_t limit, void **pointer);
 static void ny_wasm_client(struct ny_wasm_plugin_s *plugin,
@@ -92,6 +104,9 @@ static NativeSymbol g_wasm_symbols[] = {
   { "core_log", (void *)ny_wasm_core_log, "(ii)i", NULL },
   { "storage_get", (void *)ny_wasm_storage_get, "(iiii)i", NULL },
   { "storage_put", (void *)ny_wasm_storage_put, "(iiii)i", NULL },
+  { "network_request", (void *)ny_wasm_network_request, "(iiii)i", NULL },
+  { "ui_notify", (void *)ny_wasm_ui_notify, "(ii)i", NULL },
+  { "ai_invoke", (void *)ny_wasm_ai_invoke, "(iiii)i", NULL },
 };
 
 /****************************************************************************
@@ -234,6 +249,103 @@ static int32_t ny_wasm_storage_put(wasm_exec_env_t environment,
   if (ret < 0)
     {
       fprintf(stderr, "nycore: wasm storage_put rejected: %d\n", ret);
+    }
+
+  return ret;
+}
+
+static int32_t ny_wasm_network_request(wasm_exec_env_t environment,
+                                       int32_t input_offset,
+                                       int32_t input_length,
+                                       int32_t output_offset,
+                                       int32_t output_capacity)
+{
+  struct ny_wasm_plugin_s *plugin = wasm_runtime_get_user_data(environment);
+  struct ny_broker_client_s client;
+  const void *input;
+  void *output;
+  int ret;
+
+  if (plugin == NULL || output_capacity < input_length)
+    {
+      return plugin == NULL ? -EINVAL : -ENOSPC;
+    }
+
+  ret = ny_wasm_memory(environment, input_offset, input_length,
+                       NY_WASM_BROKER_PAYLOAD_LIMIT, (void **)&input);
+  if (ret < 0 ||
+      (ret = ny_wasm_memory(environment, output_offset, output_capacity,
+                            NY_WASM_BROKER_PAYLOAD_LIMIT, &output)) < 0)
+    {
+      return ret;
+    }
+
+  ny_wasm_client(plugin, &client);
+  ret = ny_broker_network_request(&client);
+  if (ret >= 0)
+    {
+      memcpy(output, input, (size_t)input_length);
+      ret = input_length;
+    }
+
+  return ret;
+}
+
+static int32_t ny_wasm_ui_notify(wasm_exec_env_t environment, int32_t offset,
+                                 int32_t length)
+{
+  struct ny_wasm_plugin_s *plugin = wasm_runtime_get_user_data(environment);
+  struct ny_broker_client_s client;
+  const void *message;
+  int ret;
+
+  if (plugin == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = ny_wasm_memory(environment, offset, length,
+                       NY_WASM_BROKER_PAYLOAD_LIMIT, (void **)&message);
+  if (ret >= 0)
+    {
+      ny_wasm_client(plugin, &client);
+      ret = ny_broker_ui_notify(&client, message, (size_t)length);
+    }
+
+  return ret;
+}
+
+static int32_t ny_wasm_ai_invoke(wasm_exec_env_t environment,
+                                 int32_t input_offset, int32_t input_length,
+                                 int32_t output_offset,
+                                 int32_t output_capacity)
+{
+  struct ny_wasm_plugin_s *plugin = wasm_runtime_get_user_data(environment);
+  struct ny_broker_client_s client;
+  const void *input;
+  void *output;
+  int ret;
+
+  if (plugin == NULL || output_capacity < input_length)
+    {
+      return plugin == NULL ? -EINVAL : -ENOSPC;
+    }
+
+  ret = ny_wasm_memory(environment, input_offset, input_length,
+                       NY_WASM_BROKER_PAYLOAD_LIMIT, (void **)&input);
+  if (ret < 0 ||
+      (ret = ny_wasm_memory(environment, output_offset, output_capacity,
+                            NY_WASM_BROKER_PAYLOAD_LIMIT, &output)) < 0)
+    {
+      return ret;
+    }
+
+  ny_wasm_client(plugin, &client);
+  ret = ny_broker_ai_invoke(&client);
+  if (ret >= 0)
+    {
+      memcpy(output, input, (size_t)input_length);
+      ret = input_length;
     }
 
   return ret;
