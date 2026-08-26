@@ -17,12 +17,6 @@ if(CONFIG_RK3576_SDMMC OR CONFIG_RK3576_SDIO)
   list(APPEND SRCS rk3576_sdmmc.c)
 endif()
 
-if(CONFIG_RK3576_SV6621_TRANSPORT)
-  list(APPEND SRCS rk3576_sv6621_transport.c)
-  target_include_directories(
-    arch PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../boards/rk3576/drivers/include)
-endif()
-
 if(CONFIG_RK3576_I2C)
   list(APPEND SRCS rk3576_i2c.c)
 endif()
