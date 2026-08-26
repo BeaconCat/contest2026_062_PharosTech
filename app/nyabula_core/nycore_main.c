@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ny_package.h"
 #include "ny_permission.h"
 #include "ny_runtime.h"
 #include "ny_scheduler.h"
@@ -59,6 +60,7 @@ static void nycore_usage(void)
                   "  nycore grant <id> <permission>\n"
                   "  nycore revoke <id> <permission>\n"
                   "  nycore permissions <id>\n"
+                  "  nycore install <package-dir>\n"
                   "  nycore list\n");
 }
 
@@ -225,6 +227,10 @@ int main(int argc, char *argv[])
   else if (strcmp(argv[1], "permissions") == 0 && argc == 3)
     {
       ret = ny_permission_show(argv[2]);
+    }
+  else if (strcmp(argv[1], "install") == 0 && argc == 3)
+    {
+      ret = ny_package_install(argv[2]);
     }
   else if (strcmp(argv[1], "list") == 0 && argc == 2)
     {

@@ -1,0 +1,453 @@
+/****************************************************************************
+ * packages/demos/contest2026_062_nyabula_core/ny_package.c
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ ****************************************************************************/
+
+/****************************************************************************
+ * Included Files
+ ****************************************************************************/
+
+#include <nuttx/config.h>
+#include <nuttx/mutex.h>
+
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "ny_manifest.h"
+#include "ny_package.h"
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#ifndef O_NOFOLLOW
+#define O_NOFOLLOW 0
+#endif
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+static mutex_t g_package_lock = NXMUTEX_INITIALIZER;
+
+/****************************************************************************
+ * Private Function Prototypes
+ ****************************************************************************/
+
+static bool ny_package_valid_version(const char *version);
+static bool ny_package_mutable_name(const char *name);
+static int ny_package_join(char *path, size_t size, const char *left,
+                           const char *right);
+static int ny_package_mkdir(const char *path);
+static int ny_package_mkdir_parents(const char *path);
+static int ny_package_write_all(int fd, const void *buffer, size_t length);
+static int ny_package_copy_file(const char *source, const char *destination);
+static int ny_package_copy_tree(const char *source, const char *destination,
+                                bool root);
+static int ny_package_remove_tree(const char *path);
+static int ny_package_sync_directory(const char *path);
+
+/****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
+static bool ny_package_valid_version(const char *version)
+{
+  size_t index;
+  size_t length;
+
+  if (version == NULL || (length = strlen(version)) == 0 ||
+      length >= NY_PLUGIN_VERSION_SIZE || version[0] == '.' ||
+      version[length - 1] == '.')
+    {
+      return false;
+    }
+
+  for (index = 0; index < length; index++)
+    {
+      char value = version[index];
+
+      if (!((value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') ||
+            (value >= '0' && value <= '9') || value == '.' || value == '_' ||
+            value == '-'))
+        {
+          return false;
+        }
+    }
+
+  return true;
+}
+
+static bool ny_package_mutable_name(const char *name)
+{
+  return strcmp(name, "data") == 0 || strcmp(name, "cache") == 0 ||
+         strcmp(name, "tmp") == 0;
+}
+
+static int ny_package_join(char *path, size_t size, const char *left,
+                           const char *right)
+{
+  int length = snprintf(path, size, "%s/%s", left, right);
+
+  return length < 0 || (size_t)length >= size ? -ENAMETOOLONG : 0;
+}
+
+static int ny_package_mkdir(const char *path)
+{
+  struct stat status;
+
+  if (mkdir(path, 0700) == 0)
+    {
+      return 0;
+    }
+
+  if (errno != EEXIST || lstat(path, &status) < 0 || !S_ISDIR(status.st_mode))
+    {
+      return -errno;
+    }
+
+  return 0;
+}
+
+static int ny_package_mkdir_parents(const char *path)
+{
+  char copy[PATH_MAX];
+  char *cursor;
+  int ret;
+
+  if (path == NULL || path[0] != '/' ||
+      strlcpy(copy, path, sizeof(copy)) >= sizeof(copy))
+    {
+      return -EINVAL;
+    }
+
+  for (cursor = copy + 1; *cursor != '\0'; cursor++)
+    {
+      if (*cursor != '/')
+        {
+          continue;
+        }
+
+      *cursor = '\0';
+      ret = ny_package_mkdir(copy);
+      *cursor = '/';
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+
+  return ny_package_mkdir(copy);
+}
+
+static int ny_package_write_all(int fd, const void *buffer, size_t length)
+{
+  const unsigned char *bytes = buffer;
+  size_t offset = 0;
+
+  while (offset < length)
+    {
+      ssize_t count = write(fd, bytes + offset, length - offset);
+
+      if (count < 0)
+        {
+          if (errno == EINTR)
+            {
+              continue;
+            }
+
+          return -errno;
+        }
+
+      if (count == 0)
+        {
+          return -EIO;
+        }
+
+      offset += (size_t)count;
+    }
+
+  return 0;
+}
+
+static int ny_package_copy_file(const char *source, const char *destination)
+{
+  unsigned char buffer[4096];
+  int source_fd;
+  int destination_fd;
+  int ret = 0;
+
+  source_fd = open(source, O_RDONLY | O_NOFOLLOW);
+  if (source_fd < 0)
+    {
+      return -errno;
+    }
+
+  destination_fd =
+      open(destination, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
+  if (destination_fd < 0)
+    {
+      ret = -errno;
+      close(source_fd);
+      return ret;
+    }
+
+  for (;;)
+    {
+      ssize_t count = read(source_fd, buffer, sizeof(buffer));
+
+      if (count < 0)
+        {
+          if (errno == EINTR)
+            {
+              continue;
+            }
+
+          ret = -errno;
+          break;
+        }
+
+      if (count == 0)
+        {
+          break;
+        }
+
+      ret = ny_package_write_all(destination_fd, buffer, (size_t)count);
+      if (ret < 0)
+        {
+          break;
+        }
+    }
+
+  if (ret >= 0 && fsync(destination_fd) < 0)
+    {
+      ret = -errno;
+    }
+
+  close(destination_fd);
+  close(source_fd);
+  return ret;
+}
+
+static int ny_package_copy_tree(const char *source, const char *destination,
+                                bool root)
+{
+  struct dirent *entry;
+  DIR *directory;
+  int ret;
+
+  ret = ny_package_mkdir(destination);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  directory = opendir(source);
+  if (directory == NULL)
+    {
+      return -errno;
+    }
+
+  ret = 0;
+  while ((entry = readdir(directory)) != NULL)
+    {
+      char source_path[PATH_MAX];
+      char destination_path[PATH_MAX];
+      struct stat status;
+
+      if (strcmp(entry->d_name, ".") == 0 ||
+          strcmp(entry->d_name, "..") == 0 ||
+          (root && ny_package_mutable_name(entry->d_name)))
+        {
+          continue;
+        }
+
+      ret = ny_package_join(source_path, sizeof(source_path), source,
+                            entry->d_name);
+      if (ret < 0 ||
+          (ret = ny_package_join(destination_path, sizeof(destination_path),
+                                 destination, entry->d_name)) < 0)
+        {
+          break;
+        }
+
+      if (lstat(source_path, &status) < 0)
+        {
+          ret = -errno;
+          break;
+        }
+
+      if (S_ISREG(status.st_mode))
+        {
+          ret = ny_package_copy_file(source_path, destination_path);
+        }
+      else if (S_ISDIR(status.st_mode))
+        {
+          ret = ny_package_copy_tree(source_path, destination_path, false);
+        }
+      else
+        {
+          ret = -EPERM;
+        }
+
+      if (ret < 0)
+        {
+          break;
+        }
+    }
+
+  closedir(directory);
+  return ret < 0 ? ret : ny_package_sync_directory(destination);
+}
+
+static int ny_package_remove_tree(const char *path)
+{
+  struct stat status;
+  struct dirent *entry;
+  DIR *directory;
+  int ret = 0;
+
+  if (lstat(path, &status) < 0)
+    {
+      return errno == ENOENT ? 0 : -errno;
+    }
+
+  if (!S_ISDIR(status.st_mode))
+    {
+      return unlink(path) < 0 ? -errno : 0;
+    }
+
+  directory = opendir(path);
+  if (directory == NULL)
+    {
+      return -errno;
+    }
+
+  while ((entry = readdir(directory)) != NULL)
+    {
+      char child[PATH_MAX];
+
+      if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        {
+          continue;
+        }
+
+      ret = ny_package_join(child, sizeof(child), path, entry->d_name);
+      if (ret < 0 || (ret = ny_package_remove_tree(child)) < 0)
+        {
+          break;
+        }
+    }
+
+  closedir(directory);
+  return ret < 0 ? ret : (rmdir(path) < 0 ? -errno : 0);
+}
+
+static int ny_package_sync_directory(const char *path)
+{
+  int fd = open(path, O_RDONLY);
+  int ret;
+
+  if (fd < 0)
+    {
+      return -errno;
+    }
+
+  ret = fsync(fd) < 0 && errno != EINVAL ? -errno : 0;
+  close(fd);
+  return ret;
+}
+
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+int ny_package_install(const char *source)
+{
+  struct ny_plugin_config_s config;
+  char plugin_root[PATH_MAX];
+  char versions[PATH_MAX];
+  char staging[PATH_MAX];
+  char destination[PATH_MAX];
+  int ret;
+
+  ret = ny_manifest_load(source, &config);
+  if (ret < 0 || !ny_package_valid_version(config.version))
+    {
+      return ret < 0 ? ret : -EINVAL;
+    }
+
+  nxmutex_lock(&g_package_lock);
+  ret = ny_package_mkdir_parents(CONFIG_NYABULA_CORE_PACKAGE_STORE);
+  if (ret < 0 ||
+      (ret = ny_package_join(plugin_root, sizeof(plugin_root),
+                             CONFIG_NYABULA_CORE_PACKAGE_STORE, config.id)) <
+          0 ||
+      (ret = ny_package_mkdir(plugin_root)) < 0 ||
+      (ret = ny_package_join(versions, sizeof(versions), plugin_root,
+                             "versions")) < 0 ||
+      (ret = ny_package_mkdir(versions)) < 0 ||
+      (ret = ny_package_join(destination, sizeof(destination), versions,
+                             config.version)) < 0 ||
+      snprintf(staging, sizeof(staging), "%s/.staging.%ld", plugin_root,
+               (long)getpid()) >= (int)sizeof(staging))
+    {
+      goto out;
+    }
+
+  if (access(destination, F_OK) == 0)
+    {
+      ret = -EEXIST;
+      goto out;
+    }
+
+  ret = ny_package_remove_tree(staging);
+  if (ret < 0 || (ret = ny_package_copy_tree(source, staging, true)) < 0)
+    {
+      ny_package_remove_tree(staging);
+      goto out;
+    }
+
+  ret = ny_manifest_load(staging, &config);
+  if (ret < 0)
+    {
+      ny_package_remove_tree(staging);
+      goto out;
+    }
+
+  if (rename(staging, destination) < 0)
+    {
+      ret = -errno;
+      ny_package_remove_tree(staging);
+      goto out;
+    }
+
+  ret = ny_package_sync_directory(versions);
+
+out:
+  nxmutex_unlock(&g_package_lock);
+  return ret;
+}
