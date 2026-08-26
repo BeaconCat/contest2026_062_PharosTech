@@ -35,6 +35,7 @@
 #include <netutils/cJSON.h>
 
 #include "ny_manifest.h"
+#include "ny_signature.h"
 
 /****************************************************************************
  * Private Types
@@ -351,6 +352,14 @@ int ny_manifest_load(const char *package_path,
     {
       return -EINVAL;
     }
+
+#ifdef CONFIG_NYABULA_CORE_REQUIRE_SIGNATURE
+  ret = ny_signature_verify_package(package_path);
+  if (ret < 0)
+    {
+      return ret;
+    }
+#endif
 
   memset(config, 0, sizeof(*config));
   ret = snprintf(path, sizeof(path), "%s/manifest.json", package_path);

@@ -29,5 +29,6 @@ MODULE    = $(CONFIG_CONTEST2026_062_NYABULA_CORE)
 
 MAINSRC = nycore_main.c
 CSRCS   = ny_capability.c ny_manifest.c ny_module.c ny_runtime.c ny_scheduler.c
+CSRCS  += ny_signature.c
 
 include $(APPDIR)/Application.mk

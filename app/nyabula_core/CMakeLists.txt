@@ -34,6 +34,10 @@ if(CONFIG_CONTEST2026_062_NYABULA_CORE)
     ny_module.c
     ny_runtime.c
     ny_scheduler.c
+    ny_signature.c
+    INCLUDE_DIRECTORIES
+    ${NUTTX_APPS_DIR}/crypto/libsodium/libsodium/src/libsodium/include
     DEPENDS
-    libqjs)
+    libqjs
+    libsodium)
 endif()

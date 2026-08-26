@@ -23,7 +23,9 @@
 config CONTEST2026_062_NYABULA_CORE
 	bool "Nyabula Core plugin launcher"
 	default n
+	select ALLOW_ICS_COMPONENTS
 	select INTERPRETERS_QUICKJS
+	select LIBSODIUM
 	select NETUTILS_CJSON
 	---help---
 		Enable the Nyabula Core plugin launcher and its isolated QuickJS
@@ -59,6 +61,25 @@ config NYABULA_CORE_MANIFEST_LIMIT
 	int "Maximum plugin manifest size"
 	default 16384
 	range 1024 65536
+
+config NYABULA_CORE_REQUIRE_SIGNATURE
+	bool "Require signed plugin packages"
+	default y
+
+config NYABULA_CORE_TRUST_STORE
+	string "Trusted plugin public key store"
+	default "/data/nyabula/trusted-keys.json"
+	depends on NYABULA_CORE_REQUIRE_SIGNATURE
+
+config NYABULA_CORE_PACKAGE_FILE_LIMIT
+	int "Maximum files per plugin package"
+	default 128
+	range 8 1024
+
+config NYABULA_CORE_PACKAGE_SIZE_LIMIT
+	int "Maximum verified plugin package size"
+	default 8388608
+	range 65536 67108864
 
 config NYABULA_CORE_MAX_PLUGINS
 	int "Maximum concurrently scheduled plugins"
