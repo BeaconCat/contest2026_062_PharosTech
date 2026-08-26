@@ -33,6 +33,7 @@
 #include "ny_health.h"
 #include "ny_package.h"
 #include "ny_permission.h"
+#include "ny_revocation.h"
 #include "ny_runtime.h"
 #include "ny_scheduler.h"
 #include "ny_wasm.h"
@@ -71,6 +72,11 @@ static void nycore_usage(void)
                   "  nycore start-installed <id>\n"
                   "  nycore health <id> <version>\n"
                   "  nycore unquarantine <id> <version>\n"
+                  "  nycore revoke-key <key-id>\n"
+                  "  nycore allow-key <key-id>\n"
+                  "  nycore revoke-package <id> <version>\n"
+                  "  nycore allow-package <id> <version>\n"
+                  "  nycore revocations\n"
                   "  nycore list\n");
 }
 
@@ -317,6 +323,26 @@ int main(int argc, char *argv[])
   else if (strcmp(argv[1], "unquarantine") == 0 && argc == 4)
     {
       ret = ny_health_reset(argv[2], argv[3]);
+    }
+  else if (strcmp(argv[1], "revoke-key") == 0 && argc == 3)
+    {
+      ret = ny_revocation_update_key(argv[2], true);
+    }
+  else if (strcmp(argv[1], "allow-key") == 0 && argc == 3)
+    {
+      ret = ny_revocation_update_key(argv[2], false);
+    }
+  else if (strcmp(argv[1], "revoke-package") == 0 && argc == 4)
+    {
+      ret = ny_revocation_update_package(argv[2], argv[3], true);
+    }
+  else if (strcmp(argv[1], "allow-package") == 0 && argc == 4)
+    {
+      ret = ny_revocation_update_package(argv[2], argv[3], false);
+    }
+  else if (strcmp(argv[1], "revocations") == 0 && argc == 2)
+    {
+      ret = ny_revocation_show();
     }
   else if (strcmp(argv[1], "list") == 0 && argc == 2)
     {

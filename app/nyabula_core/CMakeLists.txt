@@ -37,6 +37,7 @@ if(CONFIG_CONTEST2026_062_NYABULA_CORE)
     ny_package.c
     ny_permission.c
     ny_runtime.c
+    ny_revocation.c
     ny_scheduler.c
     ny_signature.c
     ny_wasm.c

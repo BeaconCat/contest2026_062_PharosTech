@@ -37,6 +37,7 @@
 #include <netutils/cJSON.h>
 #include <sodium.h>
 
+#include "ny_revocation.h"
 #include "ny_signature.h"
 
 /****************************************************************************
@@ -529,6 +530,12 @@ int ny_signature_verify_package(const char *package_path)
   if (!cJSON_IsString(item) || item->valuestring == NULL)
     {
       ret = -EINVAL;
+      goto out;
+    }
+
+  ret = ny_revocation_check_key(item->valuestring);
+  if (ret < 0)
+    {
       goto out;
     }
 

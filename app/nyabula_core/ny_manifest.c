@@ -36,6 +36,7 @@
 
 #include "ny_manifest.h"
 #include "ny_permission.h"
+#include "ny_revocation.h"
 #include "ny_signature.h"
 
 /****************************************************************************
@@ -465,6 +466,12 @@ int ny_manifest_load(const char *package_path,
   config->event_timeout_ms = CONFIG_NYABULA_CORE_EVENT_TIMEOUT_MS;
   config->module = true;
   ret = ny_manifest_parse_limits(root, config);
+  if (ret < 0)
+    {
+      goto out;
+    }
+
+  ret = ny_revocation_check_package(config->id, config->version);
   if (ret < 0)
     {
       goto out;

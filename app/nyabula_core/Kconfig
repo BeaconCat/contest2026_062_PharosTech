@@ -85,6 +85,10 @@ config NYABULA_CORE_HEALTH_STORE
 	string "Plugin crash health store"
 	default "/data/nyabula/health"
 
+config NYABULA_CORE_REVOCATION_STORE
+	string "Plugin signer and version revocation store"
+	default "/data/nyabula/revocations.json"
+
 config NYABULA_CORE_QUARANTINE_FAILURES
 	int "Failures before a plugin version is quarantined"
 	default 3
