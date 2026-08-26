@@ -306,7 +306,8 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
   memset(plugin, 0, sizeof(*plugin));
   plugin->state = NY_PLUGIN_EMPTY;
   atomic_init(&plugin->cancelled, false);
-  plugin->permissions = config->permissions;
+  plugin->requested_permissions = config->requested_permissions;
+  atomic_init(&plugin->permissions, config->permissions);
   plugin->memory_limit = config->memory_limit;
   plugin->stack_limit = config->stack_limit;
   plugin->event_timeout_ms = config->event_timeout_ms;

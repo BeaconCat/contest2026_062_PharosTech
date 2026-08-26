@@ -31,6 +31,7 @@ int ny_scheduler_start_package(const char *package_path);
 int ny_scheduler_dispatch(const char *id, const char *event);
 int ny_scheduler_stop(const char *id);
 int ny_scheduler_stop_all(void);
+int ny_scheduler_refresh_permissions(const char *id);
 void ny_scheduler_list(void);
 
 #endif /* __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_SCHEDULER_H */

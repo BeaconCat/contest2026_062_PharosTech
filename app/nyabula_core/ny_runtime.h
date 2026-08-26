@@ -58,7 +58,8 @@ struct ny_plugin_s
   JSModuleDef *module;
   enum ny_plugin_state_e state;
   uint64_t deadline_ns;
-  uint64_t permissions;
+  uint64_t requested_permissions;
+  atomic_uint_fast64_t permissions;
   size_t memory_limit;
   size_t stack_limit;
   uint32_t event_timeout_ms;

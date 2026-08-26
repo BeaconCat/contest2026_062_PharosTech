@@ -136,7 +136,8 @@ static struct ny_plugin_s *ny_capability_plugin(JSContext *context)
 
 static bool ny_capability_has(struct ny_plugin_s *plugin, uint64_t permission)
 {
-  return plugin != NULL && (plugin->permissions & permission) == permission;
+  return plugin != NULL &&
+         (atomic_load(&plugin->permissions) & permission) == permission;
 }
 
 static JSValue ny_capability_denied(JSContext *context, const char *permission)

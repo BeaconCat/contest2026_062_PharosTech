@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ny_permission.h"
 #include "ny_runtime.h"
 #include "ny_scheduler.h"
 
@@ -307,6 +308,48 @@ int ny_scheduler_start_package(const char *package_path)
 
   ret = ny_manifest_load(package_path, &config);
   return ret < 0 ? ret : ny_scheduler_start_config(&config);
+}
+
+int ny_scheduler_refresh_permissions(const char *id)
+{
+  struct ny_scheduler_slot_s *slot;
+  struct ny_plugin_config_s config;
+  pid_t pid;
+  int ret;
+
+  if (id == NULL)
+    {
+      return -EINVAL;
+    }
+
+  nxmutex_lock(&g_scheduler_lock);
+  slot = ny_scheduler_find_locked(id);
+  if (slot == NULL)
+    {
+      nxmutex_unlock(&g_scheduler_lock);
+      return 0;
+    }
+
+  config = slot->config;
+  pid = slot->pid;
+  nxmutex_unlock(&g_scheduler_lock);
+
+  ret = ny_permission_apply(&config);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  nxmutex_lock(&g_scheduler_lock);
+  slot = ny_scheduler_find_locked(id);
+  if (slot != NULL && slot->pid == pid)
+    {
+      slot->config.permissions = config.permissions;
+      atomic_store(&slot->plugin.permissions, config.permissions);
+    }
+
+  nxmutex_unlock(&g_scheduler_lock);
+  return 0;
 }
 
 /****************************************************************************

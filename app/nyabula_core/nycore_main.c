@@ -209,10 +209,18 @@ int main(int argc, char *argv[])
   else if (strcmp(argv[1], "grant") == 0 && argc == 4)
     {
       ret = ny_permission_grant(argv[2], argv[3]);
+      if (ret >= 0)
+        {
+          ret = ny_scheduler_refresh_permissions(argv[2]);
+        }
     }
   else if (strcmp(argv[1], "revoke") == 0 && argc == 4)
     {
       ret = ny_permission_revoke(argv[2], argv[3]);
+      if (ret >= 0)
+        {
+          ret = ny_scheduler_refresh_permissions(argv[2]);
+        }
     }
   else if (strcmp(argv[1], "permissions") == 0 && argc == 3)
     {
