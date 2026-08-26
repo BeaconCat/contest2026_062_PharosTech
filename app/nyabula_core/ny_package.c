@@ -727,3 +727,33 @@ int ny_package_resolve(const char *id, char *path, size_t size)
   nxmutex_unlock(&g_package_lock);
   return ret;
 }
+
+int ny_package_resolve_version(const char *id, const char *version, char *path,
+                               size_t size)
+{
+  struct ny_plugin_config_s config;
+  char plugin_root[PATH_MAX];
+  int ret;
+
+  if (path == NULL || size == 0)
+    {
+      return -EINVAL;
+    }
+
+  nxmutex_lock(&g_package_lock);
+  ret = ny_package_version_path(id, version, plugin_root, sizeof(plugin_root),
+                                path, size);
+  if (ret >= 0)
+    {
+      ret = ny_manifest_load(path, &config);
+    }
+
+  if (ret >= 0 &&
+      (strcmp(config.id, id) != 0 || strcmp(config.version, version) != 0))
+    {
+      ret = -EINVAL;
+    }
+
+  nxmutex_unlock(&g_package_lock);
+  return ret;
+}
