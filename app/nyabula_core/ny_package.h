@@ -39,5 +39,6 @@ int ny_package_resolve(const char *id, char *path, size_t size);
 int ny_package_resolve_version(const char *id, const char *version, char *path,
                                size_t size);
 int ny_package_storage_root(const char *id, char *path, size_t size);
+int ny_package_list(void);
 
 #endif /* __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_PACKAGE_H */

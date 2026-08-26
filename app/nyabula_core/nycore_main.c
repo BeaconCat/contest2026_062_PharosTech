@@ -77,6 +77,7 @@ static void nycore_usage(void)
                   "  nycore revoke-package <id> <version>\n"
                   "  nycore allow-package <id> <version>\n"
                   "  nycore revocations\n"
+                  "  nycore packages\n"
                   "  nycore list\n");
 }
 
@@ -343,6 +344,10 @@ int main(int argc, char *argv[])
   else if (strcmp(argv[1], "revocations") == 0 && argc == 2)
     {
       ret = ny_revocation_show();
+    }
+  else if (strcmp(argv[1], "packages") == 0 && argc == 2)
+    {
+      ret = ny_package_list();
     }
   else if (strcmp(argv[1], "list") == 0 && argc == 2)
     {

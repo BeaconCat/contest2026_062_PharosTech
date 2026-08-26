@@ -772,3 +772,115 @@ int ny_package_storage_root(const char *id, char *path, size_t size)
   nxmutex_unlock(&g_package_lock);
   return ret;
 }
+
+int ny_package_list(void)
+{
+  struct dirent *plugin_entry;
+  DIR *store;
+  int ret = 0;
+
+  nxmutex_lock(&g_package_lock);
+  store = opendir(CONFIG_NYABULA_CORE_PACKAGE_STORE);
+  if (store == NULL)
+    {
+      ret = errno == ENOENT ? 0 : -errno;
+      goto out;
+    }
+
+  while ((plugin_entry = readdir(store)) != NULL)
+    {
+      struct dirent *version_entry;
+      char plugin_root[PATH_MAX];
+      char versions[PATH_MAX];
+      char current[NY_PLUGIN_VERSION_SIZE + 1] = "";
+      char last_good[NY_PLUGIN_VERSION_SIZE + 1] = "";
+      struct stat status;
+      DIR *directory;
+
+      if (strcmp(plugin_entry->d_name, ".") == 0 ||
+          strcmp(plugin_entry->d_name, "..") == 0)
+        {
+          continue;
+        }
+
+      if (!ny_package_valid_id(plugin_entry->d_name) ||
+          ny_package_join(plugin_root, sizeof(plugin_root),
+                          CONFIG_NYABULA_CORE_PACKAGE_STORE,
+                          plugin_entry->d_name) < 0 ||
+          lstat(plugin_root, &status) < 0 || !S_ISDIR(status.st_mode) ||
+          ny_package_join(versions, sizeof(versions), plugin_root,
+                          "versions") < 0)
+        {
+          ret = -EINVAL;
+          break;
+        }
+
+      ret = ny_package_read_marker(plugin_root, "current", current,
+                                   sizeof(current));
+      if (ret == -ENOENT)
+        {
+          ret = 0;
+        }
+
+      if (ret < 0)
+        {
+          break;
+        }
+
+      ret = ny_package_read_marker(plugin_root, "last-good", last_good,
+                                   sizeof(last_good));
+      if (ret == -ENOENT)
+        {
+          ret = 0;
+        }
+
+      if (ret < 0)
+        {
+          break;
+        }
+
+      directory = opendir(versions);
+      if (directory == NULL)
+        {
+          ret = -errno;
+          break;
+        }
+
+      while ((version_entry = readdir(directory)) != NULL)
+        {
+          char version_path[PATH_MAX];
+
+          if (strcmp(version_entry->d_name, ".") == 0 ||
+              strcmp(version_entry->d_name, "..") == 0)
+            {
+              continue;
+            }
+
+          if (!ny_package_valid_version(version_entry->d_name) ||
+              ny_package_join(version_path, sizeof(version_path), versions,
+                              version_entry->d_name) < 0 ||
+              lstat(version_path, &status) < 0 || !S_ISDIR(status.st_mode))
+            {
+              ret = -EINVAL;
+              break;
+            }
+
+          printf("%s %s current=%s last-good=%s\n", plugin_entry->d_name,
+                 version_entry->d_name,
+                 strcmp(version_entry->d_name, current) == 0 ? "yes" : "no",
+                 strcmp(version_entry->d_name, last_good) == 0 ? "yes" : "no");
+        }
+
+      closedir(directory);
+      if (ret < 0)
+        {
+          break;
+        }
+    }
+
+  closedir(store);
+
+out:
+  nxmutex_unlock(&g_package_lock);
+  return ret;
+}
