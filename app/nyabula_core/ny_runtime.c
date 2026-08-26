@@ -31,6 +31,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "ny_capability.h"
 #include "ny_runtime.h"
 
 /****************************************************************************
@@ -42,8 +43,6 @@ static void ny_runtime_begin_event(struct ny_plugin_s *plugin);
 static int ny_runtime_interrupt(JSRuntime *runtime, void *opaque);
 static void ny_runtime_dump_exception(struct ny_plugin_s *plugin,
                                       const char *operation);
-static JSValue ny_runtime_log(JSContext *context, JSValueConst this_value,
-                              int argc, JSValueConst *argv);
 static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
                            int argc, JSValueConst *argv);
 static int ny_runtime_read_source(const char *path, char **source,
@@ -102,28 +101,6 @@ static void ny_runtime_dump_exception(struct ny_plugin_s *plugin,
     }
 
   JS_FreeValue(plugin->context, exception);
-}
-
-static JSValue ny_runtime_log(JSContext *context, JSValueConst this_value,
-                              int argc, JSValueConst *argv)
-{
-  int index;
-
-  for (index = 0; index < argc; index++)
-    {
-      const char *text = JS_ToCString(context, argv[index]);
-
-      if (text == NULL)
-        {
-          return JS_EXCEPTION;
-        }
-
-      printf("%s%s", index == 0 ? "nyplugin: " : " ", text);
-      JS_FreeCString(context, text);
-    }
-
-  putchar('\n');
-  return JS_UNDEFINED;
 }
 
 static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
@@ -241,9 +218,7 @@ int ny_plugin_load(struct ny_plugin_s *plugin, const char *path)
 int ny_plugin_load_config(struct ny_plugin_s *plugin,
                           const struct ny_plugin_config_s *config)
 {
-  JSValue global;
   JSValue result;
-  JSValue log_function;
   char *source;
   size_t length;
   int ret;
@@ -263,6 +238,7 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
   plugin->stack_limit = config->stack_limit;
   plugin->event_timeout_ms = config->event_timeout_ms;
   strlcpy(plugin->id, config->id, sizeof(plugin->id));
+  strlcpy(plugin->version, config->version, sizeof(plugin->version));
   strlcpy(plugin->root, config->root, sizeof(plugin->root));
   strlcpy(plugin->path, config->entry, sizeof(plugin->path));
 
@@ -292,10 +268,13 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
     }
 
   JS_SetContextOpaque(plugin->context, plugin);
-  global = JS_GetGlobalObject(plugin->context);
-  log_function = JS_NewCFunction(plugin->context, ny_runtime_log, "nyLog", 1);
-  JS_SetPropertyStr(plugin->context, global, "nyLog", log_function);
-  JS_FreeValue(plugin->context, global);
+  ret = ny_capability_register(plugin);
+  if (ret < 0)
+    {
+      free(source);
+      ny_plugin_destroy(plugin);
+      return ret;
+    }
 
   ny_runtime_begin_event(plugin);
   result = JS_Eval(plugin->context, source, length, plugin->path,

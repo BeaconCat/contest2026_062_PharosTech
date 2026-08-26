@@ -75,4 +75,17 @@ config NYABULA_CORE_EVENT_SIZE
 	default 256
 	range 32 4096
 
+config NYABULA_CORE_STORAGE_VALUE_LIMIT
+	int "Maximum private storage value size"
+	default 4096
+	range 128 65536
+
+config NYABULA_CORE_MOCK_CAPABILITIES
+	bool "Mock external capabilities"
+	default y if ARCH_SIM
+	default n
+	---help---
+		Use deterministic network, UI and AI capability mocks.  This is for
+		the simulator and must remain disabled on production boards.
+
 endif

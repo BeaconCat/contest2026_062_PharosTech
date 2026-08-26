@@ -63,6 +63,7 @@ struct ny_plugin_s
   uint32_t event_timeout_ms;
   atomic_bool cancelled;
   char id[NY_PLUGIN_ID_SIZE];
+  char version[NY_PLUGIN_VERSION_SIZE];
   char root[PATH_MAX];
   char path[PATH_MAX];
 };
