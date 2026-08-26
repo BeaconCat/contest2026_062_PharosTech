@@ -192,9 +192,12 @@ def validate_manifest(path: Path) -> dict[str, object]:
         raise PluginError("version must be a non-empty string shorter than 32 bytes")
     if isinstance(manifest["apiVersion"], bool) or manifest["apiVersion"] != API_VERSION:
         raise PluginError(f"unsupported apiVersion: {manifest['apiVersion']!r}")
-    if manifest["runtime"] != "quickjs":
-        raise PluginError(f"unsupported runtime: {manifest['runtime']!r}")
-    manifest["entry"] = _safe_relative(manifest["entry"], ".js")
+    runtime = manifest["runtime"]
+    if runtime not in ("quickjs", "wamr"):
+        raise PluginError(f"unsupported runtime: {runtime!r}")
+    manifest["entry"] = _safe_relative(
+        manifest["entry"], ".js" if runtime == "quickjs" else ".wasm"
+    )
 
     permissions = manifest.get("permissions", [])
     if not isinstance(permissions, list) or any(not isinstance(item, str) for item in permissions):
@@ -239,6 +242,8 @@ def _find_esbuild(project: Path, requested: str | None) -> str:
 
 def build_plugin(project: Path, esbuild: str | None) -> Path:
     manifest = validate_manifest(project / "manifest.json")
+    if manifest["runtime"] != "quickjs":
+        raise PluginError("WAMR projects must provide a prebuilt .wasm entry")
     source = project / "src" / "main.ts"
     if not source.is_file():
         raise PluginError(f"missing TypeScript entry: {source}")
@@ -289,10 +294,14 @@ def test_project(project: Path) -> None:
         raise PluginError(f"built entry missing: {entry}")
     if entry.stat().st_size > 1024 * 1024:
         raise PluginError("built entry exceeds the device source limit")
-    content = entry.read_text(encoding="utf-8")
-    for lifecycle in ("ny_on_start", "ny_on_event", "ny_on_stop"):
-        if lifecycle not in content:
-            raise PluginError(f"built entry does not export {lifecycle}")
+    if manifest["runtime"] == "wamr":
+        if entry.read_bytes()[:8] != b"\0asm\x01\0\0\0":
+            raise PluginError("WAMR entry is not a WebAssembly 1.0 module")
+    else:
+        content = entry.read_text(encoding="utf-8")
+        for lifecycle in ("ny_on_start", "ny_on_event", "ny_on_stop"):
+            if lifecycle not in content:
+                raise PluginError(f"built entry does not export {lifecycle}")
 
 
 def _collect_package_files(project: Path, manifest: dict[str, object]) -> dict[str, bytes]:

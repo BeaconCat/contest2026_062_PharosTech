@@ -67,7 +67,7 @@ static const struct ny_permission_name_s g_permission_names[] = {
 
 static int ny_manifest_read_file(const char *path, char **content);
 static bool ny_manifest_valid_id(const char *id);
-static bool ny_manifest_valid_entry(const char *entry);
+static bool ny_manifest_valid_entry_path(const char *entry);
 static int ny_manifest_member_count(const cJSON *object, const char *name);
 static int ny_manifest_copy_string(const cJSON *object, const char *name,
                                    char *destination, size_t size);
@@ -152,15 +152,15 @@ static bool ny_manifest_valid_id(const char *id)
   return true;
 }
 
-static bool ny_manifest_valid_entry(const char *entry)
+static bool ny_manifest_valid_entry_path(const char *entry)
 {
   size_t length = strlen(entry);
 
-  return length >= 3 && length < PATH_MAX && entry[0] != '/' &&
+  return length > 0 && length < PATH_MAX && entry[0] != '/' &&
          strchr(entry, '\\') == NULL && strstr(entry, "//") == NULL &&
          strcmp(entry, ".") != 0 && strcmp(entry, "..") != 0 &&
          strncmp(entry, "../", 3) != 0 && strstr(entry, "/../") == NULL &&
-         strcmp(entry + length - 3, ".js") == 0;
+         entry[length - 1] != '/';
 }
 
 static int ny_manifest_member_count(const cJSON *object, const char *name)
@@ -320,6 +320,7 @@ void ny_manifest_default_config(struct ny_plugin_config_s *config,
   strlcpy(config->id, "local.raw", sizeof(config->id));
   strlcpy(config->version, "0", sizeof(config->version));
   strlcpy(config->entry, entry, sizeof(config->entry));
+  config->runtime = NY_PLUGIN_RUNTIME_QUICKJS;
   config->permissions = NY_PERMISSION_CORE_LOG;
   config->requested_permissions = NY_PERMISSION_CORE_LOG;
   config->module = false;
@@ -407,15 +408,40 @@ int ny_manifest_load(const char *package_path,
 
   ret = ny_manifest_copy_string(root, "entry", config->entry,
                                 sizeof(config->entry));
-  if (ret < 0 || !ny_manifest_valid_entry(config->entry))
+  if (ret < 0 || !ny_manifest_valid_entry_path(config->entry))
     {
       ret = -EINVAL;
       goto out;
     }
 
   item = cJSON_GetObjectItemCaseSensitive(root, "runtime");
-  if (!cJSON_IsString(item) || item->valuestring == NULL ||
-      strcmp(item->valuestring, "quickjs") != 0)
+  if (!cJSON_IsString(item) || item->valuestring == NULL)
+    {
+      ret = -EINVAL;
+      goto out;
+    }
+
+  if (strcmp(item->valuestring, "quickjs") == 0)
+    {
+      config->runtime = NY_PLUGIN_RUNTIME_QUICKJS;
+      if (strlen(config->entry) < 3 ||
+          strcmp(config->entry + strlen(config->entry) - 3, ".js") != 0)
+        {
+          ret = -EINVAL;
+          goto out;
+        }
+    }
+  else if (strcmp(item->valuestring, "wamr") == 0)
+    {
+      config->runtime = NY_PLUGIN_RUNTIME_WAMR;
+      if (strlen(config->entry) < 5 ||
+          strcmp(config->entry + strlen(config->entry) - 5, ".wasm") != 0)
+        {
+          ret = -EINVAL;
+          goto out;
+        }
+    }
+  else
     {
       ret = -ENOTSUP;
       goto out;

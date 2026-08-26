@@ -317,7 +317,10 @@ int ny_scheduler_start_package(const char *package_path)
   int ret;
 
   ret = ny_manifest_load(package_path, &config);
-  return ret < 0 ? ret : ny_scheduler_start_config(&config);
+  return ret < 0 ? ret
+         : config.runtime != NY_PLUGIN_RUNTIME_QUICKJS
+             ? -ENOTSUP
+             : ny_scheduler_start_config(&config);
 }
 
 int ny_scheduler_start_installed(const char *package_path,
@@ -333,6 +336,11 @@ int ny_scheduler_start_installed(const char *package_path,
     }
 
   ret = ny_manifest_load(package_path, &config);
+  if (ret >= 0 && config.runtime != NY_PLUGIN_RUNTIME_QUICKJS)
+    {
+      ret = -ENOTSUP;
+    }
+
   if (ret >= 0)
     {
       strlcpy(config.storage_root, storage_root, sizeof(config.storage_root));

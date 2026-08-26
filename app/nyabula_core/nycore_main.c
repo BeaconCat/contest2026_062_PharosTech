@@ -115,6 +115,13 @@ static int nycore_run_package(const char *path, const char *event)
       return ret;
     }
 
+  if (config.runtime == NY_PLUGIN_RUNTIME_WAMR)
+    {
+      return event == NULL
+                 ? ny_wasm_run(config.entry, config.id, config.permissions)
+                 : -ENOTSUP;
+    }
+
   ret = ny_plugin_load_config(&plugin, &config);
   if (ret < 0)
     {

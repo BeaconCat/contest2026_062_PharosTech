@@ -52,6 +52,12 @@
  * Public Types
  ****************************************************************************/
 
+enum ny_plugin_runtime_e
+{
+  NY_PLUGIN_RUNTIME_QUICKJS = 0,
+  NY_PLUGIN_RUNTIME_WAMR
+};
+
 struct ny_plugin_config_s
 {
   char id[NY_PLUGIN_ID_SIZE];
@@ -61,6 +67,7 @@ struct ny_plugin_config_s
   char entry[PATH_MAX];
   uint64_t requested_permissions;
   uint64_t permissions;
+  enum ny_plugin_runtime_e runtime;
   bool module;
   size_t memory_limit;
   size_t stack_limit;
