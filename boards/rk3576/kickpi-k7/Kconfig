@@ -50,7 +50,6 @@ config KICKPI_K7_WIFI
 	bool "On-board SeekWave SV6621 WiFi/BT combo"
 	default n
 	depends on RK3576_SDIO && RK3576_I2C
-	select RK3576_SV6621_TRANSPORT
 	select SV6621
 	select DEV_GPIO if SV6621_PM
 	---help---

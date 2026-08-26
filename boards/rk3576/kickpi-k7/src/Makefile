@@ -28,6 +28,7 @@ CSRCS += kickpi_k7_reset.c
 
 ifeq ($(CONFIG_KICKPI_K7_WIFI),y)
 CSRCS += kickpi_k7_wifi.c
+CSRCS += kickpi_k7_sv6621_transport.c
 CFLAGS += -Wa,-I$(abspath $(TOPDIR)/drivers/platform/drivers/sv6621/firmware)
 # Makefile (legacy) build mode: expose the platform driver's public header
 # directory (boards/rk3576/drivers/include, shared by all platform drivers) so

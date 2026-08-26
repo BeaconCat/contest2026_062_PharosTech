@@ -6,7 +6,7 @@ if(CONFIG_KICKPI_K7_AUDIO)
 endif()
 
 if(CONFIG_KICKPI_K7_WIFI)
-  list(APPEND SRCS kickpi_k7_wifi.c)
+  list(APPEND SRCS kickpi_k7_wifi.c kickpi_k7_sv6621_transport.c)
   target_compile_options(
     board
     PRIVATE

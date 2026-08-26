@@ -39,11 +39,6 @@ ifneq ($(filter y,$(CONFIG_RK3576_SDMMC) $(CONFIG_RK3576_SDIO)),)
 CHIP_CSRCS += rk3576_sdmmc.c
 endif
 
-ifeq ($(CONFIG_RK3576_SV6621_TRANSPORT),y)
-CHIP_CSRCS += rk3576_sv6621_transport.c
-INCLUDES += $(INCDIR_PREFIX)../../../../vendor/rockchip/boards/rk3576/drivers/include
-endif
-
 ifeq ($(CONFIG_RK3576_I2C),y)
 CHIP_CSRCS += rk3576_i2c.c
 endif

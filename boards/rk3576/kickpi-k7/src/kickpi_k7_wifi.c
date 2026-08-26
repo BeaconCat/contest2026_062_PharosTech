@@ -48,9 +48,9 @@
 #include "arm64_internal.h"
 
 #include "kickpi_k7.h"
+#include "kickpi_k7_sv6621_transport.h"
 #include "rk3576_gpio.h"
 #include "rk3576_i2c.h"
-#include "rk3576_sv6621_transport.h"
 #include "sv6621.h"
 
 #ifdef CONFIG_KICKPI_K7_WIFI
@@ -462,7 +462,7 @@ int kickpi_k7_wifi_initialize(void)
     }
 
   memset(&config, 0, sizeof(config));
-  config.transport = rk3576_sv6621_transport();
+  config.transport = kickpi_k7_sv6621_transport();
   config.board_ops = &g_kickpi_k7_wifi_board_ops;
   config.board_arg = g_kickpi_k7_wifi_address;
   config.iram.data = g_sv6621_iram_start;
