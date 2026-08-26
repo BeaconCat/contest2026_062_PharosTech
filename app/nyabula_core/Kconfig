@@ -1,0 +1,57 @@
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements.  See the NOTICE file distributed with this work for
+# additional information regarding copyright ownership.  The ASF licenses this
+# file to you under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License.  You may obtain a copy of
+# the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+# License for the specific language governing permissions and limitations under
+# the License.
+#
+# For a description of the syntax of this configuration file,
+# see the kconfig-language.txt file in the NuttX tools repository.
+#
+
+config CONTEST2026_062_NYABULA_CORE
+	bool "Nyabula Core plugin launcher"
+	default n
+	select INTERPRETERS_QUICKJS
+	---help---
+		Enable the Nyabula Core plugin launcher and its isolated QuickJS
+		runtime.
+
+if CONTEST2026_062_NYABULA_CORE
+
+config NYABULA_CORE_PRIORITY
+	int "Nyabula Core task priority"
+	default 100
+
+config NYABULA_CORE_STACKSIZE
+	int "Nyabula Core task stack size"
+	default 32768
+
+config NYABULA_CORE_PLUGIN_MEMORY
+	int "Maximum QuickJS heap per plugin"
+	default 8388608
+
+config NYABULA_CORE_PLUGIN_STACK
+	int "Maximum QuickJS stack per plugin"
+	default 262144
+
+config NYABULA_CORE_EVENT_TIMEOUT_MS
+	int "Maximum execution time per plugin event"
+	default 100
+
+config NYABULA_CORE_SOURCE_LIMIT
+	int "Maximum plugin source size"
+	default 1048576
+
+endif
