@@ -1,0 +1,68 @@
+diff --git a/arch/arm64/src/common/arm64_addrenv_mmu.c b/arch/arm64/src/common/arm64_addrenv_mmu.c
+index 13795783d55..a125d04030f 100644
+--- a/arch/arm64/src/common/arm64_addrenv_mmu.c
++++ b/arch/arm64/src/common/arm64_addrenv_mmu.c
+@@ -95,6 +95,12 @@
+ static_assert((ARCH_ADDRENV_VBASE & MMU_L2_PAGE_SIZE) == 0,
+               "Addrenv start address is not aligned to section boundary");
+ 
++/****************************************************************************
++ * Private Data
++ ****************************************************************************/
++
++static struct arch_addrenv_s g_selected_addrenv[CONFIG_SMP_NCPUS];
++
+ /****************************************************************************
+  * Public Data
+  ****************************************************************************/
+@@ -740,10 +746,16 @@ ssize_t up_addrenv_heapsize(const arch_addrenv_t *addrenv)
+ int up_addrenv_select(const arch_addrenv_t *addrenv)
+ {
+   DEBUGASSERT(addrenv && addrenv->ttbr0);
++  g_selected_addrenv[this_cpu()] = *addrenv;
+   mmu_write_ttbr0(addrenv->ttbr0);
+   return OK;
+ }
+ 
++struct arch_addrenv_s *arm64_addrenv_current(void)
++{
++  return &g_selected_addrenv[this_cpu()];
++}
++
+ /****************************************************************************
+  * Name: up_addrenv_coherent
+  *
+diff --git a/arch/arm64/src/common/arm64_internal.h b/arch/arm64/src/common/arm64_internal.h
+index e4996a9f680..6439c7e9e92 100644
+--- a/arch/arm64/src/common/arm64_internal.h
++++ b/arch/arm64/src/common/arm64_internal.h
+@@ -245,6 +245,7 @@ EXTERN uint8_t _percpu_size[];     /* percpu size */
+ void arm64_new_task(struct tcb_s *tak_new);
+ 
+ #ifdef CONFIG_BUILD_KERNEL
++struct arch_addrenv_s *arm64_addrenv_current(void);
+ void arm64_jump_to_user(uint64_t entry, uint64_t x0, uint64_t x1,
+                         uint64_t sp_el0, uint64_t *regs) noreturn_function;
+ #elif defined(CONFIG_BUILD_PROTECTED)
+diff --git a/arch/arm64/src/common/arm64_pgalloc.c b/arch/arm64/src/common/arm64_pgalloc.c
+index 41ec508952c..98ecc16e09c 100644
+--- a/arch/arm64/src/common/arm64_pgalloc.c
++++ b/arch/arm64/src/common/arm64_pgalloc.c
+@@ -91,15 +91,13 @@
+ 
+ uintptr_t pgalloc(uintptr_t brkaddr, unsigned int npages)
+ {
+-  struct tcb_s          *tcb = this_task();
+-  struct arch_addrenv_s *addrenv;
++  struct arch_addrenv_s *addrenv = arm64_addrenv_current();
+   uintptr_t              ptlast;
+   uintptr_t              ptlevel;
+   uintptr_t              paddr;
+   uintptr_t              vaddr;
+ 
+-  DEBUGASSERT(tcb && tcb->group->tg_addrenv_own);
+-  addrenv = &tcb->group->tg_addrenv_own->addrenv;
++  DEBUGASSERT(addrenv->ttbr0 != 0);
+ 
+   /* The current implementation only supports extending the user heap
+    * region as part of the implementation of user sbrk().  This function
