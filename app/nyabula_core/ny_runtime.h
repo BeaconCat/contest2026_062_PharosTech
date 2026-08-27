@@ -51,6 +51,16 @@ enum ny_plugin_state_e
   NY_PLUGIN_FAILED
 };
 
+#define NY_PLUGIN_MAX_PENDING 8
+
+struct ny_plugin_pending_s
+{
+  bool occupied;
+  uint32_t request;
+  JSValue resolve;
+  JSValue reject;
+};
+
 struct ny_plugin_s
 {
   JSRuntime *runtime;
@@ -64,13 +74,17 @@ struct ny_plugin_s
   size_t stack_limit;
   uint32_t event_timeout_ms;
   uint32_t unhandled_rejections;
+  uint32_t generation;
+  uint32_t next_request;
   bool module_entry;
+  bool cancelling;
   atomic_bool cancelled;
   char id[NY_PLUGIN_ID_SIZE];
   char version[NY_PLUGIN_VERSION_SIZE];
   char root[PATH_MAX];
   char storage_root[PATH_MAX];
   char path[PATH_MAX];
+  struct ny_plugin_pending_s pending[NY_PLUGIN_MAX_PENDING];
 };
 
 /****************************************************************************
@@ -83,6 +97,11 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
 int ny_plugin_start(struct ny_plugin_s *plugin);
 int ny_plugin_dispatch(struct ny_plugin_s *plugin, const char *event);
 int ny_plugin_stop(struct ny_plugin_s *plugin);
+int ny_plugin_async_begin(struct ny_plugin_s *plugin, JSValue *promise,
+                          uint64_t *token);
+int ny_plugin_async_complete(struct ny_plugin_s *plugin, uint64_t token,
+                             bool rejected, JSValueConst value);
+int ny_plugin_async_cancel_all(struct ny_plugin_s *plugin);
 void ny_plugin_destroy(struct ny_plugin_s *plugin);
 
 #endif /* __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_RUNTIME_H */

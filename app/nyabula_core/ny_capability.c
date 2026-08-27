@@ -59,8 +59,9 @@ static void ny_capability_client(struct ny_plugin_s *plugin,
 static bool ny_capability_has(struct ny_plugin_s *plugin, uint64_t permission);
 static JSValue ny_capability_denied(JSContext *context,
                                     const char *permission);
-static JSValue ny_capability_resolved_promise(JSContext *context,
-                                              JSValueConst value);
+static JSValue ny_capability_settled_promise(struct ny_plugin_s *plugin,
+                                             bool rejected,
+                                             JSValueConst value);
 static JSValue ny_capability_core_info(JSContext *context,
                                        JSValueConst this_value, int argc,
                                        JSValueConst *argv);
@@ -145,29 +146,28 @@ static JSValue ny_capability_denied(JSContext *context, const char *permission)
   return JS_ThrowTypeError(context, "permission denied: %s", permission);
 }
 
-static JSValue ny_capability_resolved_promise(JSContext *context,
-                                              JSValueConst value)
+static JSValue ny_capability_settled_promise(struct ny_plugin_s *plugin,
+                                             bool rejected, JSValueConst value)
 {
-  JSValue resolving[2];
   JSValue promise;
-  JSValue result;
+  uint64_t token;
+  int ret;
 
-  promise = JS_NewPromiseCapability(context, resolving);
-  if (JS_IsException(promise))
+  ret = ny_plugin_async_begin(plugin, &promise, &token);
+  if (ret < 0)
     {
-      return promise;
+      return ret == -EAGAIN ? JS_ThrowInternalError(
+                                  plugin->context, "too many pending requests")
+                            : JS_ThrowOutOfMemory(plugin->context);
     }
 
-  result = JS_Call(context, resolving[0], JS_UNDEFINED, 1, &value);
-  JS_FreeValue(context, resolving[0]);
-  JS_FreeValue(context, resolving[1]);
-  if (JS_IsException(result))
+  ret = ny_plugin_async_complete(plugin, token, rejected, value);
+  if (ret < 0)
     {
-      JS_FreeValue(context, promise);
-      return result;
+      JS_FreeValue(plugin->context, promise);
+      return JS_ThrowInternalError(plugin->context, "async completion failed");
     }
 
-  JS_FreeValue(context, result);
   return promise;
 }
 
@@ -327,7 +327,7 @@ static JSValue ny_capability_network_request(JSContext *context,
     {
       ny_capability_client(plugin, &client);
       ret = ny_broker_network_request(&client);
-      return ret >= 0 ? ny_capability_resolved_promise(context, argv[0])
+      return ret >= 0 ? ny_capability_settled_promise(plugin, false, argv[0])
                       : JS_ThrowInternalError(context,
                                               "network broker unavailable");
     }
@@ -357,7 +357,7 @@ static JSValue ny_capability_ui_notify(JSContext *context,
   ny_capability_client(plugin, &client);
   ret = ny_broker_ui_notify(&client, message, strlen(message));
   JS_FreeCString(context, message);
-  return ret >= 0 ? ny_capability_resolved_promise(context, JS_UNDEFINED)
+  return ret >= 0 ? ny_capability_settled_promise(plugin, false, JS_UNDEFINED)
                   : JS_ThrowInternalError(context, "UI broker unavailable");
 }
 
@@ -379,7 +379,7 @@ static JSValue ny_capability_ai_invoke(JSContext *context,
       ny_capability_client(plugin, &client);
       ret = ny_broker_ai_invoke(&client);
       return ret >= 0
-                 ? ny_capability_resolved_promise(context, argv[0])
+                 ? ny_capability_settled_promise(plugin, false, argv[0])
                  : JS_ThrowInternalError(context, "AI broker unavailable");
     }
 

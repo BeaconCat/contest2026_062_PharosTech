@@ -36,6 +36,12 @@
 #include "ny_runtime.h"
 
 /****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+static atomic_uint_fast32_t g_ny_runtime_generation = 1;
+
+/****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
@@ -116,6 +122,11 @@ static void ny_runtime_rejection_tracker(JSContext *context,
 {
   struct ny_plugin_s *plugin = opaque;
   const char *message;
+
+  if (plugin->cancelling)
+    {
+      return;
+    }
 
   if (is_handled)
     {
@@ -306,6 +317,13 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
   memset(plugin, 0, sizeof(*plugin));
   plugin->state = NY_PLUGIN_EMPTY;
   atomic_init(&plugin->cancelled, false);
+  plugin->generation = atomic_fetch_add(&g_ny_runtime_generation, 1);
+  if (plugin->generation == 0)
+    {
+      plugin->generation = atomic_fetch_add(&g_ny_runtime_generation, 1);
+    }
+
+  plugin->next_request = 1;
   plugin->requested_permissions = config->requested_permissions;
   atomic_init(&plugin->permissions, config->permissions);
   plugin->memory_limit = config->memory_limit;
@@ -441,10 +459,158 @@ int ny_plugin_stop(struct ny_plugin_s *plugin)
       ret = ny_runtime_call(plugin, "ny_on_stop", 0, NULL);
     }
 
+  if (ny_plugin_async_cancel_all(plugin) < 0 && ret >= 0)
+    {
+      ret = -EFAULT;
+    }
+
   atomic_store(&plugin->cancelled, true);
   plugin->deadline_ns = 0;
   plugin->state = ret < 0 ? NY_PLUGIN_FAILED : NY_PLUGIN_STOPPED;
   return ret;
+}
+
+int ny_plugin_async_begin(struct ny_plugin_s *plugin, JSValue *promise,
+                          uint64_t *token)
+{
+  JSValue resolving[2];
+  size_t index;
+
+  if (plugin == NULL || promise == NULL || token == NULL ||
+      plugin->context == NULL || plugin->state == NY_PLUGIN_STOPPED ||
+      plugin->state == NY_PLUGIN_FAILED)
+    {
+      return -EINVAL;
+    }
+
+  for (index = 0; index < NY_PLUGIN_MAX_PENDING; index++)
+    {
+      if (!plugin->pending[index].occupied)
+        {
+          break;
+        }
+    }
+
+  if (index == NY_PLUGIN_MAX_PENDING)
+    {
+      return -EAGAIN;
+    }
+
+  *promise = JS_NewPromiseCapability(plugin->context, resolving);
+  if (JS_IsException(*promise))
+    {
+      return -ENOMEM;
+    }
+
+  if (plugin->next_request == 0)
+    {
+      plugin->next_request = 1;
+    }
+
+  plugin->pending[index].occupied = true;
+  plugin->pending[index].request = plugin->next_request++;
+  plugin->pending[index].resolve = resolving[0];
+  plugin->pending[index].reject = resolving[1];
+  *token =
+      ((uint64_t)plugin->generation << 32) | plugin->pending[index].request;
+  return 0;
+}
+
+int ny_plugin_async_complete(struct ny_plugin_s *plugin, uint64_t token,
+                             bool rejected, JSValueConst value)
+{
+  JSValue callback;
+  JSValue result;
+  uint32_t generation = (uint32_t)(token >> 32);
+  uint32_t request = (uint32_t)token;
+  size_t index;
+
+  if (plugin == NULL || plugin->context == NULL || generation == 0 ||
+      request == 0 || generation != plugin->generation)
+    {
+      return -ESTALE;
+    }
+
+  for (index = 0; index < NY_PLUGIN_MAX_PENDING; index++)
+    {
+      if (plugin->pending[index].occupied &&
+          plugin->pending[index].request == request)
+        {
+          break;
+        }
+    }
+
+  if (index == NY_PLUGIN_MAX_PENDING)
+    {
+      return -ENOENT;
+    }
+
+  callback = rejected ? plugin->pending[index].reject
+                      : plugin->pending[index].resolve;
+  result = JS_Call(plugin->context, callback, JS_UNDEFINED, 1, &value);
+  JS_FreeValue(plugin->context, plugin->pending[index].resolve);
+  JS_FreeValue(plugin->context, plugin->pending[index].reject);
+  memset(&plugin->pending[index], 0, sizeof(plugin->pending[index]));
+  if (JS_IsException(result))
+    {
+      ny_runtime_dump_exception(plugin, "async completion");
+      JS_FreeValue(plugin->context, result);
+      return -EFAULT;
+    }
+
+  JS_FreeValue(plugin->context, result);
+  return 0;
+}
+
+int ny_plugin_async_cancel_all(struct ny_plugin_s *plugin)
+{
+  JSValue error;
+  bool cancelled = false;
+  int first_error = 0;
+  size_t index;
+
+  if (plugin == NULL || plugin->context == NULL)
+    {
+      return 0;
+    }
+
+  error = JS_NewError(plugin->context);
+  if (JS_IsException(error))
+    {
+      return -ENOMEM;
+    }
+
+  JS_SetPropertyStr(plugin->context, error, "message",
+                    JS_NewString(plugin->context, "plugin stopped"));
+  plugin->cancelling = true;
+  for (index = 0; index < NY_PLUGIN_MAX_PENDING; index++)
+    {
+      uint64_t token;
+      int ret;
+
+      if (!plugin->pending[index].occupied)
+        {
+          continue;
+        }
+
+      token = ((uint64_t)plugin->generation << 32) |
+              plugin->pending[index].request;
+      cancelled = true;
+      ret = ny_plugin_async_complete(plugin, token, true, error);
+      if (ret < 0 && first_error == 0)
+        {
+          first_error = ret;
+        }
+    }
+
+  JS_FreeValue(plugin->context, error);
+  if (cancelled && first_error == 0)
+    {
+      first_error = ny_runtime_drain_jobs(plugin);
+    }
+
+  plugin->cancelling = false;
+  return first_error;
 }
 
 void ny_plugin_destroy(struct ny_plugin_s *plugin)
@@ -456,6 +622,7 @@ void ny_plugin_destroy(struct ny_plugin_s *plugin)
 
   if (plugin->context != NULL)
     {
+      ny_plugin_async_cancel_all(plugin);
       JS_FreeContext(plugin->context);
     }
 
