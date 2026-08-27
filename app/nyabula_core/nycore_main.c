@@ -88,16 +88,15 @@ static int nycore_isolation(void)
   int local;
 
 #ifdef __aarch64__
+#ifdef CONFIG_BUILD_KERNEL
+  printf("build=kernel privilege=user stack=%p\n", &local);
+#else
   unsigned long current_el;
 
   __asm__ volatile("mrs %0, CurrentEL" : "=r"(current_el));
-  printf("build=%s current_el=%lu stack=%p\n",
-#ifdef CONFIG_BUILD_KERNEL
-         "kernel",
-#else
-         "flat",
+  printf("build=flat current_el=%lu stack=%p\n", (current_el >> 2) & 3,
+         &local);
 #endif
-         (current_el >> 2) & 3, &local);
 #else
   printf("build=%s current_el=host stack=%p\n",
 #ifdef CONFIG_BUILD_KERNEL
