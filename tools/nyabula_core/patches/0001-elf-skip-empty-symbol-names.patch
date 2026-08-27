@@ -1,0 +1,18 @@
+diff --git a/libs/libc/elf/elf_symbols.c b/libs/libc/elf/elf_symbols.c
+index 5fcad4d7bcf..3dc94b870e5 100644
+--- a/libs/libc/elf/elf_symbols.c
++++ b/libs/libc/elf/elf_symbols.c
+@@ -706,7 +706,12 @@ int libelf_findsymbol(FAR struct mod_loadinfo_s *loadinfo,
+ 
+       ret = libelf_symname(loadinfo, sym,
+                            loadinfo->shdr[loadinfo->strtabidx].sh_offset);
+-      if (ret < 0 && ret != -ESRCH)
++      if (ret == -ESRCH)
++        {
++          continue;
++        }
++
++      if (ret < 0)
+         {
+           berr("ERROR: Failed to get symbol name\n");
+           return ret;
