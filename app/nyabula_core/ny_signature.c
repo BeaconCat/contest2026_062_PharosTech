@@ -287,7 +287,7 @@ static int ny_signature_verify_file(struct ny_verify_context_s *context,
   unsigned char expected[NY_HASH_SIZE];
   unsigned char actual[NY_HASH_SIZE];
   const cJSON *item;
-  size_t length;
+  size_t length = 0;
   int ret;
 
   item = cJSON_GetObjectItemCaseSensitive(context->hashes, relative);
