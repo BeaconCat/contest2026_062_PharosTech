@@ -29,6 +29,7 @@
 #include <errno.h>
 #include <string.h>
 
+#define MBEDTLS_ALLOW_PRIVATE_ACCESS
 #include <mbedtls/ecp.h>
 
 #include "sv6621_sae_crypto.h"
