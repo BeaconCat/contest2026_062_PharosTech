@@ -535,6 +535,8 @@ int ny_plugin_async_complete(struct ny_plugin_s *plugin, uint64_t token,
                              bool rejected, JSValueConst value)
 {
   JSValue callback;
+  JSValue resolve;
+  JSValue reject;
   JSValue result;
   uint32_t generation = (uint32_t)(token >> 32);
   uint32_t request = (uint32_t)token;
@@ -560,12 +562,19 @@ int ny_plugin_async_complete(struct ny_plugin_s *plugin, uint64_t token,
       return -ENOENT;
     }
 
-  callback = rejected ? plugin->pending[index].reject
-                      : plugin->pending[index].resolve;
-  result = JS_Call(plugin->context, callback, JS_UNDEFINED, 1, &value);
-  JS_FreeValue(plugin->context, plugin->pending[index].resolve);
-  JS_FreeValue(plugin->context, plugin->pending[index].reject);
+  /* Release the pending slot before running plugin code: the callback may
+   * re-enter the host and complete or cancel the same token, which would
+   * otherwise double-free resolve/reject.
+   */
+
+  resolve = plugin->pending[index].resolve;
+  reject = plugin->pending[index].reject;
   memset(&plugin->pending[index], 0, sizeof(plugin->pending[index]));
+
+  callback = rejected ? reject : resolve;
+  result = JS_Call(plugin->context, callback, JS_UNDEFINED, 1, &value);
+  JS_FreeValue(plugin->context, resolve);
+  JS_FreeValue(plugin->context, reject);
   if (JS_IsException(result))
     {
       ny_runtime_dump_exception(plugin, "async completion");
