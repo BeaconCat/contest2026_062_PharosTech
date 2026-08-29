@@ -439,6 +439,11 @@ def verify_archive(
         if trust_store_path is None:
             if require_signature:
                 raise PluginError("a trust store is required")
+            print(
+                "WARNING: package is signed but no trust store was given; "
+                "the signature was NOT verified",
+                file=sys.stderr,
+            )
         else:
             _crypto_required()
             with tempfile.TemporaryDirectory() as directory:
