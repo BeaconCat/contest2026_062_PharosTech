@@ -111,8 +111,13 @@ def keygen(key_id: str, private_key_path: Path, trust_store_path: Path) -> None:
     )
     private_key_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = private_key_path.with_suffix(private_key_path.suffix + ".tmp")
-    temporary.write_bytes(private_data)
-    os.chmod(temporary, 0o600)
+    # Create with 0600 from the start so the unencrypted key is never
+    # world-readable, not even between write and chmod.
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        os.write(fd, private_data)
+    finally:
+        os.close(fd)
     os.replace(temporary, private_key_path)
     trust_store: dict[str, str] = {}
     if trust_store_path.exists():
