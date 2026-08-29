@@ -407,7 +407,12 @@ static int ny_package_sync_directory(const char *path)
 
   if (fd < 0)
     {
-      return -errno;
+      /* Best effort only: NuttX VFS rejects opening directories (EISDIR)
+       * and FAT provides no directory sync semantics.  Durability of the
+       * directory entry itself cannot be guaranteed here.
+       */
+
+      return 0;
     }
 
   ret = fsync(fd) < 0 && errno != EINVAL ? -errno : 0;

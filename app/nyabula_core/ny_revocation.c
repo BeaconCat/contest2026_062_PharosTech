@@ -413,7 +413,11 @@ static int ny_revocation_sync_parent(void)
   fd = open(path, O_RDONLY);
   if (fd < 0)
     {
-      return -errno;
+      /* Best effort only: NuttX VFS rejects opening directories (EISDIR)
+       * and FAT provides no directory sync semantics.
+       */
+
+      return 0;
     }
 
   ret = fsync(fd) < 0 && errno != EINVAL ? -errno : 0;
