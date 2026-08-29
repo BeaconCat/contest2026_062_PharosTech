@@ -69,6 +69,7 @@ static int ny_package_copy_file(const char *source, const char *destination);
 static int ny_package_copy_tree(const char *source, const char *destination,
                                 bool root);
 static int ny_package_remove_tree(const char *path);
+static void ny_package_clean_staging(const char *plugin_root);
 static int ny_package_sync_directory(const char *path);
 static int ny_package_read_marker(const char *plugin_root, const char *name,
                                   char *version, size_t size);
@@ -401,6 +402,35 @@ static int ny_package_remove_tree(const char *path)
   return ret < 0 ? ret : (rmdir(path) < 0 ? -errno : 0);
 }
 
+static void ny_package_clean_staging(const char *plugin_root)
+{
+  struct dirent *entry;
+  DIR *directory = opendir(plugin_root);
+
+  if (directory == NULL)
+    {
+      return;
+    }
+
+  /* Best effort: reclaim staging trees left behind by crashed installs.
+   * The install lock is held, so no live staging directory can exist.
+   */
+
+  while ((entry = readdir(directory)) != NULL)
+    {
+      char child[PATH_MAX];
+
+      if (strncmp(entry->d_name, ".staging.", 9) == 0 &&
+          ny_package_join(child, sizeof(child), plugin_root,
+                          entry->d_name) >= 0)
+        {
+          ny_package_remove_tree(child);
+        }
+    }
+
+  closedir(directory);
+}
+
 static int ny_package_sync_directory(const char *path)
 {
   int fd = open(path, O_RDONLY);
@@ -650,6 +680,7 @@ int ny_package_install(const char *source)
       goto out;
     }
 
+  ny_package_clean_staging(plugin_root);
   ret = ny_package_remove_tree(staging);
   if (ret < 0 || (ret = ny_package_copy_tree(source, staging, true)) < 0)
     {
