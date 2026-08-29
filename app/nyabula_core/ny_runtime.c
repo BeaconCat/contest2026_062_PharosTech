@@ -292,6 +292,11 @@ int ny_plugin_load(struct ny_plugin_s *plugin, const char *path)
 
   if (path == NULL)
     {
+      if (plugin != NULL)
+        {
+          memset(plugin, 0, sizeof(*plugin));
+        }
+
       return -EINVAL;
     }
 
@@ -307,14 +312,24 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
   size_t length = 0;
   int ret;
 
-  if (plugin == NULL || config == NULL || config->entry[0] == '\0' ||
+  if (plugin == NULL)
+    {
+      return -EINVAL;
+    }
+
+  /* Zero the plugin before any validation so callers may safely destroy
+   * the plugin on every load failure path.
+   */
+
+  memset(plugin, 0, sizeof(*plugin));
+
+  if (config == NULL || config->entry[0] == '\0' ||
       config->memory_limit == 0 || config->stack_limit == 0 ||
       config->event_timeout_ms == 0)
     {
       return -EINVAL;
     }
 
-  memset(plugin, 0, sizeof(*plugin));
   plugin->state = NY_PLUGIN_EMPTY;
   atomic_init(&plugin->cancelled, false);
   plugin->generation = atomic_fetch_add(&g_ny_runtime_generation, 1);
