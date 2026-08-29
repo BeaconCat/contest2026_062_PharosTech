@@ -77,7 +77,8 @@ static int ny_package_write_marker(const char *plugin_root, const char *name,
 static int ny_package_version_path(const char *id, const char *version,
                                    char *plugin_root, size_t root_size,
                                    char *path, size_t path_size);
-static int ny_package_activate_locked(const char *id, const char *version);
+static int ny_package_activate_locked(const char *id, const char *version,
+                                      bool update_last_good);
 
 /****************************************************************************
  * Private Functions
@@ -554,7 +555,8 @@ static int ny_package_version_path(const char *id, const char *version,
   return ny_package_join(path, path_size, versions, version);
 }
 
-static int ny_package_activate_locked(const char *id, const char *version)
+static int ny_package_activate_locked(const char *id, const char *version,
+                                      bool update_last_good)
 {
   struct ny_plugin_config_s config;
   char plugin_root[PATH_MAX];
@@ -583,10 +585,18 @@ static int ny_package_activate_locked(const char *id, const char *version)
 
   if (ret >= 0)
     {
-      ret = ny_package_write_marker(plugin_root, "last-good", current);
-      if (ret < 0)
+      /* Rollback must not record the version being abandoned as
+       * last-known-good, or a failing rollback target would ping-pong
+       * between two bad versions.
+       */
+
+      if (update_last_good)
         {
-          return ret;
+          ret = ny_package_write_marker(plugin_root, "last-good", current);
+          if (ret < 0)
+            {
+              return ret;
+            }
         }
     }
   else if (ret != -ENOENT)
@@ -673,7 +683,7 @@ int ny_package_activate(const char *id, const char *version)
   int ret;
 
   nxmutex_lock(&g_package_lock);
-  ret = ny_package_activate_locked(id, version);
+  ret = ny_package_activate_locked(id, version, true);
   nxmutex_unlock(&g_package_lock);
   return ret;
 }
@@ -696,7 +706,7 @@ int ny_package_rollback(const char *id)
 
   if (ret >= 0)
     {
-      ret = ny_package_activate_locked(id, version);
+      ret = ny_package_activate_locked(id, version, false);
     }
 
   nxmutex_unlock(&g_package_lock);
