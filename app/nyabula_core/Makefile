@@ -27,6 +27,12 @@ PRIORITY  = $(CONFIG_NYABULA_CORE_PRIORITY)
 STACKSIZE = $(CONFIG_NYABULA_CORE_STACKSIZE)
 MODULE    = $(CONFIG_CONTEST2026_062_NYABULA_CORE)
 
+# Mirror the CMake include directories: libsodium and WAMR do not export
+# their headers globally under the legacy Make build.
+
+CFLAGS += ${INCDIR_PREFIX}$(APPDIR)/crypto/libsodium/libsodium/src/libsodium/include
+CFLAGS += ${INCDIR_PREFIX}$(APPDIR)/interpreters/wamr/wamr/core/iwasm/include
+
 MAINSRC = nycore_main.c
 CSRCS   = ny_broker.c ny_capability.c ny_health.c ny_manifest.c ny_module.c
 CSRCS  += ny_package.c
