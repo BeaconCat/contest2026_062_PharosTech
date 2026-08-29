@@ -540,7 +540,9 @@ static int ny_wasm_execute(struct ny_wasm_plugin_s *plugin,
                  ny_wasm_watchdog, (wdparm_t)(uintptr_t)&watchdog);
   if (ret < 0)
     {
-      return -errno;
+      /* wd_start() already returns a negated errno value. */
+
+      return ret;
     }
 
   wasm_runtime_clear_exception(plugin->instance);
