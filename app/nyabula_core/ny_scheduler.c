@@ -472,10 +472,8 @@ int ny_scheduler_refresh_permissions(const char *id)
 }
 
 /****************************************************************************
-
- * * Private Functions
-
- * ****************************************************************************/
+ * Private Functions
+ ****************************************************************************/
 
 static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
 {
@@ -640,10 +638,8 @@ static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
 }
 
 /****************************************************************************
-
- * * Public Functions
-
- * ****************************************************************************/
+ * Public Functions
+ ****************************************************************************/
 
 int ny_scheduler_dispatch(const char *id, const char *event)
 {
