@@ -607,6 +607,23 @@ static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
 
   nxmutex_lock(&g_scheduler_lock);
   ret = slot->start_result;
+  if (ret < 0)
+    {
+      /* Claim reaping under the lock: a concurrent ny_scheduler_stop()
+       * that already set "stopping" owns the wait/join/clear sequence,
+       * so we must not run it a second time (double join, double
+       * sem_destroy).
+       */
+
+      if (slot->stopping)
+        {
+          nxmutex_unlock(&g_scheduler_lock);
+          return ret;
+        }
+
+      slot->stopping = true;
+    }
+
   nxmutex_unlock(&g_scheduler_lock);
   if (ret < 0)
     {
