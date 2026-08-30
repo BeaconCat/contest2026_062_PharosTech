@@ -74,20 +74,10 @@
 
 #define RK3576_CRU_SOFTRST_CON(n) (0x0A00 + ((n)*4))
 
-/* SDIO controller (mmc@2a320000) clock and reset controls. */
+/* SDIO controller (mmc@2a320000) reset control. */
 
-#define RK3576_CRU_SDIO_CLKSEL_CON 104
-#define RK3576_CRU_SDIO_SEL_SHIFT  6
-#define RK3576_CRU_SDIO_SEL_WIDTH  2
-#define RK3576_CRU_SDIO_DIV_SHIFT  0
-#define RK3576_CRU_SDIO_DIV_WIDTH  6
-
-#define RK3576_CRU_SDIO_GATE_CON   42
-#define RK3576_CRU_SDIO_CCLK_GATE  11
-#define RK3576_CRU_SDIO_HCLK_GATE  12
-
-#define RK3576_CRU_SDIO_RESET_CON  42
-#define RK3576_CRU_SDIO_RESET_BIT  12
+#define RK3576_CRU_SDIO_RESET_CON 42
+#define RK3576_CRU_SDIO_RESET_BIT 12
 
 /* CRU: System control register */
 
