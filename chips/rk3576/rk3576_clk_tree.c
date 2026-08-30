@@ -2167,10 +2167,9 @@ static void rk3576_clk_register_sai(void)
 static void rk3576_clk_register_sdio(void)
 {
   static const char *g_sdio_parents[] = {
-    "clk_gpll",
-    "clk_cpll",
-    "xin_osc0",
-    "xin_osc0",
+    "clk_gpll",  /* 0b00 */
+    "clk_cpll",  /* 0b01 */
+    "xin_osc0",  /* 0b10; 0b11 is undefined */
   };
   const unsigned long cru = RK3576_CRU_ADDR;
   const unsigned long sel =
