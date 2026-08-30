@@ -9,6 +9,9 @@ on:
   # 允许手动触发
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   # manifest 仓库：push / workflow_dispatch 用自身仓库；PR 事件使用目标仓库（base）。
   # 注意：merged 的 merge_commit_sha 只存在于目标(base)仓库，fork 仓库中无此 commit。
@@ -97,6 +100,26 @@ jobs:
           git remote add ci "${{ env.MANIFEST_REPO }}" || true
           git fetch ci ${{ env.MANIFEST_COMMIT }}
           git checkout FETCH_HEAD
+
+      # Public CI does not contain redistributable SeekWave firmware.  Create
+      # exact-size, zero-filled inputs so both build systems still exercise
+      # the complete SV6621 integration.  Runtime code recognizes the full
+      # placeholder set, leaves Wi-Fi disabled, and continues system startup.
+      - name: Generate SV6621 firmware placeholders
+        shell: bash
+        run: |
+          FIRMWARE_DIR="${{ env.OPENVELA_DIR }}/${{ env.REPO_NAME }}/drivers/drivers/sv6621/firmware"
+          mkdir -p "$FIRMWARE_DIR"
+          make_placeholder() {
+            local path="$1"
+            local size="$2"
+            : > "$path"
+            truncate -s "$size" "$path"
+          }
+          make_placeholder "$FIRMWARE_DIR/SWT6621S_IRAM_SDIO.bin" 356616
+          make_placeholder "$FIRMWARE_DIR/SWT6621S_DRAM_SDIO.bin" 193224
+          make_placeholder "$FIRMWARE_DIR/SWT6621S_NV_SDIO_ALONE.bin" 220
+          make_placeholder "$FIRMWARE_DIR/SWT6621S_SEEKWAVE_R00001.bin" 2372
 
       # CMake 构建
       - name: Build (CMake)
