@@ -50,25 +50,3 @@ From the OpenVela workspace root:
 ./build.sh contest2026_062_PharosTech/configs/dev -j4
 ./build.sh contest2026_062_PharosTech/configs/dev --cmake
 ```
-
-## Testing the board without SeekWave firmware
-
-Use the separate dev-no-sv6621 configuration if authorized firmware is not
-available. It excludes the SV6621 driver and onboard radio initialization,
-while retaining UART NSH, USB ADB, storage, audio, and the other development
-features whose dependencies are enabled.
-
-```sh
-./build.sh contest2026_062_PharosTech/configs/dev-no-sv6621 -j4
-./build.sh contest2026_062_PharosTech/configs/dev-no-sv6621 --cmake
-```
-
-Use separate build outputs or clean the previous configuration before
-switching. The configuration includes the Make.defs link required by the
-legacy Make build. UART0 uses 1500000 baud; the development host currently
-uses COM14. ADB provides shell and file transfer without a WiFi connection.
-
-This alternative does not enable onboard SV6621 WiFi or Bluetooth. USB
-network adapters and ADB network tunneling are separate development work,
-not capabilities promised by this configuration. Rockchip boot components
-retain their own licensing requirements.
