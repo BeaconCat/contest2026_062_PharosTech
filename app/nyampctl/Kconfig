@@ -1,0 +1,22 @@
+config EXAMPLES_NYAMPCTL
+	tristate "Nyabula AMP control diagnostic"
+	default n
+	depends on RPMSG_CHAR
+	---help---
+		Build the nyampctl health diagnostic for the Linux AMP compute domain.
+
+if EXAMPLES_NYAMPCTL
+
+config EXAMPLES_NYAMPCTL_PROGNAME
+	string "Program name"
+	default "nyampctl"
+
+config EXAMPLES_NYAMPCTL_PRIORITY
+	int "Task priority"
+	default 100
+
+config EXAMPLES_NYAMPCTL_STACKSIZE
+	int "Task stack size"
+	default 4096
+
+endif
