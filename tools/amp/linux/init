@@ -1,0 +1,27 @@
+#!/bin/sh
+
+export PATH=/sbin:/bin:/usr/sbin:/usr/bin
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts /run /tmp
+mount -t devpts devpts /dev/pts
+mount -t tmpfs tmpfs /run
+mount -t tmpfs tmpfs /tmp
+
+echo /sbin/mdev > /proc/sys/kernel/hotplug
+mdev -s
+
+if [ -x /usr/sbin/nyampd ]; then
+  (
+    while true; do
+      /usr/sbin/nyampd
+      echo "nyampd exited; restarting" >&2
+      /bin/busybox sleep 1
+    done
+  ) &
+fi
+
+echo "Nyabula AMP compute domain ready"
+exec setsid cttyhack /bin/sh
