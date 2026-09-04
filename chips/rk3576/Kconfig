@@ -118,6 +118,13 @@ config RK3576_EMMC
 		leaves the eMMC CRU clock ungated, so no CRU/pinctrl setup is
 		needed (non-removable, loader-configured).
 
+config RK3576_MAILBOX
+	bool "Mailbox (inter-core doorbell)"
+	default n
+	---help---
+		Enable the RK3576 inter-core command/data mailbox driver.  Transport
+		users select the mailbox instances and remote interrupt output.
+
 config RK3576_GPIO
 	bool "GPIO"
 	default n
