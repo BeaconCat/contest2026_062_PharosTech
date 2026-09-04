@@ -144,4 +144,10 @@
 
 #define RK3576_SARADC_ADDR 0x2AE00000
 
+/* Mailbox instances 0..13 occupy consecutive 4 KiB windows. */
+
+#define RK3576_MAILBOX_BASE   0x2AE50000
+#define RK3576_MAILBOX_STRIDE 0x00001000
+#define RK3576_MAILBOX_COUNT  14
+
 #endif /* __ARCH_ARM64_SRC_RK3576_HARDWARE_RK3576_MEMORYMAP_H */
