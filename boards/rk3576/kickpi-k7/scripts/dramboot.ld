@@ -20,6 +20,8 @@
  *
  ****************************************************************************/
 
+#include <nuttx/config.h>
+
 OUTPUT_ARCH(aarch64)
 
 ENTRY(__start)
@@ -31,15 +33,12 @@ PHDRS
 
 SECTIONS
 {
-  /* NuttX runs as BL33 in the Rockchip vendor boot chain
-   * (idbloader/SPL -> BL31/ATF -> NuttX). It is packed into the "uboot"
-   * slot of the vendor FIT image, whose load address is 0x40200000 (verified
-   * on hardware with dumpimage). BL31 exits to this address at EL2, so the
-   * link address must match CONFIG_RAM_START (0x40200000); the previous
-   * 0x02080000 was inherited from the rk3399 port and left NuttX linked at an
-   * address it was never loaded to, hanging silently right after the BL31 handoff.
+  /* NuttX runs from the address selected by the active board configuration.
+   * The standalone BL33 profile uses 0x40200000, while the AMP remote profile
+   * uses its reserved DDR window.  Both the image loader and CONFIG_RAM_START
+   * must use the same address.
    */
-  . = 0x40200000;  /* = CONFIG_RAM_START; BL31 hands off to NuttX (BL33) here */
+  . = CONFIG_RAM_START;
   _start = .;
   .text : {
         _stext = .;            /* Text section */
