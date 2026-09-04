@@ -1,0 +1,86 @@
+name: Sync N-Boot release
+
+on:
+  schedule:
+    - cron: "17,47 * * * *"
+  repository_dispatch:
+    types: [nboot-release]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: N-Boot release tag; empty selects latest
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag || github.event.client_payload.tag }}
+        run: |
+          if [ -n "$REQUESTED_TAG" ]; then
+            TAG="$REQUESTED_TAG"
+          else
+            TAG=$(gh release view --repo BeaconCat/N-Boot --json tagName -q .tagName)
+          fi
+          if ! [[ "$TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; then
+            echo "invalid release tag: $TAG" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Skip installed release
+        id: installed
+        run: |
+          CURRENT=$(cat board/nboot/RELEASE 2>/dev/null || true)
+          if [ "$CURRENT" = "${{ steps.release.outputs.tag }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download and validate assets
+        if: steps.installed.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/nboot"
+          gh release download "${{ steps.release.outputs.tag }}" \
+            --repo BeaconCat/N-Boot \
+            --dir "$RUNNER_TEMP/nboot" \
+            --pattern nboot-kickpi-k7.bin \
+            --pattern nboot-kickpi-k7.dtb \
+            --pattern SHA256SUMS
+          python3 tools/sync_nboot_release.py \
+            --assets "$RUNNER_TEMP/nboot" \
+            --output board/nboot \
+            --tag "${{ steps.release.outputs.tag }}"
+
+      - name: Create update pull request
+        if: steps.installed.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          BRANCH="automation/nboot-${TAG//[^A-Za-z0-9._-]/-}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git add board/nboot
+          git commit -m "build(nboot): update to $TAG"
+          git push --force-with-lease origin "$BRANCH"
+          if ! gh pr view "$BRANCH" >/dev/null 2>&1; then
+            gh pr create \
+              --base dev-ai-contest-2026 \
+              --head "$BRANCH" \
+              --title "build(nboot): update to $TAG" \
+              --body "Automated update from BeaconCat/N-Boot release **$TAG**. Assets passed SHA-256, ARM64 Image header and DTB validation."
+          fi
