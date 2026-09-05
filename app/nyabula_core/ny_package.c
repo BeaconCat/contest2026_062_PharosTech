@@ -32,12 +32,16 @@
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include "ny_manifest.h"
 #include "ny_package.h"
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+#include "ny_state.h"
+#endif
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -421,8 +425,8 @@ static void ny_package_clean_staging(const char *plugin_root)
       char child[PATH_MAX];
 
       if (strncmp(entry->d_name, ".staging.", 9) == 0 &&
-          ny_package_join(child, sizeof(child), plugin_root,
-                          entry->d_name) >= 0)
+          ny_package_join(child, sizeof(child), plugin_root, entry->d_name) >=
+              0)
         {
           ny_package_remove_tree(child);
         }
@@ -464,6 +468,33 @@ static int ny_package_read_marker(const char *plugin_root, const char *name,
     {
       return ret;
     }
+
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+  char *stored;
+  if (size == 0)
+    {
+      return -EINVAL;
+    }
+
+  ret = ny_state_read(path, &stored, &offset, size - 1);
+  if (ret == 0)
+    {
+      memcpy(version, stored, offset);
+      free(stored);
+      version[offset] = '\0';
+      if (offset != 0 && version[offset - 1] == '\n')
+        {
+          version[offset - 1] = '\0';
+        }
+
+      return ny_package_valid_version(version) ? 0 : -EINVAL;
+    }
+
+  if (ret != -ENOENT)
+    {
+      return ret;
+    }
+#endif
 
   fd = open(path, O_RDONLY | O_NOFOLLOW);
   if (fd < 0)
@@ -612,6 +643,39 @@ static int ny_package_activate_locked(const char *id, const char *version,
     {
       return 0;
     }
+
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+  if (ret >= 0 || ret == -ENOENT)
+    {
+      struct ny_state_update_s updates[2];
+      char last_good_path[PATH_MAX];
+      size_t count = ret >= 0 && update_last_good ? 2 : 1;
+
+      ret = ny_package_join(destination, sizeof(destination), plugin_root,
+                            "current");
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      updates[0].key = destination;
+      updates[0].value = version;
+      updates[0].length = strlen(version);
+      ret = ny_package_join(last_good_path, sizeof(last_good_path),
+                            plugin_root, "last-good");
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      updates[1].key = last_good_path;
+      updates[1].value = current;
+      updates[1].length = count == 2 ? strlen(current) : 0;
+      return ny_state_write_many(updates, count);
+    }
+
+  return ret;
+#endif
 
   if (ret >= 0)
     {
