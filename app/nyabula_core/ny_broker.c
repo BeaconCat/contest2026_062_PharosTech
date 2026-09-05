@@ -62,10 +62,10 @@ static int ny_broker_write_all(int fd, const char *buffer, size_t length);
 static bool ny_broker_valid_key(const char *key)
 {
   size_t index;
-  size_t length = strlen(key);
+  size_t length;
 
-  if (length == 0 || length >= 64 || strcmp(key, ".") == 0 ||
-      strcmp(key, "..") == 0)
+  if (key == NULL || (length = strlen(key)) == 0 || length >= 64 ||
+      strcmp(key, ".") == 0 || strcmp(key, "..") == 0)
     {
       return false;
     }
@@ -148,12 +148,27 @@ static int ny_broker_write_all(int fd, const char *buffer, size_t length)
  ****************************************************************************/
 
 int ny_broker_storage_get(const struct ny_broker_client_s *client,
-                          const char *key, char **value, size_t *length)
+                                  const char *key, char **value,
+                                  size_t *length)
 {
   char path[PATH_MAX];
+  struct stat status;
+  size_t offset = 0;
+  size_t size;
+  char extra;
   ssize_t count;
   int fd;
   int ret;
+
+  if (value != NULL)
+    {
+      *value = NULL;
+    }
+
+  if (length != NULL)
+    {
+      *length = 0;
+    }
 
   if (client == NULL || value == NULL || length == NULL ||
       (client->permissions & NY_PERMISSION_STORAGE_READ) == 0)
@@ -167,30 +182,84 @@ int ny_broker_storage_get(const struct ny_broker_client_s *client,
       return ret;
     }
 
-  fd = open(path, O_RDONLY | O_NOFOLLOW);
+  if (lstat(path, &status) < 0)
+    {
+      return -errno;
+    }
+
+  if (!S_ISREG(status.st_mode))
+    {
+      return -EINVAL;
+    }
+
+  fd = open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK);
   if (fd < 0)
     {
       return -errno;
     }
 
-  *value = malloc(CONFIG_NYABULA_CORE_STORAGE_VALUE_LIMIT + 1);
+  if (fstat(fd, &status) < 0)
+    {
+      ret = -errno;
+      close(fd);
+      return ret;
+    }
+
+  if (!S_ISREG(status.st_mode) || status.st_size < 0 ||
+      status.st_size > CONFIG_NYABULA_CORE_STORAGE_VALUE_LIMIT)
+    {
+      ret = S_ISREG(status.st_mode) ? -EFBIG : -EINVAL;
+      close(fd);
+      return ret;
+    }
+
+  size = (size_t)status.st_size;
+  *value = malloc(size + 1);
   if (*value == NULL)
     {
       close(fd);
       return -ENOMEM;
     }
 
-  count = read(fd, *value, CONFIG_NYABULA_CORE_STORAGE_VALUE_LIMIT + 1);
+  ret = 0;
+  while (offset < size)
+    {
+      count = read(fd, *value + offset, size - offset);
+      if (count < 0 && errno == EINTR)
+        {
+          continue;
+        }
+
+      if (count <= 0)
+        {
+          ret = count < 0 ? -errno : -EIO;
+          break;
+        }
+
+      offset += count;
+    }
+
+  if (ret == 0)
+    {
+      do
+        {
+          count = read(fd, &extra, 1);
+        }
+      while (count < 0 && errno == EINTR);
+
+      ret = count < 0 ? -errno : count != 0 ? -EFBIG : 0;
+    }
+
   close(fd);
-  if (count < 0 || count > CONFIG_NYABULA_CORE_STORAGE_VALUE_LIMIT)
+  if (ret < 0)
     {
       free(*value);
       *value = NULL;
-      return count < 0 ? -errno : -EFBIG;
+      return ret;
     }
 
-  (*value)[count] = '\0';
-  *length = (size_t)count;
+  (*value)[size] = '\0';
+  *length = size;
   return 0;
 }
 
