@@ -40,6 +40,9 @@
 
 #include "ny_manifest.h"
 #include "ny_revocation.h"
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+#include "ny_state.h"
+#endif
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -289,6 +292,21 @@ static int ny_revocation_read(cJSON **store)
   int fd;
   int ret;
 
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+  size_t stored_length;
+  ret = ny_state_read(CONFIG_NYABULA_CORE_REVOCATION_STORE, &content,
+                      &stored_length, NY_REVOCATION_LIMIT);
+  if (ret == 0)
+    {
+      goto parse;
+    }
+
+  if (ret != -ENOENT)
+    {
+      return ret;
+    }
+#endif
+
   fd = open(CONFIG_NYABULA_CORE_REVOCATION_STORE, O_RDONLY | O_NOFOLLOW);
   if (fd < 0)
     {
@@ -332,6 +350,9 @@ static int ny_revocation_read(cJSON **store)
     }
 
   content[status.st_size] = '\0';
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+parse:
+#endif
   *store = cJSON_ParseWithOpts(content, &end, true);
   free(content);
   ret = ny_revocation_validate(*store);
@@ -447,6 +468,12 @@ static int ny_revocation_save(cJSON *store)
       free(content);
       return -EFBIG;
     }
+
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+  ret = ny_state_write(CONFIG_NYABULA_CORE_REVOCATION_STORE, content, length);
+  free(content);
+  return ret;
+#endif
 
   ret = ny_revocation_ensure_parent();
   if (ret < 0)
