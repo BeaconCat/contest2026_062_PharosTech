@@ -24,7 +24,9 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include <nuttx/mutex.h>
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -47,6 +49,12 @@
 #endif
 
 /****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+static mutex_t g_storage_lock = NXMUTEX_INITIALIZER;
+
+/****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
@@ -54,6 +62,11 @@ static bool ny_broker_valid_key(const char *key);
 static int ny_broker_data_path(const struct ny_broker_client_s *client,
                                const char *key, char *path, size_t size);
 static int ny_broker_write_all(int fd, const char *buffer, size_t length);
+static int ny_broker_storage_budget(const char *path, const char *key,
+                                    size_t length);
+static int ny_broker_storage_read(const struct ny_broker_client_s *client,
+                                  const char *key, char **value,
+                                  size_t *length);
 
 /****************************************************************************
  * Private Functions
@@ -119,6 +132,93 @@ static int ny_broker_data_path(const struct ny_broker_client_s *client,
   return ret < 0 || ret >= (int)size ? -ENAMETOOLONG : 0;
 }
 
+static int ny_broker_storage_budget(const char *path, const char *key,
+                                    size_t length)
+{
+  char directory[PATH_MAX];
+  char entry_path[PATH_MAX];
+  struct dirent *entry;
+  struct stat status;
+  DIR *stream;
+  uint64_t bytes = length;
+  size_t keys = 1;
+  char *slash;
+  int ret = 0;
+
+  strlcpy(directory, path, sizeof(directory));
+  slash = strrchr(directory, '/');
+  if (slash == NULL)
+    {
+      return -EINVAL;
+    }
+
+  *slash = '\0';
+  stream = opendir(directory);
+  if (stream == NULL)
+    {
+      return -errno;
+    }
+
+  for (;;)
+    {
+      errno = 0;
+      entry = readdir(stream);
+      if (entry == NULL)
+        {
+          ret = errno == 0 ? 0 : -errno;
+          break;
+        }
+
+      if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        {
+          continue;
+        }
+
+      if (snprintf(entry_path, sizeof(entry_path), "%s/%s", directory,
+                   entry->d_name) >= (int)sizeof(entry_path))
+        {
+          ret = -ENAMETOOLONG;
+          break;
+        }
+
+      if (lstat(entry_path, &status) < 0)
+        {
+          ret = -errno;
+          break;
+        }
+
+      if (!S_ISREG(status.st_mode) || status.st_size < 0)
+        {
+          ret = -EINVAL;
+          break;
+        }
+
+      if (strcmp(entry->d_name, key) != 0)
+        {
+          /* Check before addition so even corrupt sizes cannot overflow. */
+
+          if ((uint64_t)status.st_size >
+              CONFIG_NYABULA_CORE_STORAGE_BYTES_LIMIT - bytes)
+            {
+              ret = -EDQUOT;
+              break;
+            }
+
+          bytes += status.st_size;
+          keys++;
+        }
+
+      if (keys > CONFIG_NYABULA_CORE_STORAGE_KEYS_LIMIT)
+        {
+          ret = -EDQUOT;
+          break;
+        }
+    }
+
+  closedir(stream);
+  return ret;
+}
+
 static int ny_broker_write_all(int fd, const char *buffer, size_t length)
 {
   size_t offset = 0;
@@ -148,16 +248,8 @@ static int ny_broker_write_all(int fd, const char *buffer, size_t length)
  ****************************************************************************/
 
 int ny_broker_storage_get(const struct ny_broker_client_s *client,
-                                  const char *key, char **value,
-                                  size_t *length)
+                          const char *key, char **value, size_t *length)
 {
-  char path[PATH_MAX];
-  struct stat status;
-  size_t offset = 0;
-  size_t size;
-  char extra;
-  ssize_t count;
-  int fd;
   int ret;
 
   if (value != NULL)
@@ -169,6 +261,30 @@ int ny_broker_storage_get(const struct ny_broker_client_s *client,
     {
       *length = 0;
     }
+
+  ret = nxmutex_lock(&g_storage_lock);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = ny_broker_storage_read(client, key, value, length);
+  nxmutex_unlock(&g_storage_lock);
+  return ret;
+}
+
+static int ny_broker_storage_read(const struct ny_broker_client_s *client,
+                                  const char *key, char **value,
+                                  size_t *length)
+{
+  char path[PATH_MAX];
+  struct stat status;
+  size_t offset = 0;
+  size_t size;
+  char extra;
+  ssize_t count;
+  int fd;
+  int ret;
 
   if (client == NULL || value == NULL || length == NULL ||
       (client->permissions & NY_PERMISSION_STORAGE_READ) == 0)
@@ -281,20 +397,40 @@ int ny_broker_storage_put(const struct ny_broker_client_s *client,
       return -EFBIG;
     }
 
-  ret = ny_broker_data_path(client, key, path, sizeof(path));
+  if (length > CONFIG_NYABULA_CORE_STORAGE_BYTES_LIMIT)
+    {
+      return -EDQUOT;
+    }
+
+  ret = nxmutex_lock(&g_storage_lock);
   if (ret < 0)
     {
+      return ret;
+    }
+
+  ret = ny_broker_data_path(client, key, path, sizeof(path));
+  if (ret >= 0)
+    {
+      ret = ny_broker_storage_budget(path, key, length);
+    }
+
+  if (ret < 0)
+    {
+      nxmutex_unlock(&g_storage_lock);
       return ret;
     }
 
   fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0660);
   if (fd < 0)
     {
-      return -errno;
+      ret = -errno;
+      nxmutex_unlock(&g_storage_lock);
+      return ret;
     }
 
   ret = ny_broker_write_all(fd, value, length);
   close(fd);
+  nxmutex_unlock(&g_storage_lock);
   return ret;
 }
 
