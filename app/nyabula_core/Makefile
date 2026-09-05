@@ -41,7 +41,7 @@ CSRCS  += ny_runtime.c ny_revocation.c ny_scheduler.c
 CSRCS  += ny_wasm.c
 
 ifeq ($(CONFIG_NYABULA_CORE_HTTP),y)
-CSRCS += ny_http.c
+CSRCS += ny_http.c ny_broker_http.c
 endif
 
 ifeq ($(CONFIG_NYABULA_CORE_STATE_SQLITE),y)
