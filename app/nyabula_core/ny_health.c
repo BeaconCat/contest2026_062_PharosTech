@@ -37,6 +37,9 @@
 #include <unistd.h>
 
 #include "ny_health.h"
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+#include "ny_state.h"
+#endif
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -205,6 +208,22 @@ static int ny_health_read(const char *path, unsigned int *failures)
   unsigned long value;
   int fd;
 
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+  char *stored;
+  int ret = ny_state_read(path, &stored, &offset, sizeof(content) - 1);
+  if (ret == 0)
+    {
+      memcpy(content, stored, offset);
+      free(stored);
+      goto parse;
+    }
+
+  if (ret != -ENOENT)
+    {
+      return ret;
+    }
+#endif
+
   fd = open(path, O_RDONLY | O_NOFOLLOW);
   if (fd < 0)
     {
@@ -241,6 +260,9 @@ static int ny_health_read(const char *path, unsigned int *failures)
     }
 
   close(fd);
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+parse:
+#endif
   if (offset == 0 || offset + 1 == sizeof(content))
     {
       return -EINVAL;
@@ -274,6 +296,10 @@ static int ny_health_write(const char *path, unsigned int failures)
     {
       return -EINVAL;
     }
+
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+  return ny_state_write(path, content, (size_t)length);
+#endif
 
   fd = open(temporary, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0600);
   if (fd < 0)
@@ -458,6 +484,12 @@ int ny_health_reset(const char *id, const char *version)
     }
 
   nxmutex_lock(&g_health_lock);
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+  ret = ny_health_write(path, 0);
+  nxmutex_unlock(&g_health_lock);
+  return ret;
+#endif
+
   if (unlink(path) == 0)
     {
       removed = true;
