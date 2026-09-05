@@ -26,6 +26,22 @@ env:
   OPENVELA_DIR: openvela
 
 jobs:
+  release_tools:
+    name: Release tooling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate release tooling
+        run: |
+          python3 -m py_compile \
+            tools/sync_nboot_release.py \
+            tools/test_sync_nboot_release.py \
+            tools/k7_abpack/bootctrl.py \
+            tools/k7_abpack/test_bootctrl.py
+          python3 tools/test_sync_nboot_release.py
+          python3 tools/k7_abpack/test_bootctrl.py
+          bash -n tools/k7_sdpack/build_nboot_ab.sh
+
   # 扫描 defconfig，生成 build matrix
   scan_configs:
     name: Scan Configs
