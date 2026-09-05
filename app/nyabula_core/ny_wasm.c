@@ -1011,16 +1011,22 @@ int ny_wasm_load(struct ny_wasm_plugin_s *plugin,
   unsigned int generation;
   int ret;
 
-  if (plugin == NULL || config == NULL || config->id[0] == '\0' ||
-      config->entry[0] == '\0' || config->stack_limit == 0 ||
-      config->stack_limit > UINT32_MAX || config->memory_limit < 65536 ||
-      config->event_timeout_ms == 0)
+  if (plugin == NULL)
     {
       return -EINVAL;
     }
 
+  /* Every failed load must leave an object safe for destroy. */
+
   memset(plugin, 0, sizeof(*plugin));
   plugin->owner = pthread_self();
+  if (config == NULL || config->id[0] == '\0' || config->entry[0] == '\0' ||
+      config->stack_limit == 0 || config->stack_limit > UINT32_MAX ||
+      config->memory_limit < 65536 || config->event_timeout_ms == 0)
+    {
+      return -EINVAL;
+    }
+
   generation = atomic_load(&g_wasm_generation);
   while (generation <= INT32_MAX &&
          !atomic_compare_exchange_weak(&g_wasm_generation, &generation,
