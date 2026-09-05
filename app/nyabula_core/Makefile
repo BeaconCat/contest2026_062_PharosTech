@@ -40,6 +40,10 @@ CSRCS  += ny_permission.c
 CSRCS  += ny_runtime.c ny_revocation.c ny_scheduler.c
 CSRCS  += ny_wasm.c
 
+ifeq ($(CONFIG_NYABULA_CORE_HTTP),y)
+CSRCS += ny_http.c
+endif
+
 ifeq ($(CONFIG_NYABULA_CORE_STATE_SQLITE),y)
 NYCORE_SQLITE_DIR = $(CURDIR)/.sqlite
 CSRCS += ny_state.c sqlite3.c

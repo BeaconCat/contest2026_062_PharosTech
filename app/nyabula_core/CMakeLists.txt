@@ -35,6 +35,10 @@ if(CONFIG_CONTEST2026_062_NYABULA_CORE)
       ny_wasm.c)
   set(NYABULA_CORE_DEPENDS libqjs)
 
+  if(CONFIG_NYABULA_CORE_HTTP)
+    list(APPEND NYABULA_CORE_SRCS ny_http.c)
+  endif()
+
   if(CONFIG_NYABULA_CORE_STATE_SQLITE)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     set(NYCORE_SQLITE_DIR ${CMAKE_CURRENT_BINARY_DIR}/sqlite)

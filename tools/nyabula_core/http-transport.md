@@ -1,0 +1,23 @@
+# HTTP传输层当前状态
+
+`NYABULA_CORE_HTTP`构建`ny_http_open/step/cancel/close`，复用NuttX webclient的HTTP解析、非阻塞socket状态机及abort。该层只传输，不鉴权；尚未接入公开QuickJS/WAMR Capability，不能把它视为完整Network provider。
+
+## 已实现的边界
+
+- 一个请求由创建它的Broker线程独占；跨线程step/cancel/close返回EPERM。其他线程必须向所有者投递取消消息，不能直接操作socket上下文。
+- URL小于256字节、只允许可打印ASCII，不接受空白及CR/LF注入；仅接受数字IPv4的HTTP地址。显式端口必须为1–65535的纯数字，拒绝上游解析器的uint16溢出回绕及尾随字符；拒绝fragment。
+- 明确拒绝域名和HTTPS。上游webclient的非阻塞模式仍同步解析DNS，TLS需要另外提供并验证适配器；此处不暗中阻塞或跳过证书校验。
+- 收到Location头立即拒绝，不能重定向到未经批准的域名或端点。
+- 响应体最多4096字节，超限EFBIG，错误不交付部分正文。正文按长度返回，允许嵌入NUL，不保证字符串终止。
+- 单请求总墙钟期限1–60000 ms，由每次step检查；所有者必须继续调度step。pending返回EAGAIN，终态保留到close。
+- 只有webclient_perform返回EAGAIN后才可abort。终态已由webclient释放内部状态，禁止再次abort；未开始的请求取消也不调用abort。
+- timeout/cancel关闭真实连接；完成后cancel不改写已保存结果。close释放请求内存。
+
+## 待接入，不缩减最终目标
+
+1. Broker统一授权、请求数与原生内存配额、权限代次、撤权/停机的所有者取消消息。
+2. QuickJS Promise及WAMR统一异步ABI，不把传输指针或JSValue跨线程传递。
+3. 可取消的域名解析、证书验证的TLS、HTTP方法/请求体及受控重定向策略。
+4. 公共插件API和端到端真实服务测试。
+
+目前Make/CMake的NuttX TCP回环测试覆盖含NUL的200响应、Location拒绝、4100字节正文拒绝、超时、主动取消、重复取消和跨线程误用。服务端在超时和取消后观察到EOF。测试是实际NuttX socket/webclient链路，不是Network mock；它也不证明真实网卡、DNS或TLS已通过。
