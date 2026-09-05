@@ -39,6 +39,9 @@
 
 #include "ny_broker.h"
 #include "ny_manifest.h"
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+#include "ny_state.h"
+#endif
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -298,6 +301,15 @@ static int ny_broker_storage_read(const struct ny_broker_client_s *client,
       return ret;
     }
 
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+  ret = ny_state_read(path, value, length,
+                      CONFIG_NYABULA_CORE_STORAGE_VALUE_LIMIT);
+  if (ret != -ENOENT)
+    {
+      return ret;
+    }
+#endif
+
   if (lstat(path, &status) < 0)
     {
       return -errno;
@@ -409,6 +421,17 @@ int ny_broker_storage_put(const struct ny_broker_client_s *client,
     }
 
   ret = ny_broker_data_path(client, key, path, sizeof(path));
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+  if (ret >= 0)
+    {
+      ret = ny_state_storage_write(path, value, length,
+                                   CONFIG_NYABULA_CORE_STORAGE_BYTES_LIMIT,
+                                   CONFIG_NYABULA_CORE_STORAGE_KEYS_LIMIT);
+    }
+  nxmutex_unlock(&g_storage_lock);
+  return ret;
+#endif
+
   if (ret >= 0)
     {
       ret = ny_broker_storage_budget(path, key, length);
