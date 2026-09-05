@@ -148,6 +148,20 @@ config NYABULA_CORE_STORAGE_VALUE_LIMIT
 	default 4096
 	range 128 65536
 
+config NYABULA_CORE_STATE_SQLITE
+	bool "Transactional Core state database"
+	default y if !BUILD_KERNEL
+	depends on !BUILD_KERNEL && !LIB_SQLITE
+	---help---
+		Use the upstream SQLite rollback journal for Core state. The flat
+		build shares one serialized broker. Kernel builds require a single
+		broker process before enabling this database integration.
+
+config NYABULA_CORE_STATE_DATABASE
+	string "Core private state database"
+	default "/data/nyabula/core.sqlite"
+	depends on NYABULA_CORE_STATE_SQLITE
+
 config NYABULA_CORE_STORAGE_BYTES_LIMIT
 	int "Maximum stored value bytes per plugin"
 	default 65536

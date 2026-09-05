@@ -40,6 +40,20 @@ CSRCS  += ny_permission.c
 CSRCS  += ny_runtime.c ny_revocation.c ny_scheduler.c
 CSRCS  += ny_wasm.c
 
+ifeq ($(CONFIG_NYABULA_CORE_STATE_SQLITE),y)
+NYCORE_SQLITE_DIR = $(CURDIR)/.sqlite
+CSRCS += ny_state.c sqlite3.c
+VPATH += $(NYCORE_SQLITE_DIR)
+CFLAGS += ${INCDIR_PREFIX}$(NYCORE_SQLITE_DIR)
+$(NYCORE_SQLITE_DIR)/sqlite3.c_CFLAGS += -DSQLITE_OS_UNIX=1 -DSQLITE_THREADSAFE=0
+$(NYCORE_SQLITE_DIR)/sqlite3.c_CFLAGS += -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_OMIT_WAL
+$(NYCORE_SQLITE_DIR)/sqlite3.c_CFLAGS += -DSQLITE_MAX_MMAP_SIZE=0 -DSQLITE_TEMP_STORE=3
+$(NYCORE_SQLITE_DIR)/sqlite3.c_CFLAGS += -DSQLITE_DEFAULT_MEMSTATUS=0
+$(NYCORE_SQLITE_DIR)/sqlite3.c_CFLAGS += -Wno-unused-variable -Wno-undef -Wno-unused-function -Wno-shadow
+context::
+	$(Q) python3 $(CURDIR)/prepare_sqlite.py --output $(NYCORE_SQLITE_DIR)
+endif
+
 ifeq ($(CONFIG_NYABULA_CORE_REQUIRE_SIGNATURE),y)
 CSRCS  += ny_signature.c
 endif

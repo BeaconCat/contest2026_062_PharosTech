@@ -35,6 +35,28 @@ if(CONFIG_CONTEST2026_062_NYABULA_CORE)
       ny_wasm.c)
   set(NYABULA_CORE_DEPENDS libqjs)
 
+  if(CONFIG_NYABULA_CORE_STATE_SQLITE)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    set(NYCORE_SQLITE_DIR ${CMAKE_CURRENT_BINARY_DIR}/sqlite)
+    execute_process(
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/prepare_sqlite.py
+              --output ${NYCORE_SQLITE_DIR}
+      RESULT_VARIABLE NYCORE_SQLITE_RESULT)
+    if(NOT NYCORE_SQLITE_RESULT EQUAL 0)
+      message(FATAL_ERROR "Failed to prepare pinned SQLite sources")
+    endif()
+    nuttx_add_library(nycore_sqlite STATIC ${NYCORE_SQLITE_DIR}/sqlite3.c)
+    target_include_directories(nycore_sqlite PUBLIC ${NYCORE_SQLITE_DIR})
+    target_compile_definitions(nycore_sqlite PRIVATE
+      SQLITE_OS_UNIX=1 SQLITE_THREADSAFE=0 SQLITE_OMIT_LOAD_EXTENSION
+      SQLITE_OMIT_WAL SQLITE_MAX_MMAP_SIZE=0 SQLITE_TEMP_STORE=3
+      SQLITE_DEFAULT_MEMSTATUS=0)
+    target_compile_options(nycore_sqlite PRIVATE -Wno-unused-variable
+      -Wno-undef -Wno-unused-function -Wno-shadow)
+    list(APPEND NYABULA_CORE_SRCS ny_state.c)
+    list(APPEND NYABULA_CORE_DEPENDS nycore_sqlite)
+  endif()
+
   if(CONFIG_NYABULA_CORE_WAMR)
     list(APPEND NYABULA_CORE_DEPENDS wamr)
     if(TARGET wamr)
@@ -57,6 +79,7 @@ if(CONFIG_CONTEST2026_062_NYABULA_CORE)
     SRCS
     ${NYABULA_CORE_SRCS}
     INCLUDE_DIRECTORIES
+    ${NYCORE_SQLITE_DIR}
     ${NUTTX_APPS_DIR}/crypto/libsodium/libsodium/src/libsodium/include
     ${NUTTX_APPS_DIR}/interpreters/wamr/wamr/core/iwasm/include
     DEPENDS
