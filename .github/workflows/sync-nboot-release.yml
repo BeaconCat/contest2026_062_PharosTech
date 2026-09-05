@@ -21,6 +21,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.NBOOT_SYNC_TOKEN || github.token }}
 
       - name: Resolve release
         id: release
@@ -35,6 +37,13 @@ jobs:
           fi
           if ! [[ "$TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; then
             echo "invalid release tag: $TAG" >&2
+            exit 1
+          fi
+          RELEASE=$(gh release view "$TAG" --repo BeaconCat/N-Boot \
+            --json isDraft,isPrerelease,tagName)
+          if [ "$(jq -r .isDraft <<<"$RELEASE")" = true ] || \
+             [ "$(jq -r .isPrerelease <<<"$RELEASE")" = true ]; then
+            echo "N-Boot release is draft or prerelease: $TAG" >&2
             exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -58,6 +67,7 @@ jobs:
             --dir "$RUNNER_TEMP/nboot" \
             --pattern nboot-kickpi-k7.bin \
             --pattern nboot-kickpi-k7.dtb \
+            --pattern nboot-release.json \
             --pattern SHA256SUMS
           python3 tools/sync_nboot_release.py \
             --assets "$RUNNER_TEMP/nboot" \
@@ -67,7 +77,7 @@ jobs:
       - name: Create update pull request
         if: steps.installed.outputs.skip != 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.NBOOT_SYNC_TOKEN || github.token }}
           TAG: ${{ steps.release.outputs.tag }}
         run: |
           BRANCH="automation/nboot-${TAG//[^A-Za-z0-9._-]/-}"
@@ -82,5 +92,5 @@ jobs:
               --base dev-ai-contest-2026 \
               --head "$BRANCH" \
               --title "build(nboot): update to $TAG" \
-              --body "Automated update from BeaconCat/N-Boot release **$TAG**. Assets passed SHA-256, ARM64 Image header and DTB validation."
+              --body "Automated update from BeaconCat/N-Boot release **$TAG**. Assets passed the release manifest, SHA-256, board contract, ARM64 Image header and DTB validation."
           fi
