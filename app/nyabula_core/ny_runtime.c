@@ -503,6 +503,11 @@ int ny_plugin_async_begin(struct ny_plugin_s *plugin, JSValue *promise,
       return -ECANCELED;
     }
 
+  if (plugin->next_request == 0)
+    {
+      return -EOVERFLOW;
+    }
+
   for (index = 0; index < NY_PLUGIN_MAX_PENDING; index++)
     {
       if (!plugin->pending[index].occupied)
@@ -520,11 +525,6 @@ int ny_plugin_async_begin(struct ny_plugin_s *plugin, JSValue *promise,
   if (JS_IsException(*promise))
     {
       return -ENOMEM;
-    }
-
-  if (plugin->next_request == 0)
-    {
-      plugin->next_request = 1;
     }
 
   plugin->pending[index].occupied = true;
