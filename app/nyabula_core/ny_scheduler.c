@@ -124,6 +124,7 @@ static int ny_scheduler_enqueue_locked(struct ny_scheduler_slot_s *slot,
                                        const char *payload);
 static int ny_scheduler_worker(int argc, char *argv[]);
 static int ny_scheduler_pump(void *opaque, uint64_t deadline_ns);
+static int ny_scheduler_wasm_pump(void *opaque, uint64_t deadline_ns);
 #ifdef CONFIG_BUILD_KERNEL
 static void *ny_scheduler_pthread(void *argument);
 #endif
@@ -321,6 +322,47 @@ static int ny_scheduler_pump(void *opaque, uint64_t deadline_ns)
     }
 }
 
+static int ny_scheduler_wasm_pump(void *opaque, uint64_t deadline_ns)
+{
+  struct ny_scheduler_slot_s *slot = opaque;
+  struct timespec wake;
+  uint64_t wake_ns;
+  bool stopping;
+  int ret;
+  for (;;)
+    {
+      nxmutex_lock(&g_scheduler_lock);
+      stopping = slot->stopping;
+      nxmutex_unlock(&g_scheduler_lock);
+      if (stopping)
+        {
+          return -ECANCELED;
+        }
+      if (deadline_ns != 0 && ny_scheduler_now_ns() >= deadline_ns)
+        {
+          return -ETIMEDOUT;
+        }
+      ret = ny_wasm_poll(&slot->wasm);
+      if (ret != -EAGAIN || deadline_ns == 0)
+        {
+          return ret;
+        }
+      wake_ns = deadline_ns;
+      if (ny_wasm_pending(&slot->wasm) &&
+          wake_ns > ny_scheduler_now_ns() + NY_HTTP_POLL_NS)
+        {
+          wake_ns = ny_scheduler_now_ns() + NY_HTTP_POLL_NS;
+        }
+      wake.tv_sec = wake_ns / 1000000000ull;
+      wake.tv_nsec = wake_ns % 1000000000ull;
+      ret = sem_clockwait(&slot->pending, CLOCK_MONOTONIC, &wake);
+      if (ret < 0 && errno != ETIMEDOUT && errno != EINTR)
+        {
+          return -errno;
+        }
+    }
+}
+
 static int ny_scheduler_worker(int argc, char *argv[])
 {
   struct ny_scheduler_event_s event;
@@ -345,6 +387,8 @@ static int ny_scheduler_worker(int argc, char *argv[])
       ret = ny_wasm_load(&slot->wasm, &slot->config);
       if (ret >= 0)
         {
+          slot->wasm.pump = ny_scheduler_wasm_pump;
+          slot->wasm.pump_opaque = slot;
           ret = ny_wasm_start(&slot->wasm);
         }
     }
@@ -374,7 +418,7 @@ static int ny_scheduler_worker(int argc, char *argv[])
   while (ret >= 0)
     {
       ret = slot->config.runtime == NY_PLUGIN_RUNTIME_WAMR
-                ? -EAGAIN
+                ? ny_scheduler_wasm_pump(slot, 0)
                 : ny_scheduler_pump(slot, 0);
       if (ret < 0 && ret != -EAGAIN && ret != -ECANCELED)
         {
@@ -395,8 +439,9 @@ static int ny_scheduler_worker(int argc, char *argv[])
         {
           nxmutex_unlock(&g_scheduler_lock);
 #ifdef CONFIG_NYABULA_CORE_HTTP
-          if (slot->config.runtime != NY_PLUGIN_RUNTIME_WAMR &&
-              ny_plugin_http_pending(&slot->plugin))
+          if (slot->config.runtime == NY_PLUGIN_RUNTIME_WAMR
+                  ? ny_wasm_pending(&slot->wasm)
+                  : ny_plugin_http_pending(&slot->plugin))
             {
               struct timespec wake;
               uint64_t wake_ns = ny_scheduler_now_ns() + NY_HTTP_POLL_NS;
@@ -577,6 +622,7 @@ int ny_scheduler_refresh_permissions(const char *id)
       if (slot->config.runtime == NY_PLUGIN_RUNTIME_WAMR)
         {
           ny_wasm_set_permissions(&slot->wasm, config.permissions);
+          sem_post(&slot->pending);
         }
       else if (slot->accept_completions)
         {

@@ -74,7 +74,7 @@ config NYABULA_CORE_EVENT_TIMEOUT_MS
 	default 100
 
 config NYABULA_CORE_ASYNC_TIMEOUT_MS
-	int "Maximum elapsed time per QuickJS lifecycle callback"
+	int "Maximum elapsed time per lifecycle callback"
 	default 5000
 	range 100 60000
 	---help---

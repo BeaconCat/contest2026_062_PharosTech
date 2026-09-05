@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "ny_manifest.h"
@@ -46,6 +47,7 @@
 #include <wasm_export.h>
 
 #include "ny_broker.h"
+#include "ny_http.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -65,6 +67,7 @@
 
 static mutex_t g_wasm_lock = NXMUTEX_INITIALIZER;
 static bool g_wasm_initialized;
+static atomic_uint g_wasm_generation = 1;
 
 /****************************************************************************
  * Private Types
@@ -108,6 +111,19 @@ static void ny_wasm_client(struct ny_wasm_plugin_s *plugin,
                            struct ny_broker_client_s *client);
 static int ny_wasm_initialize(void);
 static int ny_wasm_read(const char *path, uint8_t **binary, uint32_t *size);
+static uint64_t ny_wasm_now(void);
+static int64_t ny_wasm_defer(wasm_exec_env_t environment);
+static int32_t ny_wasm_complete(wasm_exec_env_t environment, int64_t token,
+                                int32_t result);
+static int ny_wasm_lifecycle(struct ny_wasm_plugin_s *plugin,
+                             wasm_function_inst_t function, uint32_t argc,
+                             uint32_t *argv);
+static void ny_wasm_cancel_requests(struct ny_wasm_plugin_s *plugin);
+#ifdef CONFIG_NYABULA_CORE_HTTP
+static int64_t ny_wasm_http_request(wasm_exec_env_t environment,
+                                    int32_t offset, int32_t length);
+static int32_t ny_wasm_http_cancel(wasm_exec_env_t environment, int64_t token);
+#endif
 static void ny_wasm_watchdog(wdparm_t argument);
 static void ny_wasm_terminate_work(void *argument);
 static int ny_wasm_execute(struct ny_wasm_plugin_s *plugin,
@@ -123,6 +139,12 @@ static int ny_wasm_call_event(struct ny_wasm_plugin_s *plugin,
  ****************************************************************************/
 
 static NativeSymbol g_wasm_symbols[] = {
+  { "lifecycle_defer", (void *)ny_wasm_defer, "()I", NULL },
+  { "lifecycle_complete", (void *)ny_wasm_complete, "(Ii)i", NULL },
+#ifdef CONFIG_NYABULA_CORE_HTTP
+  { "http_request", (void *)ny_wasm_http_request, "(ii)I", NULL },
+  { "http_cancel", (void *)ny_wasm_http_cancel, "(I)i", NULL },
+#endif
   { "core_log", (void *)ny_wasm_core_log, "(ii)i", NULL },
   { "storage_get", (void *)ny_wasm_storage_get, "(iiii)i", NULL },
   { "storage_put", (void *)ny_wasm_storage_put, "(iiii)i", NULL },
@@ -303,7 +325,11 @@ static int32_t ny_wasm_network_request(wasm_exec_env_t environment,
     }
 
   ny_wasm_client(plugin, &client);
+#ifdef CONFIG_NYABULA_CORE_HTTP
+  ret = -ENOTSUP;
+#else
   ret = ny_broker_network_request(&client);
+#endif
   if (ret >= 0)
     {
       memcpy(output, input, (size_t)input_length);
@@ -419,7 +445,7 @@ static int ny_wasm_call_event(struct ny_wasm_plugin_s *plugin,
   memcpy(native, event, length);
   arguments[0] = (uint32_t)offset;
   arguments[1] = (uint32_t)length;
-  ret = ny_wasm_execute(plugin, function, 2, arguments);
+  ret = ny_wasm_lifecycle(plugin, function, 2, arguments);
   if (ret < 0)
     {
       exception = wasm_runtime_get_exception(instance);
@@ -531,12 +557,32 @@ static int ny_wasm_execute(struct ny_wasm_plugin_s *plugin,
 {
   struct ny_wasm_watchdog_s watchdog;
   bool called;
+  uint64_t before = ny_wasm_now();
+  uint64_t budget = (uint64_t)plugin->event_timeout_ms * 1000000ull;
+  uint64_t elapsed;
   int ret;
 
   memset(&watchdog, 0, sizeof(watchdog));
+  if (!pthread_equal(plugin->owner, pthread_self()))
+    {
+      return -EPERM;
+    }
   watchdog.instance = plugin->instance;
   atomic_init(&watchdog.timed_out, false);
-  ret = wd_start(&watchdog.timer, MSEC2TICK(plugin->event_timeout_ms),
+  if (plugin->lifecycle_active)
+    {
+      if (before >= plugin->lifecycle_deadline_ns ||
+          plugin->execution_remaining_ns == 0)
+        {
+          return -ETIMEDOUT;
+        }
+      budget = plugin->execution_remaining_ns;
+      if (budget > plugin->lifecycle_deadline_ns - before)
+        {
+          budget = plugin->lifecycle_deadline_ns - before;
+        }
+    }
+  ret = wd_start(&watchdog.timer, MSEC2TICK((budget + 999999) / 1000000),
                  ny_wasm_watchdog, (wdparm_t)(uintptr_t)&watchdog);
   if (ret < 0)
     {
@@ -550,6 +596,20 @@ static int ny_wasm_execute(struct ny_wasm_plugin_s *plugin,
   wd_cancel(&watchdog.timer);
   work_cancel_sync(HPWORK, &watchdog.work);
   ret = atomic_load(&watchdog.timed_out) ? -ETIMEDOUT : called ? 0 : -EFAULT;
+  elapsed = ny_wasm_now() - before;
+  if (plugin->lifecycle_active)
+    {
+      plugin->execution_remaining_ns =
+          elapsed < plugin->execution_remaining_ns
+              ? plugin->execution_remaining_ns - elapsed
+              : 0;
+      if ((plugin->execution_remaining_ns == 0 ||
+           ny_wasm_now() >= plugin->lifecycle_deadline_ns) &&
+          ret == 0)
+        {
+          ret = -ETIMEDOUT;
+        }
+    }
   return ret;
 }
 
@@ -572,7 +632,7 @@ static int ny_wasm_call(struct ny_wasm_plugin_s *plugin, const char *name,
       return -EPROTO;
     }
 
-  ret = ny_wasm_execute(plugin, function, 0, NULL);
+  ret = ny_wasm_lifecycle(plugin, function, 0, NULL);
   if (ret < 0)
     {
       exception = wasm_runtime_get_exception(plugin->instance);
@@ -587,6 +647,317 @@ static int ny_wasm_call(struct ny_wasm_plugin_s *plugin, const char *name,
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
+
+static uint64_t ny_wasm_now(void)
+{
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  return (uint64_t)now.tv_sec * 1000000000ull + now.tv_nsec;
+}
+
+static int64_t ny_wasm_defer(wasm_exec_env_t environment)
+{
+  struct ny_wasm_plugin_s *plugin = wasm_runtime_get_user_data(environment);
+  if (plugin == NULL || !plugin->lifecycle_active || plugin->stopping)
+    {
+      return -ECANCELED;
+    }
+  if (plugin->lifecycle_deferred)
+    {
+      return -EALREADY;
+    }
+  plugin->lifecycle_deferred = true;
+  plugin->lifecycle_waiting = true;
+  plugin->lifecycle_result = -EINPROGRESS;
+  return plugin->lifecycle_token;
+}
+
+static int32_t ny_wasm_complete(wasm_exec_env_t environment, int64_t token,
+                                int32_t result)
+{
+  struct ny_wasm_plugin_s *plugin = wasm_runtime_get_user_data(environment);
+  if (plugin == NULL || !plugin->lifecycle_active ||
+      !plugin->lifecycle_waiting || token <= 0 ||
+      (uint64_t)token != plugin->lifecycle_token)
+    {
+      return -ESTALE;
+    }
+  if (result > 0)
+    {
+      return -EINVAL;
+    }
+  plugin->lifecycle_result = result;
+  plugin->lifecycle_waiting = false;
+  return 0;
+}
+
+static int ny_wasm_lifecycle(struct ny_wasm_plugin_s *plugin,
+                             wasm_function_inst_t function, uint32_t argc,
+                             uint32_t *argv)
+{
+  int ret;
+  if (!pthread_equal(plugin->owner, pthread_self()))
+    {
+      return -EPERM;
+    }
+  if (plugin->lifecycle_active || plugin->next_lifecycle == 0)
+    {
+      return plugin->lifecycle_active ? -EBUSY : -EOVERFLOW;
+    }
+  plugin->lifecycle_token =
+      ((uint64_t)plugin->generation << 32) | plugin->next_lifecycle;
+  plugin->next_lifecycle =
+      plugin->next_lifecycle > UINT32_MAX - 2 ? 0 : plugin->next_lifecycle + 2;
+  plugin->lifecycle_active = true;
+  plugin->lifecycle_deferred = false;
+  plugin->lifecycle_waiting = false;
+  plugin->lifecycle_result = 0;
+  plugin->execution_remaining_ns =
+      (uint64_t)plugin->event_timeout_ms * 1000000ull;
+  plugin->lifecycle_deadline_ns =
+      ny_wasm_now() +
+      (uint64_t)CONFIG_NYABULA_CORE_ASYNC_TIMEOUT_MS * 1000000ull;
+  ret = ny_wasm_execute(plugin, function, argc, argv);
+  while (ret >= 0 && plugin->lifecycle_waiting)
+    {
+      if (ny_wasm_now() >= plugin->lifecycle_deadline_ns)
+        {
+          ret = -ETIMEDOUT;
+          break;
+        }
+      if (plugin->pump != NULL)
+        {
+          ret =
+              plugin->pump(plugin->pump_opaque, plugin->lifecycle_deadline_ns);
+        }
+      else
+        {
+          ret = ny_wasm_poll(plugin);
+          if (ret == -EAGAIN)
+            {
+              usleep(1000);
+              ret = 0;
+            }
+        }
+    }
+  if (ret >= 0)
+    {
+      ret = plugin->lifecycle_result;
+    }
+  plugin->lifecycle_active = false;
+  return ret;
+}
+
+bool ny_wasm_pending(struct ny_wasm_plugin_s *plugin)
+{
+  size_t index;
+  if (plugin == NULL)
+    {
+      return false;
+    }
+  for (index = 0; index < NY_WASM_MAX_PENDING; index++)
+    {
+      if (plugin->pending[index].http != NULL)
+        {
+          return true;
+        }
+    }
+  return false;
+}
+
+static void ny_wasm_cancel_requests(struct ny_wasm_plugin_s *plugin)
+{
+#ifdef CONFIG_NYABULA_CORE_HTTP
+  size_t index;
+  for (index = 0; index < NY_WASM_MAX_PENDING; index++)
+    {
+      ny_broker_http_close(plugin->pending[index].http);
+      memset(&plugin->pending[index], 0, sizeof(plugin->pending[index]));
+    }
+#endif
+}
+
+#ifdef CONFIG_NYABULA_CORE_HTTP
+static int64_t ny_wasm_http_request(wasm_exec_env_t environment,
+                                    int32_t offset, int32_t length)
+{
+  struct ny_wasm_plugin_s *plugin = wasm_runtime_get_user_data(environment);
+  struct ny_broker_client_s client;
+  wasm_function_inst_t response;
+  wasm_valkind_t types[5];
+  const void *input;
+  char url[256];
+  size_t index;
+  int ret;
+  if (plugin == NULL || plugin->stopping)
+    {
+      return -ECANCELED;
+    }
+  if (length <= 0 || length >= sizeof(url))
+    {
+      return -EINVAL;
+    }
+  ret = ny_wasm_memory(environment, offset, length, sizeof(url) - 1,
+                       (void **)&input);
+  if (ret < 0)
+    {
+      return ret;
+    }
+  if (memchr(input, '\0', length) != NULL)
+    {
+      return -EINVAL;
+    }
+  response = wasm_runtime_lookup_function(plugin->instance, "ny_on_response");
+  if (response == NULL ||
+      wasm_func_get_param_count(response, plugin->instance) != 5 ||
+      wasm_func_get_result_count(response, plugin->instance) != 0)
+    {
+      return -EPROTO;
+    }
+  wasm_func_get_param_types(response, plugin->instance, types);
+  for (index = 0; index < 5; index++)
+    {
+      if (types[index] != (index == 0 ? WASM_I64 : WASM_I32))
+        {
+          return -EPROTO;
+        }
+    }
+  for (index = 0; index < NY_WASM_MAX_PENDING; index++)
+    {
+      if (plugin->pending[index].http == NULL)
+        {
+          break;
+        }
+    }
+  if (index == NY_WASM_MAX_PENDING || plugin->next_request == 0)
+    {
+      return index == NY_WASM_MAX_PENDING ? -EAGAIN : -EOVERFLOW;
+    }
+  memcpy(url, input, length);
+  url[length] = '\0';
+  ny_wasm_client(plugin, &client);
+  plugin->pending[index].permission_generation =
+      atomic_load(&plugin->permission_generation);
+  ret = ny_broker_http_open(
+      &client, plugin->pending[index].permission_generation, url,
+      CONFIG_NYABULA_CORE_ASYNC_TIMEOUT_MS, &plugin->pending[index].http);
+  if (ret < 0)
+    {
+      return ret;
+    }
+  plugin->pending[index].request = plugin->next_request;
+  plugin->next_request =
+      plugin->next_request > UINT32_MAX - 2 ? 0 : plugin->next_request + 2;
+  return ((uint64_t)plugin->generation << 32) | plugin->pending[index].request;
+}
+
+static int32_t ny_wasm_http_cancel(wasm_exec_env_t environment, int64_t token)
+{
+  struct ny_wasm_plugin_s *plugin = wasm_runtime_get_user_data(environment);
+  size_t index;
+  int ret;
+  if (plugin == NULL || token <= 0 ||
+      (uint32_t)((uint64_t)token >> 32) != plugin->generation)
+    {
+      return -ESTALE;
+    }
+  for (index = 0; index < NY_WASM_MAX_PENDING; index++)
+    {
+      if (plugin->pending[index].http != NULL &&
+          plugin->pending[index].request == (uint32_t)token)
+        {
+          ret = ny_broker_http_close(plugin->pending[index].http);
+          if (ret == 0)
+            {
+              memset(&plugin->pending[index], 0,
+                     sizeof(plugin->pending[index]));
+            }
+          return ret;
+        }
+    }
+  return -ESTALE;
+}
+#endif
+
+int ny_wasm_poll(struct ny_wasm_plugin_s *plugin)
+{
+#ifdef CONFIG_NYABULA_CORE_HTTP
+  struct ny_broker_client_s client;
+  const void *body;
+  void *native = NULL;
+  size_t length;
+  size_t index;
+  unsigned int status;
+  uint64_t offset;
+  uint32_t args[6];
+  int ret;
+  if (plugin == NULL || !pthread_equal(plugin->owner, pthread_self()))
+    {
+      return -EPERM;
+    }
+  if (plugin->stopping)
+    {
+      return -ECANCELED;
+    }
+  for (index = 0; index < NY_WASM_MAX_PENDING; index++)
+    {
+      if (plugin->pending[index].http == NULL)
+        {
+          continue;
+        }
+      ny_wasm_client(plugin, &client);
+      ret = ny_broker_http_step(plugin->pending[index].http, &client,
+                                atomic_load(&plugin->permission_generation),
+                                &status, &body, &length);
+      if (ret == -EAGAIN)
+        {
+          continue;
+        }
+      if (atomic_load(&plugin->permission_generation) !=
+          plugin->pending[index].permission_generation)
+        {
+          ret = -EACCES;
+        }
+      offset = 0;
+      if (ret == 0 && length != 0)
+        {
+          offset =
+              wasm_runtime_module_malloc(plugin->instance, length, &native);
+          if (offset == 0 || offset > UINT32_MAX || native == NULL)
+            {
+              if (offset != 0)
+                {
+                  wasm_runtime_module_free(plugin->instance, offset);
+                }
+              offset = 0;
+              ret = -ENOMEM;
+            }
+          else
+            {
+              memcpy(native, body, length);
+            }
+        }
+      args[0] = plugin->pending[index].request;
+      args[1] = plugin->generation;
+      args[2] = ret;
+      args[3] = ret < 0 ? 0 : status;
+      args[4] = offset;
+      args[5] = ret < 0 ? 0 : length;
+      ny_broker_http_close(plugin->pending[index].http);
+      memset(&plugin->pending[index], 0, sizeof(plugin->pending[index]));
+      ret = ny_wasm_execute(
+          plugin,
+          wasm_runtime_lookup_function(plugin->instance, "ny_on_response"), 6,
+          args);
+      if (offset != 0)
+        {
+          wasm_runtime_module_free(plugin->instance, offset);
+        }
+      return ret;
+    }
+#endif
+  return -EAGAIN;
+}
 
 int ny_wasm_run(const char *path, const char *id, uint64_t permissions)
 {
@@ -637,6 +1008,7 @@ int ny_wasm_load(struct ny_wasm_plugin_s *plugin,
 {
   InstantiationArgs arguments;
   char error[NY_WASM_ERROR_SIZE];
+  unsigned int generation;
   int ret;
 
   if (plugin == NULL || config == NULL || config->id[0] == '\0' ||
@@ -648,6 +1020,21 @@ int ny_wasm_load(struct ny_wasm_plugin_s *plugin,
     }
 
   memset(plugin, 0, sizeof(*plugin));
+  plugin->owner = pthread_self();
+  generation = atomic_load(&g_wasm_generation);
+  while (generation <= INT32_MAX &&
+         !atomic_compare_exchange_weak(&g_wasm_generation, &generation,
+                                       generation + 1))
+    {
+    }
+  if (generation > INT32_MAX)
+    {
+      return -EOVERFLOW;
+    }
+  plugin->generation = generation;
+  plugin->next_request = 1;
+  plugin->next_lifecycle = 2;
+  atomic_init(&plugin->permission_generation, 1);
   strlcpy(plugin->id, config->id, sizeof(plugin->id));
   strlcpy(plugin->storage_root, config->storage_root,
           sizeof(plugin->storage_root));
@@ -722,6 +1109,15 @@ int ny_wasm_dispatch(struct ny_wasm_plugin_s *plugin, const char *event)
 
 int ny_wasm_stop(struct ny_wasm_plugin_s *plugin)
 {
+  if (plugin != NULL && !pthread_equal(plugin->owner, pthread_self()))
+    {
+      return -EPERM;
+    }
+  if (plugin != NULL)
+    {
+      plugin->stopping = true;
+      ny_wasm_cancel_requests(plugin);
+    }
   return plugin == NULL || plugin->environment == NULL
              ? -EINVAL
              : ny_wasm_call(plugin, "ny_on_stop", false);
@@ -732,6 +1128,7 @@ void ny_wasm_set_permissions(struct ny_wasm_plugin_s *plugin,
 {
   if (plugin != NULL)
     {
+      atomic_fetch_add(&plugin->permission_generation, 1);
       atomic_store(&plugin->permissions, permissions);
     }
 }
@@ -743,6 +1140,7 @@ void ny_wasm_destroy(struct ny_wasm_plugin_s *plugin)
       return;
     }
 
+  ny_wasm_cancel_requests(plugin);
   if (plugin->environment != NULL)
     {
       wasm_runtime_destroy_exec_env(plugin->environment);
@@ -768,6 +1166,9 @@ void ny_wasm_destroy(struct ny_wasm_plugin_s *plugin)
 }
 
 #else
+
+bool ny_wasm_pending(struct ny_wasm_plugin_s *plugin) { return false; }
+int ny_wasm_poll(struct ny_wasm_plugin_s *plugin) { return -EAGAIN; }
 
 int ny_wasm_run(const char *path, const char *id, uint64_t permissions)
 {

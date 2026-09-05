@@ -28,7 +28,7 @@ onStart/onEvent/onStop返回thenable时，运行时等待其最终结果。sched
 
 停止标志与唤醒独立于用户队列容量。停止后拒绝新完成消息并丢弃尚未执行的用户事件。等待异步结果的worker会被唤醒，启动与停止调用者通过`start_consumed`交接清理所有权，避免启动调用者尚未读取结果时slot已销毁。
 
-正常取消期间拒绝新请求，有CPU/job预算；即使Error分配失败也释放pending宿主引用。最终destroy不执行插件回调。QuickJS HTTP请求已在pending槽中持有Broker句柄，完成/取消/destroy均由所属线程关闭；HTTP参数错误也由pump延后交付，允许调用方先挂上catch。模块顶层异步加载、WAMR异步ABI和跨进程IPC尚未接入本契约。
+正常取消期间拒绝新请求，有CPU/job预算；即使Error分配失败也释放pending宿主引用。最终destroy不执行插件回调。QuickJS HTTP请求已在pending槽中持有Broker句柄，完成/取消/destroy均由所属线程关闭；HTTP参数错误也由pump延后交付，允许调用方先挂上catch。WAMR使用独立强类型异步ABI，见`wasm-async.md`；模块顶层异步加载和跨进程IPC尚未接入本契约。
 
 ## 验证范围
 
