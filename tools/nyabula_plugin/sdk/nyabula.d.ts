@@ -19,6 +19,12 @@ declare module "@nyabula/storage" {
 }
 
 declare module "@nyabula/network" {
+  export interface HttpResponse {
+    status: number;
+    body: string;
+  }
+  export function request(url: string): Promise<HttpResponse>;
+  /** Legacy mock-only echo signature; not supported by the real HTTP provider. */
   export function request(request: unknown): Promise<unknown>;
 }
 

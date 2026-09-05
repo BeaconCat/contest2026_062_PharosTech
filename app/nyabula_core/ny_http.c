@@ -36,7 +36,6 @@
 #include "ny_http.h"
 
 #define NY_HTTP_URL_LIMIT     256
-#define NY_HTTP_BODY_LIMIT    4096
 #define NY_HTTP_BUFFER_SIZE   1024
 #define NY_HTTP_TIMEOUT_LIMIT 60000
 

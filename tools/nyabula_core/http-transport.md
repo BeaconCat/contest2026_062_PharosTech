@@ -1,6 +1,6 @@
 # HTTP传输层当前状态
 
-`NYABULA_CORE_HTTP`构建`ny_http_open/step/cancel/close`，复用NuttX webclient的HTTP解析、非阻塞socket状态机及abort。该层只传输，不鉴权；尚未接入公开QuickJS/WAMR Capability，不能把它视为完整Network provider。
+`NYABULA_CORE_HTTP`构建`ny_http_open/step/cancel/close`，复用NuttX webclient的HTTP解析、非阻塞socket状态机及abort。传输层本身不鉴权；QuickJS的`network.request(url)`已通过Broker接入真实传输，返回`Promise<{status:number, body:string}>`，body按UTF-8文本构造并保留NUL。该配置优先于mock，不会把失败的真实请求退回echo。WAMR绑定、域名和TLS仍未完成，不能把此切片视为完整Network provider。
 
 ## 已实现的边界
 
@@ -15,10 +15,10 @@
 
 ## 待接入，不缩减最终目标
 
-1. Broker入口已增加创建与推进鉴权、权限代次、不可恢复的撤权状态；每插件最多8个请求，全局最多MAX_PLUGINS×8个，额度在close释放。每个传输请求固定有界分配，因此原生请求内存也受请求数限制。运行时绑定尚需提供新鲜权限快照，并在撤权/停机时及时唤醒所有者取消；不能仅靠下一次业务事件才推进。
-2. QuickJS Promise及WAMR统一异步ABI，不把传输指针或JSValue跨线程传递。
+1. Broker入口已增加创建与推进鉴权、权限代次、不可恢复的撤权状态；每插件最多8个请求，全局最多MAX_PLUGINS×8个，额度在close释放。每个传输请求固定有界分配，因此原生请求内存也受请求数限制。QuickJS绑定每次推进提供新鲜权限快照；权限刷新唤醒worker，停止唤醒后由所有者关闭请求。
+2. QuickJS将请求存于既有pending槽，所属worker每轮最多交付一个HTTP完成；等待时至多10 ms重新推进一次，不依赖后续业务事件。直接run-package也能推进HTTP等待，其他无pump的pending仍返回EINPROGRESS。WAMR统一异步ABI及跨进程IPC尚未完成，不把传输指针或JSValue跨线程传递。
 3. 可取消的域名解析、证书验证的TLS、HTTP方法/请求体及受控重定向策略。
-4. 公共插件API和端到端真实服务测试。
+4. QuickJS公开URL接口已接入；签名包端到端测试覆盖启动await、后台未await请求、撤权、停止和直接运行。完整生产API仍需请求体/方法、二进制响应与跨运行时一致的错误编码。
 
 `ny_broker_http_*`仅供可信适配层使用。输入client和权限代次不是认证凭据；未来IPC服务必须从经过认证的连接会话取得身份与权限，不能接受插件自报。错误身份不能读取或撤销其他请求，其他线程也不能释放所有者请求。完成后撤权同样禁止再次取回正文。
 

@@ -56,6 +56,10 @@ enum ny_plugin_state_e
 
 struct ny_plugin_pending_s
 {
+#ifdef CONFIG_NYABULA_CORE_HTTP
+  struct ny_broker_http_s *http;
+  int http_error;
+#endif
   bool occupied;
   uint32_t request;
   uint64_t permission;
@@ -119,6 +123,13 @@ int ny_plugin_async_deliver(struct ny_plugin_s *plugin, uint64_t token,
 int ny_plugin_async_complete(struct ny_plugin_s *plugin, uint64_t token,
                              bool rejected, JSValueConst value);
 int ny_plugin_async_cancel_all(struct ny_plugin_s *plugin);
+#ifdef CONFIG_NYABULA_CORE_HTTP
+/* HTTP operations and pending inspection belong to the runtime owner. */
+int ny_plugin_http_request(struct ny_plugin_s *plugin, const char *url,
+                           JSValue *promise);
+bool ny_plugin_http_pending(struct ny_plugin_s *plugin);
+int ny_plugin_http_poll(struct ny_plugin_s *plugin);
+#endif
 void ny_plugin_destroy(struct ny_plugin_s *plugin);
 
 #endif /* __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_RUNTIME_H */

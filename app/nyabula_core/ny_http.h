@@ -26,6 +26,7 @@
 #include <stdint.h>
 
 struct ny_http_s;
+#define NY_HTTP_BODY_LIMIT 4096
 
 /* All operations belong to the creating broker thread. This transport does
  * not authorize callers. The broker must check permissions before opening.

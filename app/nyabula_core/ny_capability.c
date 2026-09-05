@@ -325,6 +325,35 @@ static JSValue ny_capability_network_request(JSContext *context,
 
   if (argc == 1)
     {
+#ifdef CONFIG_NYABULA_CORE_HTTP
+      JSValue promise = JS_UNDEFINED;
+      const char *url;
+      size_t length;
+      if (!JS_IsString(argv[0]))
+        {
+          return JS_ThrowTypeError(context,
+                                   "network.request requires a URL string");
+        }
+      url = JS_ToCStringLen(context, &length, argv[0]);
+      if (url == NULL)
+        {
+          return JS_EXCEPTION;
+        }
+      if (strlen(url) != length)
+        {
+          JS_FreeCString(context, url);
+          return JS_ThrowTypeError(context, "network URL contains NUL");
+        }
+      ret = ny_plugin_http_request(plugin, url, &promise);
+      JS_FreeCString(context, url);
+      if (ret < 0)
+        {
+          JS_FreeValue(context, promise);
+          return JS_ThrowInternalError(context, "network request failed: %d",
+                                       ret);
+        }
+      return promise;
+#endif
       ny_capability_client(plugin, &client);
       ret = ny_broker_network_request(&client);
       return ret >= 0 ? ny_capability_settled_promise(plugin, false, argv[0])

@@ -30,8 +30,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
+#include "ny_broker.h"
 #include "ny_capability.h"
+#include "ny_http.h"
 #include "ny_module.h"
 #include "ny_runtime.h"
 
@@ -48,6 +51,9 @@ static atomic_uint_fast32_t g_ny_runtime_generation = 1;
 static uint64_t ny_runtime_now_ns(void);
 static void ny_runtime_begin_event(struct ny_plugin_s *plugin);
 static int ny_runtime_pause_execution(struct ny_plugin_s *plugin);
+static int ny_runtime_deliver(struct ny_plugin_s *plugin, uint64_t token,
+                              int status, const char *payload, size_t length,
+                              unsigned int http_status);
 static int ny_runtime_interrupt(JSRuntime *runtime, void *opaque);
 static void ny_runtime_dump_exception(struct ny_plugin_s *plugin,
                                       const char *operation);
@@ -334,7 +340,11 @@ static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
       if (ret >= 0)
         {
           while (plugin->lifecycle_result == -EINPROGRESS &&
-                 plugin->pump != NULL)
+                 (plugin->pump != NULL
+#ifdef CONFIG_NYABULA_CORE_HTTP
+                  || ny_plugin_http_pending(plugin)
+#endif
+                      ))
             {
               ret = ny_runtime_pause_execution(plugin);
               if (ret < 0)
@@ -342,7 +352,21 @@ static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
                   break;
                 }
 
-              ret = plugin->pump(plugin->pump_opaque, lifecycle_deadline);
+              if (plugin->pump != NULL)
+                {
+                  ret = plugin->pump(plugin->pump_opaque, lifecycle_deadline);
+                }
+#ifdef CONFIG_NYABULA_CORE_HTTP
+              else
+                {
+                  ret = ny_plugin_http_poll(plugin);
+                  if (ret == -EAGAIN)
+                    {
+                      usleep(1000);
+                      ret = 0;
+                    }
+                }
+#endif
               if (ret >= 0 && (plugin->execution_remaining_ns == 0 ||
                                ny_runtime_now_ns() >= lifecycle_deadline))
                 {
@@ -749,6 +773,16 @@ int ny_plugin_async_complete(struct ny_plugin_s *plugin, uint64_t token,
 
   resolve = plugin->pending[index].resolve;
   reject = plugin->pending[index].reject;
+#ifdef CONFIG_NYABULA_CORE_HTTP
+  if (plugin->pending[index].http != NULL)
+    {
+      int ret = ny_broker_http_close(plugin->pending[index].http);
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+#endif
   memset(&plugin->pending[index], 0, sizeof(plugin->pending[index]));
 
   callback = rejected ? reject : resolve;
@@ -769,6 +803,13 @@ int ny_plugin_async_complete(struct ny_plugin_s *plugin, uint64_t token,
 int ny_plugin_async_deliver(struct ny_plugin_s *plugin, uint64_t token,
                             int status, const char *payload, size_t length)
 {
+  return ny_runtime_deliver(plugin, token, status, payload, length, 0);
+}
+
+static int ny_runtime_deliver(struct ny_plugin_s *plugin, uint64_t token,
+                              int status, const char *payload, size_t length,
+                              unsigned int http_status)
+{
   uint64_t previous_deadline;
   JSValue value;
   size_t index;
@@ -786,7 +827,9 @@ int ny_plugin_async_deliver(struct ny_plugin_s *plugin, uint64_t token,
     }
 
   if ((payload == NULL && length != 0) ||
-      length > CONFIG_NYABULA_CORE_EVENT_SIZE || status > 0)
+      length > (http_status != 0 ? NY_HTTP_BODY_LIMIT
+                                 : CONFIG_NYABULA_CORE_EVENT_SIZE) ||
+      status > 0)
     {
       return -EINVAL;
     }
@@ -837,6 +880,28 @@ int ny_plugin_async_deliver(struct ny_plugin_s *plugin, uint64_t token,
   value = status < 0 ? JS_NewInt32(plugin->context, status)
                      : JS_NewStringLen(plugin->context,
                                        payload == NULL ? "" : payload, length);
+  if (status == 0 && http_status != 0 && !JS_IsException(value))
+    {
+      JSValue response = JS_NewObject(plugin->context);
+      if (JS_IsException(response))
+        {
+          JS_FreeValue(plugin->context, value);
+          value = response;
+        }
+      else if (JS_SetPropertyStr(plugin->context, response, "body", value) <
+                   0 ||
+               JS_SetPropertyStr(plugin->context, response, "status",
+                                 JS_NewUint32(plugin->context, http_status)) <
+                   0)
+        {
+          JS_FreeValue(plugin->context, response);
+          value = JS_EXCEPTION;
+        }
+      else
+        {
+          value = response;
+        }
+    }
   if (JS_IsException(value))
     {
       ny_runtime_dump_exception(plugin, "async payload");
@@ -860,6 +925,124 @@ int ny_plugin_async_deliver(struct ny_plugin_s *plugin, uint64_t token,
   plugin->deadline_ns = previous_deadline;
   return ret;
 }
+
+#ifdef CONFIG_NYABULA_CORE_HTTP
+bool ny_plugin_http_pending(struct ny_plugin_s *plugin)
+{
+  size_t index;
+  if (plugin == NULL)
+    {
+      return false;
+    }
+  for (index = 0; index < NY_PLUGIN_MAX_PENDING; index++)
+    {
+      if (plugin->pending[index].occupied &&
+          (plugin->pending[index].http != NULL ||
+           plugin->pending[index].http_error < 0))
+        {
+          return true;
+        }
+    }
+  return false;
+}
+
+int ny_plugin_http_request(struct ny_plugin_s *plugin, const char *url,
+                           JSValue *promise)
+{
+  struct ny_broker_client_s client;
+  uint64_t token;
+  size_t index;
+  int ret;
+
+  ret = ny_plugin_async_begin_authorized(plugin, NY_PERMISSION_NETWORK_REQUEST,
+                                         promise, &token);
+  if (ret < 0)
+    {
+      return ret;
+    }
+  for (index = 0; index < NY_PLUGIN_MAX_PENDING; index++)
+    {
+      if (plugin->pending[index].occupied &&
+          plugin->pending[index].request == (uint32_t)token)
+        {
+          break;
+        }
+    }
+  if (index == NY_PLUGIN_MAX_PENDING)
+    {
+      return -EFAULT;
+    }
+  client.id = plugin->id;
+  client.storage_root = plugin->storage_root;
+  client.permissions = atomic_load(&plugin->permissions);
+  ret = ny_broker_http_open(
+      &client, plugin->pending[index].permission_generation, url,
+      CONFIG_NYABULA_CORE_ASYNC_TIMEOUT_MS, &plugin->pending[index].http);
+  if (ret < 0)
+    {
+      plugin->pending[index].http_error = ret;
+    }
+  return 0;
+}
+
+int ny_plugin_http_poll(struct ny_plugin_s *plugin)
+{
+  struct ny_broker_client_s client;
+  const void *body;
+  size_t length;
+  size_t index;
+  unsigned int http_status;
+  int ret;
+  if (plugin == NULL || plugin->context == NULL)
+    {
+      return -EINVAL;
+    }
+  if (!pthread_equal(plugin->owner, pthread_self()))
+    {
+      return -EPERM;
+    }
+  if (atomic_load(&plugin->cancelled))
+    {
+      return -ECANCELED;
+    }
+  for (index = 0; index < NY_PLUGIN_MAX_PENDING; index++)
+    {
+      uint64_t token;
+      if (!plugin->pending[index].occupied ||
+          (plugin->pending[index].http == NULL &&
+           plugin->pending[index].http_error == 0))
+        {
+          continue;
+        }
+      client.id = plugin->id;
+      client.storage_root = plugin->storage_root;
+      client.permissions = atomic_load(&plugin->permissions);
+      body = NULL;
+      length = 0;
+      http_status = 0;
+      ret = plugin->pending[index].http_error;
+      if (ret == 0)
+        {
+          ret =
+              ny_broker_http_step(plugin->pending[index].http, &client,
+                                  atomic_load(&plugin->permission_generation),
+                                  &http_status, &body, &length);
+        }
+      if (ret == -EAGAIN)
+        {
+          continue;
+        }
+      if (ret == 0 && http_status == 0)
+        {
+          ret = -EPROTO;
+        }
+      token = ((uint64_t)plugin->generation << 32) |
+              plugin->pending[index].request;
+      return ny_runtime_deliver(plugin, token, ret, body, length, http_status);
+    }
+  return -EAGAIN;
+}
+#endif
 
 int ny_plugin_async_cancel_all(struct ny_plugin_s *plugin)
 {
@@ -950,6 +1133,9 @@ void ny_plugin_destroy(struct ny_plugin_s *plugin)
         {
           if (plugin->pending[index].occupied)
             {
+#ifdef CONFIG_NYABULA_CORE_HTTP
+              ny_broker_http_close(plugin->pending[index].http);
+#endif
               JS_FreeValue(plugin->context, plugin->pending[index].resolve);
               JS_FreeValue(plugin->context, plugin->pending[index].reject);
               memset(&plugin->pending[index], 0,

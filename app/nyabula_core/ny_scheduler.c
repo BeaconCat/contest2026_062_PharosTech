@@ -48,6 +48,7 @@
 
 #define NY_PLUGIN_ID_SIZE 64
 #define NY_MINUTE_NS      60000000000ull
+#define NY_HTTP_POLL_NS   10000000ull
 
 /****************************************************************************
  * Private Types
@@ -249,6 +250,7 @@ static int ny_scheduler_pump(void *opaque, uint64_t deadline_ns)
   struct ny_scheduler_slot_s *slot = opaque;
   struct ny_scheduler_completion_s completion;
   struct timespec deadline;
+  uint64_t wake_ns;
   int ret;
 
   for (;;)
@@ -285,14 +287,33 @@ static int ny_scheduler_pump(void *opaque, uint64_t deadline_ns)
         }
 
       nxmutex_unlock(&g_scheduler_lock);
+#ifdef CONFIG_NYABULA_CORE_HTTP
+      ret = ny_plugin_http_poll(&slot->plugin);
+      if (ret != -EAGAIN)
+        {
+          return ret;
+        }
+#endif
       if (deadline_ns == 0)
         {
           return -EAGAIN;
         }
 
-      deadline.tv_sec = deadline_ns / 1000000000ull;
-      deadline.tv_nsec = deadline_ns % 1000000000ull;
+      wake_ns = deadline_ns;
+#ifdef CONFIG_NYABULA_CORE_HTTP
+      if (ny_plugin_http_pending(&slot->plugin) &&
+          wake_ns > ny_scheduler_now_ns() + NY_HTTP_POLL_NS)
+        {
+          wake_ns = ny_scheduler_now_ns() + NY_HTTP_POLL_NS;
+        }
+#endif
+      deadline.tv_sec = wake_ns / 1000000000ull;
+      deadline.tv_nsec = wake_ns % 1000000000ull;
       ret = sem_clockwait(&slot->pending, CLOCK_MONOTONIC, &deadline);
+      if (ret < 0 && errno == ETIMEDOUT && wake_ns < deadline_ns)
+        {
+          continue;
+        }
       if (ret < 0 && errno != EINTR)
         {
           return -errno;
@@ -373,6 +394,24 @@ static int ny_scheduler_worker(int argc, char *argv[])
       if (slot->count == 0)
         {
           nxmutex_unlock(&g_scheduler_lock);
+#ifdef CONFIG_NYABULA_CORE_HTTP
+          if (slot->config.runtime != NY_PLUGIN_RUNTIME_WAMR &&
+              ny_plugin_http_pending(&slot->plugin))
+            {
+              struct timespec wake;
+              uint64_t wake_ns = ny_scheduler_now_ns() + NY_HTTP_POLL_NS;
+              wake.tv_sec = wake_ns / 1000000000ull;
+              wake.tv_nsec = wake_ns % 1000000000ull;
+              ret = sem_clockwait(&slot->pending, CLOCK_MONOTONIC, &wake);
+              if (ret < 0 && errno != ETIMEDOUT && errno != EINTR)
+                {
+                  ret = -errno;
+                  break;
+                }
+              ret = 0;
+              continue;
+            }
+#endif
           ret = ny_scheduler_wait(&slot->pending);
           continue;
         }
@@ -543,6 +582,7 @@ int ny_scheduler_refresh_permissions(const char *id)
         {
           atomic_fetch_add(&slot->plugin.permission_generation, 1);
           atomic_store(&slot->plugin.permissions, config.permissions);
+          sem_post(&slot->pending);
         }
     }
 
