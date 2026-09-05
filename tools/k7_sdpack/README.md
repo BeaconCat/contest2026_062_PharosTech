@@ -18,7 +18,19 @@ SD BootROM → idbloader(DDR init + U-Boot SPL) → FIT(atf-1/uboot/atf-2/atf-3/
 # 用 balenaEtcher / Win32DiskImager 整盘烧到 SD 卡, 上电抓串口(1500000 8N1)
 ```
 
-依赖：`dtc` `sgdisk`(gdisk) `dd`。rkbin 自带 `mkimage`/`boot_merger`/`trust_merger`。
+N-Boot A/B产品镜像使用团队仓锁定的release payload：
+
+```sh
+bash ./build_nboot_ab.sh <nuttx.bin> ../../board/nboot rkbin out
+```
+
+产物包括`out/nboot.img`和4 GiB稀疏镜像`out/nyabula-k7-sd.img`。后者包含
+NuttX A/B、双副本bootctrl、AMP A/B预留和已格式化的FAT32 data分区。脚本固定
+FIT reservation map、GPT GUID与FAT元数据；相同输入和`SOURCE_DATE_EPOCH`应生成
+逐字节一致的输出。
+
+依赖：`dtc` `sgdisk`(gdisk) `dd` `mkfs.fat`。rkbin 自带
+`mkimage`/`boot_merger`/`trust_merger`。
 
 ## 启动件全部来自官方 rkbin —— 不含设备抠出的私有 blob
 
