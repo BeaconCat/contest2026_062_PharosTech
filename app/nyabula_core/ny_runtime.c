@@ -498,6 +498,11 @@ int ny_plugin_async_begin(struct ny_plugin_s *plugin, JSValue *promise,
       return -EINVAL;
     }
 
+  if (plugin->cancelling || atomic_load(&plugin->cancelled))
+    {
+      return -ECANCELED;
+    }
+
   for (index = 0; index < NY_PLUGIN_MAX_PENDING; index++)
     {
       if (!plugin->pending[index].occupied)
@@ -589,6 +594,7 @@ int ny_plugin_async_complete(struct ny_plugin_s *plugin, uint64_t token,
 int ny_plugin_async_cancel_all(struct ny_plugin_s *plugin)
 {
   JSValue error;
+  uint64_t previous_deadline;
   bool cancelled = false;
   int first_error = 0;
   size_t index;
@@ -598,15 +604,33 @@ int ny_plugin_async_cancel_all(struct ny_plugin_s *plugin)
       return 0;
     }
 
+  if (plugin->cancelling)
+    {
+      return 0;
+    }
+
+  plugin->cancelling = true;
+  previous_deadline = plugin->deadline_ns;
+  if (previous_deadline == 0)
+    {
+      plugin->deadline_ns = ny_runtime_now_ns() +
+                            (uint64_t)plugin->event_timeout_ms * 1000000ull;
+    }
+
   error = JS_NewError(plugin->context);
   if (JS_IsException(error))
     {
-      return -ENOMEM;
-    }
+      /* Clearing host references must not depend on allocating an Error. */
 
-  JS_SetPropertyStr(plugin->context, error, "message",
-                    JS_NewString(plugin->context, "plugin stopped"));
-  plugin->cancelling = true;
+      error = JS_GetException(plugin->context);
+    }
+  else if (JS_SetPropertyStr(plugin->context, error, "message",
+                             JS_NewString(plugin->context, "plugin stopped")) <
+           0)
+    {
+      JSValue exception = JS_GetException(plugin->context);
+      JS_FreeValue(plugin->context, exception);
+    }
   for (index = 0; index < NY_PLUGIN_MAX_PENDING; index++)
     {
       uint64_t token;
@@ -634,6 +658,7 @@ int ny_plugin_async_cancel_all(struct ny_plugin_s *plugin)
     }
 
   plugin->cancelling = false;
+  plugin->deadline_ns = previous_deadline;
   return first_error;
 }
 
@@ -646,7 +671,22 @@ void ny_plugin_destroy(struct ny_plugin_s *plugin)
 
   if (plugin->context != NULL)
     {
-      ny_plugin_async_cancel_all(plugin);
+      size_t index;
+
+      /* Destruction runs no plugin code, including rejection handlers. */
+
+      atomic_store(&plugin->cancelled, true);
+      for (index = 0; index < NY_PLUGIN_MAX_PENDING; index++)
+        {
+          if (plugin->pending[index].occupied)
+            {
+              JS_FreeValue(plugin->context, plugin->pending[index].resolve);
+              JS_FreeValue(plugin->context, plugin->pending[index].reject);
+              memset(&plugin->pending[index], 0,
+                     sizeof(plugin->pending[index]));
+            }
+        }
+
       JS_FreeContext(plugin->context);
     }
 
