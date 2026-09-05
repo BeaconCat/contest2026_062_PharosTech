@@ -76,6 +76,8 @@ struct ny_plugin_s
   uint32_t unhandled_rejections;
   uint32_t generation;
   uint32_t next_request;
+  int lifecycle_result;
+  uint32_t lifecycle_generation;
   bool module_entry;
   bool cancelling;
   atomic_bool cancelled;

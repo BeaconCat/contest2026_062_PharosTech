@@ -55,6 +55,11 @@ static void ny_runtime_rejection_tracker(JSContext *context,
                                          JSValueConst reason,
                                          JS_BOOL is_handled, void *opaque);
 static int ny_runtime_drain_jobs(struct ny_plugin_s *plugin);
+static JSValue ny_runtime_settled(JSContext *context, JSValueConst this_value,
+                                  int argc, JSValueConst *argv, int magic,
+                                  JSValue *data);
+static int ny_runtime_observe_result(struct ny_plugin_s *plugin,
+                                     JSValueConst value);
 static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
                            int argc, JSValueConst *argv);
 static int ny_runtime_read_source(const char *path, char **source,
@@ -63,6 +68,81 @@ static int ny_runtime_read_source(const char *path, char **source,
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
+
+static JSValue ny_runtime_settled(JSContext *context, JSValueConst this_value,
+                                  int argc, JSValueConst *argv, int magic,
+                                  JSValue *data)
+{
+  struct ny_plugin_s *plugin = JS_GetContextOpaque(context);
+  uint32_t generation;
+
+  if (JS_ToUint32(context, &generation, data[0]) == 0 &&
+      generation == plugin->lifecycle_generation &&
+      plugin->lifecycle_result == -EINPROGRESS)
+    {
+      plugin->lifecycle_result = magic ? -EFAULT : 0;
+    }
+
+  return JS_UNDEFINED;
+}
+
+static int ny_runtime_observe_result(struct ny_plugin_s *plugin,
+                                     JSValueConst value)
+{
+  JSValue then;
+  JSValue handlers[2];
+  JSValue result;
+  JSValue generation;
+  int ret;
+
+  if (plugin->lifecycle_generation == UINT32_MAX)
+    {
+      return -EOVERFLOW;
+    }
+
+  plugin->lifecycle_generation++;
+  plugin->lifecycle_result = 0;
+  if (!JS_IsObject(value))
+    {
+      return 0;
+    }
+
+  then = JS_GetPropertyStr(plugin->context, value, "then");
+  if (JS_IsException(then))
+    {
+      ny_runtime_dump_exception(plugin, "lifecycle result");
+      return -EFAULT;
+    }
+
+  if (!JS_IsFunction(plugin->context, then))
+    {
+      JS_FreeValue(plugin->context, then);
+      return 0;
+    }
+
+  plugin->lifecycle_result = -EINPROGRESS;
+  generation = JS_NewUint32(plugin->context, plugin->lifecycle_generation);
+  handlers[0] = JS_NewCFunctionData(plugin->context, ny_runtime_settled, 1, 0,
+                                    1, &generation);
+  handlers[1] = JS_NewCFunctionData(plugin->context, ny_runtime_settled, 1, 1,
+                                    1, &generation);
+  JS_FreeValue(plugin->context, generation);
+  if (JS_IsException(handlers[0]) || JS_IsException(handlers[1]))
+    {
+      ret = -ENOMEM;
+    }
+  else
+    {
+      result = JS_Call(plugin->context, then, value, 2, handlers);
+      ret = JS_IsException(result) ? -EFAULT : 0;
+      JS_FreeValue(plugin->context, result);
+    }
+
+  JS_FreeValue(plugin->context, handlers[0]);
+  JS_FreeValue(plugin->context, handlers[1]);
+  JS_FreeValue(plugin->context, then);
+  return ret;
+}
 
 static uint64_t ny_runtime_now_ns(void)
 {
@@ -220,7 +300,16 @@ static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
     }
   else
     {
-      ret = ny_runtime_drain_jobs(plugin);
+      ret = ny_runtime_observe_result(plugin, result);
+      if (ret >= 0)
+        {
+          ret = ny_runtime_drain_jobs(plugin);
+        }
+
+      if (ret >= 0)
+        {
+          ret = plugin->lifecycle_result;
+        }
     }
 
   plugin->deadline_ns = 0;
