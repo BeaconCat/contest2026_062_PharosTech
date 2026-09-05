@@ -39,6 +39,9 @@
 #include <netutils/cJSON.h>
 
 #include "ny_permission.h"
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+#include "ny_state.h"
+#endif
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -197,6 +200,21 @@ static int ny_permission_read(cJSON **store)
   int ret;
   int fd;
 
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+  size_t stored_length;
+  ret = ny_state_read(CONFIG_NYABULA_CORE_GRANT_STORE, &content,
+                      &stored_length, NY_GRANT_STORE_LIMIT);
+  if (ret == 0)
+    {
+      goto parse;
+    }
+
+  if (ret != -ENOENT)
+    {
+      return ret;
+    }
+#endif
+
   fd = open(CONFIG_NYABULA_CORE_GRANT_STORE, O_RDONLY | O_NOFOLLOW);
   if (fd < 0)
     {
@@ -232,6 +250,9 @@ static int ny_permission_read(cJSON **store)
     }
 
   content[status.st_size] = '\0';
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+parse:
+#endif
   *store = cJSON_ParseWithOpts(content, &end, true);
   free(content);
   ret = ny_permission_validate_store(*store);
@@ -316,6 +337,12 @@ static int ny_permission_save(cJSON *store)
       free(content);
       return -EFBIG;
     }
+
+#ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
+  ret = ny_state_write(CONFIG_NYABULA_CORE_GRANT_STORE, content, length);
+  free(content);
+  return ret;
+#endif
 
   ret = ny_permission_ensure_parent();
   if (ret < 0)
