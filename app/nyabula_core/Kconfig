@@ -63,6 +63,15 @@ config NYABULA_CORE_EVENT_TIMEOUT_MS
 	int "Maximum execution time per plugin event"
 	default 100
 
+config NYABULA_CORE_ASYNC_TIMEOUT_MS
+	int "Maximum elapsed time per QuickJS lifecycle callback"
+	default 5000
+	range 100 60000
+	---help---
+		Bound the entire asynchronous callback, including provider waits.
+		The manifest CPU budget still bounds accumulated script execution;
+		waiting for a completion does not replenish that budget.
+
 config NYABULA_CORE_EVENTS_PER_MINUTE
 	int "Default events allowed per plugin per minute"
 	default 120

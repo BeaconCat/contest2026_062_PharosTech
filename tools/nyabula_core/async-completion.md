@@ -18,9 +18,11 @@ worker调用`ny_plugin_async_deliver()`，在所属线程中创建JS值并完成
 
 请求记录所需权限和授权代次。交付时复核两者；期间刷新授权会使旧的受权限保护请求返回EACCES，包括撤销后再次授权的情况。该检查阻止旧结果进入插件，不替代provider实际操作的取消机制。
 
-onStart/onEvent/onStop返回thenable时，运行时等待其最终结果。scheduler中的worker可在等待期间处理完成队列；等待和执行共用当前`cpuMsPerEvent`期限。超时返回ETIMEDOUT。没有scheduler pump的同步CLI遇到仍pending的生命周期返回EINPROGRESS，不把它当作成功或允许包晋级。
+onStart/onEvent/onStop返回thenable时，运行时等待其最终结果。scheduler中的worker可在等待期间处理完成队列。`cpuMsPerEvent`限制一次生命周期中累计的执行段，等待完成队列时暂停计费，继续执行只使用剩余额度；Promise链不能靠反复等待重置额度。执行段按单调时钟墙钟计量，包含同步宿主调用和被抢占时间，不等同于操作系统线程CPU时间。
 
-生命周期完成回调绑定独立代次，旧resolver不能完成后续生命周期。完成消息不重置已有期限；普通后台完成处理有自己的执行预算。
+`NYABULA_CORE_ASYNC_TIMEOUT_MS`另外限制整个生命周期的墙钟时间，默认5000 ms，允许100–60000 ms；包括初始执行、provider等待和后续回调。达到期限停止等待，忙循环也受此总期限约束。等待超时返回ETIMEDOUT；QuickJS中断的执行可返回EFAULT。没有scheduler pump的同步CLI遇到仍pending的生命周期返回EINPROGRESS，不把它当作成功或允许包晋级。
+
+生命周期完成回调绑定独立代次，旧resolver不能完成后续生命周期。完成消息不重置累计执行额度或总期限；普通后台完成处理有自己的执行预算。
 
 ## 停止
 

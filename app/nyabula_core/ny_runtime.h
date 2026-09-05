@@ -74,6 +74,9 @@ struct ny_plugin_s
   void *pump_opaque;
   enum ny_plugin_state_e state;
   uint64_t deadline_ns;
+  uint64_t execution_remaining_ns;
+  uint64_t lifecycle_deadline_ns;
+  bool lifecycle_active;
   uint64_t requested_permissions;
   atomic_uint_fast64_t permissions;
   atomic_uint permission_generation;

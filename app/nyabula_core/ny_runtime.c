@@ -47,6 +47,7 @@ static atomic_uint_fast32_t g_ny_runtime_generation = 1;
 
 static uint64_t ny_runtime_now_ns(void);
 static void ny_runtime_begin_event(struct ny_plugin_s *plugin);
+static int ny_runtime_pause_execution(struct ny_plugin_s *plugin);
 static int ny_runtime_interrupt(JSRuntime *runtime, void *opaque);
 static void ny_runtime_dump_exception(struct ny_plugin_s *plugin,
                                       const char *operation);
@@ -161,21 +162,37 @@ static uint64_t ny_runtime_now_ns(void)
 static void ny_runtime_begin_event(struct ny_plugin_s *plugin)
 {
   atomic_store(&plugin->cancelled, false);
-  plugin->deadline_ns =
-      ny_runtime_now_ns() + (uint64_t)plugin->event_timeout_ms * 1000000ull;
+  plugin->execution_remaining_ns =
+      (uint64_t)plugin->event_timeout_ms * 1000000ull;
+  plugin->deadline_ns = ny_runtime_now_ns() + plugin->execution_remaining_ns;
+}
+
+static int ny_runtime_pause_execution(struct ny_plugin_s *plugin)
+{
+  uint64_t now = ny_runtime_now_ns();
+
+  if (plugin->deadline_ns != 0)
+    {
+      plugin->execution_remaining_ns =
+          plugin->deadline_ns > now ? plugin->deadline_ns - now : 0;
+      plugin->deadline_ns = 0;
+    }
+
+  return plugin->execution_remaining_ns == 0 ? -ETIMEDOUT : 0;
 }
 
 static int ny_runtime_interrupt(JSRuntime *runtime, void *opaque)
 {
   struct ny_plugin_s *plugin = opaque;
+  uint64_t now = ny_runtime_now_ns();
 
   if (atomic_load(&plugin->cancelled))
     {
       return 1;
     }
 
-  return plugin->deadline_ns != 0 &&
-         ny_runtime_now_ns() >= plugin->deadline_ns;
+  return (plugin->deadline_ns != 0 && now >= plugin->deadline_ns) ||
+         (plugin->lifecycle_active && now >= plugin->lifecycle_deadline_ns);
 }
 
 static void ny_runtime_dump_exception(struct ny_plugin_s *plugin,
@@ -262,6 +279,7 @@ static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
   JSValue global;
   JSValue function;
   JSValue result;
+  uint64_t lifecycle_deadline;
   int ret = 0;
 
   global = JS_GetGlobalObject(plugin->context);
@@ -293,6 +311,11 @@ static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
     }
 
   ny_runtime_begin_event(plugin);
+  plugin->lifecycle_active = true;
+  lifecycle_deadline =
+      ny_runtime_now_ns() +
+      (uint64_t)CONFIG_NYABULA_CORE_ASYNC_TIMEOUT_MS * 1000000ull;
+  plugin->lifecycle_deadline_ns = lifecycle_deadline;
   plugin->unhandled_rejections = 0;
   result = JS_Call(plugin->context, function, global, argc, argv);
   if (JS_IsException(result))
@@ -313,11 +336,25 @@ static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
           while (plugin->lifecycle_result == -EINPROGRESS &&
                  plugin->pump != NULL)
             {
-              ret = plugin->pump(plugin->pump_opaque, plugin->deadline_ns);
+              ret = ny_runtime_pause_execution(plugin);
               if (ret < 0)
                 {
                   break;
                 }
+
+              ret = plugin->pump(plugin->pump_opaque, lifecycle_deadline);
+              if (ret >= 0 && (plugin->execution_remaining_ns == 0 ||
+                               ny_runtime_now_ns() >= lifecycle_deadline))
+                {
+                  ret = -ETIMEDOUT;
+                }
+              if (ret < 0)
+                {
+                  break;
+                }
+
+              plugin->deadline_ns =
+                  ny_runtime_now_ns() + plugin->execution_remaining_ns;
             }
 
           if (ret >= 0)
@@ -327,7 +364,13 @@ static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
         }
     }
 
-  plugin->deadline_ns = 0;
+  if ((ny_runtime_pause_execution(plugin) < 0 ||
+       ny_runtime_now_ns() >= lifecycle_deadline) &&
+      ret >= 0)
+    {
+      ret = -ETIMEDOUT;
+    }
+  plugin->lifecycle_active = false;
 
   JS_FreeValue(plugin->context, result);
 
@@ -774,7 +817,19 @@ int ny_plugin_async_deliver(struct ny_plugin_s *plugin, uint64_t token,
   previous_deadline = plugin->deadline_ns;
   if (previous_deadline == 0)
     {
-      ny_runtime_begin_event(plugin);
+      if (plugin->lifecycle_active)
+        {
+          if (plugin->execution_remaining_ns == 0)
+            {
+              return -ETIMEDOUT;
+            }
+          plugin->deadline_ns =
+              ny_runtime_now_ns() + plugin->execution_remaining_ns;
+        }
+      else
+        {
+          ny_runtime_begin_event(plugin);
+        }
     }
 
   /* Only the owning worker creates JS values. Provider errors carry errno. */
@@ -797,6 +852,11 @@ int ny_plugin_async_deliver(struct ny_plugin_s *plugin, uint64_t token,
     }
 
   JS_FreeValue(plugin->context, value);
+  if (previous_deadline == 0 && ny_runtime_pause_execution(plugin) < 0 &&
+      ret >= 0)
+    {
+      ret = -ETIMEDOUT;
+    }
   plugin->deadline_ns = previous_deadline;
   return ret;
 }
