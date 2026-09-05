@@ -66,8 +66,10 @@ static int ny_runtime_read_source(const char *path, char **source,
                                   size_t *length);
 
 /****************************************************************************
- * Private Functions
- ****************************************************************************/
+
+ * * Private Functions
+
+ * ****************************************************************************/
 
 static JSValue ny_runtime_settled(JSContext *context, JSValueConst this_value,
                                   int argc, JSValueConst *argv, int magic,
@@ -308,7 +310,20 @@ static int ny_runtime_call(struct ny_plugin_s *plugin, const char *name,
 
       if (ret >= 0)
         {
-          ret = plugin->lifecycle_result;
+          while (plugin->lifecycle_result == -EINPROGRESS &&
+                 plugin->pump != NULL)
+            {
+              ret = plugin->pump(plugin->pump_opaque, plugin->deadline_ns);
+              if (ret < 0)
+                {
+                  break;
+                }
+            }
+
+          if (ret >= 0)
+            {
+              ret = plugin->lifecycle_result;
+            }
         }
     }
 
@@ -420,6 +435,7 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
     }
 
   plugin->state = NY_PLUGIN_EMPTY;
+  plugin->owner = pthread_self();
   atomic_init(&plugin->cancelled, false);
   plugin->generation = atomic_fetch_add(&g_ny_runtime_generation, 1);
   if (plugin->generation == 0)
@@ -430,6 +446,7 @@ int ny_plugin_load_config(struct ny_plugin_s *plugin,
   plugin->next_request = 1;
   plugin->requested_permissions = config->requested_permissions;
   atomic_init(&plugin->permissions, config->permissions);
+  atomic_init(&plugin->permission_generation, 0);
   plugin->memory_limit = config->memory_limit;
   plugin->stack_limit = config->stack_limit;
   plugin->event_timeout_ms = config->event_timeout_ms;
@@ -577,7 +594,15 @@ int ny_plugin_stop(struct ny_plugin_s *plugin)
 int ny_plugin_async_begin(struct ny_plugin_s *plugin, JSValue *promise,
                           uint64_t *token)
 {
+  return ny_plugin_async_begin_authorized(plugin, 0, promise, token);
+}
+
+int ny_plugin_async_begin_authorized(struct ny_plugin_s *plugin,
+                                     uint64_t permission, JSValue *promise,
+                                     uint64_t *token)
+{
   JSValue resolving[2];
+  uint32_t permission_generation;
   size_t index;
 
   if (plugin == NULL || promise == NULL || token == NULL ||
@@ -590,6 +615,17 @@ int ny_plugin_async_begin(struct ny_plugin_s *plugin, JSValue *promise,
   if (plugin->cancelling || atomic_load(&plugin->cancelled))
     {
       return -ECANCELED;
+    }
+
+  if (!pthread_equal(plugin->owner, pthread_self()))
+    {
+      return -EPERM;
+    }
+
+  permission_generation = atomic_load(&plugin->permission_generation);
+  if ((atomic_load(&plugin->permissions) & permission) != permission)
+    {
+      return -EACCES;
     }
 
   if (plugin->next_request == 0)
@@ -618,6 +654,8 @@ int ny_plugin_async_begin(struct ny_plugin_s *plugin, JSValue *promise,
 
   plugin->pending[index].occupied = true;
   plugin->pending[index].request = plugin->next_request++;
+  plugin->pending[index].permission = permission;
+  plugin->pending[index].permission_generation = permission_generation;
   plugin->pending[index].resolve = resolving[0];
   plugin->pending[index].reject = resolving[1];
   *token =
@@ -640,6 +678,11 @@ int ny_plugin_async_complete(struct ny_plugin_s *plugin, uint64_t token,
       request == 0 || generation != plugin->generation)
     {
       return -ESTALE;
+    }
+
+  if (!pthread_equal(plugin->owner, pthread_self()))
+    {
+      return -EPERM;
     }
 
   for (index = 0; index < NY_PLUGIN_MAX_PENDING; index++)
@@ -678,6 +721,84 @@ int ny_plugin_async_complete(struct ny_plugin_s *plugin, uint64_t token,
 
   JS_FreeValue(plugin->context, result);
   return 0;
+}
+
+int ny_plugin_async_deliver(struct ny_plugin_s *plugin, uint64_t token,
+                            int status, const char *payload, size_t length)
+{
+  uint64_t previous_deadline;
+  JSValue value;
+  size_t index;
+  int ret;
+
+  if (plugin == NULL || plugin->context == NULL ||
+      (uint32_t)(token >> 32) != plugin->generation)
+    {
+      return -ESTALE;
+    }
+
+  if (!pthread_equal(plugin->owner, pthread_self()))
+    {
+      return -EPERM;
+    }
+
+  if ((payload == NULL && length != 0) ||
+      length > CONFIG_NYABULA_CORE_EVENT_SIZE || status > 0)
+    {
+      return -EINVAL;
+    }
+
+  for (index = 0; index < NY_PLUGIN_MAX_PENDING; index++)
+    {
+      if (plugin->pending[index].occupied &&
+          plugin->pending[index].request == (uint32_t)token)
+        {
+          break;
+        }
+    }
+
+  if (index == NY_PLUGIN_MAX_PENDING)
+    {
+      return -ENOENT;
+    }
+
+  if ((plugin->pending[index].permission != 0 &&
+       atomic_load(&plugin->permission_generation) !=
+           plugin->pending[index].permission_generation) ||
+      (atomic_load(&plugin->permissions) &
+       plugin->pending[index].permission) != plugin->pending[index].permission)
+    {
+      status = -EACCES;
+    }
+
+  previous_deadline = plugin->deadline_ns;
+  if (previous_deadline == 0)
+    {
+      ny_runtime_begin_event(plugin);
+    }
+
+  /* Only the owning worker creates JS values. Provider errors carry errno. */
+
+  value = status < 0 ? JS_NewInt32(plugin->context, status)
+                     : JS_NewStringLen(plugin->context,
+                                       payload == NULL ? "" : payload, length);
+  if (JS_IsException(value))
+    {
+      ny_runtime_dump_exception(plugin, "async payload");
+      ret = -ENOMEM;
+    }
+  else
+    {
+      ret = ny_plugin_async_complete(plugin, token, status < 0, value);
+      if (ret >= 0)
+        {
+          ret = ny_runtime_drain_jobs(plugin);
+        }
+    }
+
+  JS_FreeValue(plugin->context, value);
+  plugin->deadline_ns = previous_deadline;
+  return ret;
 }
 
 int ny_plugin_async_cancel_all(struct ny_plugin_s *plugin)

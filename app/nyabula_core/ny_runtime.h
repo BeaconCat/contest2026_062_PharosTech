@@ -29,6 +29,7 @@
 #include <nuttx/config.h>
 
 #include <limits.h>
+#include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -57,6 +58,8 @@ struct ny_plugin_pending_s
 {
   bool occupied;
   uint32_t request;
+  uint64_t permission;
+  uint32_t permission_generation;
   JSValue resolve;
   JSValue reject;
 };
@@ -66,10 +69,14 @@ struct ny_plugin_s
   JSRuntime *runtime;
   JSContext *context;
   JSModuleDef *module;
+  pthread_t owner;
+  int (*pump)(void *opaque, uint64_t deadline_ns);
+  void *pump_opaque;
   enum ny_plugin_state_e state;
   uint64_t deadline_ns;
   uint64_t requested_permissions;
   atomic_uint_fast64_t permissions;
+  atomic_uint permission_generation;
   size_t memory_limit;
   size_t stack_limit;
   uint32_t event_timeout_ms;
@@ -101,6 +108,11 @@ int ny_plugin_dispatch(struct ny_plugin_s *plugin, const char *event);
 int ny_plugin_stop(struct ny_plugin_s *plugin);
 int ny_plugin_async_begin(struct ny_plugin_s *plugin, JSValue *promise,
                           uint64_t *token);
+int ny_plugin_async_begin_authorized(struct ny_plugin_s *plugin,
+                                     uint64_t permission, JSValue *promise,
+                                     uint64_t *token);
+int ny_plugin_async_deliver(struct ny_plugin_s *plugin, uint64_t token,
+                            int status, const char *payload, size_t length);
 int ny_plugin_async_complete(struct ny_plugin_s *plugin, uint64_t token,
                              bool rejected, JSValueConst value);
 int ny_plugin_async_cancel_all(struct ny_plugin_s *plugin);

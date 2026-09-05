@@ -22,6 +22,9 @@
 #ifndef __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_SCHEDULER_H
 #define __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_SCHEDULER_H
 
+#include <stddef.h>
+#include <stdint.h>
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
@@ -31,6 +34,10 @@ int ny_scheduler_start_package(const char *package_path);
 int ny_scheduler_start_installed(const char *package_path,
                                  const char *storage_root);
 int ny_scheduler_dispatch(const char *id, const char *event);
+/* Task-context provider entry: copies bytes; never accepts JS values. */
+
+int ny_scheduler_complete(const char *id, uint64_t token, int status,
+                          const char *payload, size_t length);
 int ny_scheduler_stop(const char *id);
 int ny_scheduler_stop_all(void);
 int ny_scheduler_refresh_permissions(const char *id);

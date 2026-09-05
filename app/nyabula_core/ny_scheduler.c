@@ -53,15 +53,16 @@
  * Private Types
  ****************************************************************************/
 
-enum ny_scheduler_event_type_e
-{
-  NY_SCHEDULER_EVENT_USER = 0,
-  NY_SCHEDULER_EVENT_STOP
-};
-
 struct ny_scheduler_event_s
 {
-  enum ny_scheduler_event_type_e type;
+  char payload[CONFIG_NYABULA_CORE_EVENT_SIZE];
+};
+
+struct ny_scheduler_completion_s
+{
+  uint64_t token;
+  int status;
+  size_t length;
   char payload[CONFIG_NYABULA_CORE_EVENT_SIZE];
 };
 
@@ -70,6 +71,11 @@ struct ny_scheduler_slot_s
   bool occupied;
   bool stopping;
   bool task_stopped;
+  bool accept_completions;
+  uint32_t generation;
+  size_t completion_head;
+  size_t completion_count;
+  struct ny_scheduler_completion_s completions[NY_PLUGIN_MAX_PENDING];
   pid_t pid;
 #ifdef CONFIG_BUILD_KERNEL
   pthread_t thread;
@@ -82,6 +88,7 @@ struct ny_scheduler_slot_s
   char path[PATH_MAX];
   char index_arg[12];
   sem_t ready;
+  sem_t start_consumed;
   sem_t pending;
   sem_t stopped;
   size_t head;
@@ -113,9 +120,9 @@ static struct ny_scheduler_slot_s *ny_scheduler_find_locked(const char *id);
 static struct ny_scheduler_slot_s *ny_scheduler_empty_locked(void);
 static int ny_scheduler_background_count_locked(void);
 static int ny_scheduler_enqueue_locked(struct ny_scheduler_slot_s *slot,
-                                       enum ny_scheduler_event_type_e type,
                                        const char *payload);
 static int ny_scheduler_worker(int argc, char *argv[]);
+static int ny_scheduler_pump(void *opaque, uint64_t deadline_ns);
 #ifdef CONFIG_BUILD_KERNEL
 static void *ny_scheduler_pthread(void *argument);
 #endif
@@ -215,7 +222,6 @@ static int ny_scheduler_background_count_locked(void)
 }
 
 static int ny_scheduler_enqueue_locked(struct ny_scheduler_slot_s *slot,
-                                       enum ny_scheduler_event_type_e type,
                                        const char *payload)
 {
   struct ny_scheduler_event_s *event;
@@ -227,7 +233,6 @@ static int ny_scheduler_enqueue_locked(struct ny_scheduler_slot_s *slot,
 
   event = &slot->events[slot->tail];
   memset(event, 0, sizeof(*event));
-  event->type = type;
   if (payload != NULL)
     {
       strlcpy(event->payload, payload, sizeof(event->payload));
@@ -237,6 +242,62 @@ static int ny_scheduler_enqueue_locked(struct ny_scheduler_slot_s *slot,
   slot->count++;
   sem_post(&slot->pending);
   return 0;
+}
+
+static int ny_scheduler_pump(void *opaque, uint64_t deadline_ns)
+{
+  struct ny_scheduler_slot_s *slot = opaque;
+  struct ny_scheduler_completion_s completion;
+  struct timespec deadline;
+  int ret;
+
+  for (;;)
+    {
+      nxmutex_lock(&g_scheduler_lock);
+      if (slot->stopping)
+        {
+          nxmutex_unlock(&g_scheduler_lock);
+          return -ECANCELED;
+        }
+
+      if (deadline_ns != 0 && ny_scheduler_now_ns() >= deadline_ns)
+        {
+          nxmutex_unlock(&g_scheduler_lock);
+          return -ETIMEDOUT;
+        }
+
+      if (slot->completion_count != 0)
+        {
+          completion = slot->completions[slot->completion_head];
+          slot->completion_head =
+              (slot->completion_head + 1) % NY_PLUGIN_MAX_PENDING;
+          slot->completion_count--;
+          nxmutex_unlock(&g_scheduler_lock);
+          ret = ny_plugin_async_deliver(&slot->plugin, completion.token,
+                                        completion.status, completion.payload,
+                                        completion.length);
+          if (ret == -ENOENT || ret == -ESTALE)
+            {
+              continue;
+            }
+
+          return ret;
+        }
+
+      nxmutex_unlock(&g_scheduler_lock);
+      if (deadline_ns == 0)
+        {
+          return -EAGAIN;
+        }
+
+      deadline.tv_sec = deadline_ns / 1000000000ull;
+      deadline.tv_nsec = deadline_ns % 1000000000ull;
+      ret = sem_clockwait(&slot->pending, CLOCK_MONOTONIC, &deadline);
+      if (ret < 0 && errno != EINTR)
+        {
+          return -errno;
+        }
+    }
 }
 
 static int ny_scheduler_worker(int argc, char *argv[])
@@ -271,6 +332,12 @@ static int ny_scheduler_worker(int argc, char *argv[])
       ret = ny_plugin_load_config(&slot->plugin, &slot->config);
       if (ret >= 0)
         {
+          slot->plugin.pump = ny_scheduler_pump;
+          slot->plugin.pump_opaque = slot;
+          nxmutex_lock(&g_scheduler_lock);
+          slot->generation = slot->plugin.generation;
+          slot->accept_completions = !slot->stopping;
+          nxmutex_unlock(&g_scheduler_lock);
           ret = ny_plugin_start(&slot->plugin);
         }
     }
@@ -285,16 +352,28 @@ static int ny_scheduler_worker(int argc, char *argv[])
 
   while (ret >= 0)
     {
-      ret = ny_scheduler_wait(&slot->pending);
-      if (ret < 0)
+      ret = slot->config.runtime == NY_PLUGIN_RUNTIME_WAMR
+                ? -EAGAIN
+                : ny_scheduler_pump(slot, 0);
+      if (ret < 0 && ret != -EAGAIN && ret != -ECANCELED)
         {
           break;
         }
 
       nxmutex_lock(&g_scheduler_lock);
+      if (slot->stopping)
+        {
+          nxmutex_unlock(&g_scheduler_lock);
+          ret = slot->config.runtime == NY_PLUGIN_RUNTIME_WAMR
+                    ? ny_wasm_stop(&slot->wasm)
+                    : ny_plugin_stop(&slot->plugin);
+          break;
+        }
+
       if (slot->count == 0)
         {
           nxmutex_unlock(&g_scheduler_lock);
+          ret = ny_scheduler_wait(&slot->pending);
           continue;
         }
 
@@ -302,14 +381,6 @@ static int ny_scheduler_worker(int argc, char *argv[])
       slot->head = (slot->head + 1) % CONFIG_NYABULA_CORE_EVENT_DEPTH;
       slot->count--;
       nxmutex_unlock(&g_scheduler_lock);
-
-      if (event.type == NY_SCHEDULER_EVENT_STOP)
-        {
-          ret = slot->config.runtime == NY_PLUGIN_RUNTIME_WAMR
-                    ? ny_wasm_stop(&slot->wasm)
-                    : ny_plugin_stop(&slot->plugin);
-          break;
-        }
 
       ret = slot->config.runtime == NY_PLUGIN_RUNTIME_WAMR
                 ? ny_wasm_dispatch(&slot->wasm, event.payload)
@@ -322,6 +393,12 @@ static int ny_scheduler_worker(int argc, char *argv[])
     }
 
   nxmutex_lock(&g_scheduler_lock);
+  slot->accept_completions = false;
+  if (ret == -ECANCELED && slot->stopping)
+    {
+      ret = 0;
+    }
+
   slot->exit_result = ret;
   slot->state = ret < 0 ? NY_PLUGIN_FAILED : NY_PLUGIN_STOPPED;
   nxmutex_unlock(&g_scheduler_lock);
@@ -368,6 +445,7 @@ static void *ny_scheduler_pthread(void *argument)
 static void ny_scheduler_clear_locked(struct ny_scheduler_slot_s *slot)
 {
   sem_destroy(&slot->ready);
+  sem_destroy(&slot->start_consumed);
   sem_destroy(&slot->pending);
   sem_destroy(&slot->stopped);
   memset(slot, 0, sizeof(*slot));
@@ -461,8 +539,9 @@ int ny_scheduler_refresh_permissions(const char *id)
         {
           ny_wasm_set_permissions(&slot->wasm, config.permissions);
         }
-      else
+      else if (slot->accept_completions)
         {
+          atomic_fetch_add(&slot->plugin.permission_generation, 1);
           atomic_store(&slot->plugin.permissions, config.permissions);
         }
     }
@@ -557,6 +636,17 @@ static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
       return ret;
     }
 
+  if (sem_init(&slot->start_consumed, 0, 0) < 0)
+    {
+      ret = -errno;
+      sem_destroy(&slot->stopped);
+      sem_destroy(&slot->pending);
+      sem_destroy(&slot->ready);
+      memset(slot, 0, sizeof(*slot));
+      nxmutex_unlock(&g_scheduler_lock);
+      return ret;
+    }
+
 #ifdef CONFIG_BUILD_KERNEL
   pthread_attr_init(&attributes);
   pthread_attr_setstacksize(&attributes, CONFIG_NYABULA_CORE_STACKSIZE);
@@ -605,6 +695,7 @@ static int ny_scheduler_start_config(const struct ny_plugin_config_s *config)
 
   nxmutex_lock(&g_scheduler_lock);
   ret = slot->start_result;
+  sem_post(&slot->start_consumed);
   if (ret < 0)
     {
       /* Claim reaping under the lock: a concurrent ny_scheduler_stop()
@@ -679,8 +770,7 @@ int ny_scheduler_dispatch(const char *id, const char *event)
         }
       else
         {
-          ret = ny_scheduler_enqueue_locked(slot, NY_SCHEDULER_EVENT_USER,
-                                            event);
+          ret = ny_scheduler_enqueue_locked(slot, event);
           if (ret >= 0)
             {
               slot->event_count++;
@@ -690,6 +780,71 @@ int ny_scheduler_dispatch(const char *id, const char *event)
 
   nxmutex_unlock(&g_scheduler_lock);
   return ret;
+}
+
+int ny_scheduler_complete(const char *id, uint64_t token, int status,
+                          const char *payload, size_t length)
+{
+  struct ny_scheduler_slot_s *slot;
+  struct ny_scheduler_completion_s *completion;
+  size_t index;
+
+  if (id == NULL || token == 0 || status > 0 ||
+      (payload == NULL && length != 0))
+    {
+      return -EINVAL;
+    }
+
+  if (length > CONFIG_NYABULA_CORE_EVENT_SIZE)
+    {
+      return -EMSGSIZE;
+    }
+
+  nxmutex_lock(&g_scheduler_lock);
+  slot = ny_scheduler_find_locked(id);
+  if (slot == NULL || slot->generation != (uint32_t)(token >> 32))
+    {
+      nxmutex_unlock(&g_scheduler_lock);
+      return -ESTALE;
+    }
+
+  if (slot->stopping || !slot->accept_completions)
+    {
+      nxmutex_unlock(&g_scheduler_lock);
+      return -ECANCELED;
+    }
+
+  for (index = 0; index < slot->completion_count; index++)
+    {
+      size_t offset = (slot->completion_head + index) % NY_PLUGIN_MAX_PENDING;
+      if (slot->completions[offset].token == token)
+        {
+          nxmutex_unlock(&g_scheduler_lock);
+          return -EALREADY;
+        }
+    }
+
+  if (slot->completion_count == NY_PLUGIN_MAX_PENDING)
+    {
+      nxmutex_unlock(&g_scheduler_lock);
+      return -EAGAIN;
+    }
+
+  index =
+      (slot->completion_head + slot->completion_count) % NY_PLUGIN_MAX_PENDING;
+  completion = &slot->completions[index];
+  completion->token = token;
+  completion->status = status;
+  completion->length = length;
+  if (length != 0)
+    {
+      memcpy(completion->payload, payload, length);
+    }
+
+  slot->completion_count++;
+  sem_post(&slot->pending);
+  nxmutex_unlock(&g_scheduler_lock);
+  return 0;
 }
 
 int ny_scheduler_stop(const char *id)
@@ -718,12 +873,12 @@ int ny_scheduler_stop(const char *id)
     }
 
   already_stopped = slot->task_stopped;
-  ret = already_stopped
-            ? 0
-            : ny_scheduler_enqueue_locked(slot, NY_SCHEDULER_EVENT_STOP, NULL);
-  if (ret >= 0)
+  ret = 0;
+  slot->stopping = true;
+  slot->accept_completions = false;
+  if (!already_stopped)
     {
-      slot->stopping = true;
+      sem_post(&slot->pending);
     }
 
   nxmutex_unlock(&g_scheduler_lock);
@@ -744,6 +899,12 @@ int ny_scheduler_stop(const char *id)
 #ifdef CONFIG_BUILD_KERNEL
   pthread_join(slot->thread, NULL);
 #endif
+
+  ret = ny_scheduler_wait(&slot->start_consumed);
+  if (ret < 0)
+    {
+      return ret;
+    }
 
   nxmutex_lock(&g_scheduler_lock);
   ny_scheduler_clear_locked(slot);
