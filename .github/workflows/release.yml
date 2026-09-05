@@ -1,0 +1,142 @@
+name: Publish Nyabula K7 firmware
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing team release tag
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  REPO_NAME: contest2026_062_PharosTech
+  RELEASE_CONFIG: configs/display
+
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Resolve release tag
+        id: release
+        env:
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          TAG=${EVENT_TAG:-$INPUT_TAG}
+          if ! [[ "$TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; then
+            echo "invalid release tag: $TAG" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+
+      - name: Pin reproducible source metadata
+        run: |
+          echo "RELEASE_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" \
+            >> "$GITHUB_ENV"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential cmake curl dosfstools gdisk git jq python3
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo \
+            -o "$RUNNER_TEMP/bin/repo"
+          chmod +x "$RUNNER_TEMP/bin/repo"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Sync the tagged openvela workspace
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          mkdir openvela
+          cd openvela
+          repo init \
+            -u "${{ github.server_url }}/${{ github.repository }}" \
+            -b "$TAG" \
+            -m "$REPO_NAME.xml" \
+            --depth=1
+          repo sync -c -j4
+
+      - name: Build release NuttX
+        run: |
+          cd openvela
+          ./build.sh "$REPO_NAME/$RELEASE_CONFIG" distclean
+          ./build.sh "$REPO_NAME/$RELEASE_CONFIG" -j4
+          install -Dm644 nuttx/nuttx.bin \
+            "$GITHUB_WORKSPACE/release/nuttx-kickpi-k7.bin"
+
+      - name: Assemble N-Boot and full SD image
+        run: |
+          TEAM_DIR="openvela/$REPO_NAME"
+          "$TEAM_DIR/tools/k7_sdpack/fetch_rkbin.sh" "$RUNNER_TEMP/rkbin"
+          bash "$TEAM_DIR/tools/k7_sdpack/build_nboot_ab.sh" \
+            release/nuttx-kickpi-k7.bin \
+            "$TEAM_DIR/board/nboot" \
+            "$RUNNER_TEMP/rkbin" \
+            release/card
+          mv release/card/nboot.img release/nboot-kickpi-k7.img
+          gzip -1 -n release/card/nyabula-k7-sd.img
+          mv release/card/nyabula-k7-sd.img.gz release/nyabula-k7-sd.img.gz
+
+      - name: Generate release manifest
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+
+          root = pathlib.Path("release")
+          names = (
+              "nuttx-kickpi-k7.bin",
+              "nboot-kickpi-k7.img",
+              "nyabula-k7-sd.img.gz",
+          )
+          artifacts = {}
+          for name in names:
+              data = (root / name).read_bytes()
+              artifacts[name] = {
+                  "size": len(data),
+                  "sha256": hashlib.sha256(data).hexdigest(),
+              }
+          manifest = {
+              "schema": 1,
+              "tag": os.environ["RELEASE_TAG"],
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "source_sha": os.environ["RELEASE_SOURCE_SHA"],
+              "target": "kickpi-k7-rk3576",
+              "config": os.environ["RELEASE_CONFIG"],
+              "nboot_release": (pathlib.Path("openvela") /
+                  os.environ["REPO_NAME"] / "board/nboot/RELEASE"
+              ).read_text(encoding="utf-8").strip(),
+              "artifacts": artifacts,
+          }
+          (root / "nyabula-release.json").write_text(
+              json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          PY
+          cd release
+          sha256sum nuttx-kickpi-k7.bin nboot-kickpi-k7.img \
+            nyabula-k7-sd.img.gz nyabula-release.json > SHA256SUMS
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            release/nuttx-kickpi-k7.bin \
+            release/nboot-kickpi-k7.img \
+            release/nyabula-k7-sd.img.gz \
+            release/nyabula-release.json \
+            release/SHA256SUMS \
+            --clobber
