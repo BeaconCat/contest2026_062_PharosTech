@@ -2,31 +2,34 @@
   "schema": 1,
   "tag": "v0.1.0-alpha.1",
   "repository": "BeaconCat/N-Boot",
-  "source_sha": "da0120d2b6285b17858e5eac70c7e1eabf59dab9",
+  "source_sha": "5ef4155fc4dc841e32530cb3d6a578a7743fe791",
   "target": "kickpi-k7-rk3576",
   "contract": {
     "load_address": "0x40200000",
     "text_offset": "0x200000",
     "vendor_fit_size": 4194304,
-    "layout_version": 2,
+    "layout_version": 3,
     "reboot_request_register": "0x26026230",
     "handoff_register": "0x26026234",
     "generation_low_register": "0x26026238",
     "generation_high_register": "0x2602623c",
     "reboot_magic": "0x4e425200",
     "handoff_magic": "0x4e480000",
-    "handoff_version": 1
+    "handoff_version": 2,
+    "sd_mmc_devnum": 0,
+    "emmc_mmc_devnum": 1,
+    "storage_policy": "sd-then-emmc"
   },
   "artifacts": {
     "proper": {
       "name": "nboot-kickpi-k7.bin",
-      "size": 991880,
-      "sha256": "2c113644ea1782b0d5736bba3e6baebd4c5baf76e26ae4237c5d62e2d8de5846"
+      "size": 992272,
+      "sha256": "1df74cffa15aa6e2868ee937b9d86af93776fe4640bf4331777fc7eb3a6eba9c"
     },
     "dtb": {
       "name": "nboot-kickpi-k7.dtb",
-      "size": 174208,
-      "sha256": "fcca36b4f8083f57ed13bb62ff37588ad326791cd4353890aa48dc5c8c9e465f"
+      "size": 174232,
+      "sha256": "8b4520006e08cb1ff9cdcf242952820343bd63db45cef3d10e8c202a8244b6d1"
     }
   }
 }
