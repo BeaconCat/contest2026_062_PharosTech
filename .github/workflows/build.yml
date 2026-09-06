@@ -41,6 +41,11 @@ jobs:
           python3 tools/test_sync_nboot_release.py
           python3 tools/k7_abpack/test_bootctrl.py
           bash -n tools/k7_sdpack/build_nboot_ab.sh
+          TAG=$(cat board/nboot/RELEASE)
+          python3 tools/sync_nboot_release.py \
+            --assets board/nboot \
+            --output "$RUNNER_TEMP/verified-nboot" \
+            --tag "$TAG"
 
   # 扫描 defconfig，生成 build matrix
   scan_configs:

@@ -76,13 +76,22 @@ jobs:
           install -Dm644 nuttx/nuttx.bin \
             "$GITHUB_WORKSPACE/release/nuttx-kickpi-k7.bin"
 
+      - name: Verify pinned N-Boot assets
+        run: |
+          TEAM_DIR="openvela/$REPO_NAME"
+          TAG=$(cat "$TEAM_DIR/board/nboot/RELEASE")
+          python3 "$TEAM_DIR/tools/sync_nboot_release.py" \
+            --assets "$TEAM_DIR/board/nboot" \
+            --output "$RUNNER_TEMP/verified-nboot" \
+            --tag "$TAG"
+
       - name: Assemble N-Boot and full SD image
         run: |
           TEAM_DIR="openvela/$REPO_NAME"
           "$TEAM_DIR/tools/k7_sdpack/fetch_rkbin.sh" "$RUNNER_TEMP/rkbin"
           bash "$TEAM_DIR/tools/k7_sdpack/build_nboot_ab.sh" \
             release/nuttx-kickpi-k7.bin \
-            "$TEAM_DIR/board/nboot" \
+            "$RUNNER_TEMP/verified-nboot" \
             "$RUNNER_TEMP/rkbin" \
             release/card
           mv release/card/nboot.img release/nboot-kickpi-k7.img
