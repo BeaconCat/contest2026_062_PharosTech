@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "tag": "v0.1.0-alpha.1",
+  "repository": "BeaconCat/N-Boot",
+  "source_sha": "77a2e52147327d967f071e2c1687a8fd469410f5",
+  "target": "kickpi-k7-rk3576",
+  "contract": {
+    "load_address": "0x40200000",
+    "text_offset": "0x200000",
+    "vendor_fit_size": 4194304,
+    "layout_version": 1
+  },
+  "artifacts": {
+    "proper": {
+      "name": "nboot-kickpi-k7.bin",
+      "size": 991344,
+      "sha256": "022b2ef4e9ecf01e36f5b77d4ff78bcdad2ec658c0eafdd90f012fd0e1a193b7"
+    },
+    "dtb": {
+      "name": "nboot-kickpi-k7.dtb",
+      "size": 174208,
+      "sha256": "fcca36b4f8083f57ed13bb62ff37588ad326791cd4353890aa48dc5c8c9e465f"
+    }
+  }
+}
