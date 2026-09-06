@@ -97,7 +97,7 @@ cat > "$WORK/nboot.its" <<'ITS'
   };
   configurations {
     default = "conf";
-    conf { firmware = "atf-1";
+    conf { description = "rk3576-evb"; firmware = "atf-1";
       loadables = "atf-2", "atf-3", "optee", "uboot"; fdt = "fdt"; };
   };
 };
