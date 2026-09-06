@@ -1,11 +1,11 @@
 #!/bin/bash
-# Fetch exactly the RK3576 files needed by build_sd.sh from the official
+# Fetch exactly the RK3576 files needed by the SD/eMMC packers from the official
 # Rockchip binary repo (github.com/rockchip-linux/rkbin). Downloads ~4MB of
 # specific files instead of cloning the full ~1.5GB repo.
 #
 # Usage: ./fetch_rkbin.sh [out_rkbin_dir]
 #   Honors http_proxy/https_proxy env (or set PROXY=host:port).
-#   Alternatively, skip this and point build_sd.sh at a full rkbin checkout.
+#   Alternatively, point either packer at a full rkbin checkout.
 set -e
 DEST="${1:-rkbin}"
 # Pin an exact rkbin commit -- do NOT track 'master'. rkbin has no release tags and

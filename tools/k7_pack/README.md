@@ -1,7 +1,7 @@
-# k7_sdpack — KICKPI-K7 (RK3576) SD 启动卡打包
+# k7_pack — KICKPI-K7 SD/eMMC发布打包
 
-把编译出的 `nuttx.bin` 打成从 SD 卡启动的镜像，NuttX 作 **BL33** 跑在 Rockchip 启动链里。
-**eMMC 上的原厂 Android 完全不动**——SD 优先启动，砖了拔卡即回 Android。
+使用同一份N-Boot、bootctrl和固定分区合同，生成SD整盘镜像或RKDevTool eMMC
+分区包。构建脚本只在团队仓维护，N-Boot仓仅发布proper与控制DTB。
 
 启动链（2026-07-04 板上实测点亮 NSH）：
 
@@ -14,20 +14,32 @@ SD BootROM → idbloader(DDR init + U-Boot SPL) → FIT(atf-1/uboot/atf-2/atf-3/
 
 ```sh
 ./fetch_rkbin.sh rkbin                    # 拉官方启动件(~4MB, 支持 PROXY=host:port)
-./build_sd.sh <nuttx.bin> rkbin out       # 组出 out/sd_nuttx.img
-# 用 balenaEtcher / Win32DiskImager 整盘烧到 SD 卡, 上电抓串口(1500000 8N1)
+./build_sd.sh <nuttx.bin> ../../board/nboot rkbin out-sd
+./build_emmc.sh <nuttx.bin> ../../board/nboot rkbin out-emmc
 ```
 
-N-Boot A/B产品镜像使用团队仓锁定的release payload：
+SD产物为`out-sd/nyabula-k7-sd.img`，使用balenaEtcher或Win32DiskImager整盘
+写入。eMMC产物位于`out-emmc/nyabula-k7-emmc/`，包含：
 
-```sh
-bash ./build_nboot_ab.sh <nuttx.bin> ../../board/nboot rkbin out
+```text
+package-file
+SHA256SUMS
+README.txt
+Image/MiniLoaderAll.bin
+Image/parameter.txt
+Image/uboot.img
+Image/trust.img
+Image/bootctrl.img
+Image/nuttx_a.img
+Image/nuttx_b.img
 ```
 
-产物包括`out/nboot.img`和4 GiB稀疏镜像`out/nyabula-k7-sd.img`。后者包含
-NuttX A/B、双副本bootctrl、AMP A/B预留和已格式化的FAT32 data分区。脚本固定
-FIT reservation map、GPT GUID与FAT元数据；相同输入和`SOURCE_DATE_EPOCH`应生成
-逐字节一致的输出。
+RKDevTool使用Download Image模式：加载`MiniLoaderAll.bin`作为Loader，加载
+`parameter.txt`创建GPT，再按同名项刷入各分区镜像。`amp_a`、`amp_b`和自动扩展
+到设备末尾的`data`只建分区，本阶段不写初始内容。
+
+两个入口都调用内部`build_nboot_ab.sh`，因此N-Boot FIT、bootctrl、分区起始和大小
+不会形成两套实现。相同输入和`SOURCE_DATE_EPOCH`应生成逐字节一致的payload。
 
 依赖：`dtc` `sgdisk`(gdisk) `dd` `mkfs.fat`。rkbin 自带
 `mkimage`/`boot_merger`/`trust_merger`。
@@ -55,9 +67,19 @@ FIT reservation map、GPT GUID与FAT元数据；相同输入和`SOURCE_DATE_EPOC
 > rkbin BL31 elf 的 3 个 PT_LOAD 段载入址 `0x40060000 / 0x400f0000 / 0x3fe70000` 与原厂
 > vendor FIT 的 atf-1/2/3 逐一吻合，证实同族固件；仅版本较新（v1.24 vs 原厂 v1.20），实测兼容。
 
+## 旧版NuttX直作BL33镜像
+
+早期、不含N-Boot A/B的64 MiB开发镜像保留为：
+
+```sh
+./build_legacy_sd.sh <nuttx.bin> rkbin out
+```
+
+仅用于复现历史bring-up，不作为产品发布路径。
+
 ## 原理：自写最简 FIT
 
-`build_sd.sh` 拆 BL31 elf 三段 → `atf-1/2/3.bin`，自写 `fit.its`：`uboot` 槽 = nuttx@0x40200000，
+`build_legacy_sd.sh`拆BL31 elf三段，自写`fit.its`：`uboot`槽为nuttx@0x40200000，
 外加 atf-1(firmware)/atf-2/atf-3/optee@0x48400000/dummy-fdt，`mkimage` 内嵌打包成 `uboot_nuttx.img`。
 idbloader、trust 用 rkbin 的 merger 按官方 `.ini` 生成。
 

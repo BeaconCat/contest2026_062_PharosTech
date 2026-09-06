@@ -10,17 +10,17 @@
 # Verified on board 2026-07-04: boots SD -> SPL(FIT all segments OK, no bad hash)
 # -> BL31 v1.24 -> OP-TEE v1.08 -> EL3 exit@EL2 -> NuttShell (NSH).
 #
-# Usage: ./build_sd.sh <nuttx.bin> <rkbin_dir> <out_dir>
+# Usage: ./build_legacy_sd.sh <nuttx.bin> <rkbin_dir> <out_dir>
 #   Get <rkbin_dir> with ./fetch_rkbin.sh (or point at a full rkbin checkout).
 set -Eeuo pipefail
 # Report the failing line/command instead of exiting silently (set -e used to
 # swallow the reason -- e.g. a merger hitting a read-only rkbin dir).
-trap 'rc=$?; echo "ERROR: build_sd.sh failed at line ${LINENO} (exit ${rc}): ${BASH_COMMAND}" >&2; exit "${rc}"' ERR
+trap 'rc=$?; echo "ERROR: build_legacy_sd.sh failed at line ${LINENO} (exit ${rc}): ${BASH_COMMAND}" >&2; exit "${rc}"' ERR
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 abspath() { (cd "$(dirname "$1")" && printf '%s/%s' "$(pwd)" "$(basename "$1")"); }
-[ $# -eq 3 ] || die "usage: build_sd.sh <nuttx.bin> <rkbin_dir> <out_dir>"
+[ $# -eq 3 ] || die "usage: build_legacy_sd.sh <nuttx.bin> <rkbin_dir> <out_dir>"
 [ -r "$1" ] || die "nuttx.bin not readable: $1"
 [ -d "$2" ] || die "rkbin dir not found: $2 (run ./fetch_rkbin.sh first)"
 NUTTX=$(abspath "$1")
