@@ -143,7 +143,7 @@ class SyncNBootReleaseTest(unittest.TestCase):
                 "handoff_version": 2,
                 "sd_mmc_devnum": 0,
                 "emmc_mmc_devnum": 1,
-                "boot_source_fallback": True,
+                "storage_policy": "sd-then-emmc",
             }
             assets, _ = self.make_release(root, contract=contract)
             self.run_sync(assets, root / "output")

@@ -67,7 +67,7 @@ def main():
         "handoff_version": 2,
         "sd_mmc_devnum": 0,
         "emmc_mmc_devnum": 1,
-        "boot_source_fallback": True,
+        "storage_policy": "sd-then-emmc",
     }
     if manifest.get("contract") not in (contract_v1, contract_v2,
                                          contract_v3):
