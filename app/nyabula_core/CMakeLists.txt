@@ -45,6 +45,7 @@ if(CONFIG_CONTEST2026_062_NYABULA_CORE)
     execute_process(
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/prepare_sqlite.py
               --output ${NYCORE_SQLITE_DIR}
+              --cache ${CMAKE_CURRENT_LIST_DIR}/.sqlite
       RESULT_VARIABLE NYCORE_SQLITE_RESULT)
     if(NOT NYCORE_SQLITE_RESULT EQUAL 0)
       message(FATAL_ERROR "Failed to prepare pinned SQLite sources")

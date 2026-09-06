@@ -7,7 +7,9 @@ import hashlib
 import io
 import os
 from pathlib import Path
+import shutil
 import tempfile
+from typing import Optional
 import urllib.request
 import zipfile
 
@@ -19,10 +21,19 @@ FILES = {
 }
 
 
-def prepare(output: Path) -> None:
-    if all((output / name).is_file() and
-           hashlib.sha256((output / name).read_bytes()).hexdigest() == digest
-           for name, digest in FILES.items()):
+def valid(directory: Path) -> bool:
+    return all((directory / name).is_file() and
+               hashlib.sha256((directory / name).read_bytes()).hexdigest() ==
+               digest for name, digest in FILES.items())
+
+
+def prepare(output: Path, cache: Optional[Path]) -> None:
+    if valid(output):
+        return
+    if cache is not None and valid(cache):
+        output.mkdir(parents=True, exist_ok=True)
+        for name in FILES:
+            shutil.copyfile(cache / name, output / name)
         return
     with urllib.request.urlopen(URL, timeout=45) as response:
         archive = response.read(4 * 1024 * 1024)
@@ -47,4 +58,6 @@ def prepare(output: Path) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
-    prepare(parser.parse_args().output)
+    parser.add_argument("--cache", type=Path)
+    arguments = parser.parse_args()
+    prepare(arguments.output, arguments.cache)
