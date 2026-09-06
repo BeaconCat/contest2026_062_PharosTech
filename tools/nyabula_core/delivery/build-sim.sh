@@ -7,7 +7,7 @@ backend=${2:-all}
 jobs=${JOBS:-4}
 tools=${OPENVELA_TOOLS:-/root/openvela/src/vela/prebuilts/tools}
 
-test -f "$workspace/nuttx/boards/sim/sim/configs/nyabula_core/defconfig"
+test -f "$workspace/nuttx/boards/sim/sim/sim/configs/nyabula_core/defconfig"
 export PATH="$tools/python/bin:$tools/cmake/bin:$PATH"
 export PYTHONPATH="$tools/python/dist-packages/kconfiglib"
 

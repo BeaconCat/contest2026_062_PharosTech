@@ -34,9 +34,9 @@ for part in interpreters/quickjs/quickjs interpreters/wamr/wamr crypto/libsodium
   git init -q "$dst/apps/$part"
 done
 find "$dst/apps" "$dst/packages" -type f -name Kconfig -exec sed -i "s#$src/#$dst/#g" {} +
-mkdir -p "$dst/nuttx/boards/sim/sim/configs/nyabula_core"
+mkdir -p "$dst/nuttx/boards/sim/sim/sim/configs/nyabula_core"
 cp "$team/configs/nyabula_core_sim/defconfig" \
-  "$dst/nuttx/boards/sim/sim/configs/nyabula_core/defconfig"
+  "$dst/nuttx/boards/sim/sim/sim/configs/nyabula_core/defconfig"
 mkdir -p "$dst/nuttx/boards/arm64/qemu/qemu-armv8a/configs/nyabula_delivery"
 cp "$team/configs/nyabula_core_arm64_kernel/defconfig" "$dst/nuttx/boards/arm64/qemu/qemu-armv8a/configs/nyabula_delivery/defconfig"
 printf 'PREPARED %s\n' "$dst"
