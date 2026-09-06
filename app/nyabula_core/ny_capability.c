@@ -396,6 +396,10 @@ static JSValue ny_capability_ai_invoke(JSContext *context,
 {
   struct ny_plugin_s *plugin = ny_capability_plugin(context);
   struct ny_broker_client_s client;
+  char response[CONFIG_NYABULA_CORE_AI_RESPONSE_LIMIT];
+  const char *prompt;
+  size_t prompt_length;
+  JSValue result;
   int ret;
 
   if (!ny_capability_has(plugin, NY_PERMISSION_AI_INVOKE))
@@ -403,16 +407,38 @@ static JSValue ny_capability_ai_invoke(JSContext *context,
       return ny_capability_denied(context, "ai.invoke");
     }
 
-  if (argc == 1)
+  if (argc != 1 || !JS_IsString(argv[0]))
     {
-      ny_capability_client(plugin, &client);
-      ret = ny_broker_ai_invoke(&client);
-      return ret >= 0
-                 ? ny_capability_settled_promise(plugin, false, argv[0])
-                 : JS_ThrowInternalError(context, "AI broker unavailable");
+      return JS_ThrowTypeError(context, "ai.invoke requires one prompt");
     }
 
-  return JS_ThrowTypeError(context, "ai.invoke requires one prompt");
+  prompt = JS_ToCStringLen(context, &prompt_length, argv[0]);
+  if (prompt != NULL)
+    {
+      ny_capability_client(plugin, &client);
+      ret = ny_broker_ai_invoke(&client, prompt, prompt_length, response,
+                                sizeof(response));
+      JS_FreeCString(context, prompt);
+      if (ret < 0)
+        {
+          return JS_ThrowInternalError(context, "AI broker unavailable: %d",
+                                       ret);
+        }
+
+      result = JS_NewStringLen(context, response, (size_t)ret);
+      if (JS_IsException(result))
+        {
+          return result;
+        }
+
+      {
+        JSValue promise = ny_capability_settled_promise(plugin, false, result);
+        JS_FreeValue(context, result);
+        return promise;
+      }
+    }
+
+  return JS_EXCEPTION;
 }
 
 static int

@@ -39,6 +39,7 @@
 
 #include "ny_broker.h"
 #include "ny_manifest.h"
+#include "ny_provider.h"
 #ifdef CONFIG_NYABULA_CORE_STATE_SQLITE
 #include "ny_state.h"
 #endif
@@ -481,24 +482,22 @@ int ny_broker_ui_notify(const struct ny_broker_client_s *client,
       return -EACCES;
     }
 
-#ifdef CONFIG_NYABULA_CORE_MOCK_CAPABILITIES
-  printf("nymock-ui[%s]: %.*s\n", client->id, (int)length, message);
-  return 0;
-#else
-  return -ENOSYS;
-#endif
+  return ny_provider_ui_notify(client->id, message, length);
 }
 
-int ny_broker_ai_invoke(const struct ny_broker_client_s *client)
+int ny_broker_ai_invoke(const struct ny_broker_client_s *client,
+                        const char *prompt, size_t prompt_length,
+                        char *response, size_t response_capacity)
 {
-  if (client == NULL || (client->permissions & NY_PERMISSION_AI_INVOKE) == 0)
+  int ret;
+
+  if (client == NULL || client->id == NULL || prompt == NULL ||
+      response == NULL || (client->permissions & NY_PERMISSION_AI_INVOKE) == 0)
     {
       return -EACCES;
     }
 
-#ifdef CONFIG_NYABULA_CORE_MOCK_CAPABILITIES
-  return 0;
-#else
-  return -ENOSYS;
-#endif
+  ret = ny_provider_ai_invoke(client->id, prompt, prompt_length, response,
+                              response_capacity);
+  return ret >= 0 && (size_t)ret > response_capacity ? -EOVERFLOW : ret;
 }

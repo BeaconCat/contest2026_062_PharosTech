@@ -389,12 +389,8 @@ static int32_t ny_wasm_ai_invoke(wasm_exec_env_t environment,
     }
 
   ny_wasm_client(plugin, &client);
-  ret = ny_broker_ai_invoke(&client);
-  if (ret >= 0)
-    {
-      memcpy(output, input, (size_t)input_length);
-      ret = input_length;
-    }
+  ret = ny_broker_ai_invoke(&client, input, (size_t)input_length, output,
+                            (size_t)output_capacity);
 
   return ret;
 }

@@ -50,6 +50,7 @@ int ny_broker_storage_put(const struct ny_broker_client_s *client,
                           const char *key, const char *value, size_t length);
 int ny_broker_network_request(const struct ny_broker_client_s *client);
 struct ny_broker_http_s;
+
 /* Trusted runtime adapters supply a fresh permission snapshot and generation
  * on every step. An IPC server must derive these from its authenticated
  * session, never from fields supplied by a plugin. Close is owner-thread only.
@@ -64,6 +65,8 @@ int ny_broker_http_step(struct ny_broker_http_s *request,
 int ny_broker_http_close(struct ny_broker_http_s *request);
 int ny_broker_ui_notify(const struct ny_broker_client_s *client,
                         const char *message, size_t length);
-int ny_broker_ai_invoke(const struct ny_broker_client_s *client);
+int ny_broker_ai_invoke(const struct ny_broker_client_s *client,
+                        const char *prompt, size_t prompt_length,
+                        char *response, size_t response_capacity);
 
 #endif /* __PACKAGES_DEMOS_CONTEST2026_062_NYABULA_CORE_NY_BROKER_H */

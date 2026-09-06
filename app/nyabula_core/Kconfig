@@ -167,6 +167,11 @@ config NYABULA_CORE_STORAGE_VALUE_LIMIT
 	default 4096
 	range 128 65536
 
+config NYABULA_CORE_AI_RESPONSE_LIMIT
+	int "Maximum AI response size"
+	default 4096
+	range 128 65536
+
 config NYABULA_CORE_STATE_SQLITE
 	bool "Transactional Core state database"
 	default y if !BUILD_KERNEL

@@ -33,5 +33,5 @@ declare module "@nyabula/ui" {
 }
 
 declare module "@nyabula/ai" {
-  export function invoke(prompt: unknown): Promise<unknown>;
+  export function invoke(prompt: string): Promise<string>;
 }
