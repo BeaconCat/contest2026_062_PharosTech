@@ -44,13 +44,24 @@ def main():
         raise SystemExit("unexpected N-Boot target")
     if not re.fullmatch(r"[0-9a-f]{40}", manifest.get("source_sha", "")):
         raise SystemExit("invalid N-Boot source commit")
-    expected_contract = {
+    contract_v1 = {
         "load_address": "0x40200000",
         "text_offset": "0x200000",
         "vendor_fit_size": 4194304,
         "layout_version": 1,
     }
-    if manifest.get("contract") != expected_contract:
+    contract_v2 = {
+        **contract_v1,
+        "layout_version": 2,
+        "reboot_request_register": "0x26026230",
+        "handoff_register": "0x26026234",
+        "generation_low_register": "0x26026238",
+        "generation_high_register": "0x2602623c",
+        "reboot_magic": "0x4e425200",
+        "handoff_magic": "0x4e480000",
+        "handoff_version": 1,
+    }
+    if manifest.get("contract") not in (contract_v1, contract_v2):
         raise SystemExit("unsupported N-Boot board contract")
 
     if binary.stat().st_size > 2 * 1024 * 1024:

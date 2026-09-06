@@ -107,6 +107,25 @@ class SyncNBootReleaseTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("manifest artifact hash mismatch", result.stderr)
 
+    def test_accepts_versioned_system_boot_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            contract = {
+                "load_address": "0x40200000",
+                "text_offset": "0x200000",
+                "vendor_fit_size": 4194304,
+                "layout_version": 2,
+                "reboot_request_register": "0x26026230",
+                "handoff_register": "0x26026234",
+                "generation_low_register": "0x26026238",
+                "generation_high_register": "0x2602623c",
+                "reboot_magic": "0x4e425200",
+                "handoff_magic": "0x4e480000",
+                "handoff_version": 1,
+            }
+            assets, _ = self.make_release(root, contract=contract)
+            self.run_sync(assets, root / "output")
+
 
 if __name__ == "__main__":
     unittest.main()
