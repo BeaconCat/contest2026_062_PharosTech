@@ -103,7 +103,10 @@ cat > "$WORK/nboot.its" <<'ITS'
 };
 ITS
 
-(cd "$WORK" && "$MKIMAGE" -E -p 0x1000 -f nboot.its nboot.fit >/dev/null)
+# Vendor SPL reads external FIT data in storage blocks. Keep every payload on
+# a 512-byte boundary even if the selected mkimage has a smaller default.
+(cd "$WORK" && "$MKIMAGE" -E -B 0x200 -p 0x1000 \
+  -f nboot.its nboot.fit >/dev/null)
 # The pinned rkbin mkimage leaks its mmap address into the FIT reservation
 # entry. N-Boot does not consume that reservation, so terminate the map at its
 # first entry to make release output reproducible.
