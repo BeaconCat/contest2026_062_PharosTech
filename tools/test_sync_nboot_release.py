@@ -126,6 +126,28 @@ class SyncNBootReleaseTest(unittest.TestCase):
             assets, _ = self.make_release(root, contract=contract)
             self.run_sync(assets, root / "output")
 
+    def test_accepts_dual_medium_boot_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            contract = {
+                "load_address": "0x40200000",
+                "text_offset": "0x200000",
+                "vendor_fit_size": 4194304,
+                "layout_version": 3,
+                "reboot_request_register": "0x26026230",
+                "handoff_register": "0x26026234",
+                "generation_low_register": "0x26026238",
+                "generation_high_register": "0x2602623c",
+                "reboot_magic": "0x4e425200",
+                "handoff_magic": "0x4e480000",
+                "handoff_version": 2,
+                "sd_mmc_devnum": 0,
+                "emmc_mmc_devnum": 1,
+                "boot_source_fallback": True,
+            }
+            assets, _ = self.make_release(root, contract=contract)
+            self.run_sync(assets, root / "output")
+
 
 if __name__ == "__main__":
     unittest.main()
