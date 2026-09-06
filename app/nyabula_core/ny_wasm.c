@@ -1097,9 +1097,15 @@ int ny_wasm_load(struct ny_wasm_plugin_s *plugin,
 
 int ny_wasm_start(struct ny_wasm_plugin_s *plugin)
 {
-  return plugin == NULL || plugin->environment == NULL
-             ? -EINVAL
-             : ny_wasm_call(plugin, "ny_on_start", true);
+  int ret;
+
+  if (plugin == NULL || plugin->environment == NULL)
+    {
+      return -EINVAL;
+    }
+
+  ret = ny_wasm_call(plugin, "_initialize", false);
+  return ret < 0 ? ret : ny_wasm_call(plugin, "ny_on_start", true);
 }
 
 int ny_wasm_dispatch(struct ny_wasm_plugin_s *plugin, const char *event)
