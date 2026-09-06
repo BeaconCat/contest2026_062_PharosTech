@@ -22,6 +22,7 @@
 #include <nuttx/config.h>
 
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <errno.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -55,6 +56,7 @@ struct ny_http_s
 };
 
 static uint64_t ny_http_now(void);
+static bool ny_http_hostname(const char *host);
 static int ny_http_url(const char *url);
 static int ny_http_sink(char **buffer, int offset, int end, int *length,
                         void *opaque);
@@ -65,6 +67,38 @@ static uint64_t ny_http_now(void)
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
   return (uint64_t)now.tv_sec * 1000000000ull + now.tv_nsec;
+}
+
+static bool ny_http_hostname(const char *host)
+{
+  size_t index;
+  size_t length = strlen(host);
+
+  if (length == 0 || host[0] == '.' || host[length - 1] == '.' ||
+      host[0] == '-' || host[length - 1] == '-')
+    {
+      return false;
+    }
+
+  for (index = 0; index < length; index++)
+    {
+      unsigned char character = host[index];
+
+      if (character == '.')
+        {
+          if (host[index - 1] == '.' || host[index + 1] == '.' ||
+              host[index - 1] == '-' || host[index + 1] == '-')
+            {
+              return false;
+            }
+        }
+      else if (!isalnum(character) && character != '-')
+        {
+          return false;
+        }
+    }
+
+  return true;
 }
 
 static int ny_http_url(const char *url)
@@ -105,14 +139,19 @@ static int ny_http_url(const char *url)
       return ret;
     }
 
-  /* Upstream non-blocking webclient still resolves names synchronously.
-   * Until a cancellable resolver and verified TLS adapter are attached,
-   * accept only explicit HTTP IPv4 endpoints and never follow redirects.
+  /* Upstream non-blocking webclient resolves names synchronously before the
+   * socket state machine starts. DNS is therefore bounded by the resolver,
+   * not this request deadline. HTTPS and redirects remain unsupported.
    */
 
-  if (strcmp(scheme, "http") != 0 || inet_pton(AF_INET, host, &address) != 1)
+  if (strcmp(scheme, "http") != 0)
     {
       return -ENOTSUP;
+    }
+
+  if (inet_pton(AF_INET, host, &address) != 1 && !ny_http_hostname(host))
+    {
+      return -EINVAL;
     }
 
   /* The upstream parser accumulates ports in uint16_t without overflow

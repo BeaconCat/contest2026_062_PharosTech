@@ -45,8 +45,8 @@ config NYABULA_CORE_HTTP
 	select NETUTILS_WEBCLIENT
 	---help---
 		Build the broker-owned transport using upstream webclient. The
-		current transport accepts numeric IPv4 HTTP endpoints only; DNS,
-		TLS and public capability bindings require further integration.
+		current transport accepts IPv4 HTTP endpoints and DNS hostnames.
+		TLS requires further integration.
 
 config NYABULA_CORE_PRIORITY
 	int "Nyabula Core task priority"
