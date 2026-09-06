@@ -1,0 +1,5 @@
+board/nboot/RELEASE text eol=lf
+board/nboot/SHA256SUMS text eol=lf
+board/nboot/*.json text eol=lf
+board/nboot/*.bin binary
+board/nboot/*.dtb binary
