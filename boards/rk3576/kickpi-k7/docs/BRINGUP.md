@@ -123,16 +123,16 @@ export PATH=/root/openvela/src/vela/prebuilts/gcc/linux-x86_64/aarch64-none-elf/
 ### 4.2 打包 SD 启动镜像（rkbin 官方件 + 自建 FIT）
 
 启动件全部取自 Rockchip 官方二进制仓 [rkbin](https://github.com/rockchip-linux/rkbin)，
-**仓内不含任何从设备镜像抠出的私有 blob**（license 干净）。脚本在 `tools/k7_sdpack/`：
+**仓内不含任何从设备镜像抠出的私有 blob**（license 干净）。脚本在 `tools/k7_pack/`：
 
 ```bash
-cd tools/k7_sdpack
+cd tools/k7_pack
 ./fetch_rkbin.sh rkbin              # 拉所需 ~10 个 RK3576 官方件(~4MB, 支持 PROXY=host:port)
-./build_sd.sh <nuttx.bin> rkbin out # 组出 out/sd_nuttx.img
+./build_legacy_sd.sh <nuttx.bin> rkbin out # 组出 out/sd_nuttx.img
 # 烧 out/sd_nuttx.img
 ```
 
-原理（见 `tools/k7_sdpack/README.md`）：拆 rkbin BL31 elf 的 3 个 PT_LOAD 段 → `atf-1/2/3`，
+原理（见 `tools/k7_pack/README.md`）：拆 rkbin BL31 elf 的 3 个 PT_LOAD 段 → `atf-1/2/3`，
 自写最简 `fit.its`（`uboot` 槽 = nuttx@0x40200000 + atf-1/2/3 + optee@0x48400000 + dummy-fdt），
 `mkimage` **内嵌**打包（不用 `-E`，各段 hash 由 mkimage 重算、布局自洽）；idbloader、trust 用
 rkbin 的 merger 按官方 `.ini` 生成。SD 布局 idbloader@64 / uboot@16384 / trust@24576。
@@ -172,7 +172,7 @@ head.S 依赖，漏了报 `unknown mnemonic`。→ 重写 chip.h 保留 `__ASSEM
 ## 六、当前状态与后续
 
 - **已达成**：M2（NSH 点亮）。三个抄 rk3399 遗留（irq.h / cntfrq / dramboot 链接地址）全清。
-- **启动件官方化（实测）**：整条链改从 rkbin 官方件全量复现，仓内零设备抠出 blob，`tools/k7_sdpack/` 自建 FIT 板上一次点亮 NSH。
+- **启动件官方化（实测）**：整条链改从 rkbin 官方件全量复现，仓内零设备抠出 blob，`tools/k7_pack/` 自建 FIT 板上一次点亮 NSH。
 - **两仓一致**：队伍仓（github，PR#6）与 VM vendor 树（gitee）内存图已同步。
 - **后续（M3~M7）**：时钟树/CRU、GIC 中断实触发、MMU 细分、SMP 多核、外设驱动（UART 完整/SPI/I2C/GPIO/双圆屏 QSPI）。
 - **相关 PR**：#4 irq.h、#5 cntfrq、#6 链接地址修复 + 内存图回填 + rkbin 打包套件。

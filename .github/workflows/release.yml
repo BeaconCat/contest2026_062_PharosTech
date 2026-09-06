@@ -85,18 +85,25 @@ jobs:
             --output "$RUNNER_TEMP/verified-nboot" \
             --tag "$TAG"
 
-      - name: Assemble N-Boot and full SD image
+      - name: Assemble SD and eMMC release packages
         run: |
           TEAM_DIR="openvela/$REPO_NAME"
-          "$TEAM_DIR/tools/k7_sdpack/fetch_rkbin.sh" "$RUNNER_TEMP/rkbin"
-          bash "$TEAM_DIR/tools/k7_sdpack/build_nboot_ab.sh" \
+          "$TEAM_DIR/tools/k7_pack/fetch_rkbin.sh" "$RUNNER_TEMP/rkbin"
+          bash "$TEAM_DIR/tools/k7_pack/build_sd.sh" \
             release/nuttx-kickpi-k7.bin \
             "$RUNNER_TEMP/verified-nboot" \
             "$RUNNER_TEMP/rkbin" \
             release/card
+          bash "$TEAM_DIR/tools/k7_pack/build_emmc.sh" \
+            release/nuttx-kickpi-k7.bin \
+            "$RUNNER_TEMP/verified-nboot" \
+            "$RUNNER_TEMP/rkbin" \
+            release/emmc
           mv release/card/nboot.img release/nboot-kickpi-k7.img
           gzip -1 -n release/card/nyabula-k7-sd.img
           mv release/card/nyabula-k7-sd.img.gz release/nyabula-k7-sd.img.gz
+          tar -C release/emmc -czf release/nyabula-k7-emmc.tar.gz \
+            nyabula-k7-emmc
 
       - name: Generate release manifest
         env:
@@ -110,6 +117,7 @@ jobs:
               "nuttx-kickpi-k7.bin",
               "nboot-kickpi-k7.img",
               "nyabula-k7-sd.img.gz",
+              "nyabula-k7-emmc.tar.gz",
           )
           artifacts = {}
           for name in names:
@@ -135,7 +143,8 @@ jobs:
           PY
           cd release
           sha256sum nuttx-kickpi-k7.bin nboot-kickpi-k7.img \
-            nyabula-k7-sd.img.gz nyabula-release.json > SHA256SUMS
+            nyabula-k7-sd.img.gz nyabula-k7-emmc.tar.gz \
+            nyabula-release.json > SHA256SUMS
 
       - name: Upload release assets
         env:
@@ -146,6 +155,7 @@ jobs:
             release/nuttx-kickpi-k7.bin \
             release/nboot-kickpi-k7.img \
             release/nyabula-k7-sd.img.gz \
+            release/nyabula-k7-emmc.tar.gz \
             release/nyabula-release.json \
             release/SHA256SUMS \
             --clobber

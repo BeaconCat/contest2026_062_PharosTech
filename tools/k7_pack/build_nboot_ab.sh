@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: Apache-2.0
 #
-# Build the KICKPI-K7 N-Boot + NuttX A/B release image.
+# Build KICKPI-K7 N-Boot + NuttX A/B release artifacts.
 
 set -Eeuo pipefail
 
@@ -18,8 +18,8 @@ abspath()
   (cd "$(dirname "$1")" && printf '%s/%s' "$(pwd)" "$(basename "$1")")
 }
 
-[ "$#" -eq 4 ] || die \
-  "usage: build_nboot_ab.sh <nuttx.bin> <nboot_dir> <rkbin_dir> <out_dir>"
+[ "$#" -eq 5 ] || die \
+  "usage: build_nboot_ab.sh <nuttx.bin> <nboot_dir> <rkbin_dir> <out_dir> <sd|emmc>"
 [ -r "$1" ] || die "NuttX image is not readable: $1"
 [ -d "$2" ] || die "N-Boot release directory is missing: $2"
 [ -d "$3" ] || die "rkbin directory is missing: $3"
@@ -27,6 +27,9 @@ abspath()
 NUTTX=$(abspath "$1")
 NBOOT_DIR=$(cd "$2" && pwd)
 RKBIN=$(cd "$3" && pwd)
+TARGET=$5
+[ "$TARGET" = sd ] || [ "$TARGET" = emmc ] || die \
+  "target must be sd or emmc: $TARGET"
 mkdir -p "$4"
 OUT=$(cd "$4" && pwd)
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -37,9 +40,28 @@ MKIMAGE="$RKBIN/tools/mkimage"
 BL31="$RKBIN/bin/rk35/rk3576_bl31_v1.24.elf"
 BL32="$RKBIN/bin/rk35/rk3576_bl32_v1.08.bin"
 
-for tool in dd dtc mkfs.fat python3 sgdisk sha256sum truncate; do
+UBOOT_START=16384
+UBOOT_SECTORS=8192
+TRUST_START=24576
+TRUST_SECTORS=8192
+BOOTCTRL_START=32768
+BOOTCTRL_SECTORS=2048
+NUTTX_A_START=36864
+NUTTX_B_START=167936
+NUTTX_SECTORS=131072
+AMP_A_START=299008
+AMP_B_START=1347584
+AMP_SECTORS=1048576
+DATA_START=2396160
+
+for tool in dd dtc fdtget python3 sha256sum truncate; do
   command -v "$tool" >/dev/null 2>&1 || die "missing host tool: $tool"
 done
+if [ "$TARGET" = sd ]; then
+  for tool in mkfs.fat sgdisk; do
+    command -v "$tool" >/dev/null 2>&1 || die "missing host tool: $tool"
+  done
+fi
 for file in "$NBOOT_PROPER" "$NBOOT_DTB" "$BOOTCTRL" "$MKIMAGE" \
             "$RKBIN/tools/boot_merger" "$RKBIN/tools/trust_merger" \
             "$RKBIN/RKBOOT/RK3576MINIALL.ini" \
@@ -103,15 +125,25 @@ cat > "$WORK/nboot.its" <<'ITS'
 };
 ITS
 
-# Vendor SPL reads external FIT data in storage blocks. Keep every payload on
-# a 512-byte boundary even if the selected mkimage has a smaller default.
-(cd "$WORK" && "$MKIMAGE" -E -B 0x200 -p 0x1000 \
+# Vendor SPL reads external FIT data in storage blocks. New mkimage versions
+# accept an explicit alignment; the pinned rkbin version uses 512 bytes by
+# default but does not implement -B.
+MKIMAGE_ALIGNMENT=()
+if "$MKIMAGE" -h 2>&1 | grep -q -- '-B'; then
+  MKIMAGE_ALIGNMENT=(-B 0x200)
+fi
+(cd "$WORK" && "$MKIMAGE" -E "${MKIMAGE_ALIGNMENT[@]}" -p 0x1000 \
   -f nboot.its nboot.fit >/dev/null)
 # The pinned rkbin mkimage leaks its mmap address into the FIT reservation
 # entry. N-Boot does not consume that reservation, so terminate the map at its
 # first entry to make release output reproducible.
 dd if=/dev/zero of="$WORK/nboot.fit" bs=1 seek=40 count=16 \
   conv=notrunc status=none
+for node in atf-1 atf-2 atf-3 optee fdt uboot; do
+  position=$(fdtget -tx "$WORK/nboot.fit" "/images/$node" data-position)
+  [ $((16#$position % 512)) -eq 0 ] || die \
+    "FIT payload $node is not 512-byte aligned: 0x$position"
+done
 [ "$(stat -c %s "$WORK/nboot.fit")" -le $((4 * 1024 * 1024)) ] ||
   die "N-Boot FIT exceeds its 4 MiB region"
 cp "$WORK/nboot.fit" "$OUT/nboot.img"
@@ -129,25 +161,98 @@ python3 "$BOOTCTRL" init --output "$WORK/bootctrl.bin" \
   --nuttx-a "$NUTTX" --nuttx-b "$NUTTX"
 python3 "$BOOTCTRL" inspect "$WORK/bootctrl.bin" >/dev/null
 
+if [ "$TARGET" = emmc ]; then
+  PACKAGE="$OUT/nyabula-k7-emmc"
+  IMAGE_DIR="$PACKAGE/Image"
+
+  rm -rf "$PACKAGE"
+  mkdir -p "$IMAGE_DIR"
+  cp "$WORK/idbloader.img" "$IMAGE_DIR/MiniLoaderAll.bin"
+  cp "$OUT/nboot.img" "$IMAGE_DIR/uboot.img"
+  cp "$WORK/trust.img" "$IMAGE_DIR/trust.img"
+  cp "$WORK/bootctrl.bin" "$IMAGE_DIR/bootctrl.img"
+  cp "$NUTTX" "$IMAGE_DIR/nuttx_a.img"
+  cp "$NUTTX" "$IMAGE_DIR/nuttx_b.img"
+
+  cat > "$IMAGE_DIR/parameter.txt" <<'PARAMETER'
+FIRMWARE_VER: 1.0
+MACHINE_MODEL: KICKPI-K7
+MACHINE_ID: 007
+MANUFACTURER: Pharos Tech
+MAGIC: 0x5041524B
+ATAG: 0x00200800
+MACHINE: 0xffffffff
+CHECK_MASK: 0x80
+PWR_HLD: 0,0,A
+TYPE: GPT
+PARAMETER
+  printf 'CMDLINE:mtdparts=rk29xxnand:' >> "$IMAGE_DIR/parameter.txt"
+  printf '0x%08x@0x%08x(uboot),' \
+    "$UBOOT_SECTORS" "$UBOOT_START" >> "$IMAGE_DIR/parameter.txt"
+  printf '0x%08x@0x%08x(trust),' \
+    "$TRUST_SECTORS" "$TRUST_START" >> "$IMAGE_DIR/parameter.txt"
+  printf '0x%08x@0x%08x(bootctrl),' \
+    "$BOOTCTRL_SECTORS" "$BOOTCTRL_START" >> "$IMAGE_DIR/parameter.txt"
+  printf '0x%08x@0x%08x(nuttx_a),' \
+    "$NUTTX_SECTORS" "$NUTTX_A_START" >> "$IMAGE_DIR/parameter.txt"
+  printf '0x%08x@0x%08x(nuttx_b),' \
+    "$NUTTX_SECTORS" "$NUTTX_B_START" >> "$IMAGE_DIR/parameter.txt"
+  printf '0x%08x@0x%08x(amp_a),' \
+    "$AMP_SECTORS" "$AMP_A_START" >> "$IMAGE_DIR/parameter.txt"
+  printf '0x%08x@0x%08x(amp_b),' \
+    "$AMP_SECTORS" "$AMP_B_START" >> "$IMAGE_DIR/parameter.txt"
+  printf '%s@0x%08x(data:grow)\n' - "$DATA_START" \
+    >> "$IMAGE_DIR/parameter.txt"
+
+  cat > "$PACKAGE/package-file" <<'PACKAGE_FILE'
+package-file package-file
+bootloader Image/MiniLoaderAll.bin
+parameter Image/parameter.txt
+uboot Image/uboot.img
+trust Image/trust.img
+bootctrl Image/bootctrl.img
+nuttx_a Image/nuttx_a.img
+nuttx_b Image/nuttx_b.img
+PACKAGE_FILE
+
+  cat > "$PACKAGE/README.txt" <<'README'
+KICKPI-K7 Nyabula eMMC partition package
+
+Use RKDevTool Download Image mode. Load Image/MiniLoaderAll.bin as Loader,
+then load Image/parameter.txt and the named partition images. amp_a, amp_b and
+data are created by parameter.txt but intentionally have no initial payload.
+README
+
+  (cd "$PACKAGE" && sha256sum package-file README.txt Image/* > SHA256SUMS)
+  printf 'OK: %s\n' "$PACKAGE"
+  exit 0
+fi
+
 IMAGE="$OUT/nyabula-k7-sd.img"
 truncate -s 4G "$IMAGE"
-DATA_START=2396160
 DATA_END=$((4 * 1024 * 1024 * 1024 / 512 - 2049))
 sgdisk -og "$IMAGE" >/dev/null
 sgdisk -U 4b374142-0000-4000-8000-000000000002 "$IMAGE" >/dev/null
-sgdisk -n 1:16384:24575 -c 1:uboot -t 1:8300 \
+sgdisk -n 1:"$UBOOT_START":$((UBOOT_START + UBOOT_SECTORS - 1)) \
+  -c 1:uboot -t 1:8300 \
   -u 1:4b374142-0001-4000-8000-000000000002 "$IMAGE" >/dev/null
-sgdisk -n 2:24576:32767 -c 2:trust -t 2:8300 \
+sgdisk -n 2:"$TRUST_START":$((TRUST_START + TRUST_SECTORS - 1)) \
+  -c 2:trust -t 2:8300 \
   -u 2:4b374142-0002-4000-8000-000000000002 "$IMAGE" >/dev/null
-sgdisk -n 3:32768:34815 -c 3:bootctrl -t 3:8300 \
+sgdisk -n 3:"$BOOTCTRL_START":$((BOOTCTRL_START + BOOTCTRL_SECTORS - 1)) \
+  -c 3:bootctrl -t 3:8300 \
   -u 3:4b374142-0003-4000-8000-000000000002 "$IMAGE" >/dev/null
-sgdisk -n 4:36864:167935 -c 4:nuttx_a -t 4:8300 \
+sgdisk -n 4:"$NUTTX_A_START":$((NUTTX_A_START + NUTTX_SECTORS - 1)) \
+  -c 4:nuttx_a -t 4:8300 \
   -u 4:4b374142-0004-4000-8000-000000000002 "$IMAGE" >/dev/null
-sgdisk -n 5:167936:299007 -c 5:nuttx_b -t 5:8300 \
+sgdisk -n 5:"$NUTTX_B_START":$((NUTTX_B_START + NUTTX_SECTORS - 1)) \
+  -c 5:nuttx_b -t 5:8300 \
   -u 5:4b374142-0005-4000-8000-000000000002 "$IMAGE" >/dev/null
-sgdisk -n 6:299008:1347583 -c 6:amp_a -t 6:8300 \
+sgdisk -n 6:"$AMP_A_START":$((AMP_A_START + AMP_SECTORS - 1)) \
+  -c 6:amp_a -t 6:8300 \
   -u 6:4b374142-0006-4000-8000-000000000002 "$IMAGE" >/dev/null
-sgdisk -n 7:1347584:2396159 -c 7:amp_b -t 7:8300 \
+sgdisk -n 7:"$AMP_B_START":$((AMP_B_START + AMP_SECTORS - 1)) \
+  -c 7:amp_b -t 7:8300 \
   -u 7:4b374142-0007-4000-8000-000000000002 "$IMAGE" >/dev/null
 sgdisk -n 8:"$DATA_START":"$DATA_END" -c 8:data -t 8:0700 \
   -u 8:4b374142-0008-4000-8000-000000000002 "$IMAGE" >/dev/null
@@ -158,14 +263,16 @@ if [ "$(stat -c %s "$WORK/idbloader.img")" -le $((1024 * 512)) ]; then
   dd if="$WORK/idbloader.img" of="$IMAGE" bs=512 seek=1088 \
     conv=notrunc status=none
 fi
-dd if="$OUT/nboot.img" of="$IMAGE" bs=512 seek=16384 \
+dd if="$OUT/nboot.img" of="$IMAGE" bs=512 seek="$UBOOT_START" \
   conv=notrunc status=none
-dd if="$WORK/trust.img" of="$IMAGE" bs=512 seek=24576 \
+dd if="$WORK/trust.img" of="$IMAGE" bs=512 seek="$TRUST_START" \
   conv=notrunc status=none
-dd if="$WORK/bootctrl.bin" of="$IMAGE" bs=512 seek=32768 \
+dd if="$WORK/bootctrl.bin" of="$IMAGE" bs=512 seek="$BOOTCTRL_START" \
   conv=notrunc status=none
-dd if="$NUTTX" of="$IMAGE" bs=512 seek=36864 conv=notrunc status=none
-dd if="$NUTTX" of="$IMAGE" bs=512 seek=167936 conv=notrunc status=none
+dd if="$NUTTX" of="$IMAGE" bs=512 seek="$NUTTX_A_START" \
+  conv=notrunc status=none
+dd if="$NUTTX" of="$IMAGE" bs=512 seek="$NUTTX_B_START" \
+  conv=notrunc status=none
 
 DATA_SECTORS=$((DATA_END - DATA_START + 1))
 truncate -s $((DATA_SECTORS * 512)) "$WORK/data.fat"
