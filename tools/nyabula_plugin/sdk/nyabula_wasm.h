@@ -24,6 +24,8 @@
 
 #include <stdint.h>
 
+#define NYABULA_WASM_ABI_VERSION 1
+
 #if defined(__wasm__)
 #define NYABULA_IMPORT(name) \
   __attribute__((import_module("nyabula"), import_name(name)))
@@ -40,6 +42,27 @@ typedef int64_t nyabula_token_t;
 
 NYABULA_IMPORT("core_log")
 int32_t nyabula_core_log(const char *message, uint32_t length);
+
+NYABULA_IMPORT("storage_get")
+int32_t nyabula_storage_get(const char *key, uint32_t key_length,
+                            uint8_t *output, uint32_t output_capacity);
+NYABULA_IMPORT("storage_put")
+int32_t nyabula_storage_put(const char *key, uint32_t key_length,
+                            const uint8_t *value, uint32_t value_length);
+
+/* Legacy synchronous network entry. Real HTTP configurations return
+ * -ENOTSUP; use nyabula_http_request instead.
+ */
+
+NYABULA_IMPORT("network_request")
+int32_t nyabula_network_request(const uint8_t *input, uint32_t input_length,
+                                uint8_t *output, uint32_t output_capacity);
+
+NYABULA_IMPORT("ui_notify")
+int32_t nyabula_ui_notify(const char *message, uint32_t length);
+NYABULA_IMPORT("ai_invoke")
+int32_t nyabula_ai_invoke(const char *prompt, uint32_t prompt_length,
+                          uint8_t *response, uint32_t response_capacity);
 
 NYABULA_IMPORT("lifecycle_defer")
 nyabula_token_t nyabula_lifecycle_defer(void);
@@ -58,5 +81,16 @@ int32_t nyabula_http_cancel(nyabula_token_t token);
 NYABULA_EXPORT("ny_on_response")
 void ny_on_response(nyabula_token_t token, int32_t result, uint32_t status,
                     const uint8_t *body, uint32_t length);
+
+/* Plugin lifecycle exports. ny_on_start is required; the others are optional.
+ * Event data is borrowed for the duration of ny_on_event.
+ */
+
+NYABULA_EXPORT("ny_on_start")
+void ny_on_start(void);
+NYABULA_EXPORT("ny_on_event")
+void ny_on_event(const uint8_t *event, uint32_t length);
+NYABULA_EXPORT("ny_on_stop")
+void ny_on_stop(void);
 
 #endif

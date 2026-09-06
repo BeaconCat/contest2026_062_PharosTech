@@ -1,5 +1,7 @@
 # Nyabula Plugin SDK
 
+Wasm 的 C、Rust、TinyGo 构建约束见 [WASM_SDK.md](WASM_SDK.md)。
+
 `nyabula_plugin.py` builds and packages TypeScript/JavaScript plugins for the
 Nyabula Core runtime.
 
