@@ -61,7 +61,16 @@ def main():
         "handoff_magic": "0x4e480000",
         "handoff_version": 1,
     }
-    if manifest.get("contract") not in (contract_v1, contract_v2):
+    contract_v3 = {
+        **contract_v2,
+        "layout_version": 3,
+        "handoff_version": 2,
+        "sd_mmc_devnum": 0,
+        "emmc_mmc_devnum": 1,
+        "boot_source_fallback": True,
+    }
+    if manifest.get("contract") not in (contract_v1, contract_v2,
+                                         contract_v3):
         raise SystemExit("unsupported N-Boot board contract")
 
     if binary.stat().st_size > 2 * 1024 * 1024:
