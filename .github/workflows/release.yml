@@ -79,9 +79,9 @@ jobs:
       - name: Verify pinned N-Boot assets
         run: |
           TEAM_DIR="openvela/$REPO_NAME"
-          TAG=$(cat "$TEAM_DIR/board/nboot/RELEASE")
+          TAG=$(cat "$TEAM_DIR/boards/rk3576/kickpi-k7/nboot/RELEASE")
           python3 "$TEAM_DIR/tools/sync_nboot_release.py" \
-            --assets "$TEAM_DIR/board/nboot" \
+            --assets "$TEAM_DIR/boards/rk3576/kickpi-k7/nboot" \
             --output "$RUNNER_TEMP/verified-nboot" \
             --tag "$TAG"
 
@@ -134,7 +134,8 @@ jobs:
               "target": "kickpi-k7-rk3576",
               "config": os.environ["RELEASE_CONFIG"],
               "nboot_release": (pathlib.Path("openvela") /
-                  os.environ["REPO_NAME"] / "board/nboot/RELEASE"
+                  os.environ["REPO_NAME"] /
+                  "boards/rk3576/kickpi-k7/nboot/RELEASE"
               ).read_text(encoding="utf-8").strip(),
               "artifacts": artifacts,
           }

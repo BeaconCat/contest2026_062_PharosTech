@@ -14,8 +14,8 @@ SD BootROM → idbloader(DDR init + U-Boot SPL) → FIT(atf-1/uboot/atf-2/atf-3/
 
 ```sh
 ./fetch_rkbin.sh rkbin                    # 拉官方启动件(~4MB, 支持 PROXY=host:port)
-./build_sd.sh <nuttx.bin> ../../board/nboot rkbin out-sd
-./build_emmc.sh <nuttx.bin> ../../board/nboot rkbin out-emmc
+./build_sd.sh <nuttx.bin> ../../boards/rk3576/kickpi-k7/nboot rkbin out-sd
+./build_emmc.sh <nuttx.bin> ../../boards/rk3576/kickpi-k7/nboot rkbin out-emmc
 ```
 
 SD产物为`out-sd/nyabula-k7-sd.img`，使用balenaEtcher或Win32DiskImager整盘

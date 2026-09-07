@@ -51,7 +51,8 @@ jobs:
       - name: Skip installed release
         id: installed
         run: |
-          CURRENT=$(cat board/nboot/RELEASE 2>/dev/null || true)
+          CURRENT=$(cat boards/rk3576/kickpi-k7/nboot/RELEASE \
+            2>/dev/null || true)
           if [ "$CURRENT" = "${{ steps.release.outputs.tag }}" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
@@ -71,7 +72,7 @@ jobs:
             --pattern SHA256SUMS
           python3 tools/sync_nboot_release.py \
             --assets "$RUNNER_TEMP/nboot" \
-            --output board/nboot \
+            --output boards/rk3576/kickpi-k7/nboot \
             --tag "${{ steps.release.outputs.tag }}"
 
       - name: Create update pull request
@@ -84,7 +85,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C "$BRANCH"
-          git add board/nboot
+          git add boards/rk3576/kickpi-k7/nboot
           git commit -m "build(nboot): update to $TAG"
           git push --force-with-lease origin "$BRANCH"
           if ! gh pr view "$BRANCH" >/dev/null 2>&1; then

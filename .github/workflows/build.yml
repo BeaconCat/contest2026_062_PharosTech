@@ -44,9 +44,9 @@ jobs:
           bash -n tools/k7_pack/build_sd.sh
           bash -n tools/k7_pack/build_emmc.sh
           bash -n tools/k7_pack/build_legacy_sd.sh
-          TAG=$(cat board/nboot/RELEASE)
+          TAG=$(cat boards/rk3576/kickpi-k7/nboot/RELEASE)
           python3 tools/sync_nboot_release.py \
-            --assets board/nboot \
+            --assets boards/rk3576/kickpi-k7/nboot \
             --output "$RUNNER_TEMP/verified-nboot" \
             --tag "$TAG"
 
