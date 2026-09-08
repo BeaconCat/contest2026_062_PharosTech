@@ -168,6 +168,8 @@ static void nbootctl_usage(void)
           "       nbootctl set-active nuttx|amp a|b\n"
           "       nbootctl mark-successful nuttx|amp a|b\n"
           "       nbootctl stage nuttx|amp IMAGE\n"
+          "       nbootctl clone nuttx|amp a|b a|b\n"
+          "       nbootctl update-nboot IMAGE\n"
           "       nbootctl reboot console|fastboot|nuttx-a|nuttx-b\n");
 }
 
@@ -231,6 +233,46 @@ int main(int argc, FAR char *argv[])
       if (ret < 0)
         {
           fprintf(stderr, "nbootctl: stage failed: %d\n", ret);
+          return 1;
+        }
+
+      return 0;
+    }
+
+  if (argc == 5 && strcmp(argv[1], "clone") == 0)
+    {
+      unsigned int target_slot;
+
+      ret = nbootctl_handoff(&medium, &running_slot);
+      if (ret != 0 || nbootctl_parse_slot(argv[3], &slot) != 0 ||
+          nbootctl_parse_slot(argv[4], &target_slot) != 0)
+        {
+          nbootctl_usage();
+          return 1;
+        }
+
+      ret = nbootctl_bootctrl_clone(medium, argv[2], slot, target_slot);
+      if (ret < 0)
+        {
+          fprintf(stderr, "nbootctl: clone failed: %d\n", ret);
+          return 1;
+        }
+
+      return 0;
+    }
+
+  if (argc == 3 && strcmp(argv[1], "update-nboot") == 0)
+    {
+      ret = nbootctl_handoff(&medium, &running_slot);
+      if (ret != 0)
+        {
+          return 1;
+        }
+
+      ret = nbootctl_update_nboot(medium, argv[2]);
+      if (ret < 0)
+        {
+          fprintf(stderr, "nbootctl: update-nboot failed: %d\n", ret);
           return 1;
         }
 

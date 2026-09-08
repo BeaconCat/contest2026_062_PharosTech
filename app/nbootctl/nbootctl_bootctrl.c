@@ -47,6 +47,9 @@
 #define NBOOTCTL_SHA256_SIZE       32
 #define NBOOTCTL_VERIFY_SECTORS    128
 #define NBOOTCTL_SECTOR_SIZE       512
+#define NBOOTCTL_UBOOT_START       16384
+#define NBOOTCTL_UBOOT_SECTORS     8192
+#define NBOOTCTL_FIT_MAGIC         0xd00dfeedu
 
 struct nbootctl_slot_s
 {
@@ -95,6 +98,18 @@ static const char *nbootctl_bootctrl_path(unsigned int medium)
 {
   return medium == 1 ? "/dev/mmcsd0p3" :
          medium == 2 ? "/dev/mmcsd1p3" : NULL;
+}
+
+static const char *nbootctl_disk_path(unsigned int medium)
+{
+  return medium == 1 ? "/dev/mmcsd0" :
+         medium == 2 ? "/dev/mmcsd1" : NULL;
+}
+
+static uint32_t nbootctl_be32(const uint8_t *value)
+{
+  return (uint32_t)value[0] << 24 | (uint32_t)value[1] << 16 |
+         (uint32_t)value[2] << 8 | value[3];
 }
 
 static const char *nbootctl_slot_path(unsigned int medium, int domain,
@@ -617,5 +632,256 @@ out:
 
   free(buffer);
   free(records);
+  return ret;
+}
+
+int nbootctl_bootctrl_clone(unsigned int medium, const char *domain,
+                            unsigned int source, unsigned int target)
+{
+  struct nbootctl_record_s *records;
+  struct nbootctl_domain_s *domain_entry;
+  struct nbootctl_slot_s *source_entry;
+  struct inode *control = NULL;
+  struct inode *source_inode = NULL;
+  struct inode *target_inode = NULL;
+  SHA2_CTX source_hash;
+  SHA2_CTX target_hash;
+  uint8_t source_digest[NBOOTCTL_SHA256_SIZE];
+  uint8_t target_digest[NBOOTCTL_SHA256_SIZE];
+  uint8_t *buffer;
+  uint64_t offset;
+  uint64_t size;
+  size_t bytes;
+  size_t sectors;
+  int selected;
+  int domain_index;
+  int ret;
+
+  domain_index = nbootctl_domain_index(domain);
+  if (domain_index < 0 || source > 1 || target > 1 || source == target)
+    {
+      return -EINVAL;
+    }
+
+  records = memalign(64, sizeof(*records) * NBOOTCTL_COPY_COUNT);
+  buffer = memalign(64, NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE);
+  if (records == NULL || buffer == NULL)
+    {
+      ret = -ENOMEM;
+      goto out;
+    }
+
+  ret = nbootctl_read_records(medium, &control, records, &selected);
+  if (ret < 0)
+    {
+      goto out;
+    }
+
+  domain_entry = &records[selected].domains[domain_index];
+  source_entry = &domain_entry->slots[source];
+  size = source_entry->image_size;
+  if (size == 0)
+    {
+      ret = -ENOENT;
+      goto out;
+    }
+
+  ret = find_blockdriver(nbootctl_slot_path(medium, domain_index, source),
+                         0, &source_inode);
+  if (ret < 0)
+    {
+      goto out;
+    }
+
+  ret = find_blockdriver(nbootctl_slot_path(medium, domain_index, target),
+                         0, &target_inode);
+  if (ret < 0 || source_inode->u.i_bops->read == NULL ||
+      target_inode->u.i_bops->read == NULL ||
+      target_inode->u.i_bops->write == NULL)
+    {
+      ret = ret < 0 ? ret : -ENOSYS;
+      goto out;
+    }
+
+  sha256init(&source_hash);
+  for (offset = 0; offset < size; offset += bytes)
+    {
+      bytes = size - offset > NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE ?
+              NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE :
+              (size_t)(size - offset);
+      sectors = (bytes + NBOOTCTL_SECTOR_SIZE - 1) / NBOOTCTL_SECTOR_SIZE;
+      if (source_inode->u.i_bops->read(source_inode, buffer,
+                                       offset / NBOOTCTL_SECTOR_SIZE,
+                                       sectors) != (ssize_t)sectors)
+        {
+          ret = -EIO;
+          goto out;
+        }
+
+      sha256update(&source_hash, buffer, bytes);
+      if (target_inode->u.i_bops->write(target_inode, buffer,
+                                        offset / NBOOTCTL_SECTOR_SIZE,
+                                        sectors) != (ssize_t)sectors)
+        {
+          ret = -EIO;
+          goto out;
+        }
+    }
+
+  sha256final(source_digest, &source_hash);
+  if (memcmp(source_digest, source_entry->sha256,
+             sizeof(source_digest)) != 0)
+    {
+      ret = -EBADMSG;
+      goto out;
+    }
+
+  sha256init(&target_hash);
+  for (offset = 0; offset < size; offset += bytes)
+    {
+      bytes = size - offset > NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE ?
+              NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE :
+              (size_t)(size - offset);
+      sectors = (bytes + NBOOTCTL_SECTOR_SIZE - 1) / NBOOTCTL_SECTOR_SIZE;
+      if (target_inode->u.i_bops->read(target_inode, buffer,
+                                       offset / NBOOTCTL_SECTOR_SIZE,
+                                       sectors) != (ssize_t)sectors)
+        {
+          ret = -EIO;
+          goto out;
+        }
+
+      sha256update(&target_hash, buffer, bytes);
+    }
+
+  sha256final(target_digest, &target_hash);
+  if (memcmp(source_digest, target_digest, sizeof(source_digest)) != 0)
+    {
+      ret = -EBADMSG;
+      goto out;
+    }
+
+  domain_entry->slots[target] = *source_entry;
+  if (domain_entry->slots[target].priority > 1)
+    {
+      domain_entry->slots[target].priority--;
+    }
+
+  ret = nbootctl_write_records(control, records, selected);
+  if (ret == 0)
+    {
+      printf("clone %s %c -> %c: %llu bytes, verified\n", domain,
+             source ? 'b' : 'a', target ? 'b' : 'a',
+             (unsigned long long)size);
+    }
+
+out:
+  if (target_inode != NULL)
+    {
+      close_blockdriver(target_inode);
+    }
+
+  if (source_inode != NULL)
+    {
+      close_blockdriver(source_inode);
+    }
+
+  if (control != NULL)
+    {
+      close_blockdriver(control);
+    }
+
+  free(buffer);
+  free(records);
+  return ret;
+}
+
+int nbootctl_update_nboot(unsigned int medium, const char *path)
+{
+  const char *disk_path = nbootctl_disk_path(medium);
+  struct inode *disk = NULL;
+  struct stat file_info;
+  uint8_t magic[4];
+  uint8_t *buffer;
+  uint8_t *verify;
+  uint64_t offset;
+  size_t bytes;
+  size_t sectors;
+  int source = -1;
+  int ret;
+
+  if (disk_path == NULL || stat(path, &file_info) < 0 ||
+      file_info.st_size <= 0 ||
+      file_info.st_size > NBOOTCTL_UBOOT_SECTORS * NBOOTCTL_SECTOR_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  source = open(path, O_RDONLY);
+  if (source < 0 || read(source, magic, sizeof(magic)) != sizeof(magic) ||
+      nbootctl_be32(magic) != NBOOTCTL_FIT_MAGIC || lseek(source, 0, SEEK_SET) < 0)
+    {
+      ret = source < 0 ? -errno : -EINVAL;
+      goto out;
+    }
+
+  buffer = memalign(64, NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE);
+  verify = memalign(64, NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE);
+  if (buffer == NULL || verify == NULL)
+    {
+      ret = -ENOMEM;
+      goto out_buffers;
+    }
+
+  ret = find_blockdriver(disk_path, 0, &disk);
+  if (ret < 0 || disk->u.i_bops->read == NULL ||
+      disk->u.i_bops->write == NULL)
+    {
+      ret = ret < 0 ? ret : -ENOSYS;
+      goto out_buffers;
+    }
+
+  for (offset = 0; offset < (uint64_t)file_info.st_size; offset += bytes)
+    {
+      bytes = (uint64_t)file_info.st_size - offset >
+              NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE ?
+              NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE :
+              (size_t)((uint64_t)file_info.st_size - offset);
+      sectors = (bytes + NBOOTCTL_SECTOR_SIZE - 1) / NBOOTCTL_SECTOR_SIZE;
+      memset(buffer, 0, sectors * NBOOTCTL_SECTOR_SIZE);
+      if (read(source, buffer, bytes) != (ssize_t)bytes ||
+          disk->u.i_bops->write(disk, buffer,
+                                NBOOTCTL_UBOOT_START +
+                                offset / NBOOTCTL_SECTOR_SIZE,
+                                sectors) != (ssize_t)sectors ||
+          disk->u.i_bops->read(disk, verify,
+                               NBOOTCTL_UBOOT_START +
+                               offset / NBOOTCTL_SECTOR_SIZE,
+                               sectors) != (ssize_t)sectors ||
+          memcmp(buffer, verify, sectors * NBOOTCTL_SECTOR_SIZE) != 0)
+        {
+          ret = -EIO;
+          goto out_buffers;
+        }
+    }
+
+  printf("update-nboot: %lld bytes written and verified on %s\n",
+         (long long)file_info.st_size, medium == 1 ? "sd" : "emmc");
+  ret = 0;
+
+out_buffers:
+  if (disk != NULL)
+    {
+      close_blockdriver(disk);
+    }
+
+  free(verify);
+  free(buffer);
+out:
+  if (source >= 0)
+    {
+      close(source);
+    }
+
   return ret;
 }
