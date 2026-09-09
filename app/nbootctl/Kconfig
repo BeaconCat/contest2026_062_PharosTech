@@ -1,0 +1,30 @@
+config SYSTEM_NBOOTCTL
+	tristate "N-Boot runtime control utility"
+	default n
+	depends on BOARDCTL_RESET
+	select CRYPTO
+	---help---
+		Inspect the KICKPI-K7 N-Boot handoff and request a one-shot
+		console, Fastboot, NuttX A, or NuttX B boot across a system reset.
+
+if SYSTEM_NBOOTCTL
+
+
+config SYSTEM_NBOOTCTL_PROGNAME
+	string "Program name"
+	default "nbootctl"
+
+config SYSTEM_NBOOTCTL_PRIORITY
+	int "Task priority"
+	default 100
+
+config SYSTEM_NBOOTCTL_STACKSIZE
+	int "Task stack size"
+	default 4096
+
+config SYSTEM_NBOOTCTL_HEAPSIZE
+	int "Task heap size"
+	depends on MM_TASK_HEAP
+	default MM_TASK_HEAP_DEFAULT_SIZE
+
+endif
