@@ -23,10 +23,38 @@
 #ifndef __CHIPS_RK3576_RK3576_MAILBOX_H
 #define __CHIPS_RK3576_RK3576_MAILBOX_H
 
+/****************************************************************************
+ * Included Files
+ ****************************************************************************/
+
 #include <stdint.h>
 
-/* Send a command/data doorbell after the peripheral clock is enabled. */
+/****************************************************************************
+ * Public Types
+ ****************************************************************************/
+
+/* Invoked in interrupt context when the remote core kicks us; cmd and data
+ * are the unmodified doorbell payload words.
+ */
+
+typedef void (*rk3576_mailbox_callback_t)(void *arg, uint32_t cmd,
+                                          uint32_t data);
+
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
+
+/* Kick the remote core with a command/data doorbell. */
 
 int rk3576_mailbox_send(unsigned int instance, uint32_t cmd, uint32_t data);
+
+/* Register/clear the remote-kick callback and enable/disable the interrupt. */
+
+void rk3576_mailbox_register_callback(rk3576_mailbox_callback_t callback,
+                                      void *arg);
+
+/* Enable the peripheral clock and attach the mailbox interrupt. */
+
+int rk3576_mailbox_initialize(unsigned int rx_instance);
 
 #endif /* __CHIPS_RK3576_RK3576_MAILBOX_H */
