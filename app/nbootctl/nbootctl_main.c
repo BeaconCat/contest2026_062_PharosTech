@@ -168,7 +168,8 @@ static int nbootctl_parse_slot(const char *value, unsigned int *slot)
 static void nbootctl_usage(void)
 {
   fprintf(stderr, "usage: nbootctl status\n"
-                  "       nbootctl verify nuttx|amp a|b\n");
+                  "       nbootctl verify nuttx|amp a|b\n"
+                  "       nbootctl set-active nuttx|amp a|b\n");
 }
 
 /****************************************************************************
@@ -187,7 +188,8 @@ int main(int argc, FAR char *argv[])
       return nbootctl_status();
     }
 
-  if (argc == 4 && (strcmp(argv[1], "verify") == 0))
+  if (argc == 4 &&
+      (strcmp(argv[1], "verify") == 0 || strcmp(argv[1], "set-active") == 0))
     {
       ret = nbootctl_handoff(&medium, &running_slot);
       if (ret != 0 || nbootctl_parse_slot(argv[3], &slot) != 0)
@@ -202,7 +204,7 @@ int main(int argc, FAR char *argv[])
         }
       else
         {
-          return 1;
+          ret = nbootctl_bootctrl_set_active(medium, argv[2], slot);
         }
       if (ret < 0)
         {
