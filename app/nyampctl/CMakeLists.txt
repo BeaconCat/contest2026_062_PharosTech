@@ -1,0 +1,18 @@
+if(CONFIG_EXAMPLES_NYAMPCTL)
+  set(NYAMP_PROTOCOL_DIR
+      ${NUTTX_APPS_DIR}/../vendor/rockchip/tools/amp/protocol)
+  nuttx_add_application(
+    MODULE
+    ${CONFIG_EXAMPLES_NYAMPCTL}
+    NAME
+    ${CONFIG_EXAMPLES_NYAMPCTL_PROGNAME}
+    SRCS
+    nyampctl_main.c
+    ${NYAMP_PROTOCOL_DIR}/nyamp_protocol.c
+    INCLUDE_DIRECTORIES
+    ${NYAMP_PROTOCOL_DIR}
+    STACKSIZE
+    ${CONFIG_EXAMPLES_NYAMPCTL_STACKSIZE}
+    PRIORITY
+    ${CONFIG_EXAMPLES_NYAMPCTL_PRIORITY})
+endif()
