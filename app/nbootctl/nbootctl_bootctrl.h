@@ -26,5 +26,7 @@
 int nbootctl_bootctrl_status(unsigned int medium);
 int nbootctl_bootctrl_verify(unsigned int medium, const char *domain,
                              unsigned int slot);
+int nbootctl_bootctrl_set_active(unsigned int medium, const char *domain,
+                                 unsigned int slot);
 
 #endif

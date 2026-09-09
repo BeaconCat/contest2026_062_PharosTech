@@ -108,6 +108,11 @@ static bool nbootctl_record_valid(const struct nbootctl_record_s *record);
 static int nbootctl_read_records(unsigned int medium, struct inode **inode,
                                  struct nbootctl_record_s *records,
                                  int *selected);
+static int nbootctl_write_records(struct inode *inode,
+                                  struct nbootctl_record_s *records,
+                                  int selected);
+static int nbootctl_bootctrl_update(unsigned int medium, const char *domain,
+                                    unsigned int slot, bool mark_successful);
 
 /****************************************************************************
  * Name: nbootctl_bootctrl_path
@@ -235,6 +240,45 @@ static int nbootctl_read_records(unsigned int medium, struct inode **inode,
     }
 
   *selected = best;
+  return 0;
+}
+
+/****************************************************************************
+ * Name: nbootctl_write_records
+ ****************************************************************************/
+
+static int nbootctl_write_records(struct inode *inode,
+                                  struct nbootctl_record_s *records,
+                                  int selected)
+{
+  struct nbootctl_record_s *record = &records[selected];
+  struct nbootctl_record_s *verify = &records[1 - selected];
+  int order[2] = { 1 - selected, selected };
+  int index;
+
+  /* Both records are allocated on the aligned heap by the caller. A record
+   * alone fills the task's entire 4 KiB stack and must never be local here.
+   */
+
+  record->generation++;
+  record->crc32 =
+      nbootctl_crc32(record, offsetof(struct nbootctl_record_s, crc32));
+
+  for (index = 0; index < NBOOTCTL_COPY_COUNT; index++)
+    {
+      if (inode->u.i_bops->write(inode, (const uint8_t *)record,
+                                 order[index] * NBOOTCTL_RECORD_SECTORS,
+                                 NBOOTCTL_RECORD_SECTORS) !=
+              NBOOTCTL_RECORD_SECTORS ||
+          inode->u.i_bops->read(
+              inode, (uint8_t *)verify, order[index] * NBOOTCTL_RECORD_SECTORS,
+              NBOOTCTL_RECORD_SECTORS) != NBOOTCTL_RECORD_SECTORS ||
+          memcmp(record, verify, sizeof(*record)) != 0)
+        {
+          return -EIO;
+        }
+    }
+
   return 0;
 }
 
@@ -385,4 +429,80 @@ out:
   free(buffer);
   free(records);
   return ret;
+}
+
+/****************************************************************************
+ * Name: nbootctl_bootctrl_update
+ ****************************************************************************/
+
+static int nbootctl_bootctrl_update(unsigned int medium, const char *domain,
+                                    unsigned int slot, bool mark_successful)
+{
+  struct nbootctl_record_s *records;
+  struct nbootctl_domain_s *entry;
+  struct inode *inode = NULL;
+  int selected;
+  int domain_index;
+  int ret;
+
+  domain_index = nbootctl_domain_index(domain);
+  if (domain_index < 0 || slot > 1)
+    {
+      return -EINVAL;
+    }
+
+  records = memalign(64, sizeof(*records) * NBOOTCTL_COPY_COUNT);
+  if (records == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  ret = nbootctl_read_records(medium, &inode, records, &selected);
+  if (ret < 0)
+    {
+      goto out;
+    }
+
+  entry = &records[selected].domains[domain_index];
+  if (entry->slots[slot].image_size == 0)
+    {
+      ret = -ENOENT;
+      goto out;
+    }
+
+  if (mark_successful)
+    {
+      entry->slots[slot].successful = 1;
+      entry->slots[slot].tries_remaining = 0;
+    }
+  else
+    {
+      entry->active_slot = slot;
+      entry->slots[slot].priority = 15;
+      if (entry->slots[1 - slot].priority >= 15)
+        {
+          entry->slots[1 - slot].priority = 14;
+        }
+    }
+
+  ret = nbootctl_write_records(inode, records, selected);
+
+out:
+  if (inode != NULL)
+    {
+      close_blockdriver(inode);
+    }
+
+  free(records);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: nbootctl_bootctrl_set_active
+ ****************************************************************************/
+
+int nbootctl_bootctrl_set_active(unsigned int medium, const char *domain,
+                                 unsigned int slot)
+{
+  return nbootctl_bootctrl_update(medium, domain, slot, false);
 }
