@@ -79,6 +79,11 @@
 #define RK3576_CRU_SDIO_RESET_CON 42
 #define RK3576_CRU_SDIO_RESET_BIT 12
 
+/* Mailbox peripheral clock gate. */
+
+#define RK3576_CRU_MAILBOX_GATE_CON 17
+#define RK3576_CRU_MAILBOX_GATE_BIT 13
+
 /* CRU: System control register */
 
 #define RK3576_CRU_GLB_CNT_TH              (0x0C00)
