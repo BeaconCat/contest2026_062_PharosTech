@@ -5,7 +5,7 @@
 `rpmsg-raw`的endpoint对应的`/dev/rpmsgN`，不依赖动态编号。收到畸形包时丢弃，
 transport EOF/错误或短写时立即退出，让 PID1 重新拉起并生成新的 generation。
 
-当前只实现 `health.query`，这是有意的停止边界：NPU、ISP、ASR/TTS 服务必须在各自
+当前只实现health与info，打开端点后先发送READY事件完成地址发现。NPU、ISP、ASR/TTS必须在各自
 vendor runtime 和 buffer 生命周期确定后作为独立提交加入，不能先返回伪成功。
 
 deadline 使用两端共享的 ARM generic counter 换算毫秒。AArch64 生产构建读取
