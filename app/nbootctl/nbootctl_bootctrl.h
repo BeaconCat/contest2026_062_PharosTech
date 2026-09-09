@@ -32,5 +32,7 @@ int nbootctl_bootctrl_mark_successful(unsigned int medium, const char *domain,
                                       unsigned int slot);
 int nbootctl_bootctrl_stage(unsigned int medium, const char *domain,
                             unsigned int running_slot, const char *path);
+int nbootctl_bootctrl_clone(unsigned int medium, const char *domain,
+                            unsigned int source, unsigned int target);
 
 #endif
