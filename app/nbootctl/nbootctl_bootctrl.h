@@ -34,5 +34,6 @@ int nbootctl_bootctrl_stage(unsigned int medium, const char *domain,
                             unsigned int running_slot, const char *path);
 int nbootctl_bootctrl_clone(unsigned int medium, const char *domain,
                             unsigned int source, unsigned int target);
+int nbootctl_update_nboot(unsigned int medium, const char *path);
 
 #endif

@@ -100,6 +100,8 @@ _Static_assert(offsetof(struct nbootctl_record_s, padding) == 236,
 /* Private Function Prototypes */
 
 static const char *nbootctl_bootctrl_path(unsigned int medium);
+static const char *nbootctl_disk_path(unsigned int medium);
+static uint32_t nbootctl_be32(const uint8_t *value);
 static uint32_t nbootctl_crc32(const void *data, size_t size);
 static const char *nbootctl_slot_path(unsigned int medium, int domain,
                                       unsigned int slot);
@@ -121,6 +123,25 @@ static int nbootctl_bootctrl_update(unsigned int medium, const char *domain,
 static const char *nbootctl_bootctrl_path(unsigned int medium)
 {
   return medium == 1 ? "/dev/mmcsd0p3" : medium == 2 ? "/dev/mmcsd1p3" : NULL;
+}
+
+/****************************************************************************
+ * Name: nbootctl_disk_path
+ ****************************************************************************/
+
+static const char *nbootctl_disk_path(unsigned int medium)
+{
+  return medium == 1 ? "/dev/mmcsd0" : medium == 2 ? "/dev/mmcsd1" : NULL;
+}
+
+/****************************************************************************
+ * Name: nbootctl_be32
+ ****************************************************************************/
+
+static uint32_t nbootctl_be32(const uint8_t *value)
+{
+  return (uint32_t)value[0] << 24 | (uint32_t)value[1] << 16 |
+         (uint32_t)value[2] << 8 | value[3];
 }
 
 /****************************************************************************
@@ -879,5 +900,99 @@ out:
 
   free(buffer);
   free(records);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: nbootctl_update_nboot
+ ****************************************************************************/
+
+int nbootctl_update_nboot(unsigned int medium, const char *path)
+{
+  const char *disk_path = nbootctl_disk_path(medium);
+  struct inode *disk = NULL;
+  struct stat file_info;
+  uint8_t magic[4];
+  uint8_t *buffer;
+  uint8_t *verify;
+  uint64_t offset;
+  size_t bytes;
+  size_t sectors;
+  int source = -1;
+  int ret;
+
+  if (disk_path == NULL || stat(path, &file_info) < 0 ||
+      file_info.st_size <= 0 ||
+      file_info.st_size > NBOOTCTL_UBOOT_SECTORS * NBOOTCTL_SECTOR_SIZE)
+    {
+      return -EINVAL;
+    }
+
+  source = open(path, O_RDONLY);
+  if (source < 0 || read(source, magic, sizeof(magic)) != sizeof(magic) ||
+      nbootctl_be32(magic) != NBOOTCTL_FIT_MAGIC ||
+      lseek(source, 0, SEEK_SET) < 0)
+    {
+      ret = source < 0 ? -errno : -EINVAL;
+      goto out;
+    }
+
+  buffer = memalign(64, NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE);
+  verify = memalign(64, NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE);
+  if (buffer == NULL || verify == NULL)
+    {
+      ret = -ENOMEM;
+      goto out_buffers;
+    }
+
+  ret = open_blockdriver(disk_path, 0, &disk);
+  if (ret < 0 || disk->u.i_bops->read == NULL || disk->u.i_bops->write == NULL)
+    {
+      ret = ret < 0 ? ret : -ENOSYS;
+      goto out_buffers;
+    }
+
+  for (offset = 0; offset < (uint64_t)file_info.st_size; offset += bytes)
+    {
+      bytes = (uint64_t)file_info.st_size - offset >
+                      NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE
+                  ? NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE
+                  : (size_t)((uint64_t)file_info.st_size - offset);
+      sectors = (bytes + NBOOTCTL_SECTOR_SIZE - 1) / NBOOTCTL_SECTOR_SIZE;
+      memset(buffer, 0, sectors * NBOOTCTL_SECTOR_SIZE);
+      if (read(source, buffer, bytes) != (ssize_t)bytes ||
+          disk->u.i_bops->write(disk, buffer,
+                                NBOOTCTL_UBOOT_START +
+                                    offset / NBOOTCTL_SECTOR_SIZE,
+                                sectors) != (ssize_t)sectors ||
+          disk->u.i_bops->read(disk, verify,
+                               NBOOTCTL_UBOOT_START +
+                                   offset / NBOOTCTL_SECTOR_SIZE,
+                               sectors) != (ssize_t)sectors ||
+          memcmp(buffer, verify, sectors * NBOOTCTL_SECTOR_SIZE) != 0)
+        {
+          ret = -EIO;
+          goto out_buffers;
+        }
+    }
+
+  printf("update-nboot: %lld bytes written and verified on %s\n",
+         (long long)file_info.st_size, medium == 1 ? "sd" : "emmc");
+  ret = 0;
+
+out_buffers:
+  if (disk != NULL)
+    {
+      close_blockdriver(disk);
+    }
+
+  free(verify);
+  free(buffer);
+out:
+  if (source >= 0)
+    {
+      close(source);
+    }
+
   return ret;
 }
