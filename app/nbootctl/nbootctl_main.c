@@ -43,6 +43,7 @@ static const char *nbootctl_medium_name(unsigned int medium);
 static const char *nbootctl_reason_name(unsigned int reason);
 static int nbootctl_handoff(unsigned int *medium_out, unsigned int *slot_out);
 static int nbootctl_status(void);
+static int nbootctl_parse_slot(const char *value, unsigned int *slot);
 static void nbootctl_usage(void);
 
 /****************************************************************************
@@ -140,12 +141,34 @@ static int nbootctl_status(void)
 }
 
 /****************************************************************************
+ * Name: nbootctl_parse_slot
+ ****************************************************************************/
+
+static int nbootctl_parse_slot(const char *value, unsigned int *slot)
+{
+  if (strcmp(value, "a") == 0)
+    {
+      *slot = 0;
+      return 0;
+    }
+
+  if (strcmp(value, "b") == 0)
+    {
+      *slot = 1;
+      return 0;
+    }
+
+  return -1;
+}
+
+/****************************************************************************
  * Name: nbootctl_usage
  ****************************************************************************/
 
 static void nbootctl_usage(void)
 {
-  fprintf(stderr, "usage: nbootctl status\n");
+  fprintf(stderr, "usage: nbootctl status\n"
+                  "       nbootctl verify nuttx|amp a|b\n");
 }
 
 /****************************************************************************
@@ -154,9 +177,40 @@ static void nbootctl_usage(void)
 
 int main(int argc, FAR char *argv[])
 {
+  unsigned int medium;
+  unsigned int running_slot;
+  unsigned int slot;
+  int ret;
+
   if (argc == 2 && strcmp(argv[1], "status") == 0)
     {
       return nbootctl_status();
+    }
+
+  if (argc == 4 && (strcmp(argv[1], "verify") == 0))
+    {
+      ret = nbootctl_handoff(&medium, &running_slot);
+      if (ret != 0 || nbootctl_parse_slot(argv[3], &slot) != 0)
+        {
+          nbootctl_usage();
+          return 1;
+        }
+
+      if (strcmp(argv[1], "verify") == 0)
+        {
+          ret = nbootctl_bootctrl_verify(medium, argv[2], slot);
+        }
+      else
+        {
+          return 1;
+        }
+      if (ret < 0)
+        {
+          fprintf(stderr, "nbootctl: %s failed: %d\n", argv[1], ret);
+          return 1;
+        }
+      printf("%s %s %c: OK\n", argv[1], argv[2], slot ? 'b' : 'a');
+      return 0;
     }
 
   nbootctl_usage();
