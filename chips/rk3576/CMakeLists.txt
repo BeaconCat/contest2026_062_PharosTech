@@ -65,4 +65,8 @@ if(CONFIG_RK3576_SARADC)
   list(APPEND SRCS rk3576_saradc.c)
 endif()
 
+if(CONFIG_RK3576_MAILBOX)
+  list(APPEND SRCS rk3576_mailbox.c)
+endif()
+
 target_sources(arch PRIVATE ${SRCS})

@@ -119,6 +119,12 @@ config RK3576_EMMC
 		The driver manages the complete eMMC clock domain through the NuttX
 		clock framework; board code owns pin configuration.
 
+config RK3576_MAILBOX
+	bool "Mailbox (inter-core doorbell)"
+	default n
+	---help---
+		Enable RK3576 mailbox command/data doorbell operations.
+
 config RK3576_GPIO
 	bool "GPIO"
 	default n
