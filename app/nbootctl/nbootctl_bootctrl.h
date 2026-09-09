@@ -24,6 +24,7 @@
 #define __APPS_SYSTEM_NBOOTCTL_NBOOTCTL_BOOTCTRL_H
 
 int nbootctl_bootctrl_status(unsigned int medium);
+int nbootctl_bootctrl_request(unsigned int medium, unsigned int target);
 int nbootctl_bootctrl_verify(unsigned int medium, const char *domain,
                              unsigned int slot);
 int nbootctl_bootctrl_set_active(unsigned int medium, const char *domain,
