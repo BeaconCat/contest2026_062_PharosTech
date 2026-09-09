@@ -170,7 +170,8 @@ static void nbootctl_usage(void)
   fprintf(stderr, "usage: nbootctl status\n"
                   "       nbootctl verify nuttx|amp a|b\n"
                   "       nbootctl set-active nuttx|amp a|b\n"
-                  "       nbootctl mark-successful nuttx|amp a|b\n");
+                  "       nbootctl mark-successful nuttx|amp a|b\n"
+                  "       nbootctl stage nuttx|amp IMAGE\n");
 }
 
 /****************************************************************************
@@ -218,6 +219,24 @@ int main(int argc, FAR char *argv[])
           return 1;
         }
       printf("%s %s %c: OK\n", argv[1], argv[2], slot ? 'b' : 'a');
+      return 0;
+    }
+
+  if (argc == 4 && strcmp(argv[1], "stage") == 0)
+    {
+      ret = nbootctl_handoff(&medium, &running_slot);
+      if (ret != 0)
+        {
+          return 1;
+        }
+
+      ret = nbootctl_bootctrl_stage(medium, argv[2], running_slot, argv[3]);
+      if (ret < 0)
+        {
+          fprintf(stderr, "nbootctl: stage failed: %d\n", ret);
+          return 1;
+        }
+
       return 0;
     }
 

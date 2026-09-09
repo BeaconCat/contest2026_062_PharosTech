@@ -516,3 +516,191 @@ int nbootctl_bootctrl_mark_successful(unsigned int medium, const char *domain,
 {
   return nbootctl_bootctrl_update(medium, domain, slot, true);
 }
+
+/****************************************************************************
+ * Name: nbootctl_bootctrl_stage
+ ****************************************************************************/
+
+int nbootctl_bootctrl_stage(unsigned int medium, const char *domain,
+                            unsigned int running_slot, const char *path)
+{
+  struct nbootctl_record_s *records;
+  struct nbootctl_domain_s *domain_entry;
+  struct nbootctl_slot_s *slot_entry;
+  struct inode *control = NULL;
+  struct inode *payload = NULL;
+  struct geometry geometry;
+  struct stat file_info;
+  SHA2_CTX write_hash;
+  SHA2_CTX read_hash;
+  uint8_t expected[NBOOTCTL_SHA256_SIZE];
+  uint8_t actual[NBOOTCTL_SHA256_SIZE];
+  uint8_t *buffer;
+  uint64_t offset;
+  uint64_t version;
+  size_t bytes;
+  size_t sectors;
+  int selected;
+  int target;
+  int domain_index;
+  int source = -1;
+  int ret;
+
+  domain_index = nbootctl_domain_index(domain);
+  if (domain_index < 0 || stat(path, &file_info) < 0 || file_info.st_size <= 0)
+    {
+      return -EINVAL;
+    }
+
+  records = memalign(64, sizeof(*records) * NBOOTCTL_COPY_COUNT);
+  buffer = memalign(64, NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE);
+  if (records == NULL || buffer == NULL)
+    {
+      ret = -ENOMEM;
+      goto out;
+    }
+
+  ret = nbootctl_read_records(medium, &control, records, &selected);
+  if (ret < 0)
+    {
+      goto out;
+    }
+
+  domain_entry = &records[selected].domains[domain_index];
+  target = domain_index == 0 ? 1 - (int)running_slot
+                             : 1 - (int)domain_entry->active_slot;
+  ret = open_blockdriver(nbootctl_slot_path(medium, domain_index, target), 0,
+                         &payload);
+  if (ret < 0 || payload->u.i_bops->read == NULL ||
+      payload->u.i_bops->write == NULL || payload->u.i_bops->geometry == NULL)
+    {
+      ret = ret < 0 ? ret : -ENOSYS;
+      goto out;
+    }
+
+  ret = payload->u.i_bops->geometry(payload, &geometry);
+  if (ret < 0 || !geometry.geo_available || !geometry.geo_writeenabled ||
+      geometry.geo_sectorsize != NBOOTCTL_SECTOR_SIZE ||
+      (uint64_t)file_info.st_size >
+          (uint64_t)geometry.geo_nsectors * geometry.geo_sectorsize)
+    {
+      ret = ret < 0 ? ret : -EFBIG;
+      goto out;
+    }
+
+  source = open(path, O_RDONLY);
+  if (source < 0)
+    {
+      ret = -errno;
+      goto out;
+    }
+
+  /* A partially replaced payload must not remain a boot candidate. */
+
+  domain_entry->slots[target].priority = 0;
+  domain_entry->slots[target].successful = 0;
+  ret = nbootctl_write_records(control, records, selected);
+  if (ret < 0)
+    {
+      goto out;
+    }
+
+  sha256init(&write_hash);
+  for (offset = 0; offset < (uint64_t)file_info.st_size; offset += bytes)
+    {
+      bytes = (uint64_t)file_info.st_size - offset >
+                      NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE
+                  ? NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE
+                  : (size_t)((uint64_t)file_info.st_size - offset);
+      sectors = (bytes + NBOOTCTL_SECTOR_SIZE - 1) / NBOOTCTL_SECTOR_SIZE;
+      memset(buffer, 0, sectors * NBOOTCTL_SECTOR_SIZE);
+      if (read(source, buffer, bytes) != (ssize_t)bytes)
+        {
+          ret = -EIO;
+          goto out;
+        }
+
+      sha256update(&write_hash, buffer, bytes);
+      if (payload->u.i_bops->write(payload, buffer,
+                                   offset / NBOOTCTL_SECTOR_SIZE,
+                                   sectors) != (ssize_t)sectors)
+        {
+          ret = -EIO;
+          goto out;
+        }
+    }
+
+  sha256final(expected, &write_hash);
+  sha256init(&read_hash);
+  for (offset = 0; offset < (uint64_t)file_info.st_size; offset += bytes)
+    {
+      bytes = (uint64_t)file_info.st_size - offset >
+                      NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE
+                  ? NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE
+                  : (size_t)((uint64_t)file_info.st_size - offset);
+      sectors = (bytes + NBOOTCTL_SECTOR_SIZE - 1) / NBOOTCTL_SECTOR_SIZE;
+      if (payload->u.i_bops->read(payload, buffer,
+                                  offset / NBOOTCTL_SECTOR_SIZE,
+                                  sectors) != (ssize_t)sectors)
+        {
+          ret = -EIO;
+          goto out;
+        }
+
+      sha256update(&read_hash, buffer, bytes);
+    }
+
+  sha256final(actual, &read_hash);
+  if (memcmp(expected, actual, sizeof(actual)) != 0)
+    {
+      ret = -EBADMSG;
+      goto out;
+    }
+
+  slot_entry = &domain_entry->slots[target];
+  version = domain_entry->slots[0].image_version;
+  if (domain_entry->slots[1].image_version > version)
+    {
+      version = domain_entry->slots[1].image_version;
+    }
+
+  slot_entry->priority = 15;
+  slot_entry->tries_remaining = 0;
+  slot_entry->successful = 0;
+  slot_entry->image_size = file_info.st_size;
+  slot_entry->image_version = version + 1;
+  memcpy(slot_entry->sha256, expected, sizeof(expected));
+  domain_entry->active_slot = target;
+  if (domain_entry->slots[1 - target].priority >= 15)
+    {
+      domain_entry->slots[1 - target].priority = 14;
+    }
+
+  ret = nbootctl_write_records(control, records, selected);
+  if (ret == 0)
+    {
+      printf("stage %s %c: %lld bytes, version %llu, activated\n", domain,
+             target ? 'b' : 'a', (long long)file_info.st_size,
+             (unsigned long long)slot_entry->image_version);
+    }
+
+out:
+  if (source >= 0)
+    {
+      close(source);
+    }
+
+  if (payload != NULL)
+    {
+      close_blockdriver(payload);
+    }
+
+  if (control != NULL)
+    {
+      close_blockdriver(control);
+    }
+
+  free(buffer);
+  free(records);
+  return ret;
+}
