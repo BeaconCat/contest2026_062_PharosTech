@@ -506,3 +506,13 @@ int nbootctl_bootctrl_set_active(unsigned int medium, const char *domain,
 {
   return nbootctl_bootctrl_update(medium, domain, slot, false);
 }
+
+/****************************************************************************
+ * Name: nbootctl_bootctrl_mark_successful
+ ****************************************************************************/
+
+int nbootctl_bootctrl_mark_successful(unsigned int medium, const char *domain,
+                                      unsigned int slot)
+{
+  return nbootctl_bootctrl_update(medium, domain, slot, true);
+}
