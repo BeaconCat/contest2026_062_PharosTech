@@ -126,6 +126,20 @@ config RK3576_MAILBOX
 	---help---
 		Enable RK3576 mailbox command/data doorbell operations.
 
+config RK3576_RPTUN
+	bool "AMP rptun/rpmsg transport (mailbox)"
+	default n
+	depends on RK3576_MAILBOX
+	select RPTUN
+	---help---
+		Enable the RK3576 AMP rptun back end.  openvela runs as the OpenAMP
+		rpmsg remote and reaches a peer OS (Linux) over shared memory, using
+		the inter-core mailbox (RK3576_MAILBOX) for doorbell notification.
+		The Linux peer is a compute domain for NPU, ISP and heavyweight media
+		services; openvela remains the product owner.  Vring and buffer
+		addresses are fixed by Rockchip's rk3576-amp.dtsi and compiled in
+		(see rk3576_rptun.c).
+
 config RK3576_GPIO
 	bool "GPIO"
 	default n
