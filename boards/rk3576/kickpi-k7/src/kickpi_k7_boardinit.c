@@ -42,6 +42,10 @@
 #include <nuttx/ioexpander/gpio.h>
 #endif
 
+#ifdef CONFIG_RK3576_RPTUN
+#include "rk3576_rptun.h"
+#endif
+
 #ifdef CONFIG_RK3576_SDMMC
 #include "rk3576_sdmmc.h"
 #include <nuttx/mmcsd.h>
@@ -479,6 +483,18 @@ void board_late_initialize(void)
         syslog(LOG_ERR, "ERROR: kickpi_k7_lcd_initialize failed: %d\n", ret);
       }
   }
+#endif
+
+#ifdef CONFIG_RK3576_RPTUN
+  /* Bring up the AMP control transport to the Linux compute domain.
+   * openvela remains the product owner; Linux provides NPU, ISP and other
+   * heavyweight services over mailbox-notified shared-memory vrings.
+   */
+
+  if (rk3576_rptun_init("linux") < 0)
+    {
+      syslog(LOG_ERR, "ERROR: rk3576_rptun_init failed\n");
+    }
 #endif
 }
 #endif /* CONFIG_BOARD_LATE_INITIALIZE */
