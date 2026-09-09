@@ -1,0 +1,156 @@
+# Nyabula KICKPI-K7 RAM-only Linux compute domain
+# Merge with scripts/kconfig/merge_config.sh and run olddefconfig.
+
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+CONFIG_TMPFS=y
+CONFIG_PROC_FS=y
+CONFIG_SYSFS=y
+CONFIG_NULL_TTY=y
+# CONFIG_FIQ_DEBUGGER is not set
+# CONFIG_FIQ_DEBUGGER_CONSOLE is not set
+# CONFIG_CMDLINE_FORCE is not set
+# CONFIG_CPU_FREQ is not set
+# CONFIG_CPU_IDLE is not set
+# CONFIG_ARM_ROCKCHIP_DMC_DEVFREQ is not set
+# CONFIG_SUSPEND is not set
+# CONFIG_HIBERNATION is not set
+# The SDK ARM64 architecture selects the class; K7 has no RK817 battery.
+CONFIG_POWER_SUPPLY=y
+# CONFIG_BATTERY_RK817 is not set
+# CONFIG_CHARGER_RK817 is not set
+# CONFIG_TEST_POWER is not set
+# CONFIG_ROCKCHIP_SUSPEND_MODE is not set
+# CONFIG_ROCKCHIP_EARLYSUSPEND is not set
+# CONFIG_ROCKCHIP_LITE_ULTRA_SUSPEND is not set
+
+# Enable the native Rockchip transport even in SDKs without an AMP fragment.
+CONFIG_MAILBOX=y
+CONFIG_ROCKCHIP_AMP=y
+CONFIG_ROCKCHIP_MBOX=y
+CONFIG_RPMSG_ROCKCHIP_MBOX=y
+CONFIG_RPMSG_VIRTIO=y
+CONFIG_RPMSG_CHAR=y
+CONFIG_RPMSG_CTRL=y
+# CONFIG_RPMSG_TTY is not set
+# CONFIG_RPMSG_ROCKCHIP_TEST is not set
+# CONFIG_ROCKCHIP_MBOX_DEMO is not set
+
+CONFIG_DMA_CMA=y
+CONFIG_CMA=y
+CONFIG_CMA_SIZE_MBYTES=256
+CONFIG_DMABUF_HEAPS=y
+CONFIG_DMABUF_HEAPS_ROCKCHIP=y
+CONFIG_DMABUF_HEAPS_ROCKCHIP_CMA_HEAP=y
+CONFIG_ROCKCHIP_RKNPU=y
+CONFIG_ROCKCHIP_RKNPU_DMA_HEAP=y
+
+# The vendor defconfig is multi-SoC.  Keep only RK3576 so version-specific ISP,
+# codec, clock and power drivers for unrelated Rockchip parts are not linked.
+# CONFIG_CPU_RV1126B is not set
+# CONFIG_CPU_PX30 is not set
+# CONFIG_CPU_RK1808 is not set
+# CONFIG_CPU_RK3328 is not set
+# CONFIG_CPU_RK3399 is not set
+# CONFIG_CPU_RK3528 is not set
+# CONFIG_CPU_RK3538 is not set
+# CONFIG_CPU_RK3562 is not set
+# CONFIG_CPU_RK3568 is not set
+CONFIG_CPU_RK3576=y
+# CONFIG_CPU_RK3588 is not set
+
+# The compute domain receives data over RPMsg/shared DDR.  The first-stage
+# kernel does not own product storage, radios, USB, display or audio hardware.
+CONFIG_NET=y
+CONFIG_UNIX=y
+# CONFIG_INET is not set
+# CONFIG_NETFILTER is not set
+# CONFIG_PACKET is not set
+# CONFIG_IPV6 is not set
+# CONFIG_CAN is not set
+# CONFIG_WIRELESS is not set
+# CONFIG_CFG80211 is not set
+# CONFIG_RFKILL is not set
+# CONFIG_NETDEVICES is not set
+# CONFIG_MMC is not set
+# CONFIG_ATA is not set
+# CONFIG_SCSI is not set
+# CONFIG_NVME_CORE is not set
+# CONFIG_USB_SUPPORT is not set
+# CONFIG_BT is not set
+# CONFIG_WLAN is not set
+# CONFIG_DRM is not set
+# CONFIG_SOUND is not set
+# CONFIG_INPUT is not set
+# CONFIG_RK_HEADSET is not set
+# CONFIG_HID is not set
+# CONFIG_VT is not set
+# CONFIG_TCG_TPM is not set
+# CONFIG_PCI is not set
+# CONFIG_EFI is not set
+# CONFIG_COMPAT is not set
+# CONFIG_MODULES is not set
+# CONFIG_BLOCK is not set
+# CONFIG_MTD is not set
+# CONFIG_AIO is not set
+# CONFIG_IO_URING is not set
+
+# Keep crash symbols and printk during bring-up, but drop heavyweight tracing
+# and performance frameworks from the RAM-only image.
+# CONFIG_FTRACE is not set
+# CONFIG_BPF_SYSCALL is not set
+# CONFIG_PERF_EVENTS is not set
+
+# NPU, RGA, MPP and ISP stay enabled; display GPUs do not belong to this domain.
+# CONFIG_MALI_BIFROST is not set
+# CONFIG_MALI_MIDGARD is not set
+# CONFIG_MALI400 is not set
+# CONFIG_RK628_MISC is not set
+# CONFIG_MFD_RKX110_X120 is not set
+# CONFIG_MFD_SERDES_DISPLAY is not set
+# CONFIG_LKDTM is not set
+
+# Retain the K7 camera/ISP and Rockchip media accelerators without pulling in
+# every tuner, DVB frontend, radio and test driver from the vendor defconfig.
+CONFIG_MEDIA_SUPPORT=y
+CONFIG_MEDIA_SUPPORT_FILTER=y
+# CONFIG_MEDIA_SUBDRV_AUTOSELECT is not set
+CONFIG_MEDIA_CAMERA_SUPPORT=y
+CONFIG_MEDIA_PLATFORM_SUPPORT=y
+# CONFIG_MEDIA_ANALOG_TV_SUPPORT is not set
+# CONFIG_MEDIA_DIGITAL_TV_SUPPORT is not set
+# CONFIG_MEDIA_RADIO_SUPPORT is not set
+# CONFIG_MEDIA_SDR_SUPPORT is not set
+# CONFIG_MEDIA_TEST_SUPPORT is not set
+# CONFIG_MEDIA_CEC_SUPPORT is not set
+CONFIG_VIDEO_IMX415=y
+
+# Disable controller PHYs selected by the broad vendor defconfig.  Camera
+# DPHYs stay enabled for the later ISP service profile.
+# CONFIG_TYPEC is not set
+# CONFIG_PHY_ROCKCHIP_EMMC is not set
+# CONFIG_PHY_ROCKCHIP_INNO_USB3 is not set
+# CONFIG_PHY_ROCKCHIP_TYPEC is not set
+# CONFIG_PHY_ROCKCHIP_USB is not set
+# CONFIG_PHY_ROCKCHIP_USBDP is not set
+# CONFIG_PHY_ROCKCHIP_INNO_HDMI is not set
+# CONFIG_PHY_ROCKCHIP_DP is not set
+# CONFIG_PHY_ROCKCHIP_NANENG_EDP is not set
+# CONFIG_PHY_ROCKCHIP_SAMSUNG_HDPTX is not set
+
+# Keep only RAM-backed and diagnostic filesystems in the initramfs profile.
+# CONFIG_XFS_FS is not set
+# CONFIG_BTRFS_FS is not set
+# CONFIG_F2FS_FS is not set
+# CONFIG_JFFS2_FS is not set
+# CONFIG_UBIFS_FS is not set
+# CONFIG_NTFS_FS is not set
+# CONFIG_FUSE_FS is not set
+# CONFIG_CONFIGFS_FS is not set
+
+# Keep the first compute-domain image RAM-only.  Storage and networking can be
+# restored in later product profiles without changing the AMP wire contract.
+# CONFIG_EROFS_FS is not set
+# CONFIG_EXT4_FS is not set
+# CONFIG_NFS_FS is not set
