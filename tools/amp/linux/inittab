@@ -1,0 +1,3 @@
+# The Linux compute domain has no interactive hardware console.
+# BusyBox init owns PID1 and reaps/restarts the control daemon.
+::respawn:/usr/sbin/nyampd
