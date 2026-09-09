@@ -101,6 +101,9 @@ _Static_assert(offsetof(struct nbootctl_record_s, padding) == 236,
 
 static const char *nbootctl_bootctrl_path(unsigned int medium);
 static uint32_t nbootctl_crc32(const void *data, size_t size);
+static const char *nbootctl_slot_path(unsigned int medium, int domain,
+                                      unsigned int slot);
+static int nbootctl_domain_index(const char *domain);
 static bool nbootctl_record_valid(const struct nbootctl_record_s *record);
 static int nbootctl_read_records(unsigned int medium, struct inode **inode,
                                  struct nbootctl_record_s *records,
@@ -122,6 +125,39 @@ static const char *nbootctl_bootctrl_path(unsigned int medium)
 static uint32_t nbootctl_crc32(const void *data, size_t size)
 {
   return crc32part(data, size, UINT32_MAX) ^ UINT32_MAX;
+}
+
+/****************************************************************************
+ * Name: nbootctl_slot_path
+ ****************************************************************************/
+
+static const char *nbootctl_slot_path(unsigned int medium, int domain,
+                                      unsigned int slot)
+{
+  static const char *const paths[2][2][2] = {
+    { { "/dev/mmcsd0p4", "/dev/mmcsd0p5" },
+      { "/dev/mmcsd0p6", "/dev/mmcsd0p7" } },
+    { { "/dev/mmcsd1p4", "/dev/mmcsd1p5" },
+      { "/dev/mmcsd1p6", "/dev/mmcsd1p7" } },
+  };
+
+  return medium >= 1 && medium <= 2 && domain >= 0 && domain <= 1 && slot <= 1
+             ? paths[medium - 1][domain][slot]
+             : NULL;
+}
+
+/****************************************************************************
+ * Name: nbootctl_domain_index
+ ****************************************************************************/
+
+static int nbootctl_domain_index(const char *domain)
+{
+  if (strcmp(domain, "nuttx") == 0)
+    {
+      return 0;
+    }
+
+  return strcmp(domain, "amp") == 0 ? 1 : -EINVAL;
 }
 
 /****************************************************************************
@@ -253,4 +289,100 @@ int nbootctl_bootctrl_status(unsigned int medium)
   close_blockdriver(inode);
   free(records);
   return 0;
+}
+
+/****************************************************************************
+ * Name: nbootctl_bootctrl_verify
+ ****************************************************************************/
+
+int nbootctl_bootctrl_verify(unsigned int medium, const char *domain,
+                             unsigned int slot)
+{
+  struct nbootctl_record_s *records;
+  struct nbootctl_slot_s *entry;
+  struct inode *control = NULL;
+  struct inode *payload = NULL;
+  SHA2_CTX context;
+  uint8_t digest[SHA256_DIGEST_LENGTH];
+  uint8_t *buffer;
+  uint64_t remaining;
+  size_t bytes;
+  size_t sectors;
+  int selected;
+  int domain_index;
+  int ret;
+
+  domain_index = nbootctl_domain_index(domain);
+  if (domain_index < 0 || slot > 1)
+    {
+      return -EINVAL;
+    }
+
+  records = memalign(64, sizeof(*records) * NBOOTCTL_COPY_COUNT);
+  buffer = memalign(64, NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE);
+  if (records == NULL || buffer == NULL)
+    {
+      ret = -ENOMEM;
+      goto out;
+    }
+
+  ret = nbootctl_read_records(medium, &control, records, &selected);
+  if (ret < 0)
+    {
+      goto out;
+    }
+
+  entry = &records[selected].domains[domain_index].slots[slot];
+  if (entry->image_size == 0)
+    {
+      ret = -ENOENT;
+      goto out;
+    }
+
+  ret = open_blockdriver(nbootctl_slot_path(medium, domain_index, slot), 0,
+                         &payload);
+  if (ret < 0 || payload->u.i_bops->read == NULL)
+    {
+      ret = ret < 0 ? ret : -ENOSYS;
+      goto out;
+    }
+
+  remaining = entry->image_size;
+  sha256init(&context);
+  while (remaining > 0)
+    {
+      bytes = remaining > NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE
+                  ? NBOOTCTL_VERIFY_SECTORS * NBOOTCTL_SECTOR_SIZE
+                  : (size_t)remaining;
+      sectors = (bytes + NBOOTCTL_SECTOR_SIZE - 1) / NBOOTCTL_SECTOR_SIZE;
+      if (payload->u.i_bops->read(payload, buffer,
+                                  (entry->image_size - remaining) /
+                                      NBOOTCTL_SECTOR_SIZE,
+                                  sectors) != (ssize_t)sectors)
+        {
+          ret = -EIO;
+          goto out;
+        }
+
+      sha256update(&context, buffer, bytes);
+      remaining -= bytes;
+    }
+
+  sha256final(digest, &context);
+  ret = memcmp(digest, entry->sha256, sizeof(digest)) == 0 ? 0 : -EBADMSG;
+
+out:
+  if (payload != NULL)
+    {
+      close_blockdriver(payload);
+    }
+
+  if (control != NULL)
+    {
+      close_blockdriver(control);
+    }
+
+  free(buffer);
+  free(records);
+  return ret;
 }
