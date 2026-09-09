@@ -36,6 +36,14 @@
 #define NBOOTCTL_HANDOFF_MAGIC_MASK 0xffff0000u
 #define NBOOTCTL_HANDOFF_VERSION    2u
 
+enum nbootctl_target_e
+{
+  NBOOTCTL_TARGET_CONSOLE = 1,
+  NBOOTCTL_TARGET_FASTBOOT = 2,
+  NBOOTCTL_TARGET_SLOT_A = 3,
+  NBOOTCTL_TARGET_SLOT_B = 4,
+};
+
 /* Private Function Prototypes */
 
 static uint32_t nbootctl_read(uintptr_t address);
@@ -44,6 +52,7 @@ static const char *nbootctl_reason_name(unsigned int reason);
 static int nbootctl_handoff(unsigned int *medium_out, unsigned int *slot_out);
 static int nbootctl_status(void);
 static int nbootctl_parse_slot(const char *value, unsigned int *slot);
+static int nbootctl_reboot(enum nbootctl_target_e target);
 static void nbootctl_usage(void);
 
 /****************************************************************************
@@ -162,6 +171,38 @@ static int nbootctl_parse_slot(const char *value, unsigned int *slot)
 }
 
 /****************************************************************************
+ * Name: nbootctl_reboot
+ ****************************************************************************/
+
+static int nbootctl_reboot(enum nbootctl_target_e target)
+{
+  unsigned int medium;
+  unsigned int slot;
+  int ret;
+
+  ret = nbootctl_handoff(&medium, &slot);
+  if (ret != 0)
+    {
+      return 1;
+    }
+
+  ret = nbootctl_bootctrl_request(medium, target);
+  if (ret < 0)
+    {
+      fprintf(stderr, "nbootctl: reboot request failed: %d\n", ret);
+      return 1;
+    }
+
+  printf("nbootctl: one-shot target %u stored\n", (unsigned int)target);
+  fflush(stdout);
+  __asm__ volatile("dsb sy" ::: "memory");
+  boardctl(BOARDIOC_RESET, 0);
+  nbootctl_bootctrl_request(medium, 0);
+  fprintf(stderr, "nbootctl: reset returned unexpectedly\n");
+  return 1;
+}
+
+/****************************************************************************
  * Name: nbootctl_usage
  ****************************************************************************/
 
@@ -173,7 +214,8 @@ static void nbootctl_usage(void)
                   "       nbootctl mark-successful nuttx|amp a|b\n"
                   "       nbootctl stage nuttx|amp IMAGE\n"
                   "       nbootctl clone nuttx|amp a|b a|b\n"
-                  "       nbootctl update-nboot IMAGE\n");
+                  "       nbootctl update-nboot IMAGE\n"
+                  "       nbootctl reboot console|fastboot|nuttx-a|nuttx-b\n");
 }
 
 /****************************************************************************
@@ -186,6 +228,8 @@ int main(int argc, FAR char *argv[])
   unsigned int running_slot;
   unsigned int slot;
   int ret;
+
+  enum nbootctl_target_e target;
 
   if (argc == 2 && strcmp(argv[1], "status") == 0)
     {
@@ -282,6 +326,33 @@ int main(int argc, FAR char *argv[])
       return 0;
     }
 
-  nbootctl_usage();
-  return 1;
+  if (argc != 3 || strcmp(argv[1], "reboot") != 0)
+    {
+      nbootctl_usage();
+      return 1;
+    }
+
+  if (strcmp(argv[2], "console") == 0)
+    {
+      target = NBOOTCTL_TARGET_CONSOLE;
+    }
+  else if (strcmp(argv[2], "fastboot") == 0)
+    {
+      target = NBOOTCTL_TARGET_FASTBOOT;
+    }
+  else if (strcmp(argv[2], "nuttx-a") == 0)
+    {
+      target = NBOOTCTL_TARGET_SLOT_A;
+    }
+  else if (strcmp(argv[2], "nuttx-b") == 0)
+    {
+      target = NBOOTCTL_TARGET_SLOT_B;
+    }
+  else
+    {
+      nbootctl_usage();
+      return 1;
+    }
+
+  return nbootctl_reboot(target);
 }

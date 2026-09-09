@@ -357,6 +357,45 @@ int nbootctl_bootctrl_status(unsigned int medium)
 }
 
 /****************************************************************************
+ * Name: nbootctl_bootctrl_request
+ ****************************************************************************/
+
+int nbootctl_bootctrl_request(unsigned int medium, unsigned int target)
+{
+  struct nbootctl_record_s *records;
+  struct inode *inode = NULL;
+  uint32_t request = target ? NBOOTCTL_REBOOT_MAGIC | target : 0;
+  int selected;
+  int ret;
+
+  if (target > 4)
+    {
+      return -EINVAL;
+    }
+
+  records = memalign(64, sizeof(*records) * NBOOTCTL_COPY_COUNT);
+  if (records == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  ret = nbootctl_read_records(medium, &inode, records, &selected);
+  if (ret == 0)
+    {
+      memcpy(records[selected].padding, &request, sizeof(request));
+      ret = nbootctl_write_records(inode, records, selected);
+    }
+
+  if (inode != NULL)
+    {
+      close_blockdriver(inode);
+    }
+
+  free(records);
+  return ret;
+}
+
+/****************************************************************************
  * Name: nbootctl_bootctrl_verify
  ****************************************************************************/
 
