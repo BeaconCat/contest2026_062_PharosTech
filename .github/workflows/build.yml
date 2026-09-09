@@ -146,6 +146,12 @@ jobs:
           make_placeholder "$FIRMWARE_DIR/SWT6621S_NV_SDIO_ALONE.bin" 220
           make_placeholder "$FIRMWARE_DIR/SWT6621S_SEEKWAVE_R00001.bin" 2372
 
+      - name: Apply AMP GIC dependency
+        if: matrix.config == 'boards/rk3576/kickpi-k7/configs/amp'
+        run: |
+          bash "${{ env.OPENVELA_DIR }}/${{ env.REPO_NAME }}/tools/amp/nuttx/apply.sh" \
+            "${{ env.OPENVELA_DIR }}/nuttx"
+
       # CMake 构建
       - name: Build (CMake)
         id: cmake_build
