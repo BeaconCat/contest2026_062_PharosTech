@@ -20,6 +20,8 @@
  *
  ****************************************************************************/
 
+#include <nuttx/config.h>
+
 OUTPUT_ARCH(aarch64)
 
 ENTRY(__start)
@@ -31,20 +33,12 @@ PHDRS
 
 SECTIONS
 {
-  /* NuttX is loaded by u-boot to a fixed RAM address and started exactly
-   * like a Linux kernel image placed at the same spot (it is no longer a
-   * BL33 stage handed off by ATF). U-boot copies the image to 0x40200000
-   * and jumps there, so the link address must match CONFIG_RAM_START
-   * (0x40200000). 
-   *
-   * (Historically this board also ran NuttX as BL33 in the vendor boot
-   * chain idbloader/SPL -> BL31/ATF -> NuttX, packed into the "uboot" slot
-   * of the vendor FIT image at the same 0x40200000 load address. The
-   * address requirement is identical in either scheme, which is why the
-   * link base must equal CONFIG_RAM_START regardless of how the image is
-   * launched.)
+  /* NuttX runs from the address selected by the active board configuration.
+   * The standalone N-Boot profile uses 0x40200000, while the AMP profile
+   * uses its reserved DDR window.  Both the image loader and CONFIG_RAM_START
+   * must use the same address.
    */
-  . = 0x40200000;  /* = CONFIG_RAM_START; u-boot loads and jumps to NuttX here */
+  . = CONFIG_RAM_START;
   _start = .;
   .text : {
         _stext = .;            /* Text section */
@@ -150,6 +144,11 @@ SECTIONS
    */
 
   _szdata = _e_initstack - _sdata;
+
+  /* NOLOAD reduces the file, not the runtime memory requirement. */
+
+  ASSERT(_e_initstack <= CONFIG_RAM_START + CONFIG_RAM_SIZE,
+         "K7 runtime image exceeds configured RAM")
 
   /* Sections to be discarded */
   /DISCARD/ : {
