@@ -40,6 +40,7 @@ jobs:
             tools/k7_abpack/test_bootctrl.py
           python3 tools/test_sync_nboot_release.py
           python3 tools/k7_abpack/test_bootctrl.py
+          python3 tools/tests/test_nbootctl_records.py
           bash -n tools/k7_pack/build_nboot_ab.sh
           bash -n tools/k7_pack/build_sd.sh
           bash -n tools/k7_pack/build_emmc.sh
