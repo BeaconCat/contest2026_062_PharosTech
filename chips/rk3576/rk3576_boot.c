@@ -54,6 +54,16 @@
 #endif
 
 /****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#define RK3576_LITTLE_NCPUS 4
+
+#if defined(CONFIG_SMP) && CONFIG_SMP_NCPUS > RK3576_LITTLE_NCPUS
+#error "RK3576 SMP currently supports only the four LITTLE CPUs"
+#endif
+
+/****************************************************************************
  * Private Data
  ****************************************************************************/
 
@@ -113,6 +123,22 @@ void arm64_el_init(void)
       UP_ISB();
     }
 }
+
+#ifdef CONFIG_SMP
+/****************************************************************************
+ * Name: arm64_get_mpid
+ *
+ * Description:
+ *   Map logical CPUs to the RK3576 LITTLE cluster.  Cross-cluster SMP is
+ *   not supported by this mapping.
+ ****************************************************************************/
+
+uint64_t arm64_get_mpid(int cpu)
+{
+  DEBUGASSERT(cpu >= 0 && cpu < CONFIG_SMP_NCPUS);
+  return cpu >= 0 && cpu < CONFIG_SMP_NCPUS ? (uint64_t)cpu : UINT64_MAX;
+}
+#endif
 
 /****************************************************************************
  * Name: arm64_chip_boot
