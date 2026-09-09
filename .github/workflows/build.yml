@@ -51,6 +51,21 @@ jobs:
             --output "$RUNNER_TEMP/verified-nboot" \
             --tag "$TAG"
 
+  amp_tools:
+    name: AMP control and packaging
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install FIT test tools
+        run: sudo apt-get update && sudo apt-get install -y device-tree-compiler u-boot-tools
+      - name: Test AMP tools
+        run: |
+          python3 tools/amp/test_amp_topology.py
+          cmake -S tools/amp/nyampd -B out/nyampd
+          cmake --build out/nyampd -j2
+          ctest --test-dir out/nyampd --output-on-failure
+          python3 tools/amp/test_application_pty.py . out/nyampd/nyampd
+
   # 扫描 defconfig，生成 build matrix
   scan_configs:
     name: Scan Configs
