@@ -1,6 +1,7 @@
 if(CONFIG_EXAMPLES_NYAMPCTL)
+  get_filename_component(NYAMPCTL_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}" REALPATH)
   set(NYAMP_PROTOCOL_DIR
-      ${NUTTX_APPS_DIR}/../vendor/rockchip/tools/amp/protocol)
+      "${NYAMPCTL_SOURCE_DIR}/../../tools/amp/protocol")
   nuttx_add_application(
     MODULE
     ${CONFIG_EXAMPLES_NYAMPCTL}
