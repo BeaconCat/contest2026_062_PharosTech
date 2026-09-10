@@ -1,3 +1,6 @@
+NYAMPCTL_SOURCE_DIR := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
+NYAMP_PROTOCOL_DIR := $(abspath $(NYAMPCTL_SOURCE_DIR)/../../tools/amp/protocol)
+
 include $(APPDIR)/Make.defs
 
 PROGNAME  = $(CONFIG_EXAMPLES_NYAMPCTL_PROGNAME)
@@ -8,7 +11,7 @@ MODULE    = $(CONFIG_EXAMPLES_NYAMPCTL)
 MAINSRC = nyampctl_main.c
 CSRCS   = nyamp_protocol.c
 
-VPATH += $(TOPDIR)/../vendor/rockchip/tools/amp/protocol
-CFLAGS += ${INCDIR_PREFIX}$(TOPDIR)/../vendor/rockchip/tools/amp/protocol
+VPATH += $(NYAMP_PROTOCOL_DIR)
+CFLAGS += ${INCDIR_PREFIX}$(NYAMP_PROTOCOL_DIR)
 
 include $(APPDIR)/Application.mk
