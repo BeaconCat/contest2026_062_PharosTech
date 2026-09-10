@@ -14,11 +14,11 @@ permissions:
 
 env:
   # manifest 仓库：push / workflow_dispatch 用自身仓库；PR 事件使用目标仓库（base）。
-  # 注意：merged 的 merge_commit_sha 只存在于目标(base)仓库，fork 仓库中无此 commit。
+  # PR 的测试合并提交只存在于目标(base)仓库，fork 仓库中无此 commit。
   MANIFEST_REPO: ${{ format('{0}/{1}', github.server_url, github.repository) }}
-  # 目标 commit（sha）：PR 下用 GitHub 生成的 merge commit（合并后的结果，即 refs/pull/<num>/merge）；
-  # push / workflow_dispatch 用当前 commit。锁定 sha 可消除分支解析竞态与 fork 歧义。
-  MANIFEST_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.sha }}
+  # 与本次 Actions 事件和 checkout 默认行为一致：PR 为测试合并提交，其余为当前提交。
+  # pull_request.merge_commit_sha 在 synchronize 事件中可能仍指向上一版合并树。
+  MANIFEST_COMMIT: ${{ github.sha }}
   # 仓库名即 manifest 文件名
   REPO_NAME: ${{ github.event.repository.name }}
   MANIFEST_FILE: ${{ github.event.repository.name }}.xml
