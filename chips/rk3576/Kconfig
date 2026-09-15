@@ -176,6 +176,7 @@ config RK3576_USBHOST
 	bool "RK3576 USB OTG1 xHCI host controller"
 	default n
 	select USBHOST
+	select USBHOST_HAVE_ASYNCH
 	select USBHOST_WAITER
 	select USBHOST_XHCI
 	select USBHOST_HUB
