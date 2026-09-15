@@ -41,7 +41,7 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define KICKPI_K7_USBHOST_VBUS           (GPIO_PORT3 | GPIO_PIN_D6 | GPIO_OUTPUT)
+#define KICKPI_K7_USBHOST_VBUS           (GPIO_PORT3 | GPIO_PIN_D6)
 
 #define KICKPI_K7_USBHOST_POWER_DELAY_MS 600
 #define KICKPI_K7_USBHOST_POWER_OFF_MS   100
@@ -51,6 +51,7 @@
  ****************************************************************************/
 
 static FAR struct usbhost_connection_s *g_kickpi_k7_usbhost;
+static FAR struct gpio_dev_s *g_kickpi_k7_usbhost_vbus;
 
 /****************************************************************************
  * Public Functions
@@ -65,14 +66,21 @@ int kickpi_k7_usbhost_initialize(void)
       return OK;
     }
 
-  ret = rk3576_config_gpio(KICKPI_K7_USBHOST_VBUS);
-  if (ret < 0)
+  if (g_kickpi_k7_usbhost_vbus == NULL)
     {
-      return ret;
+      ret = rk3576_gpio_get(KICKPI_K7_USBHOST_VBUS, &g_kickpi_k7_usbhost_vbus);
+      if (ret < 0)
+        {
+          return ret;
+        }
     }
 
+  rk3576_gpio_set_af(g_kickpi_k7_usbhost_vbus, 0);
+  rk3576_gpio_set_pull(g_kickpi_k7_usbhost_vbus, RK3576_GPIO_PULLDOWN);
+  rk3576_gpio_write_bit(g_kickpi_k7_usbhost_vbus, false);
+  rk3576_gpio_set_mode(g_kickpi_k7_usbhost_vbus, RK3576_GPIO_OUTPUT);
   up_mdelay(KICKPI_K7_USBHOST_POWER_OFF_MS);
-  rk3576_gpio_write(KICKPI_K7_USBHOST_VBUS, true);
+  rk3576_gpio_write_bit(g_kickpi_k7_usbhost_vbus, true);
 
   /* GPIO3_D6 enables both load switches supplying VBUS to the three
    * external downstream ports.  Allow the GL3510 crystal and regulators
@@ -84,7 +92,7 @@ int kickpi_k7_usbhost_initialize(void)
   g_kickpi_k7_usbhost = rk3576_usbhost_initialize();
   if (g_kickpi_k7_usbhost == NULL)
     {
-      rk3576_gpio_write(KICKPI_K7_USBHOST_VBUS, false);
+      rk3576_gpio_write_bit(g_kickpi_k7_usbhost_vbus, false);
       return -ENODEV;
     }
 
