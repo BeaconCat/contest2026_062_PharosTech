@@ -155,14 +155,6 @@ jobs:
           git fetch ci ${{ env.MANIFEST_COMMIT }}
           git checkout FETCH_HEAD
 
-      - name: Resync target manifest dependencies
-        run: |
-          cd ${{ env.OPENVELA_DIR }}
-          cp "${{ env.REPO_NAME }}/openvela.xml" .repo/manifests/openvela.xml
-          cp "${{ env.REPO_NAME }}/${{ env.MANIFEST_FILE }}" \
-            ".repo/manifests/${{ env.MANIFEST_FILE }}"
-          repo sync -c -j4 nuttx
-
       # Public CI does not contain redistributable SeekWave firmware.  Create
       # exact-size, zero-filled inputs so both build systems still exercise
       # the complete SV6621 integration.  Runtime code recognizes the full
