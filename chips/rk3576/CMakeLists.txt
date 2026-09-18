@@ -34,7 +34,15 @@ if(CONFIG_RK3576_EMMC)
 endif()
 
 if(CONFIG_RK3576_DMA)
-  list(APPEND SRCS rk3576_addrenv.c rk3576_dma.c)
+  list(APPEND SRCS rk3576_dma.c)
+
+  # drivers/misc/addrenv.c defines the same up_addrenv_va_to_pa when
+  # DEV_SIMPLE_ADDRENV is selected, and the two collide at link time.  Prefer
+  # the generic copy where it is enabled: it is the maintained one, and this
+  # file is a fork of an older revision of it.
+  if(NOT CONFIG_DEV_SIMPLE_ADDRENV)
+    list(APPEND SRCS rk3576_addrenv.c)
+  endif()
 endif()
 
 if(CONFIG_RK3576_DMA_ALLOC)

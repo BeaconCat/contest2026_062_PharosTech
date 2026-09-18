@@ -56,7 +56,17 @@ CHIP_CSRCS += rk3576_emmc.c
 endif
 
 ifeq ($(CONFIG_RK3576_DMA),y)
-CHIP_CSRCS += rk3576_addrenv.c rk3576_dma.c
+CHIP_CSRCS += rk3576_dma.c
+endif
+
+# The generic drivers/misc/addrenv.c provides the same up_addrenv_va_to_pa
+# when DEV_SIMPLE_ADDRENV is selected, and the two definitions collide at link
+# time.  Prefer the generic one where it is enabled: it is the maintained copy,
+# and this one is a fork of an older revision of it.
+ifeq ($(CONFIG_RK3576_DMA),y)
+ifneq ($(CONFIG_DEV_SIMPLE_ADDRENV),y)
+CHIP_CSRCS += rk3576_addrenv.c
+endif
 endif
 
 ifeq ($(CONFIG_RK3576_DMA_ALLOC),y)
