@@ -28,6 +28,6 @@ PRIORITY  = $(CONFIG_SYSTEM_NBOOTCTL_PRIORITY)
 STACKSIZE = $(CONFIG_SYSTEM_NBOOTCTL_STACKSIZE)
 MODULE    = $(CONFIG_SYSTEM_NBOOTCTL)
 MAINSRC = nbootctl_main.c
-CSRCS   = nbootctl_bootctrl.c
+CSRCS   = nbootctl_bootctrl.c nbootctl_part.c
 
 include $(APPDIR)/Application.mk

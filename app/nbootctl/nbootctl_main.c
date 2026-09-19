@@ -24,10 +24,12 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/boardctl.h>
 
 #include "nbootctl_bootctrl.h"
+#include "nbootctl_part.h"
 
 #define NBOOTCTL_HANDOFF_REG        0x26026234ul
 #define NBOOTCTL_GENERATION_LO_REG  0x26026238ul
@@ -215,7 +217,20 @@ static void nbootctl_usage(void)
                   "       nbootctl stage nuttx|amp IMAGE\n"
                   "       nbootctl clone nuttx|amp a|b a|b\n"
                   "       nbootctl update-nboot IMAGE\n"
-                  "       nbootctl reboot console|fastboot|nuttx-a|nuttx-b\n");
+                  "       nbootctl reboot console|fastboot|nuttx-a|nuttx-b\n"
+                  "\n"
+                  "  partition writes (SHA-256 checked at both ends)\n"
+                  "       nbootctl digest FILE\n"
+                  "       nbootctl verify-part FILE SHA256\n"
+                  "       nbootctl write-part PARTITION FILE SHA256\n"
+                  "       nbootctl write-raw LBA SECTORS FILE SHA256\n"
+                  "       nbootctl write-gpt FILE SHA256\n"
+                  "       nbootctl check-raw LBA SECTORS SHA256\n"
+                  "\n"
+                  "  PARTITION is one of uboot, trust, bootctrl, nuttx_a,\n"
+                  "  nuttx_b, amp_a, amp_b, data.  The digest is the file's\n"
+                  "  SHA-256 as lowercase hex; the write is refused unless\n"
+                  "  it matches, and the medium is read back afterwards.\n");
 }
 
 /****************************************************************************
@@ -320,6 +335,132 @@ int main(int argc, FAR char *argv[])
       if (ret < 0)
         {
           fprintf(stderr, "nbootctl: update-nboot failed: %d\n", ret);
+          return 1;
+        }
+
+      return 0;
+    }
+
+  /* Partition writes.  These do not need the handoff record -- the medium
+   * is named implicitly by whatever the board booted from -- but they do
+   * need it for consistency with the slot commands, and the digest is
+   * mandatory in every form.  There is deliberately no way to ask for a
+   * write without one.
+   */
+
+  if (argc == 3 && strcmp(argv[1], "digest") == 0)
+    {
+      return nbootctl_part_digest(argv[2]) < 0 ? 1 : 0;
+    }
+
+  if (argc == 4 && strcmp(argv[1], "verify-part") == 0)
+    {
+      return nbootctl_part_verify(argv[2], argv[3]) < 0 ? 1 : 0;
+    }
+
+  if (argc == 5 && strcmp(argv[1], "write-part") == 0)
+    {
+      ret = nbootctl_handoff(&medium, &running_slot);
+      if (ret != 0)
+        {
+          return 1;
+        }
+
+      ret = nbootctl_part_write(medium, argv[2], argv[3], argv[4]);
+      if (ret < 0)
+        {
+          fprintf(stderr, "nbootctl: write-part %s failed: %d\n", argv[2],
+                  ret);
+          return 1;
+        }
+
+      return 0;
+    }
+
+  if (argc == 6 && strcmp(argv[1], "write-raw") == 0)
+    {
+      uint64_t lba;
+      uint64_t sectors;
+      char *end;
+
+      ret = nbootctl_handoff(&medium, &running_slot);
+      if (ret != 0)
+        {
+          return 1;
+        }
+
+      lba = strtoull(argv[2], &end, 0);
+      if (*end != '\0')
+        {
+          nbootctl_usage();
+          return 1;
+        }
+
+      sectors = strtoull(argv[3], &end, 0);
+      if (*end != '\0')
+        {
+          nbootctl_usage();
+          return 1;
+        }
+
+      ret = nbootctl_part_write_raw(medium, lba, sectors, argv[4], argv[5]);
+      if (ret < 0)
+        {
+          fprintf(stderr, "nbootctl: write-raw %s failed: %d\n", argv[2], ret);
+          return 1;
+        }
+
+      return 0;
+    }
+
+  if (argc == 4 && strcmp(argv[1], "write-gpt") == 0)
+    {
+      ret = nbootctl_handoff(&medium, &running_slot);
+      if (ret != 0)
+        {
+          return 1;
+        }
+
+      ret = nbootctl_part_write_gpt(medium, argv[2], argv[3]);
+      if (ret < 0)
+        {
+          fprintf(stderr, "nbootctl: write-gpt failed: %d\n", ret);
+          return 1;
+        }
+
+      return 0;
+    }
+
+  if (argc == 5 && strcmp(argv[1], "check-raw") == 0)
+    {
+      uint64_t lba;
+      uint64_t sectors;
+      char *end;
+
+      ret = nbootctl_handoff(&medium, &running_slot);
+      if (ret != 0)
+        {
+          return 1;
+        }
+
+      lba = strtoull(argv[2], &end, 0);
+      if (*end != '\0')
+        {
+          nbootctl_usage();
+          return 1;
+        }
+
+      sectors = strtoull(argv[3], &end, 0);
+      if (*end != '\0')
+        {
+          nbootctl_usage();
+          return 1;
+        }
+
+      ret = nbootctl_part_check_raw(medium, lba, sectors, argv[4]);
+      if (ret < 0)
+        {
+          fprintf(stderr, "nbootctl: check-raw %s failed: %d\n", argv[2], ret);
           return 1;
         }
 
