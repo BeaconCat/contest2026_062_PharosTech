@@ -226,6 +226,7 @@ static void nbootctl_usage(void)
                   "       nbootctl write-raw LBA SECTORS FILE SHA256\n"
                   "       nbootctl write-gpt FILE SHA256\n"
                   "       nbootctl check-raw LBA SECTORS SHA256\n"
+                  "       nbootctl format PARTITION\n"
                   "\n"
                   "  PARTITION is one of uboot, trust, bootctrl, nuttx_a,\n"
                   "  nuttx_b, amp_a, amp_b, data.  The digest is the file's\n"
@@ -429,6 +430,18 @@ int main(int argc, FAR char *argv[])
         }
 
       return 0;
+    }
+
+  if (argc == 3 && strcmp(argv[1], "format") == 0)
+    {
+      ret = nbootctl_handoff(&medium, &running_slot);
+      if (ret != 0)
+        {
+          return 1;
+        }
+
+      ret = nbootctl_format_partition(medium, argv[2]);
+      return ret < 0 ? 1 : 0;
     }
 
   if (argc == 5 && strcmp(argv[1], "check-raw") == 0)

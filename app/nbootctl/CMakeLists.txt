@@ -23,7 +23,7 @@ if(CONFIG_SYSTEM_NBOOTCTL)
   nuttx_add_application(
     MODULE ${CONFIG_SYSTEM_NBOOTCTL}
     NAME ${CONFIG_SYSTEM_NBOOTCTL_PROGNAME}
-    SRCS nbootctl_main.c nbootctl_bootctrl.c nbootctl_part.c
+    SRCS nbootctl_main.c nbootctl_bootctrl.c nbootctl_part.c nbootctl_format.c
     STACKSIZE ${CONFIG_SYSTEM_NBOOTCTL_STACKSIZE}
     HEAPSIZE ${CONFIG_SYSTEM_NBOOTCTL_HEAPSIZE}
     PRIORITY ${CONFIG_SYSTEM_NBOOTCTL_PRIORITY})
