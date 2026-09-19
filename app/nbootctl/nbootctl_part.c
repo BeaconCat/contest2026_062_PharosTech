@@ -62,6 +62,11 @@
  * device node: the layout in parameter.txt lists uboot first, so it becomes
  * /dev/mmcsdNp1.  Names are matched here and translated to an index; the
  * names are never used as node names directly.
+ *
+ * config sits between the AMP slots and data.  It holds provisioning and
+ * identity, which a factory reset must preserve or deliberately clear,
+ * while data holds models that an OTA can replace.  Keeping them in
+ * separate partitions is what lets one be wiped without the other.
  */
 
 struct nbootctl_partition_s
@@ -80,7 +85,8 @@ static const struct nbootctl_partition_s nbootctl_partitions[] =
   { "nuttx_b",  5, 131072   },
   { "amp_a",    6, 1048576  },
   { "amp_b",    7, 1048576  },
-  { "data",     8, 0        },
+  { "config",   8, 65536    },
+  { "data",     9, 0        },
 };
 
 /* Private Function Prototypes */
@@ -607,25 +613,51 @@ int nbootctl_part_verify(const char *path, const char *hex)
   return 0;
 }
 
-int nbootctl_part_write(unsigned int medium, const char *partition,
-                        const char *path, const char *hex)
+int nbootctl_part_device_path(unsigned int medium, const char *partition,
+                              char *out, size_t size)
 {
   const char *disk_path = nbootctl_disk_path(medium);
-  const struct nbootctl_partition_s *entry = NULL;
-  char node[32];
   size_t i;
+
+  if (disk_path == NULL || partition == NULL || out == NULL || size == 0)
+    {
+      return -EINVAL;
+    }
 
   for (i = 0; i < sizeof(nbootctl_partitions) /
                   sizeof(nbootctl_partitions[0]); i++)
     {
       if (strcmp(partition, nbootctl_partitions[i].name) == 0)
         {
+          snprintf(out, size, "%sp%u", disk_path,
+                   nbootctl_partitions[i].index);
+          return 0;
+        }
+    }
+
+  return -ENOENT;
+}
+
+int nbootctl_part_write(unsigned int medium, const char *partition,
+                        const char *path, const char *hex)
+{
+  const struct nbootctl_partition_s *entry = NULL;
+  char node[32];
+  size_t i;
+  int ret;
+
+  for (i = 0; i < sizeof(nbootctl_partitions) /
+                  sizeof(nbootctl_partitions[0]); i++)
+    {
+      if (partition != NULL &&
+          strcmp(partition, nbootctl_partitions[i].name) == 0)
+        {
           entry = &nbootctl_partitions[i];
           break;
         }
     }
 
-  if (disk_path == NULL || entry == NULL)
+  if (entry == NULL)
     {
       fprintf(stderr, "nbootctl: unknown partition %s\n",
               partition != NULL ? partition : "(null)");
@@ -639,7 +671,12 @@ int nbootctl_part_write(unsigned int medium, const char *partition,
    * offset means NuttX itself bounds the write to the partition.
    */
 
-  snprintf(node, sizeof(node), "%sp%u", disk_path, entry->index);
+  ret = nbootctl_part_device_path(medium, partition, node, sizeof(node));
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   return nbootctl_part_write_node(node, path, hex, entry->blocks);
 }
 

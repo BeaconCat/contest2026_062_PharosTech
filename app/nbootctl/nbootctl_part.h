@@ -30,6 +30,9 @@
 #define NBOOTCTL_SHA256_SIZE 32
 #define NBOOTCTL_SHA256_HEX  64
 
+/* Room for /dev/mmcsdNpMM and a terminator. */
+#define NBOOTCTL_FORMAT_PATH_MAX 32
+
 /* Print the SHA-256 of a file as hex.  Used by the web UI's upload flow to
  * compare the browser's digest against what the board received.
  */
@@ -76,5 +79,16 @@ int nbootctl_part_write_gpt(unsigned int medium, const char *path,
 
 int nbootctl_part_check_raw(unsigned int medium, uint64_t lba,
                             uint64_t sectors, const char *hex);
+
+/* Resolve a partition name to its device node.  Exposed because the
+ * formatter needs the same name-to-node mapping the writer uses, and two
+ * tables would drift.
+ */
+
+int nbootctl_part_device_path(unsigned int medium, const char *partition,
+                              char *out, size_t size);
+
+/* Create a filesystem on a named partition. */
+int nbootctl_format_partition(unsigned int medium, const char *partition);
 
 #endif /* __APPS_SYSTEM_NBOOTCTL_NBOOTCTL_PART_H */
