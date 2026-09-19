@@ -1,7 +1,8 @@
 <script setup lang="ts">
-/* Desktop. Device build: bare page in the centred gate frame (no app shell).
- * Hosted build: the same flow in a narrow column inside the shell. */
-import GateFrame from '../../components/gate/GateFrame.desktop.vue';
+/* Tablet. Device build: bare page in the tablet gate frame (brand panel
+ * beside the form in landscape, one touch-sized column in portrait).
+ * Hosted build: unchanged, the narrow column the desktop variant shows. */
+import GateFrame from '../../components/gate/GateFrame.tablet.vue';
 import { useProvisionPage } from './provision.logic';
 import ProvisionBody from './ProvisionBody.vue';
 
