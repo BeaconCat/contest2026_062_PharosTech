@@ -2026,6 +2026,7 @@ static void *ny_voice_eyes_thread(void *arg)
   };
 
   const char *shown = NULL;
+  bool yielded = false; /* The agent chose a face in this turn. */
   int held = -1;
 
   (void)arg;
@@ -2083,13 +2084,24 @@ static void *ny_voice_eyes_thread(void *arg)
           continue;
         }
 
-      if (wanted == NY_VOICE_EYES_RESTORE)
+      if (wanted == NY_VOICE_EYES_LISTENING)
+        {
+          yielded = false;
+        }
+      else if (yielded)
+        {
+          cJSON_Delete(data);
+          continue;
+        }
+      else
         {
           const cJSON *now = NULL;
 
-          /* Put the face back only if it still is the one this service
-           * put on: the agent may have been asked for an expression during
-           * the very turn that is ending.
+          /* Every face after the first of a turn goes on only while the
+           * one this service put on is still there: the agent may have
+           * been asked for an expression during this very turn, and that
+           * one is the owner's wish, not to be covered by the speaking
+           * face or put back to rest.
            */
 
           if (shown != NULL &&
@@ -2098,8 +2110,13 @@ static void *ny_voice_eyes_thread(void *arg)
               now = cJSON_GetObjectItemCaseSensitive(result, "expression");
             }
 
-          if (!cJSON_IsString(now) || strcmp(now->valuestring, shown) != 0)
+          if (wanted == NY_VOICE_EYES_RESTORE
+                  ? (!cJSON_IsString(now) ||
+                     strcmp(now->valuestring, shown) != 0)
+                  : (cJSON_IsString(now) &&
+                     strcmp(now->valuestring, shown) != 0))
             {
+              yielded = true;
               shown = NULL;
               held = -1;
               cJSON_Delete(result);
