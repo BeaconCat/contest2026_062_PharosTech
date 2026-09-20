@@ -1130,19 +1130,6 @@ diff -ruN -x '*.o' -x '*.a' -x .depend -x Make.dep -x .built -x .git -x .github 
  
  #endif
  
-diff -ruN -x '*.o' -x '*.a' -x .depend -x Make.dep -x .built -x .git -x .github -x .gitee -x .gitignore -x defconfigs -x docs -x logs -x scripts -x '*.sh' -x README.md a/src/config/config_store.h b/src/config/config_store.h
---- a/src/config/config_store.h	2026-06-30 23:15:19.614650175 +0800
-+++ b/src/config/config_store.h	2026-09-12 10:05:11.000000000 +0800
-@@ -42,6 +42,9 @@
- 
- /** Write (or overwrite) a string value and persist to disk. */
- int claw_config_set(const char *key, const char *value);
-+/* Persist a set of fields in one replace operation. */
-+int claw_config_set_many(const char *const *keys, const char *const *values,
-+                        size_t count);
- 
- /** Delete a key. Returns OK even if key was absent. */
- int config_del(const char *key);
 diff -ruN -x '*.o' -x '*.a' -x .depend -x Make.dep -x .built -x .git -x .github -x .gitee -x .gitignore -x defconfigs -x docs -x logs -x scripts -x '*.sh' -x README.md a/src/core/agent_loop.c b/src/core/agent_loop.c
 --- a/src/core/agent_loop.c	2026-06-30 23:15:19.610650095 +0800
 +++ b/src/core/agent_loop.c	2026-09-12 11:05:21.000000000 +0800
