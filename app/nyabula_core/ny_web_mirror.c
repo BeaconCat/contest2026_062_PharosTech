@@ -41,11 +41,17 @@
 #include "ny_web_auth.h"
 #include "ny_web_mirror.h"
 
+#ifdef CONFIG_NYABULA_CORE_WEB_EYEPROBE
+#  include "ny_web_eyeprobe_page.h"
+#endif
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
 #define NY_MIRROR_PATH          "/eyes/stream"
+#define NY_MIRROR_PROBE_PAGE    "/eyeprobe"
+#define NY_MIRROR_PROBE_STREAM  "/eyeprobe/stream"
 #define NY_MIRROR_BEARER        "Bearer "
 #define NY_MIRROR_BEARER_SIZE   7
 
@@ -249,6 +255,14 @@ static bool ny_mirror_target_is(const char *head, const char *path)
 
 bool ny_web_mirror_claims(const char *head)
 {
+#ifdef CONFIG_NYABULA_CORE_WEB_EYEPROBE
+  if (ny_mirror_target_is(head, NY_MIRROR_PROBE_PAGE) ||
+      ny_mirror_target_is(head, NY_MIRROR_PROBE_STREAM))
+    {
+      return true;
+    }
+#endif
+
   return ny_mirror_target_is(head, NY_MIRROR_PATH);
 }
 
@@ -281,6 +295,30 @@ int ny_web_mirror_serve(int fd, const char *head, const char *pair_token)
                              "{\"error\":\"method\"}");
     }
 
+#ifdef CONFIG_NYABULA_CORE_WEB_EYEPROBE
+  if (ny_mirror_target_is(head, NY_MIRROR_PROBE_PAGE))
+    {
+      static const char page[] = NY_WEB_EYEPROBE_PAGE;
+      char header[192];
+      int count = snprintf(header, sizeof(header),
+                           "HTTP/1.1 200 OK\r\n"
+                           "Content-Type: text/html; charset=utf-8\r\n"
+                           "Content-Length: %zu\r\n"
+                           "Cache-Control: no-store\r\n"
+                           "X-Content-Type-Options: nosniff\r\n"
+                           "Connection: close\r\n\r\n",
+                           sizeof(page) - 1);
+
+      ret = ny_web_http_write(fd, header, count);
+      return ret < 0 ? ret : ny_web_http_write(fd, page, sizeof(page) - 1);
+    }
+
+  /* What the panels show is for whoever stands in front of the device, and
+   * this build says that whoever is on its network stands in front of it.
+   */
+
+  if (!ny_mirror_target_is(head, NY_MIRROR_PROBE_STREAM))
+#endif
   if (!ny_mirror_authorized(head, pair_token))
     {
       return ny_mirror_reply(fd, 401, "Unauthorized",
