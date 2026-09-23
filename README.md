@@ -1,5 +1,8 @@
 # Nyabula · 星喵
 
+> 后续研发在 [BeaconCat/contest2026_062_PharosTech](https://github.com/BeaconCat/contest2026_062_PharosTech) 继续。
+> 原 open-vela 团队仓已归档；Draft 对照与本地研发快照见 [研发迁移说明](docs/development-continuation.md)。
+
 ### 基于 openvela 的 RK3576 桌面 AI 陪伴猫
 
 **2026 首届 openvela AI 硬件开发者大赛 · 队伍 062 · Pharos Tech**
