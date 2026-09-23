@@ -17,7 +17,8 @@
   <extend-project name="external_zblue" remote="beaconcat"
                   revision="refs/heads/dev-ai-contest-2026"/>
 
-  <project path="contest2026_062_PharosTech" name="contest2026_062_PharosTech">
+  <project path="contest2026_062_PharosTech" name="contest2026_062_PharosTech"
+           remote="beaconcat">
     <linkfile src="boards" dest="vendor/rockchip/boards"/>
     <linkfile src="chips" dest="vendor/rockchip/chips"/>
     <linkfile src="app/k7flash" dest="apps/examples/k7flash"/>
