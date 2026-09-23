@@ -41,10 +41,13 @@ std::uint32_t NewGeneration()
 {
   std::uint32_t generation = 0;
 
-  if (getrandom(&generation, sizeof(generation), 0) != sizeof(generation) ||
+  if (getrandom(&generation, sizeof(generation), GRND_NONBLOCK) != sizeof(generation) ||
       generation == 0)
     {
-      generation = static_cast<std::uint32_t>(getpid()) ^ 0x4e594150U;
+      const std::uint64_t now = SharedCounterMilliseconds();
+      generation = static_cast<std::uint32_t>(now) ^
+                   static_cast<std::uint32_t>(now >> 32) ^
+                   (static_cast<std::uint32_t>(getpid()) * 0x9e3779b9U);
       if (generation == 0)
         {
           generation = 1;
@@ -100,6 +103,50 @@ int FindDevice(char *path, std::size_t path_size)
   return -ENOENT;
 }
 
+std::size_t CpuInfo(char *output, std::size_t capacity)
+{
+  int size = std::snprintf(output, capacity, "online=%ld\n",
+                           sysconf(_SC_NPROCESSORS_ONLN));
+  if (size < 0 || static_cast<std::size_t>(size) >= capacity)
+    {
+      return 0;
+    }
+
+  std::size_t used = static_cast<std::size_t>(size);
+  std::FILE *file = std::fopen("/proc/cpuinfo", "r");
+  if (file == nullptr)
+    {
+      return used;
+    }
+
+  char line[512];
+  unsigned int cpu = 0;
+  unsigned int part;
+  while (std::fgets(line, sizeof(line), file) != nullptr)
+    {
+      if (std::sscanf(line, "processor : %u", &cpu) == 1)
+        {
+          continue;
+        }
+
+      if (std::sscanf(line, "CPU part : %x", &part) == 1)
+        {
+          size = std::snprintf(output + used, capacity - used,
+                               "cpu%u part=0x%x\n", cpu, part);
+          if (size < 0 || static_cast<std::size_t>(size) >= capacity - used)
+            {
+              std::fclose(file);
+              return 0;
+            }
+
+          used += static_cast<std::size_t>(size);
+        }
+    }
+
+  std::fclose(file);
+  return used;
+}
+
 int Run(const char *requested_device)
 {
   std::uint8_t request[NYAMP_RPMSG_MTU];
@@ -152,10 +199,19 @@ int Run(const char *requested_device)
           return 1;
         }
 
+      char info[NYAMP_INLINE_MAX - 4];
+      std::size_t info_size = 0;
+      nyamp_header_s header;
+      if (nyamp_header_decode(&header, request, static_cast<std::size_t>(received)) == NYAMP_OK &&
+          header.service == NYAMP_SERVICE_HEALTH && header.opcode == nyamp::kInfoQuery)
+        {
+          info_size = CpuInfo(info, sizeof(info));
+        }
+
       const int result = nyamp::Dispatch(
         request, static_cast<std::size_t>(received),
         SharedCounterMilliseconds(), generation, response, sizeof(response),
-        &response_size);
+        &response_size, std::string_view(info, info_size));
       if (result != NYAMP_OK)
         {
           std::fprintf(stderr, "nyampd: malformed request: %d\n", result);

@@ -1,7 +1,17 @@
 # KICKPI-K7 AMP 离线集成件
 
-本目录保存 K7 双系统 AMP 的可复现输入。当前边界是：openvela 运行在
-RK3576 CPU3，仍是产品控制面；Linux 运行在其余 CPU 上，仅提供 NPU、ISP、
+> 2026-09-07 已迁移至最新团队基线并完成编译回归，见[INTEGRATION.md](INTEGRATION.md)。
+> N-Boot新基线尚未实现AMP启动，以下旧CPU3说明不能用于刷板。
+
+> 当前目标拓扑已变更为四A53运行NuttX、四A72运行Linux，见[TOPOLOGY.md](TOPOLOGY.md)。
+> 下文CPU3启动、旧FIT cpu字段等属于待迁移旧实现，不能用于新拓扑上板。
+
+> 2026-09-06复审：当前仅完成部分构建，尚不是可刷发布候选。已确认CPU3被UP
+> 入口拒绝、GIC全局初始化缺少AMP所有权隔离、本地RPTUN资源表没有DRIVER_OK
+> 更新来源。必须先修复这些可离线验证的阻塞，不能将此前编译成功视为AMP闭环。
+
+本目录保存 K7 双系统 AMP 的可复现输入。目标分配是：openvela 运行在
+RK3576 四个A53，仍是产品控制面；Linux 运行在四个A72，仅提供 NPU、ISP、
 ASR/TTS 和重媒体计算服务。WiFi、蓝牙、存储等产品外设默认不因启用 AMP
 而自动转交 Linux。
 
@@ -12,7 +22,7 @@ ASR/TTS 和重媒体计算服务。WiFi、蓝牙、存储等产品外设默认�
 | rpmsg vring | `0x47800000` | 2 MiB | 两端共享，实际 vring 位于前 64 KiB |
 | rpmsg DMA pool | `0x47a00000` | 2 MiB | Linux coherent DMA 分配，openvela 显式维护缓存 |
 | service shmem | `0x47c00000` | 4 MiB | 后续大块数据通道，当前仅预留 |
-| openvela image | `0x4a400000` | 16 MiB | CPU3 固件及运行内存 |
+| openvela image | `0x4a400000` | 16 MiB | 四A53共享的固件及运行内存 |
 
 地址由 `linux/rk3576-kickpi-k7-amp.dtsi`、openvela `amp/defconfig` 和
 `rk3576_rptun.c` 共同约束。修改任何一处后先运行：

@@ -7,6 +7,7 @@
 #include "nyampd_core.h"
 
 #include "nyamp_protocol.h"
+#include <cstring>
 
 namespace nyamp
 {
@@ -27,13 +28,19 @@ void PutLe32(std::uint8_t *dest, std::uint32_t value)
 
 int EncodeResponse(const nyamp_header_s &request, Status status,
                    std::uint32_t generation, std::uint8_t *response,
-                   std::size_t response_capacity, std::size_t *response_size)
+                   std::size_t response_capacity, std::size_t *response_size,
+                   std::string_view diagnostics = {})
 {
   const bool health = status == Status::kOk &&
                       request.service == NYAMP_SERVICE_HEALTH &&
                       request.opcode == kHealthQuery;
-  const std::uint32_t payload_size =
-    health ? kHealthPayloadSize : kStatusPayloadSize;
+  if (diagnostics.size() > NYAMP_INLINE_MAX - kStatusPayloadSize)
+    {
+      return NYAMP_EMSGSIZE;
+    }
+
+  const std::uint32_t payload_size = static_cast<std::uint32_t>(
+    health ? kHealthPayloadSize : kStatusPayloadSize + diagnostics.size());
   nyamp_header_s header = {
     request.service,
     request.opcode,
@@ -64,6 +71,11 @@ int EncodeResponse(const nyamp_header_s &request, Status status,
       PutLe32(response + NYAMP_WIRE_HEADER_SIZE + 4, generation);
       PutLe32(response + NYAMP_WIRE_HEADER_SIZE + 8, kCapabilityHealth);
     }
+  else if (!diagnostics.empty())
+    {
+      std::memcpy(response + NYAMP_WIRE_HEADER_SIZE + kStatusPayloadSize,
+                  diagnostics.data(), diagnostics.size());
+    }
 
   *response_size = NYAMP_WIRE_HEADER_SIZE + payload_size;
   return NYAMP_OK;
@@ -74,7 +86,7 @@ int EncodeResponse(const nyamp_header_s &request, Status status,
 int Dispatch(const std::uint8_t *request_wire, std::size_t request_size,
              std::uint64_t now_ms, std::uint32_t generation,
              std::uint8_t *response, std::size_t response_capacity,
-             std::size_t *response_size)
+             std::size_t *response_size, std::string_view diagnostics)
 {
   nyamp_header_s request;
   int result;
@@ -111,14 +123,17 @@ int Dispatch(const std::uint8_t *request_wire, std::size_t request_size,
     }
 
   if (request.service != NYAMP_SERVICE_HEALTH ||
-      request.opcode != kHealthQuery || request.payload_size != 0)
+      (request.opcode != kHealthQuery && request.opcode != kInfoQuery) ||
+      request.payload_size != 0 ||
+      (request.opcode == kInfoQuery && diagnostics.empty()))
     {
       return EncodeResponse(request, Status::kUnsupported, generation,
                             response, response_capacity, response_size);
     }
 
   return EncodeResponse(request, Status::kOk, generation, response,
-                        response_capacity, response_size);
+                        response_capacity, response_size,
+                        request.opcode == kInfoQuery ? diagnostics : std::string_view{});
 }
 
 } // namespace nyamp

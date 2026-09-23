@@ -1,6 +1,7 @@
 # KICKPI-K7 AMP 最小上板收敛清单
 
-本文只列离线构建无法证明的事项。每轮固定使用 COM14、K7 Monitor 穿重启抓串口；
+目标拓扑：四A53运行NuttX、四A72运行Linux。当前启动交接、GIC隔离、RPTUN握手
+尚未完成离线修复；本清单不是当前板刷许可。每轮固定使用 COM14、K7 Monitor 穿重启抓串口；
 同时可直接使用ADB采集Linux日志，不另开可见窗口。任何“预期”都不能勾成成功，
 必须保留原始输出并写入`实测日志.md`。
 
@@ -10,8 +11,8 @@
   `amp_b`保持禁用。
 - 校验FIT SHA-256为离线记录值后再加载；禁止手术修改external-data FIT。
 - 首轮Linux RAM-only，不初始化MMC/eMMC/SD/USB存储驱动；不得写eMMC。
-- N-Boot启动CPU3前必须确认Linux DTB已禁用`cpu@3`。若Linux已online CPU3，立即
-  停止，不能再调用AMP CPU_ON。
+- N-Boot交接前必须确认Linux DTB已禁用全部四个A53并启用全部四个A72。
+  Linux主核为物理MPIDR `0x100`，NuttX主核为`0`；禁止对当前运行核调用CPU_ON。
 - 任何连续重启、串口完全消失、loader/maskrom或存储枚举异常都先回已知好镜像，
   不连续盲刷。
 
@@ -21,17 +22,19 @@
 
 1. `dumpimage -l`四段hash、load和entry全部通过；
 2. Linux启动参数中的DTB就是AMP DTB；
-3. Linux只online 7个CPU，CPU3节点为disabled；
+3. Linux只online四个A72，物理MPIDR为`0x100..0x103`；NuttX四核均为A53，
+   物理MPIDR为`0..3`。不能仅凭两边的逻辑CPU0..3或online数量判断；
 4. `/proc/iomem`或reserved-memory调试输出包含：
    - `0x47800000..0x47a00000` vring；
    - `0x47a00000..0x47c00000` rpmsg DMA；
    - `0x47c00000..0x48000000` service shmem；
    - `0x4a400000..0x4b400000` openvela；
 5. OP-TEE仍为`0x48400000..0x49400000`，与openvela无交集；
-6. N-Boot/BL31调用`CPU_ON(cpu_id=3, entry=0x4a400000)`返回成功，CPU3输出
-   openvela早期标识，Linux继续启动。
+6. N-Boot/BL31启动Linux主核`0x100`，传入最终DTB地址，然后当前小核进入
+   `0x4a400000`的NuttX；两个OS各自成功启动同簇另外三个核；
+7. NuttX初始化和启动次核期间，Linux的SPI路由、使能和优先级没有被全局重置。
 
-失败即停：CPU3双重online、reserved-memory缺失、OP-TEE异常、SMC不支持或入口不符。
+失败即停：CPU双重online、reserved-memory缺失、OP-TEE异常、SMC不支持或入口不符。
 
 ## 2. Mailbox与RPMsg建链
 

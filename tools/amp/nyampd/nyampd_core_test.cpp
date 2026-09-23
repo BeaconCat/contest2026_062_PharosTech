@@ -91,6 +91,23 @@ int main()
   CHECK(Exchange(request, 500, generation, &response, &status) == 0);
   CHECK(status == static_cast<std::int32_t>(nyamp::Status::kUnsupported));
 
+  request.service = NYAMP_SERVICE_HEALTH;
+  request.opcode = nyamp::kInfoQuery;
+  request.generation = generation;
+  {
+    std::uint8_t input[NYAMP_RPMSG_MTU] = {};
+    std::uint8_t output[NYAMP_RPMSG_MTU] = {};
+    std::size_t size = 0;
+    constexpr char info[] = "online=4\ncpu0 part=0xd08\n";
+    CHECK(nyamp_header_encode(input, sizeof(input), &request) == NYAMP_OK);
+    CHECK(nyamp::Dispatch(input, NYAMP_WIRE_HEADER_SIZE, 500, generation,
+                          output, sizeof(output), &size, info) == NYAMP_OK);
+    CHECK(size == NYAMP_WIRE_HEADER_SIZE + 4 + std::strlen(info));
+    CHECK(std::memcmp(output + NYAMP_WIRE_HEADER_SIZE + 4, info, std::strlen(info)) == 0);
+    CHECK(nyamp::Dispatch(input, NYAMP_WIRE_HEADER_SIZE, 500, generation,
+                          output, NYAMP_WIRE_HEADER_SIZE + 4, &size, info) == NYAMP_EMSGSIZE);
+  }
+
   std::puts("nyampd core tests passed");
   return 0;
 }

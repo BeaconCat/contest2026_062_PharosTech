@@ -200,6 +200,7 @@ void rk3576_mailbox_register_callback(rk3576_mbox_callback_t callback,
 
   if (callback != NULL)
     {
+      UP_DMB();
       mbox_putreg(RK3576_MBOX_INT_UPDATE | RK3576_MBOX_INT_MASK,
                   g_mbox_rx_base, RK3576_MBOX_A2B_INTEN);
       up_enable_irq(g_mbox_rx_irq);
@@ -216,9 +217,8 @@ void rk3576_mailbox_register_callback(rk3576_mbox_callback_t callback,
  * Name: rk3576_mailbox_initialize
  *
  * Description:
- *   Attach the RX mailbox interrupt (mailbox3).  The pclk_mailbox gate must
- *   already be on (enabled by the loader or the Linux AMP node); this routine
- *   does not touch the clock.
+ *   Enable the mailbox clock and attach its RX interrupt (mailbox3), while
+ *   preserving any startup notification already sent by the Linux peer.
  ****************************************************************************/
 
 int rk3576_mailbox_initialize(unsigned int rx_instance)
@@ -244,7 +244,10 @@ int rk3576_mailbox_initialize(unsigned int rx_instance)
              RK3576_CRU_GATE_CON(RK3576_CRU_MAILBOX_GATE_CON));
 
   mbox_putreg(RK3576_MBOX_INT_UPDATE, base, RK3576_MBOX_A2B_INTEN);
-  mbox_putreg(RK3576_MBOX_INT_MASK, base, RK3576_MBOX_A2B_STATUS);
+
+  /* N-Boot clears stale status before starting either OS.  Preserve a
+   * pending Linux startup notification until the callback is installed.
+   */
 
   ret = irq_attach(g_mbox_rx_irq, rk3576_mailbox_interrupt, NULL);
   if (ret < 0)

@@ -73,7 +73,7 @@
  */
 
 #define RK3576_RPMSG_MBOX_MAGIC 0x524d5347 /* "RMSG" */
-#define RK3576_RPMSG_LINK_ID    0x03       /* master cpu0 <-> remote cpu3 */
+#define RK3576_RPMSG_LINK_ID    0x03       /* Wire link label, not an MPIDR */
 #define RK3576_RPMSG_TX_MBOX    0
 #define RK3576_RPMSG_RX_MBOX    3
 
@@ -165,7 +165,11 @@ static void rk3576_rptun_setup_rsc(void)
   rsc->rpmsg_vdev.dfeatures = 1 << VIRTIO_RPMSG_F_NS;
   rsc->rpmsg_vdev.num_of_vrings = 2;
   rsc->rpmsg_vdev.notifyid = RSC_NOTIFY_ID_ANY;
-  rsc->rpmsg_vdev.reserved[0] = VIRTIO_DEV_DEVICE;
+  /* The resource role is relative to the transport master.  rptun inverts
+   * it on the non-master side, making this instance the virtio device.
+   */
+
+  rsc->rpmsg_vdev.reserved[0] = VIRTIO_DEV_DRIVER;
 
   rsc->rpmsg_vring0.da = RK3576_RPMSG_VRING0_DA;
   rsc->rpmsg_vring0.align = RK3576_RPMSG_VRING_ALIGN;
@@ -247,7 +251,7 @@ static int rk3576_rptun_notify(struct rptun_dev_s *dev, uint32_t notifyid)
 
   (void)dev;
 
-  if (notifyid == 0)
+  if (notifyid == 0 || notifyid == RPTUN_NOTIFY_ALL)
     {
       instance = RK3576_RPMSG_TX_MBOX;
     }
@@ -307,6 +311,24 @@ static void rk3576_rptun_mbox_callback(void *arg, uint32_t cmd, uint32_t data)
   if ((cmd & 0xffu) == RK3576_RPMSG_LINK_ID &&
       data == RK3576_RPMSG_MBOX_MAGIC && priv->callback != NULL)
     {
+      /* The Linux master kicks after preparing its receive buffers.  Its
+       * fixed-vring transport has no shared resource table, so reflect that
+       * handshake in our local table before notifying the rptun core.
+       * This is a cold-boot contract; independent peer restart is not yet
+       * supported.  N-Boot must clear old mailbox status before CPU_ON.
+       */
+
+      if ((__atomic_load_n(&g_rk3576_rptun_rsc.rpmsg_vdev.status,
+                           __ATOMIC_ACQUIRE) &
+           VIRTIO_CONFIG_STATUS_DRIVER_OK) == 0)
+        {
+          g_rk3576_rptun_rsc.rpmsg_vdev.gfeatures =
+            1u << VIRTIO_RPMSG_F_NS;
+          __atomic_store_n(&g_rk3576_rptun_rsc.rpmsg_vdev.status,
+                           VIRTIO_CONFIG_STATUS_DRIVER_OK,
+                           __ATOMIC_RELEASE);
+        }
+
       priv->callback(priv->arg, RPTUN_NOTIFY_ALL);
     }
 }

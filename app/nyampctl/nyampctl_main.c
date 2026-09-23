@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <nuttx/rpmsg/rpmsg.h>
@@ -40,7 +41,12 @@
 #define NYAMPCTL_OPEN_DELAY_US   100000
 #define NYAMPCTL_RESPONSE_MS     5000
 #define NYAMPCTL_HEALTH_OPCODE   1
+#define NYAMPCTL_INFO_OPCODE     2
 #define NYAMPCTL_HEALTH_RESPONSE 12
+
+static uint32_t nyampctl_get_le32(const uint8_t *source);
+static int nyampctl_open_endpoint(void);
+static int nyampctl_query(int fd, uint16_t opcode);
 
 static uint32_t nyampctl_get_le32(const uint8_t *source)
 {
@@ -74,13 +80,13 @@ static int nyampctl_open_endpoint(void)
   return -errno;
 }
 
-static int nyampctl_health(int fd)
+static int nyampctl_query(int fd, uint16_t opcode)
 {
   struct nyamp_header_s request = {
     .service = NYAMP_SERVICE_HEALTH,
-    .opcode = NYAMPCTL_HEALTH_OPCODE,
+    .opcode = opcode,
     .flags = NYAMP_FLAG_REQUEST,
-    .request_id = 1,
+    .request_id = 0,
     .deadline_ms = 0,
     .generation = 0,
     .payload_size = 0,
@@ -90,6 +96,16 @@ static int nyampctl_health(int fd)
   uint8_t wire[NYAMP_RPMSG_MTU];
   ssize_t size;
   int ret;
+  struct timespec now;
+
+  if (clock_gettime(CLOCK_MONOTONIC, &now) < 0)
+    {
+      return -errno;
+    }
+
+  request.request_id = ((uint64_t)(uint32_t)getpid() << 32) |
+                       (uint32_t)((uint64_t)now.tv_sec * 1000 +
+                                  now.tv_nsec / 1000000);
 
   ret = nyamp_header_encode(wire, sizeof(wire), &request);
   if (ret != NYAMP_OK)
@@ -120,8 +136,10 @@ static int nyampctl_health(int fd)
 
   ret = nyamp_header_decode(&response, wire, (size_t)size);
   if (ret != NYAMP_OK || response.request_id != request.request_id ||
-      response.flags != NYAMP_FLAG_RESPONSE ||
-      response.payload_size != NYAMPCTL_HEALTH_RESPONSE)
+      response.service != request.service || response.opcode != opcode ||
+      (response.flags & ~NYAMP_FLAG_ERROR) != NYAMP_FLAG_RESPONSE ||
+      response.payload_size < 4 || response.generation == 0 ||
+      size != (ssize_t)(NYAMP_WIRE_HEADER_SIZE + response.payload_size))
     {
       return -EPROTO;
     }
@@ -129,6 +147,41 @@ static int nyampctl_health(int fd)
   if (nyampctl_get_le32(wire + NYAMP_WIRE_HEADER_SIZE) != 0)
     {
       return -EREMOTEIO;
+    }
+
+  if (response.flags != NYAMP_FLAG_RESPONSE)
+    {
+      return -EPROTO;
+    }
+
+  if (opcode == NYAMPCTL_INFO_OPCODE)
+    {
+      size_t index;
+
+      if (response.payload_size <= 4)
+        {
+          return -EPROTO;
+        }
+
+      for (index = NYAMP_WIRE_HEADER_SIZE + 4; index < (size_t)size; index++)
+        {
+          if (wire[index] != '\n' && (wire[index] < 0x20 || wire[index] > 0x7e))
+            {
+              return -EPROTO;
+            }
+        }
+
+      printf("nyamp Linux info: generation=%" PRIu32 "\n", response.generation);
+      fwrite(wire + NYAMP_WIRE_HEADER_SIZE + 4, 1, response.payload_size - 4,
+             stdout);
+      return 0;
+    }
+
+  if (response.payload_size != NYAMPCTL_HEALTH_RESPONSE ||
+      nyampctl_get_le32(wire + NYAMP_WIRE_HEADER_SIZE + 4) != response.generation ||
+      (nyampctl_get_le32(wire + NYAMP_WIRE_HEADER_SIZE + 8) & 1) == 0)
+    {
+      return -EPROTO;
     }
 
   printf("nyamp health ok: generation=%" PRIu32 " capabilities=0x%08" PRIx32
@@ -144,12 +197,15 @@ int main(int argc, char *argv[])
   int ctrl;
   int fd;
   int ret;
+  uint16_t opcode;
 
-  if (argc != 2 || strcmp(argv[1], "health") != 0)
+  if (argc != 2 || (strcmp(argv[1], "health") != 0 && strcmp(argv[1], "info") != 0))
     {
-      fprintf(stderr, "usage: %s health\n", argv[0]);
+      fprintf(stderr, "usage: %s health|info\n", argv[0]);
       return 2;
     }
+
+  opcode = strcmp(argv[1], "info") == 0 ? NYAMPCTL_INFO_OPCODE : NYAMPCTL_HEALTH_OPCODE;
 
   ctrl = open(NYAMPCTL_CTRL_PATH, O_RDWR);
   if (ctrl < 0)
@@ -180,7 +236,7 @@ int main(int argc, char *argv[])
     }
   else
     {
-      ret = nyampctl_health(fd);
+      ret = nyampctl_query(fd, opcode);
       close(fd);
     }
 
@@ -188,7 +244,7 @@ int main(int argc, char *argv[])
 
   if (ret < 0)
     {
-      fprintf(stderr, "nyampctl: health failed: %d\n", ret);
+      fprintf(stderr, "nyampctl: query failed: %d\n", ret);
       return 1;
     }
 
