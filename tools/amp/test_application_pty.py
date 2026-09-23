@@ -46,6 +46,18 @@ static ssize_t nyamp_test_read(int fd,void *buffer,size_t capacity) {{
 #include "{source}"
 #undef main
 int main(int argc,char **argv) {{
+ if(argc==2 && !strcmp(argv[1],"--verify-npu")) {{
+  static const int32_t expected[32]={{6,4,2,0,-2,-4,-6,-8,8,6,4,2,0,-2,-4,-6,-8,8,6,4,2,0,-2,-4,-6,-8,8,6,4,2,0,-2}};
+  uint8_t payload[NYAMP_NPU_RESPONSE_SIZE]={{0}};
+  nyampctl_put_le32(payload+12,1);
+  for(unsigned int n=0;n<32;n++)nyampctl_put_le32(payload+16+n*4,(uint32_t)expected[n]);
+  if(nyampctl_verify_npu(payload,sizeof(payload),1))return 3;
+  payload[16]^=1;
+  if(nyampctl_verify_npu(payload,sizeof(payload),1)!=-EBADMSG)return 4;
+  payload[16]^=1;payload[12]=0;
+  if(nyampctl_verify_npu(payload,sizeof(payload),1)!=-EPROTO)return 5;
+  return 0;
+ }}
  if(argc!=3)return 2;
  return nyampctl_query(atoi(argv[1]),atoi(argv[2]))<0?1:0;
 }}
@@ -54,6 +66,10 @@ int main(int argc,char **argv) {{
     subprocess.run(['cc','-std=gnu11','-D_GNU_SOURCE','-Wall','-Werror',
                     '-I',str(root),'-I',str(protocol),str(root/'client.c'),
                     str(protocol/'nyamp_protocol.c'),'-o',str(root/'client')],check=True)
+    verified=subprocess.run([str(root/'client'),'--verify-npu'],
+                            capture_output=True,text=True,timeout=10)
+    assert verified.returncode==0, verified
+    print('NYAMP_NPU_VERIFIER_PASS (synthetic host data)',flush=True)
     master,slave=pty.openpty()
     tty.setraw(slave)
     process=subprocess.Popen([str(daemon),os.ttyname(slave)],stderr=subprocess.PIPE,text=True)

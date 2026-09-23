@@ -4,14 +4,15 @@
 set -euo pipefail
 umask 022
 
-if [[ $# -lt 1 || $# -gt 3 ]]; then
-  echo "usage: $0 BUSYBOX [OUTPUT.cpio.gz] [STATIC_NYAMPD]" >&2
+if [[ $# -lt 1 || $# -gt 4 ]]; then
+  echo "usage: $0 BUSYBOX [OUTPUT.cpio.gz] [NYAMPD] [RUNTIME_LIB_DIR]" >&2
   exit 2
 fi
 
 busybox=$(readlink -f "$1")
 output=${2:-nyabula-amp-initramfs.cpio.gz}
 nyampd=${3:-}
+runtime_libs=${4:-}
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 if [[ ! -x "$busybox" ]]; then
@@ -29,9 +30,12 @@ fi
 if [[ -n "$nyampd" ]]; then
   nyampd=$(readlink -f "$nyampd")
   description=$(file -Lb "$nyampd")
-  if [[ ! -x "$nyampd" || "$description" != *"ARM aarch64"* ||
-        "$description" != *"statically linked"* ]]; then
-    echo "nyampd must be a statically linked AArch64 ELF: $description" >&2
+  if [[ ! -x "$nyampd" || "$description" != *"ARM aarch64"* ]]; then
+    echo "nyampd must be an AArch64 ELF: $description" >&2
+    exit 2
+  fi
+  if [[ "$description" != *"statically linked"* && -z "$runtime_libs" ]]; then
+    echo "dynamic nyampd requires its collected runtime libraries" >&2
     exit 2
   fi
 fi
@@ -61,6 +65,11 @@ if [[ -n "$nyampd" ]]; then
   cp "$nyampd" "$work/usr/sbin/nyampd"
   chmod 0755 "$work/usr/sbin/nyampd"
   cp "$script_dir/inittab" "$work/etc/inittab"
+fi
+
+if [[ -n "$runtime_libs" ]]; then
+  mkdir -p "$work/lib"
+  cp -L "$runtime_libs"/* "$work/lib/"
 fi
 
 find "$work" -exec touch -h -d "@$epoch" {} +

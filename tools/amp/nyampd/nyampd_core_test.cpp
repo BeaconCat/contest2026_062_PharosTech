@@ -27,6 +27,27 @@
 namespace
 {
 
+int npu_calls;
+
+int FakeNpu(std::uint32_t seed, nyamp::NpuResult &result)
+{
+  npu_calls++;
+  result.setup_us = 12;
+  result.run_us = 3;
+  result.irq_delta = 1;
+  for (unsigned int n = 0; n < NYAMP_NPU_N; n++)
+    {
+      result.values[n] = static_cast<std::int32_t>(seed + n);
+    }
+  return 0;
+}
+
+int FailedNpu(std::uint32_t, nyamp::NpuResult &result)
+{
+  result.stage = "mock-create";
+  return -7;
+}
+
 std::int32_t GetLe32(const std::uint8_t *source)
 {
   std::uint32_t value = 0;
@@ -112,6 +133,48 @@ int main()
     CHECK(nyamp::Dispatch(input, NYAMP_WIRE_HEADER_SIZE, 500, generation,
                           output, NYAMP_WIRE_HEADER_SIZE + 4, &size,
                           info) == NYAMP_EMSGSIZE);
+  }
+
+  {
+    std::uint8_t input[NYAMP_RPMSG_MTU] = {};
+    std::uint8_t output[NYAMP_RPMSG_MTU] = {};
+    std::size_t size = 0;
+    request.service = NYAMP_SERVICE_NPU;
+    request.opcode = NYAMP_NPU_MATMUL_OPCODE;
+    request.payload_size = 4;
+    CHECK(nyamp_header_encode(input, sizeof(input), &request) == NYAMP_OK);
+    input[NYAMP_WIRE_HEADER_SIZE] = 7;
+    CHECK(nyamp::Dispatch(input, NYAMP_WIRE_HEADER_SIZE + 4, 500, generation,
+                          output, sizeof(output), &size, {},
+                          FakeNpu) == NYAMP_OK);
+    CHECK(npu_calls == 1);
+    CHECK(size == NYAMP_WIRE_HEADER_SIZE + NYAMP_NPU_RESPONSE_SIZE);
+    CHECK(GetLe32(output + NYAMP_WIRE_HEADER_SIZE) == 0);
+    CHECK(GetLe32(output + NYAMP_WIRE_HEADER_SIZE + 4) == 12);
+    CHECK(GetLe32(output + NYAMP_WIRE_HEADER_SIZE + 8) == 3);
+    CHECK(GetLe32(output + NYAMP_WIRE_HEADER_SIZE + 12) == 1);
+    CHECK(GetLe32(output + NYAMP_WIRE_HEADER_SIZE + 16 + 31 * 4) == 38);
+    CHECK(nyamp::Dispatch(input, NYAMP_WIRE_HEADER_SIZE + 4, 500, generation,
+                          output, sizeof(output), &size, {},
+                          FailedNpu) == NYAMP_OK);
+    CHECK(GetLe32(output + NYAMP_WIRE_HEADER_SIZE) ==
+          static_cast<std::int32_t>(nyamp::Status::kBackend));
+    CHECK(std::memcmp(output + NYAMP_WIRE_HEADER_SIZE + 4,
+                      "mock-create failed (-7)", 23) == 0);
+    input[NYAMP_WIRE_HEADER_SIZE + 1] = 1;
+    CHECK(nyamp::Dispatch(input, NYAMP_WIRE_HEADER_SIZE + 4, 500, generation,
+                          output, sizeof(output), &size, {},
+                          FakeNpu) == NYAMP_OK);
+    CHECK(GetLe32(output + NYAMP_WIRE_HEADER_SIZE) ==
+          static_cast<std::int32_t>(nyamp::Status::kProtocol));
+    CHECK(npu_calls == 1);
+    input[NYAMP_WIRE_HEADER_SIZE + 1] = 0;
+    CHECK(nyamp::Dispatch(input, NYAMP_WIRE_HEADER_SIZE + 4, 1001, generation,
+                          output, sizeof(output), &size, {},
+                          FakeNpu) == NYAMP_OK);
+    CHECK(npu_calls == 1);
+    CHECK(GetLe32(output + NYAMP_WIRE_HEADER_SIZE) ==
+          static_cast<std::int32_t>(nyamp::Status::kDeadline));
   }
 
   std::puts("nyampd core tests passed");

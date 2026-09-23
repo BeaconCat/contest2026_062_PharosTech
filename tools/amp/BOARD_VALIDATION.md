@@ -36,9 +36,33 @@ cpu3 part=0xd08
 
 ## 未验证与已知限制
 
-压力/长稳、独立重启、NPU推理、产品外设共存、AMP槽自动加载未验证。
+本节描述最初RAM候选；后续SD槽启动结果见SLOT_BOOT.md，NPU结果见下节。
+长稳、独立重启、完整模型推理、产品外设共存仍未验证。
 Linux仍有SDK其他外设日志；bootm对已保留区域打印重复LMB reservation警告，
 本轮未影响启动，不能将此候选称为完整产品发行版。
 
 N-Boot等待超时会复位整个SoC回普通NuttX；openvela断言可能需要物理Reset。
 普通NSH可用nbootctl reboot console再次进入启动器；最小AMP无ADB。
+
+## 本地NPU候选收尾（2026-09-10）
+
+- FIT：17681920字节（16.8628MiB），SHA256
+  `acd450e6224a85aa55cc829fac232a1cffd48821a8a27f36ec4081aab4e84a37`。
+- Linux内核和DTB与既有4+4 AMP基线一致；新增外部RKNN v2.3.2用户态库。
+- SD AMP A version6，AMP B version1和普通NuttX A/B保留，未写eMMC。
+- 固定INT8矩阵乘M1/K64/N32，openvela独立校验全部32项，无CPU后端回退。
+- 本次收尾连续20次请求通过；软件复位、回普通NuttXverify/rearm后，再20次通过。
+  种子序列为`1 2 0 255 7 31 64 127 254 1`重复两遍。
+  两轮health generation分别为1872780287、1310416904，capabilities均为3。
+- 用户确认主电源断开再接回，11:37:07自动加载A version6 (trial)并进入NSH；
+  随后同一序列20次NPU请求全部通过，health generation=3546581191，capabilities=3。
+  本次收尾共60次请求通过；原始冷启动记录为
+  `串口日志/console_20260910_113638.log`，不是用软件复位代替冷启动。
+- 验证后在普通NuttX中verify/mark-successful AMP A成功，bootctrl generation115，
+  A successful=1、B successful=1。再重启输出`bootamp: loaded SD slot a, version 6 (confirmed)`；
+  额外一次NPU计算通过，info返回四个A72，health generation=3114657656、capabilities=3。
+- 以上是有限次验收，不是长时间压力测试；NPU公开镜像还需完成第三方许可核验。
+
+实测有效组合：使用SDK默认同步，不对C输出内存预先memset。
+去掉手动输入同步单独不足以修复；先前出现全零/半段错误，原始失败保留在
+项目实测日志。CPU脏缓存行影响DMA是机制推断，未宣称已证明SDK内部根因。

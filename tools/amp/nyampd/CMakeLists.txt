@@ -16,6 +16,17 @@ add_executable(nyampd nyampd_main.cpp)
 target_link_libraries(nyampd PRIVATE nyampd_core)
 target_compile_options(nyampd PRIVATE -Wall -Wextra -Werror)
 
+set(NYAMP_RKNN_ROOT "" CACHE PATH "External Linux AArch64 RKNN runtime SDK")
+if(NYAMP_RKNN_ROOT)
+  target_sources(nyampd PRIVATE nyampd_npu.cpp)
+  target_include_directories(nyampd PRIVATE "${NYAMP_RKNN_ROOT}/include")
+  target_link_libraries(nyampd PRIVATE "${NYAMP_RKNN_ROOT}/lib/librknnrt.so")
+  target_compile_definitions(nyampd PRIVATE NYAMP_RKNN_ENABLED=1)
+  set_target_properties(nyampd PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_RPATH "$ORIGIN/../lib")
+endif()
+
 add_executable(nyampd_core_test nyampd_core_test.cpp)
 target_link_libraries(nyampd_core_test PRIVATE nyampd_core)
 target_compile_options(nyampd_core_test PRIVATE -Wall -Wextra -Werror)

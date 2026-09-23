@@ -5,6 +5,9 @@
  ****************************************************************************/
 
 #include "nyampd_core.h"
+#ifdef NYAMP_RKNN_ENABLED
+#include "nyampd_npu.h"
+#endif
 
 #include "nyamp_protocol.h"
 
@@ -150,6 +153,11 @@ std::size_t CpuInfo(char *output, std::size_t capacity)
 
 int Run(const char *requested_device)
 {
+#ifdef NYAMP_RKNN_ENABLED
+  const nyamp::NpuMatmul npu = nyamp::RunNpuMatmul;
+#else
+  const nyamp::NpuMatmul npu = nullptr;
+#endif
   std::uint8_t request[NYAMP_RPMSG_MTU];
   std::uint8_t response[NYAMP_RPMSG_MTU];
   const std::uint32_t generation = NewGeneration();
@@ -237,7 +245,7 @@ int Run(const char *requested_device)
       const int result = nyamp::Dispatch(
           request, static_cast<std::size_t>(received),
           SharedCounterMilliseconds(), generation, response, sizeof(response),
-          &response_size, std::string_view(info, info_size));
+          &response_size, std::string_view(info, info_size), npu);
       if (result != NYAMP_OK)
         {
           std::fprintf(stderr, "nyampd: malformed request: %d\n", result);

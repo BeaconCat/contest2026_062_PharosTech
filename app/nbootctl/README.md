@@ -39,3 +39,35 @@ copies one verified slot to the other without activating it. Boot-control
 mutations update the older redundant copy first, verify it, and then update the
 other copy. `update-nboot` replaces the N-Boot FIT on the current medium and
 verifies it from media; reboot is left to the caller.
+
+## AMP trial activation
+
+With the matching active-slot N-Boot, staging an AMP image grants one trial.
+Activating an unconfirmed AMP slot rearms one trial; marking it successful
+clears the trial count. Ordinary NuttX staging/activation behavior is unchanged.
+Status includes `tries` for each slot.
+
+Run staging and confirmation from ordinary NuttX, not the minimal AMP profile
+(which has no storage host). Use the actual slot printed by `stage`; this
+example assumes it selected slot b:
+
+```text
+nbootctl stage amp /tmp/amp.itb
+nbootctl status
+reboot
+```
+
+In AMP NSH, verify `nyampctl health` and `nyampctl info`, then reboot without
+confirming. The consumed trial causes the next boot to return to ordinary
+NuttX. There, confirm only the image that was actually tested:
+
+```text
+nbootctl verify amp b
+nbootctl mark-successful amp b
+reboot
+```
+
+Confirmed images start on subsequent boots. A one-shot `nbootctl reboot
+nuttx-a` or `nuttx-b` still requests ordinary NuttX. Serial/key recovery remains
+necessary for later failures of an already-confirmed kernel; this is not a
+watchdog-based health monitor.

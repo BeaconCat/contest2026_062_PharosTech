@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <string_view>
 
+#include "nyamp_protocol.h"
+
 namespace nyamp
 {
 
@@ -24,12 +26,25 @@ enum class Status : std::int32_t
   kDeadline = -2,
   kGeneration = -3,
   kUnsupported = -4,
+  kBackend = -5,
 };
+
+struct NpuResult
+{
+  const char *stage = "backend";
+  std::uint32_t setup_us = 0;
+  std::uint32_t run_us = 0;
+  std::uint32_t irq_delta = 0;
+  std::int32_t values[NYAMP_NPU_N]{};
+};
+
+using NpuMatmul = int (*)(std::uint32_t seed, NpuResult &result);
 
 int Dispatch(const std::uint8_t *request, std::size_t request_size,
              std::uint64_t now_ms, std::uint32_t generation,
              std::uint8_t *response, std::size_t response_capacity,
-             std::size_t *response_size, std::string_view diagnostics = {});
+             std::size_t *response_size, std::string_view diagnostics = {},
+             NpuMatmul npu = nullptr);
 
 } // namespace nyamp
 

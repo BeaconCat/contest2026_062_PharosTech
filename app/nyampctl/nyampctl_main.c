@@ -23,8 +23,10 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <poll.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <time.h>
@@ -45,8 +47,13 @@
 #define NYAMPCTL_HEALTH_RESPONSE 12
 
 static uint32_t nyampctl_get_le32(const uint8_t *source);
+static void nyampctl_put_le32(uint8_t *dest, uint32_t value);
 static int nyampctl_open_endpoint(void);
 static int nyampctl_query(int fd, uint16_t opcode);
+static int nyampctl_request(int fd, uint16_t service, uint16_t opcode,
+                            uint32_t seed);
+static int nyampctl_verify_npu(const uint8_t *payload, uint32_t size,
+                               uint32_t seed);
 
 static uint32_t nyampctl_get_le32(const uint8_t *source)
 {
@@ -59,6 +66,57 @@ static uint32_t nyampctl_get_le32(const uint8_t *source)
     }
 
   return value;
+}
+
+static void nyampctl_put_le32(uint8_t *dest, uint32_t value)
+{
+  unsigned int index;
+  for (index = 0; index < 4; index++)
+    {
+      dest[index] = (uint8_t)(value >> (8 * index));
+    }
+}
+
+static int nyampctl_verify_npu(const uint8_t *payload, uint32_t size,
+                               uint32_t seed)
+{
+  unsigned int n;
+  if (size != NYAMP_NPU_RESPONSE_SIZE || nyampctl_get_le32(payload + 12) == 0)
+    {
+      return -EPROTO;
+    }
+  for (n = 0; n < NYAMP_NPU_N; n++)
+    {
+      int32_t expected = 0;
+      unsigned int k;
+      int32_t actual = (int32_t)nyampctl_get_le32(payload + 16 + 4 * n);
+      for (k = 0; k < NYAMP_NPU_K; k++)
+        {
+          int a = (int)((k + seed) % 7) - 3;
+          int b = (int)((3 * k + n + seed % 5) % 9) - 4;
+          expected += a * b;
+        }
+      if (actual != expected)
+        {
+          fprintf(stderr,
+                  "nyampctl: NPU output %u is %" PRId32 ", expected %" PRId32
+                  "\n",
+                  n, actual, expected);
+          return -EBADMSG;
+        }
+    }
+  printf("nyamp NPU ok: seed=%" PRIu32 " shape=%ux%ux%u checked=%u "
+         "setup_us=%" PRIu32 " run_us=%" PRIu32 " irq_delta=%" PRIu32 "\n",
+         seed, NYAMP_NPU_M, NYAMP_NPU_K, NYAMP_NPU_N, NYAMP_NPU_N,
+         nyampctl_get_le32(payload + 4), nyampctl_get_le32(payload + 8),
+         nyampctl_get_le32(payload + 12));
+  printf("values:");
+  for (n = 0; n < NYAMP_NPU_N; n++)
+    {
+      printf(" %" PRId32, (int32_t)nyampctl_get_le32(payload + 16 + 4 * n));
+    }
+  printf("\n");
+  return 0;
 }
 
 static int nyampctl_open_endpoint(void)
@@ -82,14 +140,20 @@ static int nyampctl_open_endpoint(void)
 
 static int nyampctl_query(int fd, uint16_t opcode)
 {
+  return nyampctl_request(fd, NYAMP_SERVICE_HEALTH, opcode, 0);
+}
+
+static int nyampctl_request(int fd, uint16_t service, uint16_t opcode,
+                            uint32_t seed)
+{
   struct nyamp_header_s request = {
-    .service = NYAMP_SERVICE_HEALTH,
+    .service = service,
     .opcode = opcode,
     .flags = NYAMP_FLAG_REQUEST,
     .request_id = 0,
     .deadline_ms = 0,
     .generation = 0,
-    .payload_size = 0,
+    .payload_size = service == NYAMP_SERVICE_NPU ? 4 : 0,
   };
   struct nyamp_header_s response;
   struct pollfd pollfd;
@@ -98,6 +162,7 @@ static int nyampctl_query(int fd, uint16_t opcode)
   int attempt;
   int ret;
   struct timespec now;
+  size_t request_size = NYAMP_WIRE_HEADER_SIZE + request.payload_size;
 
   if (clock_gettime(CLOCK_MONOTONIC, &now) < 0)
     {
@@ -114,11 +179,16 @@ static int nyampctl_query(int fd, uint16_t opcode)
       return ret;
     }
 
+  if (request.payload_size != 0)
+    {
+      nyampctl_put_le32(wire + NYAMP_WIRE_HEADER_SIZE, seed);
+    }
+
   /* The Linux peer sends a ready event to publish its dynamic address. */
 
   for (attempt = 0; attempt < NYAMPCTL_OPEN_RETRIES; attempt++)
     {
-      size = write(fd, wire, NYAMP_WIRE_HEADER_SIZE);
+      size = write(fd, wire, request_size);
       if (size >= 0 || errno != EAGAIN)
         {
           break;
@@ -127,7 +197,7 @@ static int nyampctl_query(int fd, uint16_t opcode)
       usleep(NYAMPCTL_OPEN_DELAY_US);
     }
 
-  if (size != (ssize_t)NYAMP_WIRE_HEADER_SIZE)
+  if (size != (ssize_t)request_size)
     {
       return size < 0 ? -errno : -EIO;
     }
@@ -171,12 +241,33 @@ static int nyampctl_query(int fd, uint16_t opcode)
 
   if (nyampctl_get_le32(wire + NYAMP_WIRE_HEADER_SIZE) != 0)
     {
+      if (service == NYAMP_SERVICE_NPU && response.payload_size > 4)
+        {
+          size_t index;
+          for (index = NYAMP_WIRE_HEADER_SIZE + 4; index < (size_t)size;
+               index++)
+            {
+              if (wire[index] < 0x20 || wire[index] > 0x7e)
+                {
+                  return -EPROTO;
+                }
+            }
+          fprintf(stderr, "nyampctl: NPU %.*s\n",
+                  (int)(response.payload_size - 4),
+                  (const char *)wire + NYAMP_WIRE_HEADER_SIZE + 4);
+        }
       return -EREMOTEIO;
     }
 
   if (response.flags != NYAMP_FLAG_RESPONSE)
     {
       return -EPROTO;
+    }
+
+  if (service == NYAMP_SERVICE_NPU)
+    {
+      return nyampctl_verify_npu(wire + NYAMP_WIRE_HEADER_SIZE,
+                                 response.payload_size, seed);
     }
 
   if (opcode == NYAMPCTL_INFO_OPCODE)
@@ -226,12 +317,29 @@ int main(int argc, char *argv[])
   int fd;
   int ret;
   uint16_t opcode;
+  uint32_t seed = 1;
+  bool npu = argc >= 2 && strcmp(argv[1], "npu") == 0;
 
-  if (argc != 2 ||
-      (strcmp(argv[1], "health") != 0 && strcmp(argv[1], "info") != 0))
+  if ((!npu && (argc != 2 || (strcmp(argv[1], "health") != 0 &&
+                              strcmp(argv[1], "info") != 0))) ||
+      (npu && argc != 2 && argc != 3))
     {
-      fprintf(stderr, "usage: %s health|info\n", argv[0]);
+      fprintf(stderr, "usage: %s health|info|npu [seed 0..255]\n", argv[0]);
       return 2;
+    }
+
+  if (npu && argc == 3)
+    {
+      char *end;
+      unsigned long value;
+      errno = 0;
+      value = strtoul(argv[2], &end, 10);
+      if (errno || end == argv[2] || *end || value > NYAMP_NPU_SEED_MAX)
+        {
+          fprintf(stderr, "nyampctl: seed must be 0..255\n");
+          return 2;
+        }
+      seed = value;
     }
 
   opcode = strcmp(argv[1], "info") == 0 ? NYAMPCTL_INFO_OPCODE
@@ -266,7 +374,9 @@ int main(int argc, char *argv[])
     }
   else
     {
-      ret = nyampctl_query(fd, opcode);
+      ret = npu ? nyampctl_request(fd, NYAMP_SERVICE_NPU,
+                                   NYAMP_NPU_MATMUL_OPCODE, seed)
+                : nyampctl_query(fd, opcode);
       close(fd);
     }
 

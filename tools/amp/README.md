@@ -4,9 +4,15 @@
 RPMsg调用nyampctl health和nyampctl info。本分支基于团队PR #83。
 配套N-Boot需要新bootamp命令，并以N-Boot PR #7为基线。
 
-本次不包含AMP槽自动启动、独立重启或产品外设，未验证NPU推理。
-默认启动仍是普通NuttX；AMP由显式命令启动，不是安全隔离。
+本地槽启动分支已增加活动AMP槽试启动与回退，见[SLOT_BOOT.md](SLOT_BOOT.md)。
+已验证固定INT8矩阵乘的真实NPU请求闭环；完整模型、独立重启、产品外设
+仍不在最小基线内，也不是安全隔离。
 详见[所有权](OWNERSHIP.md)、[板测结果](BOARD_VALIDATION.md)和[基线](INTEGRATION.md)。
+
+AMP二进制计划由独立镜像仓发布，本仓不提交每轮FIT或第三方运行库。
+目前没有公开发布地址。下载、版本固定、CI接入和许可证边界见
+[DISTRIBUTION.md](DISTRIBUTION.md)。带RKNN的当前产物仅供本地验证，
+再分发许可尚未核清，不是可直接公开上传的发行包。
 
 ## 内存与CPU
 
@@ -53,6 +59,24 @@ bash tools/amp/nboot/build_amp_fit.sh \
   out/initramfs.cpio.gz /path/to/nuttx.bin /path/to/.config out/amp.itb
 python3 tools/amp/test_amp_topology.py
 ```
+
+### 可选NPU后端
+
+外部SDK目录应包含`include/rknn_api.h`、`include/rknn_matmul_api.h`和
+Linux AArch64版`lib/librknnrt.so`。不得使用Android/Bionic版运行库。
+本地验证使用rknn-toolkit2 v2.3.2；不传SDK路径则保持静态health/info版。
+
+```sh
+bash tools/amp/nyampd/build_arm64.sh out/nyampd-rknn /path/to/rknn-sdk
+bash tools/amp/linux/build_minimal_initramfs.sh out/busybox-arm64 \
+  out/initramfs-npu.cpio.gz out/nyampd-rknn/nyampd \
+  out/nyampd-rknn/runtime-libs
+```
+
+用同一`build_amp_fit.sh`打包新的initramfs，再按SLOT_BOOT.md热更新AMP槽。
+NSH执行`nyampctl npu 1`：固定M=1/K=64/N=32，返回32个INT32结果，
+openvela逐项独立校验；`setup_us`为初始化时间，`run_us`为SDK阻塞执行时间，
+不等于端到端延迟。当前不支持模型文件、LLM、批量异步任务或CPU回退。
 
 ## RAM启动
 

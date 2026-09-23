@@ -41,9 +41,16 @@ extern "C" {
 #define NYAMP_FLAG_KIND_MASK                                     \
   (NYAMP_FLAG_REQUEST | NYAMP_FLAG_RESPONSE | NYAMP_FLAG_EVENT | \
    NYAMP_FLAG_CANCEL)
-#define NYAMP_FLAG_ALL     (NYAMP_FLAG_KIND_MASK | NYAMP_FLAG_ERROR)
+#define NYAMP_FLAG_ALL          (NYAMP_FLAG_KIND_MASK | NYAMP_FLAG_ERROR)
 
-#define NYAMP_HEALTH_READY 0U
+#define NYAMP_HEALTH_READY      0U
+
+#define NYAMP_NPU_MATMUL_OPCODE 1U
+#define NYAMP_NPU_M             1U
+#define NYAMP_NPU_K             64U
+#define NYAMP_NPU_N             32U
+#define NYAMP_NPU_SEED_MAX      255U
+#define NYAMP_NPU_RESPONSE_SIZE (16U + 4U * NYAMP_NPU_N)
 
 enum nyamp_service_e
 {

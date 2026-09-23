@@ -44,6 +44,8 @@
 #define NBOOTCTL_RECORD_SIZE    4096
 #define NBOOTCTL_RECORD_SECTORS 8
 #define NBOOTCTL_COPY_COUNT     2
+#define NBOOTCTL_AMP_DOMAIN     1
+#define NBOOTCTL_AMP_TRIALS     1
 #define NBOOTCTL_SHA256_SIZE    32
 #define NBOOTCTL_VERIFY_SECTORS 128
 #define NBOOTCTL_SECTOR_SIZE    512
@@ -344,10 +346,12 @@ int nbootctl_bootctrl_status(unsigned int medium)
           const struct nbootctl_slot_s *entry =
               &record->domains[domain].slots[slot];
 
-          printf("%s_%c priority=%u successful=%u size=%llu version=%llu\n",
+          printf("%s_%c priority=%u successful=%u size=%llu version=%llu "
+                 "tries=%u\n",
                  name, slot ? 'b' : 'a', entry->priority, entry->successful,
                  (unsigned long long)entry->image_size,
-                 (unsigned long long)entry->image_version);
+                 (unsigned long long)entry->image_version,
+                 entry->tries_remaining);
         }
     }
 
@@ -539,6 +543,11 @@ static int nbootctl_bootctrl_update(unsigned int medium, const char *domain,
     {
       entry->active_slot = slot;
       entry->slots[slot].priority = 15;
+      if (domain_index == NBOOTCTL_AMP_DOMAIN &&
+          !entry->slots[slot].successful)
+        {
+          entry->slots[slot].tries_remaining = NBOOTCTL_AMP_TRIALS;
+        }
       if (entry->slots[1 - slot].priority >= 15)
         {
           entry->slots[1 - slot].priority = 14;
@@ -725,7 +734,8 @@ int nbootctl_bootctrl_stage(unsigned int medium, const char *domain,
     }
 
   slot_entry->priority = 15;
-  slot_entry->tries_remaining = 0;
+  slot_entry->tries_remaining =
+      domain_index == NBOOTCTL_AMP_DOMAIN ? NBOOTCTL_AMP_TRIALS : 0;
   slot_entry->successful = 0;
   slot_entry->image_size = file_info.st_size;
   slot_entry->image_version = version + 1;
