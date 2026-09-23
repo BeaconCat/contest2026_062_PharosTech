@@ -39,6 +39,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <syslog.h>
 
 #include <nuttx/arch.h>
 #include <nuttx/i2c/i2c_master.h>
@@ -465,6 +466,9 @@ int kickpi_k7_wifi_initialize(void)
       g_kickpi_k7_wifi_dev = NULL;
       return ret;
     }
+
+  syslog(LOG_INFO, "SV6621 P1 host-wake raw GPIO1_D5=%u\n",
+         rk3576_gpio_read(GPIO_PORT1 | GPIO_PIN_D5) ? 1 : 0);
 
   init_result = ret;
   initialized = true;
