@@ -1,0 +1,148 @@
+﻿ 
+Interface name : WLAN 
+There are 6 networks currently visible. 
+
+SSID 1 : Xiaomi_CEFC_5G
+    Network type            : Infrastructure
+    Authentication          : WPA2-Personal
+    Encryption              : CCMP 
+    BSSID 1                 : c8:bf:4c:bc:7e:0d
+         Signal             : 20%  
+         Radio type         : 802.11ax
+         Band               : 5 GHz
+         Channel            : 161 
+         QoS MSCS Supported    : 0
+         QoS Map Supported     : 0
+         Basic rates (Mbps) : 6 12 24
+         Other rates (Mbps) : 9 18 36 48 54
+    BSSID 2                 : 5a:b3:8f:7f:14:28
+         Signal             : 86%  
+         Radio type         : 802.11ax
+         Band               : 5 GHz
+         Channel            : 153 
+         Bss Load:
+             Connected Stations:         1
+             Channel Utilization:        24 (9 %)
+             Medium Available Capacity:  31250 (1000000 us/s)
+         QoS MSCS Supported    : 0
+         QoS Map Supported     : 0
+         Basic rates (Mbps) : 6 12 24
+         Other rates (Mbps) : 9 18 36 48 54
+
+SSID 2 : 
+    Network type            : Infrastructure
+    Authentication          : Open
+    Encryption              : None 
+    BSSID 1                 : ce:bf:4c:bc:7e:0e
+         Signal             : 80%  
+         Radio type         : 802.11ax
+         Band               : 2.4 GHz
+         Channel            : 7 
+         QoS MSCS Supported    : 0
+         QoS Map Supported     : 0
+         Basic rates (Mbps) : 1 2 5.5 11
+         Other rates (Mbps) : 6 9 12 18 24 36 48 54
+    BSSID 2                 : 5a:b3:8f:6f:14:28
+         Signal             : 86%  
+         Radio type         : 802.11ax
+         Band               : 5 GHz
+         Channel            : 153 
+         Bss Load:
+             Connected Stations:         0
+             Channel Utilization:        24 (9 %)
+             Medium Available Capacity:  31250 (1000000 us/s)
+         QoS MSCS Supported    : 0
+         QoS Map Supported     : 0
+         Basic rates (Mbps) : 6 12 24
+         Other rates (Mbps) : 9 18 36 48 54
+    BSSID 3                 : 58:b3:8f:5f:14:28
+         Signal             : 96%  
+         Radio type         : 802.11ax
+         Band               : 2.4 GHz
+         Channel            : 7 
+         Bss Load:
+             Connected Stations:         0
+             Channel Utilization:        24 (9 %)
+             Medium Available Capacity:  31250 (1000000 us/s)
+         QoS MSCS Supported    : 0
+         QoS Map Supported     : 0
+         Basic rates (Mbps) : 1 2 5.5 11
+         Other rates (Mbps) : 6 9 12 18 24 36 48 54
+
+SSID 3 : Xiaomi_CEFC
+    Network type            : Infrastructure
+    Authentication          : WPA2-Personal
+    Encryption              : CCMP 
+    BSSID 1                 : c8:bf:4c:bc:7e:0e
+         Signal             : 75%  
+         Radio type         : 802.11ax
+         Band               : 2.4 GHz
+         Channel            : 7 
+         QoS MSCS Supported    : 0
+         QoS Map Supported     : 0
+         Basic rates (Mbps) : 1 2 5.5 11
+         Other rates (Mbps) : 6 9 12 18 24 36 48 54
+    BSSID 2                 : 5a:b3:8f:1f:14:28
+         Signal             : 95%  
+         Radio type         : 802.11ax
+         Band               : 2.4 GHz
+         Channel            : 7 
+         Bss Load:
+             Connected Stations:         0
+             Channel Utilization:        24 (9 %)
+             Medium Available Capacity:  31250 (1000000 us/s)
+         QoS MSCS Supported    : 0
+         QoS Map Supported     : 0
+         Basic rates (Mbps) : 1 2 5.5 11
+         Other rates (Mbps) : 6 9 12 18 24 36 48 54
+
+SSID 4 : Xiaomi_CEFC_5G_Game
+    Network type            : Infrastructure
+    Authentication          : WPA2-Personal
+    Encryption              : CCMP 
+    BSSID 1                 : c8:bf:4c:bc:7e:0f
+         Signal             : 24%  
+         Radio type         : 802.11ax
+         Band               : 5 GHz
+         Channel            : 44 
+         QoS MSCS Supported    : 0
+         QoS Map Supported     : 0
+         Basic rates (Mbps) : 6 12 24
+         Other rates (Mbps) : 9 18 36 48 54
+
+SSID 5 : H3C-WiFi5-1426
+    Network type            : Infrastructure
+    Authentication          : WPA2-Personal
+    Encryption              : CCMP 
+    BSSID 1                 : 5a:b3:8f:5f:14:28
+         Signal             : 94%  
+         Radio type         : 802.11ac
+         Band               : 2.4 GHz
+         Channel            : 7 
+         Bss Load:
+             Connected Stations:         0
+             Channel Utilization:        25 (9 %)
+             Medium Available Capacity:  31250 (1000000 us/s)
+         QoS MSCS Supported    : 0
+         QoS Map Supported     : 0
+         Basic rates (Mbps) : 1 2 5.5 11
+         Other rates (Mbps) : 6 9 12 18 24 36 48 54
+
+SSID 6 : H3C-WiFi5-1426-5G
+    Network type            : Infrastructure
+    Authentication          : WPA2-Personal
+    Encryption              : CCMP 
+    BSSID 1                 : 5a:b3:8f:bf:14:28
+         Signal             : 86%  
+         Radio type         : 802.11ac
+         Band               : 5 GHz
+         Channel            : 153 
+         Bss Load:
+             Connected Stations:         0
+             Channel Utilization:        24 (9 %)
+             Medium Available Capacity:  31250 (1000000 us/s)
+         QoS MSCS Supported    : 0
+         QoS Map Supported     : 0
+         Basic rates (Mbps) : 6 12 24
+         Other rates (Mbps) : 9 18 36 48 54
+

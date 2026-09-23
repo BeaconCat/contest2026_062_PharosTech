@@ -1,0 +1,37 @@
+
+Pinging 192.168.0.250 from 192.168.0.86 with 32 bytes of data:
+Reply from 192.168.0.250: bytes=32 time=32ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=46ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=47ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=39ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=30ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=20ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=13ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=4ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=4ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=8ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=5ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=4ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=6ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=4ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=4ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=5ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=6ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=4ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=4ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=4ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+
+Ping statistics for 192.168.0.250:
+    Packets: Sent = 30, Received = 30, Lost = 0 (0% loss),
+Approximate round trip times in milli-seconds:
+    Minimum = 3ms, Maximum = 47ms, Average = 10ms

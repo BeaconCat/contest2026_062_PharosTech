@@ -1,0 +1,42 @@
+
+Pinging 192.168.0.250 from 192.168.0.86 with 32 bytes of data:
+Request timed out.
+Reply from 192.168.0.250: bytes=32 time=97ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=114ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=29ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=41ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=46ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=63ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=78ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=79ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=73ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=19ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=34ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=46ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=37ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=23ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=12ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=5ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=4ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=5ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=4ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=6ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=7ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=6ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=16ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=7ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=9ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=3ms TTL=128
+Reply from 192.168.0.250: bytes=32 time=62ms TTL=128
+
+Ping statistics for 192.168.0.250:
+    Packets: Sent = 35, Received = 34, Lost = 1 (2% loss),
+Approximate round trip times in milli-seconds:
+    Minimum = 3ms, Maximum = 114ms, Average = 27ms

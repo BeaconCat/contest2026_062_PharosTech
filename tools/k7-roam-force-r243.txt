@@ -1,0 +1,33 @@
+PING 192.168.0.1 56 bytes of data
+56 bytes from 192.168.0.1: icmp_seq=0 time=4.0 ms
+56 bytes from 192.168.0.1: icmp_seq=1 time=4.0 ms
+56 bytes from 192.168.0.1: icmp_seq=2 time=8.0 ms
+56 bytes from 192.168.0.1: icmp_seq=3 time=5.0 ms
+56 bytes from 192.168.0.1: icmp_seq=4 time=10.0 ms
+56 bytes from 192.168.0.1: icmp_seq=5 time=5.0 ms
+56 bytes from 192.168.0.1: icmp_seq=6 time=9.0 ms
+56 bytes from 192.168.0.1: icmp_seq=7 time=6.0 ms
+56 bytes from 192.168.0.1: icmp_seq=8 time=6.0 ms
+56 bytes from 192.168.0.1: icmp_seq=9 time=6.0 ms
+56 bytes from 192.168.0.1: icmp_seq=10 time=6.0 ms
+56 bytes from 192.168.0.1: icmp_seq=11 time=6.0 ms
+56 bytes from 192.168.0.1: icmp_seq=12 time=6.0 ms
+56 bytes from 192.168.0.1: icmp_seq=13 time=10.0 ms
+56 bytes from 192.168.0.1: icmp_seq=14 time=6.0 ms
+56 bytes from 192.168.0.1: icmp_seq=15 time=11.0 ms
+56 bytes from 192.168.0.1: icmp_seq=16 time=7.0 ms
+56 bytes from 192.168.0.1: icmp_seq=17 time=7.0 ms
+56 bytes from 192.168.0.1: icmp_seq=18 time=6.0 ms
+56 bytes from 192.168.0.1: icmp_seq=19 time=6.0 ms
+56 bytes from 192.168.0.1: icmp_seq=20 time=6.0 ms
+56 bytes from 192.168.0.1: icmp_seq=21 time=6.0 ms
+56 bytes from 192.168.0.1: icmp_seq=22 time=12.0 ms
+56 bytes from 192.168.0.1: icmp_seq=23 time=7.0 ms
+56 bytes from 192.168.0.1: icmp_seq=24 time=9.0 ms
+56 bytes from 192.168.0.1: icmp_seq=25 time=12.0 ms
+56 bytes from 192.168.0.1: icmp_seq=26 time=7.0 ms
+56 bytes from 192.168.0.1: icmp_seq=27 time=6.0 ms
+56 bytes from 192.168.0.1: icmp_seq=28 time=8.0 ms
+56 bytes from 192.168.0.1: icmp_seq=29 time=9.0 ms
+30 packets transmitted, 30 received, 0% packet loss, time 30030 ms
+rtt min/avg/max/mdev = 4.000/7.200/12.000/2.119 ms

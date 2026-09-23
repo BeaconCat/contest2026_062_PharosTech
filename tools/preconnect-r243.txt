@@ -1,0 +1,18 @@
+bssid / frequency / signal level / encode / ssid
+22:35:01:47:8f:a2	5220	-94	0800	HUAWEI-1B9EG0_Wi-Fi5
+c8:bf:4c:bc:7e:0f	5220	-94	0800	Xiaomi_CEFC_5G_Game
+c8:bf:4c:bc:7e:0d	5805	-83	0800	Xiaomi_CEFC_5G
+c8:4c:78:7c:e3:90	2422	-76	0800	CC99
+82:75:5e:a2:09:52	2437	-75	0800	Guopinjun
+02:0a:f5:ff:82:fd	2417	-75	8000	softap_B0672F39A0E0
+62:bc:94:00:3c:92	2437	-75	0800	hwxn
+82:d1:14:e2:26:c2	2412	-73	0800	freak_Wi-Fi5
+f4:a5:9d:70:a5:6c	2462	-72	0800	南瓜
+c8:bf:4c:bc:7e:0e	2447	-70	0800	Xiaomi_CEFC
+64:64:4a:8b:1e:a6	2437	-69	0800	Xiaomi_CB05
+5a:b3:8f:7f:14:28	5765	-56	0800	Xiaomi_CEFC_5G
+5a:b3:8f:6f:14:28	5765	-56	8000	
+5a:b3:8f:bf:14:28	5765	-56	0800	H3C-WiFi5-1426-5G
+5a:b3:8f:5f:14:28	2442	-38	0800	H3C-WiFi5-1426
+5a:b3:8f:1f:14:28	2442	-38	0800	Xiaomi_CEFC
+58:b3:8f:5f:14:28	2442	-37	8000	

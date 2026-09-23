@@ -1,0 +1,65 @@
+
+Pinging 192.168.0.250 from 192.168.0.86 with 32 bytes of data:
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+Request timed out.
+Reply from 192.168.0.86: Destination host unreachable.
+
+Ping statistics for 192.168.0.250:
+    Packets: Sent = 60, Received = 30, Lost = 30 (50% loss),

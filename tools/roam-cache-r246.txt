@@ -1,0 +1,14 @@
+bssid / frequency / signal level / encode / ssid
+82:d1:14:e2:26:c3	5220	-93	0800	freak_Wi-Fi5
+82:d1:14:e2:26:b8	5220	-92	0800	freak
+ca:4c:78:1c:e3:90	2422	-78	0800	
+48:0e:ec:15:c5:1d	2412	-72	0800	TP-LINK_C51D
+6a:db:54:91:f5:76	2422	-72	0800	@PHICOMM_74
+02:0a:f5:ff:82:fd	2417	-72	8000	softap_B0672F39A0E0
+82:75:5e:a2:09:52	2437	-71	0800	Guopinjun
+c8:bf:4c:bc:7e:0e	2442	-69	0800	Xiaomi_CEFC
+5a:b3:8f:7f:14:28	5765	-57	0800	Xiaomi_CEFC_5G
+5a:b3:8f:6f:14:28	5765	-57	8000	
+5a:b3:8f:bf:14:28	5765	-57	0800	H3C-WiFi5-1426-5G
+58:b3:8f:5f:14:28	2442	-39	8000	
+5a:b3:8f:1f:14:28	2442	-38	0800	Xiaomi_CEFC
