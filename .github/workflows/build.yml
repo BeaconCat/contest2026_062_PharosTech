@@ -62,10 +62,16 @@ jobs:
         run: |
           python3 tools/amp/test_amp_topology.py
           python3 tools/amp/test_manifest_layout.py
+          python3 tools/amp/test_shmem_layout.py
           cmake -S tools/amp/nyampd -B out/nyampd
           cmake --build out/nyampd -j2
           ctest --test-dir out/nyampd --output-on-failure
           python3 tools/amp/test_application_pty.py . out/nyampd/nyampd
+          python3 tools/amp/test_llm_flow.py .
+          python3 -m unittest discover -s tools/amp/resources -p 'test_*.py'
+          cmake -S tools/amp/models -B out/models
+          cmake --build out/models -j2
+          ctest --test-dir out/models --output-on-failure
 
   core_build_contract:
     name: Core dependency configuration
