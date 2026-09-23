@@ -28,13 +28,19 @@
 #include <malloc.h>
 #include <nuttx/config.h>
 #include <nuttx/fs/fs.h>
+#include <nuttx/power/pm.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/boardctl.h>
 #include <sys/stat.h>
+#include <syslog.h>
 #include <unistd.h>
+
+extern int kickpi_k7_wifi_prepare_sleep(void);
+extern int kickpi_k7_wifi_abort_sleep(void);
 
 #ifdef CONFIG_FS_TMPFS
 #include <sys/mount.h>
@@ -63,6 +69,18 @@ static uint32_t k7_be32(const uint8_t *p)
          ((uint32_t)p[2] << 8) | (uint32_t)p[3];
 }
 
+static void *k7_pm_restore_worker(void *arg)
+{
+  int ret;
+
+  (void)arg;
+  usleep(500000);
+  syslog(LOG_INFO, "SV6621 TEST pm restore begin\n");
+  ret = pm_changestate(PM_IDLE_DOMAIN, PM_RESTORE);
+  syslog(LOG_INFO, "SV6621 TEST pm restore end ret=%d\n", ret);
+  return NULL;
+}
+
 /****************************************************************************
  * k7flash_main
  ****************************************************************************/
@@ -79,6 +97,43 @@ int main(int argc, char *argv[])
   ssize_t rn;
   int fd = -1;
   int ret;
+
+  if (argc == 2 && strcmp(argv[1], "pmtest") == 0)
+    {
+      pthread_t worker;
+      int prepare = kickpi_k7_wifi_prepare_sleep();
+      int sleep;
+      int ret;
+
+      syslog(LOG_INFO, "SV6621 TEST wifi prepare ret=%d\n", prepare);
+      if (prepare < 0)
+        {
+          return 1;
+        }
+
+      ret = pthread_create(&worker, NULL, k7_pm_restore_worker, NULL);
+      syslog(LOG_INFO, "SV6621 TEST restore worker create ret=%d\n", ret);
+      if (ret != 0)
+        {
+          (void)kickpi_k7_wifi_abort_sleep();
+          return 1;
+        }
+
+      sleep = pm_changestate(PM_IDLE_DOMAIN, PM_SLEEP);
+      syslog(LOG_INFO, "SV6621 TEST pm sleep ret=%d\n", sleep);
+      if (sleep < 0)
+        {
+          (void)kickpi_k7_wifi_abort_sleep();
+          (void)pthread_join(worker, NULL);
+          return 1;
+        }
+
+      ret = pthread_join(worker, NULL);
+      syslog(LOG_INFO, "SV6621 TEST restore worker join ret=%d\n", ret);
+      usleep(1500000);
+      syslog(LOG_INFO, "SV6621 TEST pmtest complete\n");
+      return ret != 0 ? 1 : 0;
+    }
 
   if (argc != 2)
     {

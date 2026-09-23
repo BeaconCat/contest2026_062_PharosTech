@@ -35,10 +35,13 @@
 #include <debug.h>
 #include <errno.h>
 #include <nuttx/config.h>
+
+#include <nuttx/power/pm.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <syslog.h>
 
 #include <nuttx/arch.h>
 #include <nuttx/i2c/i2c_master.h>
@@ -65,6 +68,8 @@
 #define WIFI_HOST_WAKE                                                        \
   (GPIO_PORT1 | GPIO_PIN_D5 | GPIO_INPUT | GPIO_PULLDOWN | GPIO_EXTI |       \
    GPIO_INT_EDGE | GPIO_INT_HIGH_RISING)
+
+#define WIFI_HOST_WAKE_ACTIVITY 1
 
 /* IOC drive-strength registers for the SDIO bus pins (max drive). */
 
@@ -284,12 +289,10 @@ static int kickpi_k7_wifi_store_address(
 static int kickpi_k7_wifi_host_wake_isr(int irq, FAR void *context,
                                         FAR void *arg)
 {
-  FAR struct sv6621_dev_s *dev = arg;
-
   UNUSED(irq);
   UNUSED(context);
-  (void)rk3576_gpio_irq_enable(WIFI_HOST_WAKE, false);
-  (void)sv6621_resume_async(dev);
+  UNUSED(arg);
+  pm_activity(PM_IDLE_DOMAIN, WIFI_HOST_WAKE_ACTIVITY);
   return OK;
 }
 #endif
@@ -504,7 +507,13 @@ int kickpi_k7_wifi_initialize(void)
 
   ret = rk3576_gpio_irq_attach(WIFI_HOST_WAKE,
                                kickpi_k7_wifi_host_wake_isr,
-                               g_kickpi_k7_wifi_dev);
+                               NULL);
+  if (ret < 0)
+    {
+      goto stop_driver;
+    }
+
+  ret = rk3576_gpio_irq_enable(WIFI_HOST_WAKE, true);
   if (ret < 0)
     {
       goto stop_driver;
@@ -540,24 +549,15 @@ int kickpi_k7_wifi_prepare_sleep(void)
       return -ENODEV;
     }
 
+  syslog(LOG_INFO, "SV6621 TEST prepare pre level=%u\n",
+         rk3576_gpio_read(WIFI_HOST_WAKE) ? 1 : 0);
   ret = sv6621_suspend(g_kickpi_k7_wifi_dev,
                        &g_kickpi_k7_wifi_suspend);
+  syslog(LOG_INFO, "SV6621 TEST suspend ret=%d level=%u\n", ret,
+         rk3576_gpio_read(WIFI_HOST_WAKE) ? 1 : 0);
   if (ret < 0)
     {
       return ret;
-    }
-
-  ret = rk3576_gpio_irq_enable(WIFI_HOST_WAKE, true);
-  if (ret < 0)
-    {
-      (void)sv6621_resume(g_kickpi_k7_wifi_dev);
-      return ret;
-    }
-
-  if (rk3576_gpio_read(WIFI_HOST_WAKE))
-    {
-      (void)rk3576_gpio_irq_enable(WIFI_HOST_WAKE, false);
-      (void)sv6621_resume_async(g_kickpi_k7_wifi_dev);
     }
 
   return OK;
@@ -574,7 +574,8 @@ int kickpi_k7_wifi_abort_sleep(void)
       return -ENODEV;
     }
 
-  (void)rk3576_gpio_irq_enable(WIFI_HOST_WAKE, false);
+  syslog(LOG_INFO, "SV6621 TEST abort level=%u\n",
+         rk3576_gpio_read(WIFI_HOST_WAKE) ? 1 : 0);
   return sv6621_resume(g_kickpi_k7_wifi_dev);
 }
 #endif

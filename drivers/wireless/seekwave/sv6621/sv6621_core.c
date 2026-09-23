@@ -130,7 +130,6 @@ static void sv6621_core_report(FAR struct sv6621_dev_s *dev,
       dev->config.event(dev, event, data, length, dev->config.event_arg);
     }
 }
-
 /****************************************************************************
  * Name: sv6621_core_command_receive_kick
  ****************************************************************************/
@@ -206,7 +205,6 @@ static int sv6621_core_pm_queue_resume(FAR struct sv6621_dev_s *dev)
 
   return ret;
 }
-
 /****************************************************************************
  * Name: sv6621_core_pm_resume_worker
  ****************************************************************************/
@@ -216,7 +214,11 @@ static void sv6621_core_pm_resume_worker(FAR void *arg)
   FAR struct sv6621_dev_s *dev = arg;
   irqstate_t flags;
 
-  (void)sv6621_resume(dev);
+  int ret;
+
+  syslog(LOG_INFO, "SV6621 TEST async resume begin\n");
+  ret = sv6621_resume(dev);
+  syslog(LOG_INFO, "SV6621 TEST async resume end ret=%d\n", ret);
 
   flags = spin_lock_irqsave(&dev->pm_lock);
   dev->pm_suspended = false;
@@ -822,7 +824,6 @@ static int sv6621_core_channel_switch(FAR struct sv6621_dev_s *dev,
 #endif
   return ret;
 }
-
 /****************************************************************************
  * Name: sv6621_core_command_event
  ****************************************************************************/
@@ -3041,14 +3042,18 @@ int sv6621_resume(FAR struct sv6621_dev_s *dev)
       goto unlock_lifecycle;
     }
 
+  syslog(LOG_INFO, "SV6621 TEST resume rx begin\n");
   ret = sv6621_rx_resume(&dev->rx);
+  syslog(LOG_INFO, "SV6621 TEST resume rx end ret=%d\n", ret);
   if (ret < 0)
     {
       recover = true;
       goto unlock_lifecycle;
     }
 
+  syslog(LOG_INFO, "SV6621 TEST resume command begin\n");
   ret = sv6621_power_resume(&dev->command);
+  syslog(LOG_INFO, "SV6621 TEST resume command end ret=%d\n", ret);
   if (ret != 0)
     {
       ret = ret < 0 ? ret : -EREMOTEIO;
@@ -3056,8 +3061,10 @@ int sv6621_resume(FAR struct sv6621_dev_s *dev)
       goto unlock_lifecycle;
     }
 
+  syslog(LOG_INFO, "SV6621 TEST resume tx begin\n");
   ret = sv6621_data_set_tx_block(&dev->data, SV6621_DATA_TX_BLOCK_SLEEP,
                                  false);
+  syslog(LOG_INFO, "SV6621 TEST resume tx end ret=%d\n", ret);
   if (ret < 0)
     {
       recover = true;
@@ -3070,7 +3077,9 @@ int sv6621_resume(FAR struct sv6621_dev_s *dev)
   dev->pm_suspended = false;
   spin_unlock_irqrestore(&dev->pm_lock, flags);
 #endif
+  syslog(LOG_INFO, "SV6621 TEST resume state begin\n");
   ret = sv6621_core_set_state(dev, SV6621_STATE_WIFI_READY, 0);
+  syslog(LOG_INFO, "SV6621 TEST resume state end ret=%d\n", ret);
   nxmutex_unlock(&dev->lifecycle_lock);
   if (ret < 0)
     {
@@ -3093,19 +3102,3 @@ unlock_lifecycle:
 
   return ret;
 }
-
-#ifdef CONFIG_SV6621_PM
-/****************************************************************************
- * Name: sv6621_resume_async
- ****************************************************************************/
-
-int sv6621_resume_async(FAR struct sv6621_dev_s *dev)
-{
-  if (dev == NULL)
-    {
-      return -EINVAL;
-    }
-
-  return sv6621_core_pm_queue_resume(dev);
-}
-#endif
