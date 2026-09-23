@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 /*
- * KICKPI-K7 Linux side of the Nyabula CPU3 AMP deployment.
+ * KICKPI-K7 Linux side of the Nyabula four-A53/four-A72 AMP deployment.
  *
  * Include this file after the normal board DTS.  N-Boot loads the openvela
- * image at 0x4a400000 and starts CPU3; Linux must never online that CPU.
+ * image at 0x4a400000 on CPU0; Linux starts on CPU0x100 and owns only A72s.
+ * Mailbox routing below is still the legacy transport contract; this file
+ * is not a board-release configuration until transport/GIC migration passes.
  */
 
 #include <dt-bindings/soc/rockchip-amp.h>
@@ -65,6 +67,34 @@
 
 &cpu_l3 {
 	status = "disabled";
+};
+
+&cpu_l0 {
+	status = "disabled";
+};
+
+&cpu_l1 {
+	status = "disabled";
+};
+
+&cpu_l2 {
+	status = "disabled";
+};
+
+&cpu_b0 {
+	status = "okay";
+};
+
+&cpu_b1 {
+	status = "okay";
+};
+
+&cpu_b2 {
+	status = "okay";
+};
+
+&cpu_b3 {
+	status = "okay";
 };
 
 &mailbox0 {

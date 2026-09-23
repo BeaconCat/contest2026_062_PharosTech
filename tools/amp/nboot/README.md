@@ -1,7 +1,7 @@
 # AMP FIT 与 N-Boot 边界
 
 `build_amp_fit.sh` 从全新 ITS 生成 external-data FIT，同时装入 Linux Image、K7
-DTB、initramfs 和 openvela CPU3 固件。它不修改已有 vendor FIT，避免历史上因
+DTB、initramfs 和 openvela 四A53固件。它不修改已有 vendor FIT，避免历史上因
 `fdtput` 重排 external data 导致其他 payload 被截断或 hash 失效。
 
 固定加载地址：
@@ -13,10 +13,14 @@ DTB、initramfs 和 openvela CPU3 固件。它不修改已有 vendor FIT，避�
 | initramfs | `0x50000000` |
 | openvela | `0x4a400000` |
 
-脚本验证 Linux Image/DTB magic、gzip、openvela 16 MiB 上限、FIT load/entry 和每段
-SHA-256。FIT 的 `loadables` 只负责把 openvela 复制到保留区；N-Boot 仍须在跳转
-Linux 前调用RK3576 AMP SIP，以`cpu_id=3, entry=0x4a400000`启动控制域。该CPU_ON
-路径必须上板确认，不能用“FIT打包成功”代替。
+脚本要求提供该固件的展开 `.config`，检查四核SMP、私有堆范围和最终DTB的八个
+CPU节点，拒绝旧CPU3拓扑。随后验证Linux Image/DTB magic、gzip、openvela 16 MiB
+上限及FIT load/entry，并生成各段SHA-256。该配置文件须与输入二进制来自同一次
+构建；当前脚本不能证明两者的绑定，也不能替代签名或启动验证。
+
+新FIT声明Linux主核`cpu=0x100`、openvela主核`cpu=0`。旧N-Boot要求`cpu=3`，
+不兼容并会拒绝新FIT；不要通过改回3绕过校验。必须先完成N-Boot跨簇交接、
+GIC隔离及RPTUN握手，才可形成板测候选。此时生成的是离线集成产物，不可刷。
 
 ```sh
 tools/amp/nboot/build_amp_fit.sh \
@@ -24,9 +28,10 @@ tools/amp/nboot/build_amp_fit.sh \
   out/linux/arch/arm64/boot/dts/rockchip/rk3576-kickpi-k7-nyabula-amp.dtb \
   out/nyabula-amp-initramfs.cpio.gz \
   out/openvela/nuttx.bin \
+  out/openvela/.config \
   out/nyabula-amp.itb
 ```
 
-首轮可把同一FIT写入`amp_a`，`amp_b`保持禁用。确认CPU/DDR/IRQ/RPMsg和故障恢复
+放行板测后首轮只使用`amp_a`，`amp_b`保持禁用。确认CPU/DDR/IRQ/RPMsg和故障恢复
 后，再扩展现有N-Boot bootctrl格式管理`amp_a/amp_b`，不要在尚未板测时复制一套
 未经验证的A/B状态机。
