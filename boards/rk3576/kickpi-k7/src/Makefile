@@ -61,6 +61,17 @@ endif
 
 ifeq ($(CONFIG_ETC_ROMFS),y)
   RCSRCS = etc/init.d/rc.sysinit etc/init.d/rcS
+  RCSRCS += etc/nyabula/trusted-keys.json
+  RCRAWS = etc/nyabula/core-smoke/manifest.json
+  RCRAWS += etc/nyabula/core-smoke/hashes.json
+  RCRAWS += etc/nyabula/core-smoke/signer.json
+  RCRAWS += etc/nyabula/core-smoke/signature.ed25519
+  RCRAWS += etc/nyabula/core-smoke/app/main.js
+  RCRAWS += etc/nyabula/wasm-smoke/manifest.json
+  RCRAWS += etc/nyabula/wasm-smoke/hashes.json
+  RCRAWS += etc/nyabula/wasm-smoke/signer.json
+  RCRAWS += etc/nyabula/wasm-smoke/signature.ed25519
+  RCRAWS += etc/nyabula/wasm-smoke/app/main.wasm
 endif
 
 include $(TOPDIR)/boards/Board.mk

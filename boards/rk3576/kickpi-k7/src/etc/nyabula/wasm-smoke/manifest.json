@@ -1,0 +1,1 @@
+{"id":"sdk.c-probe","version":"1.0.0","apiVersion":1,"runtime":"wamr","entry":"app/main.wasm","permissions":["core.log","ai.invoke"]}

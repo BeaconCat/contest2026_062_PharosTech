@@ -36,6 +36,18 @@ if(CONFIG_ETC_ROMFS)
     RCSRCS
     etc/init.d/rcS
     etc/init.d/rc.sysinit
+    etc/nyabula/trusted-keys.json
+    RCRAWS
+    etc/nyabula/core-smoke/manifest.json
+    etc/nyabula/core-smoke/hashes.json
+    etc/nyabula/core-smoke/signer.json
+    etc/nyabula/core-smoke/app/main.js
+    etc/nyabula/core-smoke/signature.ed25519
+    etc/nyabula/wasm-smoke/manifest.json
+    etc/nyabula/wasm-smoke/hashes.json
+    etc/nyabula/wasm-smoke/signer.json
+    etc/nyabula/wasm-smoke/signature.ed25519
+    etc/nyabula/wasm-smoke/app/main.wasm
     PATH
     ${CMAKE_CURRENT_BINARY_DIR}/etc)
 

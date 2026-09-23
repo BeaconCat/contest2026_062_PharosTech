@@ -1,0 +1,1 @@
+{"id":"board.core-smoke","version":"1.0.0","apiVersion":1,"runtime":"quickjs","entry":"app/main.js","permissions":["core.log","ui.notify","ai.invoke"]}
