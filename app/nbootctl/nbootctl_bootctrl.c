@@ -50,6 +50,7 @@
 #define NBOOTCTL_UBOOT_START       16384
 #define NBOOTCTL_UBOOT_SECTORS     8192
 #define NBOOTCTL_FIT_MAGIC         0xd00dfeedu
+#define NBOOTCTL_REBOOT_MAGIC      0x4e425200u
 
 struct nbootctl_slot_s
 {
@@ -93,6 +94,8 @@ _Static_assert(offsetof(struct nbootctl_record_s, domains) == 20,
                "bootctrl domain offset changed");
 _Static_assert(offsetof(struct nbootctl_record_s, crc32) == 4092,
                "bootctrl CRC offset changed");
+_Static_assert(offsetof(struct nbootctl_record_s, padding) == 236,
+               "bootctrl request offset changed");
 
 static const char *nbootctl_bootctrl_path(unsigned int medium)
 {
@@ -110,6 +113,11 @@ static uint32_t nbootctl_be32(const uint8_t *value)
 {
   return (uint32_t)value[0] << 24 | (uint32_t)value[1] << 16 |
          (uint32_t)value[2] << 8 | value[3];
+}
+
+static uint32_t nbootctl_crc32(const void *data, size_t size)
+{
+  return crc32part(data, size, UINT32_MAX) ^ UINT32_MAX;
 }
 
 static const char *nbootctl_slot_path(unsigned int medium, int domain,
@@ -148,8 +156,8 @@ static bool nbootctl_record_valid(const struct nbootctl_record_s *record)
       return false;
     }
 
-  checksum = crc32((const uint8_t *)record,
-                   offsetof(struct nbootctl_record_s, crc32));
+  checksum = nbootctl_crc32(record,
+                           offsetof(struct nbootctl_record_s, crc32));
   return checksum == record->crc32;
 }
 
@@ -167,7 +175,7 @@ static int nbootctl_read_records(unsigned int medium, struct inode **inode,
       return -EINVAL;
     }
 
-  ret = find_blockdriver(path, 0, inode);
+  ret = open_blockdriver(path, 0, inode);
   if (ret < 0 || (*inode)->u.i_bops->read == NULL ||
       (*inode)->u.i_bops->write == NULL)
     {
@@ -211,34 +219,33 @@ static int nbootctl_write_records(struct inode *inode,
                                   struct nbootctl_record_s *records,
                                   int selected)
 {
-  struct nbootctl_record_s verify;
-  int first = 1 - selected;
-  int second = selected;
+  struct nbootctl_record_s *record = &records[selected];
+  struct nbootctl_record_s *verify = &records[1 - selected];
+  int order[2] = {1 - selected, selected};
+  int index;
 
-  records[selected].generation++;
-  records[selected].crc32 = crc32(
-    (const uint8_t *)&records[selected],
-    offsetof(struct nbootctl_record_s, crc32));
+  /* Both records are allocated on the aligned heap by the caller. A record
+   * alone fills the task's entire 4 KiB stack and must never be local here.
+   */
 
-  if (inode->u.i_bops->write(inode, (const uint8_t *)&records[selected],
-                             first * NBOOTCTL_RECORD_SECTORS,
-                             NBOOTCTL_RECORD_SECTORS) !=
-      NBOOTCTL_RECORD_SECTORS ||
-      inode->u.i_bops->read(inode, (uint8_t *)&verify,
-                            first * NBOOTCTL_RECORD_SECTORS,
-                            NBOOTCTL_RECORD_SECTORS) !=
-      NBOOTCTL_RECORD_SECTORS || !nbootctl_record_valid(&verify) ||
-      verify.generation != records[selected].generation)
+  record->generation++;
+  record->crc32 = nbootctl_crc32(record,
+                               offsetof(struct nbootctl_record_s, crc32));
+
+  for (index = 0; index < NBOOTCTL_COPY_COUNT; index++)
     {
-      return -EIO;
-    }
-
-  if (inode->u.i_bops->write(inode, (const uint8_t *)&records[selected],
-                             second * NBOOTCTL_RECORD_SECTORS,
-                             NBOOTCTL_RECORD_SECTORS) !=
-      NBOOTCTL_RECORD_SECTORS)
-    {
-      return -EIO;
+      if (inode->u.i_bops->write(inode, (const uint8_t *)record,
+                                 order[index] * NBOOTCTL_RECORD_SECTORS,
+                                 NBOOTCTL_RECORD_SECTORS) !=
+          NBOOTCTL_RECORD_SECTORS ||
+          inode->u.i_bops->read(inode, (uint8_t *)verify,
+                                order[index] * NBOOTCTL_RECORD_SECTORS,
+                                NBOOTCTL_RECORD_SECTORS) !=
+          NBOOTCTL_RECORD_SECTORS ||
+          memcmp(record, verify, sizeof(*record)) != 0)
+        {
+          return -EIO;
+        }
     }
 
   return 0;
@@ -295,6 +302,41 @@ int nbootctl_bootctrl_status(unsigned int medium)
   return 0;
 }
 
+int nbootctl_bootctrl_request(unsigned int medium, unsigned int target)
+{
+  struct nbootctl_record_s *records;
+  struct inode *inode = NULL;
+  uint32_t request = target ? NBOOTCTL_REBOOT_MAGIC | target : 0;
+  int selected;
+  int ret;
+
+  if (target > 4)
+    {
+      return -EINVAL;
+    }
+
+  records = memalign(64, sizeof(*records) * NBOOTCTL_COPY_COUNT);
+  if (records == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  ret = nbootctl_read_records(medium, &inode, records, &selected);
+  if (ret == 0)
+    {
+      memcpy(records[selected].padding, &request, sizeof(request));
+      ret = nbootctl_write_records(inode, records, selected);
+    }
+
+  if (inode != NULL)
+    {
+      close_blockdriver(inode);
+    }
+
+  free(records);
+  return ret;
+}
+
 int nbootctl_bootctrl_verify(unsigned int medium, const char *domain,
                              unsigned int slot)
 {
@@ -339,7 +381,7 @@ int nbootctl_bootctrl_verify(unsigned int medium, const char *domain,
       goto out;
     }
 
-  ret = find_blockdriver(nbootctl_slot_path(medium, domain_index, slot),
+  ret = open_blockdriver(nbootctl_slot_path(medium, domain_index, slot),
                          0, &payload);
   if (ret < 0 || payload->u.i_bops->read == NULL)
     {
@@ -509,7 +551,7 @@ int nbootctl_bootctrl_stage(unsigned int medium, const char *domain,
   domain_entry = &records[selected].domains[domain_index];
   target = domain_index == 0 ? 1 - (int)running_slot :
                                1 - (int)domain_entry->active_slot;
-  ret = find_blockdriver(nbootctl_slot_path(medium, domain_index, target),
+  ret = open_blockdriver(nbootctl_slot_path(medium, domain_index, target),
                          0, &payload);
   if (ret < 0 || payload->u.i_bops->read == NULL ||
       payload->u.i_bops->write == NULL || payload->u.i_bops->geometry == NULL)
@@ -532,6 +574,16 @@ int nbootctl_bootctrl_stage(unsigned int medium, const char *domain,
   if (source < 0)
     {
       ret = -errno;
+      goto out;
+    }
+
+  /* A partially replaced payload must not remain a boot candidate. */
+
+  domain_entry->slots[target].priority = 0;
+  domain_entry->slots[target].successful = 0;
+  ret = nbootctl_write_records(control, records, selected);
+  if (ret < 0)
+    {
       goto out;
     }
 
@@ -648,6 +700,7 @@ int nbootctl_bootctrl_clone(unsigned int medium, const char *domain,
   SHA2_CTX target_hash;
   uint8_t source_digest[NBOOTCTL_SHA256_SIZE];
   uint8_t target_digest[NBOOTCTL_SHA256_SIZE];
+  uint8_t target_priority;
   uint8_t *buffer;
   uint64_t offset;
   uint64_t size;
@@ -661,6 +714,12 @@ int nbootctl_bootctrl_clone(unsigned int medium, const char *domain,
   if (domain_index < 0 || source > 1 || target > 1 || source == target)
     {
       return -EINVAL;
+    }
+
+  ret = nbootctl_bootctrl_verify(medium, domain, source);
+  if (ret < 0)
+    {
+      return ret;
     }
 
   records = memalign(64, sizeof(*records) * NBOOTCTL_COPY_COUNT);
@@ -686,20 +745,29 @@ int nbootctl_bootctrl_clone(unsigned int medium, const char *domain,
       goto out;
     }
 
-  ret = find_blockdriver(nbootctl_slot_path(medium, domain_index, source),
+  ret = open_blockdriver(nbootctl_slot_path(medium, domain_index, source),
                          0, &source_inode);
   if (ret < 0)
     {
       goto out;
     }
 
-  ret = find_blockdriver(nbootctl_slot_path(medium, domain_index, target),
+  ret = open_blockdriver(nbootctl_slot_path(medium, domain_index, target),
                          0, &target_inode);
   if (ret < 0 || source_inode->u.i_bops->read == NULL ||
       target_inode->u.i_bops->read == NULL ||
       target_inode->u.i_bops->write == NULL)
     {
       ret = ret < 0 ? ret : -ENOSYS;
+      goto out;
+    }
+
+  target_priority = domain_entry->slots[target].priority;
+  domain_entry->slots[target].priority = 0;
+  domain_entry->slots[target].successful = 0;
+  ret = nbootctl_write_records(control, records, selected);
+  if (ret < 0)
+    {
       goto out;
     }
 
@@ -762,10 +830,8 @@ int nbootctl_bootctrl_clone(unsigned int medium, const char *domain,
     }
 
   domain_entry->slots[target] = *source_entry;
-  if (domain_entry->slots[target].priority > 1)
-    {
-      domain_entry->slots[target].priority--;
-    }
+  domain_entry->slots[target].priority = target_priority;
+  domain_entry->slots[target].successful = 0;
 
   ret = nbootctl_write_records(control, records, selected);
   if (ret == 0)
@@ -833,7 +899,7 @@ int nbootctl_update_nboot(unsigned int medium, const char *path)
       goto out_buffers;
     }
 
-  ret = find_blockdriver(disk_path, 0, &disk);
+  ret = open_blockdriver(disk_path, 0, &disk);
   if (ret < 0 || disk->u.i_bops->read == NULL ||
       disk->u.i_bops->write == NULL)
     {

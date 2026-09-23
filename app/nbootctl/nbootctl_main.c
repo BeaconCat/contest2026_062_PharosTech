@@ -29,11 +29,9 @@
 
 #include "nbootctl_bootctrl.h"
 
-#define NBOOTCTL_REQUEST_REG        0x26026230ul
 #define NBOOTCTL_HANDOFF_REG        0x26026234ul
 #define NBOOTCTL_GENERATION_LO_REG  0x26026238ul
 #define NBOOTCTL_GENERATION_HI_REG  0x2602623cul
-#define NBOOTCTL_REBOOT_MAGIC       0x4e425200u
 #define NBOOTCTL_HANDOFF_MAGIC      0x4e480000u
 #define NBOOTCTL_HANDOFF_MAGIC_MASK 0xffff0000u
 #define NBOOTCTL_HANDOFF_VERSION    2u
@@ -49,11 +47,6 @@ enum nbootctl_target_e
 static uint32_t nbootctl_read(uintptr_t address)
 {
   return *(volatile uint32_t *)address;
-}
-
-static void nbootctl_write(uintptr_t address, uint32_t value)
-{
-  *(volatile uint32_t *)address = value;
 }
 
 static const char *nbootctl_medium_name(unsigned int medium)
@@ -143,19 +136,28 @@ static int nbootctl_parse_slot(const char *value, unsigned int *slot)
 
 static int nbootctl_reboot(enum nbootctl_target_e target)
 {
-  uint32_t request = NBOOTCTL_REBOOT_MAGIC | (uint32_t)target;
+  unsigned int medium;
+  unsigned int slot;
+  int ret;
 
-  nbootctl_write(NBOOTCTL_REQUEST_REG, request);
-  if (nbootctl_read(NBOOTCTL_REQUEST_REG) != request)
+  ret = nbootctl_handoff(&medium, &slot);
+  if (ret != 0)
     {
-      fprintf(stderr, "nbootctl: reboot request read-back failed\n");
       return 1;
     }
 
-  printf("nbootctl: reboot request 0x%08lx written\n",
-         (unsigned long)request);
+  ret = nbootctl_bootctrl_request(medium, target);
+  if (ret < 0)
+    {
+      fprintf(stderr, "nbootctl: reboot request failed: %d\n", ret);
+      return 1;
+    }
+
+  printf("nbootctl: one-shot target %u stored\n", (unsigned int)target);
   fflush(stdout);
+  __asm__ volatile("dsb sy" ::: "memory");
   boardctl(BOARDIOC_RESET, 0);
+  nbootctl_bootctrl_request(medium, 0);
   fprintf(stderr, "nbootctl: reset returned unexpectedly\n");
   return 1;
 }

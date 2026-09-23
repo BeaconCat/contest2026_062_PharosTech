@@ -5,7 +5,7 @@ config SYSTEM_NBOOTCTL
 	select CRYPTO
 	---help---
 		Inspect the KICKPI-K7 N-Boot handoff and request a one-shot
-		console, Fastboot, NuttX A, or NuttX B boot across a warm reset.
+		console, Fastboot, NuttX A, or NuttX B boot across a system reset.
 
 if SYSTEM_NBOOTCTL
 config SYSTEM_NBOOTCTL_PROGNAME

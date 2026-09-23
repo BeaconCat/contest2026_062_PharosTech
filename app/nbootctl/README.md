@@ -1,8 +1,8 @@
 # nbootctl
 
-`nbootctl` is the openvela-side client for the KICKPI-K7 N-Boot warm-reset
+`nbootctl` is the openvela-side client for the KICKPI-K7 N-Boot
 contract. It reads the handoff published immediately before N-Boot enters
-NuttX, or writes a one-shot request before a PSCI warm reset.
+NuttX, or stores a one-shot request in bootctrl before a system reset.
 
 ```text
 nbootctl status
@@ -21,7 +21,11 @@ nbootctl reboot nuttx-b
 `status` validates the handoff magic and version and reads the header twice so
 a partially updated handoff is rejected. Slot requests affect one boot only;
 they do not change the persistent active slot. Reboot requests are read back
-before reset. N-Boot consumes and clears every request on the next boot.
+before the system reset. Requests use the first four padding bytes (offset
+236) of the existing CRC-protected bootctrl record. N-Boot consumes and
+clears a request through the redundant-copy update before acting on it. This
+requires the N-Boot version supporting persistent one-shot requests; PMU1
+OS_REG12 did not survive the tested loader reset chain reliably.
 
 `verify`, `set-active`, `mark-successful`, `stage`, and `clone` operate on
 either the `nuttx` or `amp` domain. `stage` writes the inactive slot, verifies
