@@ -46,6 +46,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <syslog.h>
 #include <errno.h>
 #include <debug.h>
 
@@ -1763,6 +1764,19 @@ static int skw_bringup(void)
 
   g_skw_board->power(true);
   up_mdelay(200);
+  syslog(LOG_INFO,
+         "SKW golden state: ext=%08" PRIx32 " muxb=%08" PRIx32
+         " muxc=%08" PRIx32 " pullb=%08" PRIx32
+         " pullc=%08" PRIx32 " crusel=%08" PRIx32
+         " crugate=%08" PRIx32 " ctrl=%08" PRIx32
+         " pwren=%08" PRIx32 " clkena=%08" PRIx32
+         " clkdiv=%08" PRIx32 " timing=%08" PRIx32 "\n",
+         skw_rd(0x2ae10070), skw_rd(0x2604402c),
+         skw_rd(0x26044030), skw_rd(0x26046114),
+         skw_rd(0x26046118), skw_rd(0x272004a0),
+         skw_rd(0x272008a8), skw_rd(SKW_CTRL),
+         skw_rd(SKW_MSHC_BASE + 0x004), skw_rd(SKW_CLKENA),
+         skw_rd(SKW_CLKDIV), skw_rd(SKW_TIMING0));
   skw_wr(SKW_CLKENA, 0x00000001);
   skw_ciu_update(SKW_CLK_UPDATE);
   up_mdelay(10);
