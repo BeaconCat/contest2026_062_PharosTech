@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-set(SRCS rk3576_boot.c rk3576_serial.c rk3576_clk_tree.c)
+set(SRCS rk3576_boot.c rk3576_serial.c rk3576_clk_tree.c rk3576_addrenv.c)
 
 if(CONFIG_PM)
   list(APPEND SRCS rk3576_pminitialize.c)
@@ -87,6 +87,18 @@ endif()
 
 if(CONFIG_RK3576_SPI)
   list(APPEND SRCS rk3576_spi.c)
+endif()
+
+if(CONFIG_RK3576_MIPI_DCPHY)
+  list(APPEND SRCS rk3576_mipi_dcphy.c)
+endif()
+
+if(CONFIG_RK3576_MIPI_DSI)
+  list(APPEND SRCS rk3576_mipi_dsi.c)
+endif()
+
+if(CONFIG_RK3576_VOP)
+  list(APPEND SRCS rk3576_vop.c)
 endif()
 
 target_sources(arch PRIVATE ${SRCS})

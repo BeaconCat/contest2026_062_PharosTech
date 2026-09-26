@@ -21,7 +21,8 @@
 include common/Make.defs
 
 # Rockchip RK3576 specific C source files
-CHIP_CSRCS  = rk3576_boot.c rk3576_serial.c rk3576_clk_tree.c
+CHIP_CSRCS  = rk3576_boot.c rk3576_serial.c rk3576_clk_tree.c \
+              rk3576_addrenv.c
 
 ifeq ($(CONFIG_PM),y)
 CHIP_CSRCS += rk3576_pminitialize.c
@@ -109,4 +110,16 @@ endif
 
 ifeq ($(CONFIG_RK3576_SPI),y)
 CHIP_CSRCS += rk3576_spi.c
+endif
+
+ifeq ($(CONFIG_RK3576_MIPI_DCPHY),y)
+CHIP_CSRCS += rk3576_mipi_dcphy.c
+endif
+
+ifeq ($(CONFIG_RK3576_MIPI_DSI),y)
+CHIP_CSRCS += rk3576_mipi_dsi.c
+endif
+
+ifeq ($(CONFIG_RK3576_VOP),y)
+CHIP_CSRCS += rk3576_vop.c
 endif
